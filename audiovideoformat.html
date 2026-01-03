@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>immmor Media | 极客媒体转换</title>
+    <script src="https://cdn.jsdelivr.net/npm/coi-serviceworker/coi-serviceworker.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+    <style>
+        body {
+            background: radial-gradient(circle at top right, #1e293b, #0f172a, #000000);
+            min-height: 100vh;
+            color: white;
+            font-family: system-ui, -apple-system, sans-serif;
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .gradient-text {
+            background: linear-gradient(90deg, #60a5fa, #a78bfa, #f472b6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .progress-bar-inner {
+            transition: width 0.3s ease;
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
+        }
+    </style>
+</head>
+<body class="p-6 md:p-12">
+
+    <div class="max-w-3xl mx-auto w-full">
+        <header class="flex justify-between items-center mb-10">
+            <div>
+                <h1 class="text-3xl font-bold tracking-tighter gradient-text">immmor.MEDIA</h1>
+                <p class="text-gray-500 text-xs mt-1 uppercase tracking-widest">浏览器端原声格式转换</p>
+            </div>
+            <div id="status-tag" class="px-3 py-1 rounded-full border border-yellow-500/30 text-yellow-500 text-[10px] uppercase font-bold">
+                正在初始化核心...
+            </div>
+        </header>
+
+        <section id="drop-zone" class="glass p-12 rounded-3xl border-dashed border-2 border-white/10 text-center mb-6 transition-all hover:border-blue-500/50">
+            <input type="file" id="file-input" class="hidden" accept="video/*,audio/*">
+            <label for="file-input" class="cursor-pointer">
+                <div class="w-16 h-16 bg-blue-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <svg class="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                </div>
+                <p id="file-display-name" class="text-lg font-medium">拖拽或选择视频/音频文件</p>
+                <p class="text-gray-500 text-sm mt-2">文件将直接在本地处理，绝不上传</p>
+            </label>
+        </section>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div class="glass p-6 rounded-2xl">
+                <label class="block text-gray-400 text-[10px] uppercase font-bold mb-3">输出格式</label>
+                <select id="format-select" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white outline-none focus:border-blue-500">
+                    <optgroup label="视频视频" class="bg-slate-900">
+                        <option value="mp4">MP4 (视频视频)</option>
+                        <option value="mkv">MKV (无损封装)</option>
+                        <option value="gif">GIF (动图)</option>
+                    </optgroup>
+                    <optgroup label="提取音频" class="bg-slate-900">
+                        <option value="mp3">MP3 (高音质)</option>
+                        <option value="wav">WAV (无损音频)</option>
+                    </optgroup>
+                </select>
+            </div>
+            <button id="convert-btn" disabled class="glass p-6 rounded-2xl flex items-center justify-center font-bold text-blue-400 hover:bg-blue-500/10 transition disabled:opacity-30 disabled:cursor-not-allowed">
+                <span>开始转换进程</span>
+            </button>
+        </div>
+
+        <section id="progress-container" class="hidden glass p-6 rounded-2xl space-y-4">
+            <div class="flex justify-between items-center">
+                <span id="log-text" class="text-xs text-gray-400 font-mono">准备就绪...</span>
+                <span id="progress-percent" class="text-blue-400 font-bold font-mono">0%</span>
+            </div>
+            <div class="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
+                <div id="progress-fill" class="h-full bg-blue-500 progress-bar-inner w-0"></div>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        const { createFFmpeg, fetchFile } = FFmpeg;
+        // 注意：某些环境下如果跨域问题严重，可尝试指定本地或 CDN 的 corePath
+        const ffmpeg = createFFmpeg({ log: true });
+
+        const fileInput = document.getElementById('file-input');
+        const convertBtn = document.getElementById('convert-btn');
+        const statusTag = document.getElementById('status-tag');
+        const progressContainer = document.getElementById('progress-container');
+        const progressFill = document.getElementById('progress-fill');
+        const progressPercent = document.getElementById('progress-percent');
+        const logText = document.getElementById('log-text');
+
+        // 1. 初始化 FFmpeg
+        async function init() {
+            try {
+                await ffmpeg.load();
+                statusTag.innerText = "核心就绪";
+                statusTag.className = "px-3 py-1 rounded-full border border-green-500/30 text-green-500 text-[10px] uppercase font-bold";
+            } catch (err) {
+                console.error(err);
+                statusTag.innerText = "环境受限";
+                logText.innerText = "错误：SharedArrayBuffer 未开启，请确保在服务器环境打开。";
+            }
+        }
+
+        init();
+
+        // 2. 监听文件上传
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                document.getElementById('file-display-name').innerText = file.name;
+                convertBtn.disabled = false;
+                convertBtn.classList.add('bg-blue-500/20');
+            }
+        });
+
+        // 3. 转换执行
+        convertBtn.addEventListener('click', async () => {
+            const file = fileInput.files[0];
+            const targetFormat = document.getElementById('format-select').value;
+            const outputName = `immmor_output.${targetFormat}`;
+
+            if (!file) return;
+
+            // UI 状态切换
+            convertBtn.disabled = true;
+            progressContainer.classList.remove('hidden');
+            logText.innerText = "正在读取文件并分析编码...";
+
+            // 进度监听
+            ffmpeg.setProgress(({ ratio }) => {
+                const p = Math.round(ratio * 100);
+                progressFill.style.width = p + '%';
+                progressPercent.innerText = p + '%';
+                logText.innerText = p < 100 ? "正在转换数据流..." : "转换完成，准备下载...";
+            });
+
+            // 写入虚拟文件系统 (MEMFS)
+            ffmpeg.FS('writeFile', 'input_file', await fetchFile(file));
+
+            // 执行 FFmpeg 命令
+            // 这里使用了最通用的 H.264 编码设置
+            try {
+                if (targetFormat === 'mp3') {
+                    await ffmpeg.run('-i', 'input_file', '-vn', '-acodec', 'libmp3lame', outputName);
+                } else if (targetFormat === 'gif') {
+                    await ffmpeg.run('-i', 'input_file', '-vf', 'scale=480:-1', '-f', 'gif', outputName);
+                } else {
+                    await ffmpeg.run('-i', 'input_file', '-c:v', 'libx264', '-preset', 'ultrafast', outputName);
+                }
+
+                // 读取输出文件并触发下载
+                const data = ffmpeg.FS('readFile', outputName);
+                const blob = new Blob([data.buffer], { type: targetFormat.includes('mp') ? 'video/mp4' : 'application/octet-stream' });
+                const url = URL.createObjectURL(blob);
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `immmor_${Date.now()}.${targetFormat}`;
+                a.click();
+                
+                logText.innerText = "转换成功，文件已保存";
+            } catch (error) {
+                console.error(error);
+                logText.innerText = "转换出错，请检查格式是否支持";
+            } finally {
+                convertBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>

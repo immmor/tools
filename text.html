@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus Writer | 文本美化器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: radial-gradient(circle at top right, #1e293b, #0f172a, #000000);
+            min-height: 100vh;
+            color: white;
+            overflow-x: hidden;
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .gradient-text {
+            background: linear-gradient(90deg, #60a5fa, #a78bfa, #f472b6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        /* 可编辑区域样式 */
+        #editor-content {
+            min-height: 200px;
+            padding: 1.5rem;
+            line-height: 1.6;
+            font-size: 1rem;
+            outline: none;
+            cursor: text;
+            overflow-y: auto;
+            max-height: 50vh; /* 限制高度，超出滚动 */
+        }
+        #editor-content:empty:before {
+            content: attr(placeholder);
+            color: #475569;
+            pointer-events: none;
+        }
+        /* 导出预览区样式 */
+        #export-preview {
+            padding: 2rem;
+            overflow: hidden; /* 防止内容溢出 */
+            display: flex;
+            flex-direction: column;
+            justify-center: center;
+            align-items: flex-start; /* 默认左对齐 */
+            min-height: 300px;
+            font-family: 'Times New Roman', serif; /* 默认一个优雅的字体 */
+            color: #e2e8f0;
+            background-color: #1a202c; /* 默认一个深色背景 */
+            word-wrap: break-word; /* 保证长单词换行 */
+        }
+        #export-preview p { margin-bottom: 0.5em; }
+        #export-preview h1 { font-size: 2.5em; font-weight: bold; margin-bottom: 0.8em; }
+        #export-preview h2 { font-size: 2em; font-weight: bold; margin-bottom: 0.6em; }
+        #export-preview b { font-weight: bold; }
+        #export-preview i { font-style: italic; }
+        #export-preview u { text-decoration: underline; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <nav class="flex justify-between items-center mb-8 max-w-7xl mx-auto w-full">
+        <div class="text-2xl font-bold tracking-tighter gradient-text">NEXUS.WRITER</div>
+        <div class="flex items-center space-x-4">
+            <button onclick="downloadImage()" class="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg text-sm font-bold transition">下载图片</button>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
+        
+        <section class="lg:col-span-5 space-y-4">
+            <div class="glass p-6 rounded-3xl">
+                <h2 class="text-lg font-bold mb-4 flex items-center">
+                    <svg class="w-5 h-5 mr-2 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                    在线编辑器
+                </h2>
+                <div class="flex flex-wrap gap-2 mb-4">
+                    <button class="editor-btn" data-command="bold" title="加粗"><b>B</b></button>
+                    <button class="editor-btn" data-command="italic" title="斜体"><i>I</i></button>
+                    <button class="editor-btn" data-command="underline" title="下划线"><u>U</u></button>
+                    <input type="color" id="font-color" class="w-8 h-8 p-0 border-none cursor-pointer" title="文字颜色">
+                    <select id="font-size" class="editor-btn !w-auto" title="文字大小">
+                        <option value="1">小</option>
+                        <option value="3" selected>中</option>
+                        <option value="5">大</option>
+                    </select>
+                    <button class="editor-btn" data-command="justifyLeft" title="左对齐">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8m-8 6h16"></path></svg>
+                    </button>
+                    <button class="editor-btn" data-command="justifyCenter" title="居中">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-8 6h8"></path></svg>
+                    </button>
+                    <button class="editor-btn" data-command="justifyRight" title="右对齐">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M12 12h8m-8 6h16"></path></svg>
+                    </button>
+                </div>
+                <div id="editor-content" class="glass rounded-xl text-white font-sans focus:border-blue-500 transition" contenteditable="true" placeholder="在此输入你的文字，可点击上方按钮美化..."></div>
+            </div>
+
+            <div class="glass p-6 rounded-3xl">
+                <h2 class="text-lg font-bold mb-4 flex items-center">
+                    <svg class="w-5 h-5 mr-2 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17l-2-2m0 0l-2 2m2-2V9m4-2a4 4 0 110 8m0-8a4 4 0 100 8m-4-2h8m-2 4h4M7 3h10a2 2 0 012 2v14a2 2 0 01-2 2H7a2 2 0 01-2-2V5a2 2 0 012-2z"></path></svg>
+                    背景主题
+                </h2>
+                <div class="grid grid-cols-2 gap-4">
+                    <button class="theme-btn active" data-bg="#1a202c" data-font-color="#e2e8f0" data-font-family="serif">深邃暗夜</button>
+                    <button class="theme-btn" data-bg="#f0f2f5" data-font-color="#2d3748" data-font-family="sans-serif">明亮白昼</button>
+                    <button class="theme-btn" data-bg="#a78bfa" data-font-color="#1e293b" data-font-family="monospace">紫气东来</button>
+                    <button class="theme-btn" data-bg="#f472b6" data-font-color="#ffffff" data-font-family="cursive">浪漫粉红</button>
+                </div>
+            </div>
+        </section>
+
+        <section class="lg:col-span-7 glass rounded-3xl p-6 relative flex items-center justify-center min-h-[500px]">
+            <!-- <h2 class="absolute top-6 left-6 text-gray-500 text-xs font-mono uppercase tracking-widest">导出预览</h2> -->
+            <div id="export-preview" class="w-full h-full rounded-2xl transition-all duration-300 shadow-xl">
+                </div>
+        </section>
+
+    </main>
+
+    <script>
+        const editorContent = document.getElementById('editor-content');
+        const exportPreview = document.getElementById('export-preview');
+        const fontColorInput = document.getElementById('font-color');
+        const fontSizeSelect = document.getElementById('font-size');
+
+        // 初始化编辑器按钮
+        document.querySelectorAll('.editor-btn').forEach(button => {
+            button.addEventListener('click', () => {
+                const command = button.dataset.command;
+                if (command) {
+                    document.execCommand(command, false, null);
+                    editorContent.focus();
+                    updatePreview();
+                }
+            });
+        });
+
+        // 文字颜色
+        fontColorInput.addEventListener('input', (e) => {
+            document.execCommand('foreColor', false, e.target.value);
+            editorContent.focus();
+            updatePreview();
+        });
+
+        // 文字大小
+        fontSizeSelect.addEventListener('change', (e) => {
+            document.execCommand('fontSize', false, e.target.value);
+            editorContent.focus();
+            updatePreview();
+        });
+
+        // 内容变化时更新预览
+        editorContent.addEventListener('input', updatePreview);
+        editorContent.addEventListener('keyup', updatePreview); // 确保按键释放后更新
+        editorContent.addEventListener('mouseup', updatePreview); // 确保选择后更新
+        editorContent.addEventListener('paste', updatePreview); // 确保粘贴后更新
+
+
+        // 主题切换
+        document.querySelectorAll('.theme-btn').forEach(button => {
+            button.addEventListener('click', () => {
+                // 移除所有按钮的 active 状态
+                document.querySelectorAll('.theme-btn').forEach(btn => btn.classList.remove('active', 'bg-blue-600', 'text-white'));
+                // 给当前点击的按钮添加 active 状态
+                button.classList.add('active', 'bg-blue-600', 'text-white');
+
+                const bgColor = button.dataset.bg;
+                const fontColor = button.dataset.fontColor;
+                const fontFamily = button.dataset.fontFamily;
+
+                exportPreview.style.backgroundColor = bgColor;
+                exportPreview.style.color = fontColor;
+                exportPreview.style.fontFamily = fontFamily;
+            });
+        });
+        
+        // 初始选中第一个主题
+        document.querySelector('.theme-btn').click();
+
+        // 更新预览内容
+        function updatePreview() {
+            // 注意：直接 innerHTML 可能会有样式污染，这里需要更精细的处理，但为简化示例先这样
+            // 更好的方式是遍历 editorContent 的子节点，根据标签和样式重新构建 exportPreview 的内容
+            exportPreview.innerHTML = editorContent.innerHTML;
+        }
+
+        // 下载图片
+        async function downloadImage() {
+            if (!editorContent.innerText.trim()) {
+                alert("请先输入一些文字！");
+                return;
+            }
+
+            // 获取预览区域的实际计算样式
+            const previewComputedStyle = window.getComputedStyle(exportPreview);
+            const bgColor = previewComputedStyle.backgroundColor;
+            const fontColor = previewComputedStyle.color;
+            const fontFamily = previewComputedStyle.fontFamily;
+            const padding = parseInt(previewComputedStyle.paddingLeft) + parseInt(previewComputedStyle.paddingRight);
+
+            // 获取预览区域的原始HTML内容
+            const htmlContent = editorContent.innerHTML;
+
+            // 创建一个临时的 div 来测量内容尺寸，并应用预览区的样式
+            const tempDiv = document.createElement('div');
+            tempDiv.style.position = 'absolute';
+            tempDiv.style.top = '-9999px';
+            tempDiv.style.left = '-9999px';
+            tempDiv.style.width = 'fit-content'; // 宽度自适应内容
+            tempDiv.style.whiteSpace = 'pre-wrap'; // 保留换行和空格
+            tempDiv.style.wordBreak = 'break-word';
+            tempDiv.style.fontFamily = fontFamily;
+            tempDiv.style.color = fontColor;
+            tempDiv.style.lineHeight = '1.6'; // 保持与编辑器一致的行高
+            tempDiv.style.padding = '2rem'; // 保持与预览区一致的内边距
+            tempDiv.innerHTML = htmlContent;
+            document.body.appendChild(tempDiv);
+
+            // 等待字体加载（如果是非系统字体）
+            await document.fonts.ready;
+
+            // 获取内容实际渲染后的宽度和高度
+            const contentWidth = tempDiv.offsetWidth;
+            const contentHeight = tempDiv.offsetHeight;
+            
+            document.body.removeChild(tempDiv); // 移除临时 div
+
+            // 创建 Canvas 元素
+            const renderCanvas = document.createElement('canvas');
+            const scaleFactor = 2; // 放大因子，提高导出图片清晰度
+            renderCanvas.width = contentWidth * scaleFactor;
+            renderCanvas.height = contentHeight * scaleFactor;
+            const renderCtx = renderCanvas.getContext('2d');
+            
+            renderCtx.scale(scaleFactor, scaleFactor); // 缩放绘图上下文
+
+            // 填充背景
+            renderCtx.fillStyle = bgColor;
+            renderCtx.fillRect(0, 0, renderCanvas.width, renderCanvas.height);
+
+            // 将 HTML 内容绘制到 Canvas
+            // 这是一个挑战，因为 Canvas 不直接渲染 HTML 样式。
+            // 最简单的办法是使用一个外部库，如 html2canvas。
+            // 但为了不引入更多库，我们尝试手动绘制，但这会丢失复杂样式。
+            // 考虑到你要求“漂亮”，这里用一个折中方案：先用 html2canvas 渲染，再用 Canvas 导出。
+            // 重新思考：直接将 export-preview 元素绘制到 Canvas 最简单且效果最好。
+
+            // 引入 html2canvas 库
+            if (typeof html2canvas === 'undefined') {
+                const script = document.createElement('script');
+                script.src = "https://html2canvas.hertzen.com/dist/html2canvas.min.js";
+                document.head.appendChild(script);
+                await new Promise(resolve => script.onload = resolve);
+            }
+
+            html2canvas(exportPreview, {
+                backgroundColor: null, // 让html2canvas使用元素的背景，而不是强制白色
+                scale: scaleFactor, // 导出时放大，保持清晰度
+                useCORS: true // 如果有外部图片，可能需要
+            }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = `nexus-text-image-${Date.now()}.png`;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            });
+        }
+
+        // 首次加载时更新一次预览
+        updatePreview();
+    </script>
+</body>
+</html>

@@ -36,12 +36,12 @@
 </head>
 <body class="font-sans">
 
-    <nav class="fixed top-0 left-0 right-0 glass px-6 py-3 z-50 flex justify-between items-center shadow-lg">
-        <div class="flex items-center space-x-4">
-            <a href="/" class="text-xl font-bold tracking-tighter gradient-text">immmor</a>
-            <span class="text-gray-400">/ 脑图编辑器</span>
-            <div class="ml-8 text-white text-lg">
-                <input type="text" value="我的新脑图" class="bg-transparent border-none focus:outline-none focus:ring-0" />
+    <nav class="fixed top-0 left-0 right-0 glass px-4 md:px-6 py-3 z-50 flex justify-between items-center shadow-lg">
+        <div class="flex items-center space-x-2 md:space-x-4">
+            <a href="/" class="text-lg md:text-xl font-bold tracking-tighter gradient-text">immmor</a>
+            <span class="text-gray-400 text-xs md:text-sm hidden md:block">/ 脑图编辑器</span>
+            <div class="ml-4 md:ml-8 text-white text-sm md:text-lg">
+                <input type="text" value="我的新脑图" class="bg-transparent border-none focus:outline-none focus:ring-0 w-24 md:w-48" />
             </div>
         </div>
         <div class="flex items-center space-x-4">
@@ -51,13 +51,13 @@
             <button class="text-gray-400 hover:text-white p-2 rounded-md hover:bg-white/10 transition">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
             </button>
-            <button class="bg-blue-600 text-white px-4 py-2 rounded-md text-sm hover:bg-blue-700 transition">保存</button>
+            <button class="bg-blue-600 text-white px-3 py-1 rounded-md text-xs md:text-sm hover:bg-blue-700 transition">保存</button>
         </div>
     </nav>
 
     <div class="flex flex-1 pt-16" style="height: calc(100vh - 64px);">
         
-        <aside class="w-16 flex-shrink-0 bg-gray-900/50 pt-4 flex flex-col items-center space-y-4 shadow-lg z-30">
+        <aside class="w-14 md:w-16 flex-shrink-0 bg-gray-900/50 pt-4 flex flex-col items-center space-y-4 shadow-lg z-30">
             <button class="text-gray-400 hover:text-white p-2 rounded-md hover:bg-white/10 transition" title="新建节点">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
             </button>
@@ -80,12 +80,12 @@
         </aside>
 
         <div id="mindmap-canvas" class="flex-1 canvas-bg relative overflow-hidden">
-            <div class="absolute inset-0 flex items-center justify-center text-gray-600 text-lg">
-                <p>拖拽此处创建新节点 或 点击左侧工具栏按钮</p>
+            <div class="absolute inset-0 flex items-center justify-center text-gray-600 text-sm md:text-lg px-4">
+                <p class="text-center">拖拽此处创建新节点 或 点击左侧工具栏按钮</p>
             </div>
         </div>
 
-        <aside class="w-72 flex-shrink-0 glass p-6 z-40 overflow-auto">
+        <aside class="w-full md:w-72 lg:w-72 flex-shrink-0 glass p-6 z-40 overflow-auto md:block hidden">
             <h2 class="text-xl font-semibold mb-6">节点属性</h2>
             
             <div class="mb-6">
@@ -96,10 +96,10 @@
             <div class="mb-6">
                 <label for="node-color" class="block text-gray-400 text-sm mb-2">背景颜色</label>
                 <div class="flex space-x-2">
-                    <button class="w-8 h-8 rounded-full bg-blue-600 border-2 border-transparent focus:border-blue-400 transition"></button>
-                    <button class="w-8 h-8 rounded-full bg-green-600 border-2 border-transparent focus:border-green-400 transition"></button>
-                    <button class="w-8 h-8 rounded-full bg-purple-600 border-2 border-transparent focus:border-purple-400 transition"></button>
-                    <input type="color" class="w-8 h-8 rounded-full bg-transparent border-none p-0 cursor-pointer" value="#ff0000">
+                    <button class="w-7 h-7 rounded-full bg-blue-600 border-2 border-transparent focus:border-blue-400 transition"></button>
+                    <button class="w-7 h-7 rounded-full bg-green-600 border-2 border-transparent focus:border-green-400 transition"></button>
+                    <button class="w-7 h-7 rounded-full bg-purple-600 border-2 border-transparent focus:border-purple-400 transition"></button>
+                    <input type="color" class="w-7 h-7 rounded-full bg-transparent border-none p-0 cursor-pointer" value="#ff0000">
                 </div>
             </div>
 
@@ -129,6 +129,7 @@
     <script>
         // 脑图编辑器核心功能
         let selectedNode = null;
+        let selectedNodeData = null;
         let isDragging = false;
         let offsetX, offsetY;
 
@@ -172,98 +173,272 @@
             });
         }
 
+        // 节点数据结构
+        class MindMapNode {
+            constructor(id, text, x, y, parentId = null) {
+                this.id = id;
+                this.text = text;
+                this.x = x;
+                this.y = y;
+                this.parentId = parentId;
+                this.children = [];
+            }
+        }
+
+        let nodes = [];
+        let edges = [];
+        let nextNodeId = 1;
+
         // 创建中心节点
         function createCentralNode() {
             const canvas = document.getElementById('mindmap-canvas');
             canvas.innerHTML = '';
+            nodes = [];
+            edges = [];
             
-            const node = document.createElement('div');
-            node.className = 'absolute px-6 py-3 bg-blue-600 rounded-lg shadow-lg cursor-move select-none';
-            node.style.left = '50%';
-            node.style.top = '50%';
-            node.style.transform = 'translate(-50%, -50%)';
-            node.textContent = '中心主题';
+            const centralNode = new MindMapNode(nextNodeId++, '中心主题', canvas.clientWidth / 2, canvas.clientHeight / 2);
+            nodes.push(centralNode);
             
-            setupNodeEvents(node);
-            canvas.appendChild(node);
-            selectNode(node);
+            const nodeElement = createNodeElement(centralNode);
+            setupNodeEvents(nodeElement, centralNode);
+            canvas.appendChild(nodeElement);
+            selectNode(nodeElement, centralNode);
         }
 
         // 创建子节点
         function createChildNode(x, y) {
-            if (!selectedNode) return;
+            if (!selectedNode || !selectedNodeData) return;
             
             const canvas = document.getElementById('mindmap-canvas');
-            const node = document.createElement('div');
-            node.className = 'absolute px-4 py-2 bg-green-600 rounded-lg shadow-lg cursor-move select-none';
-            node.style.left = x + 'px';
-            node.style.top = y + 'px';
-            node.textContent = '子主题';
+            const childNode = new MindMapNode(nextNodeId++, '子主题', x, y, selectedNodeData.id);
+            nodes.push(childNode);
+            selectedNodeData.children.push(childNode);
             
-            setupNodeEvents(node);
-            canvas.appendChild(node);
-            selectNode(node);
+            const nodeElement = createNodeElement(childNode);
+            setupNodeEvents(nodeElement, childNode);
+            canvas.appendChild(nodeElement);
+            
+            // 创建连接线
+            createEdge(selectedNodeData, childNode);
+            
+            selectNode(nodeElement, childNode);
+        }
+
+        // 创建节点元素
+        function createNodeElement(node) {
+            const nodeElement = document.createElement('div');
+            nodeElement.className = 'absolute px-4 py-2 bg-green-600 rounded-lg shadow-lg cursor-move select-none';
+            if (node.parentId === null) {
+                nodeElement.className = 'absolute px-6 py-3 bg-blue-600 rounded-lg shadow-lg cursor-move select-none';
+            }
+            nodeElement.style.left = node.x + 'px';
+            nodeElement.style.top = node.y + 'px';
+            nodeElement.textContent = node.text;
+            nodeElement.dataset.nodeId = node.id;
+            return nodeElement;
+        }
+
+        // 创建连接线
+        function createEdge(parentNode, childNode) {
+            const canvas = document.getElementById('mindmap-canvas');
+            const edge = document.createElement('div');
+            edge.className = 'absolute pointer-events-none';
+            edge.style.zIndex = '5';
+            
+            const parentRect = canvas.querySelector(`[data-node-id="${parentNode.id}"]`).getBoundingClientRect();
+            const childRect = canvas.querySelector(`[data-node-id="${childNode.id}"]`).getBoundingClientRect();
+            
+            const parentCenterX = parentRect.left + parentRect.width / 2 - canvas.getBoundingClientRect().left;
+            const parentCenterY = parentRect.top + parentRect.height / 2 - canvas.getBoundingClientRect().top;
+            const childCenterX = childRect.left + childRect.width / 2 - canvas.getBoundingClientRect().left;
+            const childCenterY = childRect.top + childRect.height / 2 - canvas.getBoundingClientRect().top;
+            
+            const dx = childCenterX - parentCenterX;
+            const dy = childCenterY - parentCenterY;
+            const length = Math.sqrt(dx * dx + dy * dy);
+            const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+            
+            edge.style.width = length + 'px';
+            edge.style.height = '2px';
+            edge.style.backgroundColor = '#60a5fa';
+            edge.style.left = parentCenterX + 'px';
+            edge.style.top = parentCenterY + 'px';
+            edge.style.transformOrigin = '0 50%';
+            edge.style.transform = `rotate(${angle}deg)`;
+            
+            canvas.appendChild(edge);
+            edges.push({ parentId: parentNode.id, childId: childNode.id, element: edge });
         }
 
         // 设置节点事件
-        function setupNodeEvents(node) {
+        function setupNodeEvents(nodeElement, nodeData) {
             // 点击选中
-            node.addEventListener('click', (e) => {
+            nodeElement.addEventListener('click', (e) => {
                 e.stopPropagation();
-                selectNode(node);
+                selectNode(nodeElement, nodeData);
             });
             
             // 拖拽开始
-            node.addEventListener('mousedown', (e) => {
+            nodeElement.addEventListener('mousedown', (e) => {
                 isDragging = true;
-                offsetX = e.clientX - node.getBoundingClientRect().left;
-                offsetY = e.clientY - node.getBoundingClientRect().top;
-                node.style.zIndex = '100';
+                offsetX = e.clientX - nodeElement.getBoundingClientRect().left;
+                offsetY = e.clientY - nodeElement.getBoundingClientRect().top;
+                nodeElement.style.zIndex = '100';
             });
             
             // 拖拽移动
-            document.addEventListener('mousemove', (e) => {
-                if (!isDragging) return;
+            nodeElement.addEventListener('mousemove', (e) => {
+                if (!isDragging || !nodeElement) return;
                 const canvas = document.getElementById('mindmap-canvas');
                 const rect = canvas.getBoundingClientRect();
-                node.style.left = (e.clientX - rect.left - offsetX) + 'px';
-                node.style.top = (e.clientY - rect.top - offsetY) + 'px';
+                const x = Math.max(0, Math.min(e.clientX - rect.left - offsetX, canvas.clientWidth - nodeElement.offsetWidth));
+                const y = Math.max(0, Math.min(e.clientY - rect.top - offsetY, canvas.clientHeight - nodeElement.offsetHeight));
+                
+                nodeElement.style.left = x + 'px';
+                nodeElement.style.top = y + 'px';
+                
+                // 更新节点数据
+                const node = nodes.find(n => n.id === parseInt(nodeElement.dataset.nodeId));
+                if (node) {
+                    node.x = x;
+                    node.y = y;
+                    // 更新连接线
+                    updateEdges();
+                }
+                e.stopPropagation();
             });
             
             // 拖拽结束
             document.addEventListener('mouseup', () => {
                 isDragging = false;
-                if (node) node.style.zIndex = '10';
+                if (nodeElement) nodeElement.style.zIndex = '10';
+            });
+        }
+
+        // 更新所有连接线
+        function updateEdges() {
+            const canvas = document.getElementById('mindmap-canvas');
+            edges.forEach(edge => {
+                const parentNode = nodes.find(n => n.id === edge.parentId);
+                const childNode = nodes.find(n => n.id === edge.childId);
+                if (parentNode && childNode) {
+                    const parentElement = canvas.querySelector(`[data-node-id="${parentNode.id}"]`);
+                    const childElement = canvas.querySelector(`[data-node-id="${childNode.id}"]`);
+                    if (parentElement && childElement) {
+                        const parentRect = parentElement.getBoundingClientRect();
+                        const childRect = childElement.getBoundingClientRect();
+                        const canvasRect = canvas.getBoundingClientRect();
+                        
+                        const parentCenterX = parentRect.left + parentRect.width / 2 - canvasRect.left;
+                        const parentCenterY = parentRect.top + parentRect.height / 2 - canvasRect.top;
+                        const childCenterX = childRect.left + childRect.width / 2 - canvasRect.left;
+                        const childCenterY = childRect.top + childRect.height / 2 - canvasRect.top;
+                        
+                        const dx = childCenterX - parentCenterX;
+                        const dy = childCenterY - parentCenterY;
+                        const length = Math.sqrt(dx * dx + dy * dy);
+                        const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+                        
+                        edge.element.style.width = length + 'px';
+                        edge.element.style.left = parentCenterX + 'px';
+                        edge.element.style.top = parentCenterY + 'px';
+                        edge.element.style.transform = `rotate(${angle}deg)`;
+                    }
+                }
             });
         }
 
         // 选中节点
-        function selectNode(node) {
+        function selectNode(nodeElement, nodeData) {
             if (selectedNode) {
                 selectedNode.style.border = 'none';
             }
-            selectedNode = node;
-            node.style.border = '2px solid #60a5fa';
+            selectedNode = nodeElement;
+            selectedNodeData = nodeData;
+            nodeElement.style.border = '2px solid #60a5fa';
             // 更新属性面板
-            document.getElementById('node-text').value = node.textContent;
-            document.getElementById('font-size').value = parseInt(getComputedStyle(node).fontSize);
-            document.querySelector('.mb-6:nth-child(3) span').textContent = `当前：${parseInt(getComputedStyle(node).fontSize)}px`;
+            document.getElementById('node-text').value = nodeData.text;
+            document.getElementById('font-size').value = parseInt(getComputedStyle(nodeElement).fontSize);
+            document.querySelector('.mb-6:nth-child(3) span').textContent = `当前：${parseInt(getComputedStyle(nodeElement).fontSize)}px`;
         }
 
         // 更新节点文本
         function updateNodeText(e) {
-            if (selectedNode) {
+            if (selectedNode && selectedNodeData) {
                 selectedNode.textContent = e.target.value;
+                selectedNodeData.text = e.target.value;
             }
         }
 
         // 删除选中节点
         function deleteSelectedNode() {
-            if (selectedNode) {
-                selectedNode.remove();
+            if (selectedNode && selectedNodeData) {
+                // 删除节点及其所有子节点
+                deleteNodeRecursive(selectedNodeData.id);
+                // 更新画布
+                redrawMindMap();
                 selectedNode = null;
+                selectedNodeData = null;
             }
         }
+
+        // 递归删除节点
+        function deleteNodeRecursive(nodeId) {
+            const node = nodes.find(n => n.id === nodeId);
+            if (node) {
+                // 删除子节点
+                node.children.forEach(child => deleteNodeRecursive(child.id));
+                // 删除节点
+                nodes = nodes.filter(n => n.id !== nodeId);
+                // 删除相关连接线
+                edges = edges.filter(e => e.parentId !== nodeId && e.childId !== nodeId);
+                // 更新父节点的子节点列表
+                const parentNode = nodes.find(n => n.id === node.parentId);
+                if (parentNode) {
+                    parentNode.children = parentNode.children.filter(c => c.id !== nodeId);
+                }
+            }
+        }
+
+        // 重绘整个脑图
+        function redrawMindMap() {
+            const canvas = document.getElementById('mindmap-canvas');
+            canvas.innerHTML = '';
+            
+            // 绘制所有节点
+            nodes.forEach(node => {
+                const nodeElement = createNodeElement(node);
+                setupNodeEvents(nodeElement, node);
+                canvas.appendChild(nodeElement);
+            });
+            
+            // 绘制所有连接线
+            edges.forEach(edge => {
+                const parentNode = nodes.find(n => n.id === edge.parentId);
+                const childNode = nodes.find(n => n.id === edge.childId);
+                if (parentNode && childNode) {
+                    createEdge(parentNode, childNode);
+                }
+            });
+        }
+
+        // 修复窗口大小变化时的节点位置
+        window.addEventListener('resize', () => {
+            if (nodes.length === 0) return;
+            const canvas = document.getElementById('mindmap-canvas');
+            // 仅调整中心节点位置
+            const centralNode = nodes.find(n => n.parentId === null);
+            if (centralNode) {
+                const nodeElement = canvas.querySelector(`[data-node-id="${centralNode.id}"]`);
+                if (nodeElement) {
+                    centralNode.x = canvas.clientWidth / 2;
+                    centralNode.y = canvas.clientHeight / 2;
+                    nodeElement.style.left = centralNode.x + 'px';
+                    nodeElement.style.top = centralNode.y + 'px';
+                    updateEdges();
+                }
+            }
+        });
 
         // 页面加载完成后初始化
         window.addEventListener('load', init);

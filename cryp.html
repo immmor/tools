@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>immmor Cipher | 万能加解密</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <style>
+        body {
+            background: radial-gradient(circle at top right, #1e293b, #0f172a, #000000);
+            min-height: 100vh;
+            color: white;
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .gradient-text {
+            background: linear-gradient(90deg, #60a5fa, #a78bfa, #f472b6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        textarea, input {
+            background: rgba(255, 255, 255, 0.05) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            color: #e2e8f0 !important;
+        }
+        textarea:focus, input:focus {
+            border-color: #60a5fa !important;
+            outline: none;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <nav class="flex justify-between items-center mb-10 max-w-7xl mx-auto w-full">
+        <div class="text-2xl font-bold tracking-tighter gradient-text">immmor.CIPHER</div>
+        <div class="text-gray-500 text-xs">安全级别: 军用级 (AES-256 / SHA-3)</div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
+        
+        <section class="lg:col-span-5 space-y-6">
+            <div class="glass p-6 rounded-3xl">
+                <h2 class="text-lg font-bold mb-4 flex items-center">
+                    <span class="w-2 h-2 bg-blue-500 rounded-full mr-2"></span> 数据源
+                </h2>
+                <textarea id="input-text" rows="8" class="w-full p-4 rounded-xl resize-none text-sm font-mono" placeholder="在此输入需要处理的文本..."></textarea>
+                
+                <div class="mt-6 space-y-4">
+                    <div>
+                        <label class="block text-gray-400 text-xs mb-2 uppercase tracking-widest">加密密钥 (针对 AES)</label>
+                        <input id="cipher-key" type="password" class="w-full p-3 rounded-lg text-sm" placeholder="Secret Key">
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass p-6 rounded-3xl">
+                <h2 class="text-lg font-bold mb-4 flex items-center">
+                    <span class="w-2 h-2 bg-purple-500 rounded-full mr-2"></span> 解密模式
+                </h2>
+                <p class="text-gray-400 text-xs mb-4">如果是解密已加密的文本，请粘贴至上方并输入密钥。</p>
+                <button onclick="handleDecrypt()" class="w-full py-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition text-sm">
+                    执行 AES 解密
+                </button>
+            </div>
+        </section>
+
+        <section class="lg:col-span-7 grid grid-cols-1 gap-4">
+            
+            <div class="glass p-5 rounded-2xl relative group">
+                <span class="text-[10px] text-blue-400 font-bold uppercase">AES Encryption</span>
+                <div id="res-aes" class="mt-2 font-mono text-sm break-all text-gray-300 min-h-[1.25rem]">...</div>
+                <button onclick="copy('res-aes')" class="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition text-xs text-gray-500 hover:text-white">复制</button>
+            </div>
+
+            <div class="glass p-5 rounded-2xl relative group">
+                <span class="text-[10px] text-green-400 font-bold uppercase">Base64 Encoding</span>
+                <div id="res-base64" class="mt-2 font-mono text-sm break-all text-gray-300">...</div>
+                <button onclick="copy('res-base64')" class="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition text-xs text-gray-500 hover:text-white">复制</button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="glass p-5 rounded-2xl relative group">
+                    <span class="text-[10px] text-pink-400 font-bold uppercase">MD5 Hash</span>
+                    <div id="res-md5" class="mt-2 font-mono text-sm break-all text-gray-300">...</div>
+                </div>
+                <div class="glass p-5 rounded-2xl relative group">
+                    <span class="text-[10px] text-yellow-400 font-bold uppercase">SHA-256</span>
+                    <div id="res-sha256" class="mt-2 font-mono text-sm break-all text-gray-300">...</div>
+                </div>
+            </div>
+
+            <div class="glass p-5 rounded-2xl relative group">
+                <span class="text-[10px] text-cyan-400 font-bold uppercase">URL Encoded</span>
+                <div id="res-url" class="mt-2 font-mono text-sm break-all text-gray-300">...</div>
+            </div>
+
+        </section>
+    </main>
+
+    <script>
+        const input = document.getElementById('input-text');
+        const key = document.getElementById('cipher-key');
+
+        function process() {
+            const val = input.value;
+            const k = key.value || 'immmor-default-key';
+
+            if (!val) {
+                clearResults();
+                return;
+            }
+
+            // 1. AES 加密
+            document.getElementById('res-aes').innerText = CryptoJS.AES.encrypt(val, k).toString();
+
+            // 2. Base64
+            const words = CryptoJS.enc.Utf8.parse(val);
+            document.getElementById('res-base64').innerText = CryptoJS.enc.Base64.stringify(words);
+
+            // 3. MD5
+            document.getElementById('res-md5').innerText = CryptoJS.MD5(val).toString();
+
+            // 4. SHA-256
+            document.getElementById('res-sha256').innerText = CryptoJS.SHA256(val).toString();
+
+            // 5. URL Encode
+            document.getElementById('res-url').innerText = encodeURIComponent(val);
+        }
+
+        function handleDecrypt() {
+            const val = input.value;
+            const k = key.value;
+            if (!val || !k) {
+                alert("请输入待解密文本和密钥");
+                return;
+            }
+            try {
+                const bytes = CryptoJS.AES.decrypt(val, k);
+                const originalText = bytes.toString(CryptoJS.enc.Utf8);
+                if (originalText) {
+                    input.value = originalText;
+                    process();
+                } else {
+                    alert("解密失败：密钥错误或格式不正确");
+                }
+            } catch (e) {
+                alert("出错啦：" + e.message);
+            }
+        }
+
+        function clearResults() {
+            ['res-aes', 'res-base64', 'res-md5', 'res-sha256', 'res-url'].forEach(id => {
+                document.getElementById(id).innerText = '...';
+            });
+        }
+
+        function copy(id) {
+            const text = document.getElementById(id).innerText;
+            navigator.clipboard.writeText(text);
+            const btn = event.target;
+            btn.innerText = "已复制";
+            setTimeout(() => btn.innerText = "复制", 1000);
+        }
+
+        input.addEventListener('input', process);
+        key.addEventListener('input', process);
+    </script>
+</body>
+</html>
