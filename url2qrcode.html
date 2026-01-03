@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus QR | 智能二维码生成</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        body {
+            background: radial-gradient(circle at top right, #1e293b, #0f172a, #000000);
+            min-height: 100vh;
+            color: white;
+            display: flex;
+            flex-direction: column;
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .gradient-text {
+            background: linear-gradient(90deg, #60a5fa, #a78bfa, #f472b6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        /* 二维码容器样式，确保生成的 canvas 是响应式的 */
+        #qrcode img, #qrcode canvas {
+            margin: auto;
+            border-radius: 8px;
+            border: 8px solid white; /* 经典的二维码白边，方便扫描 */
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <nav class="flex justify-between items-center mb-12 max-w-6xl mx-auto w-full">
+        <div class="text-2xl font-bold tracking-tighter gradient-text">NEXUS.IO</div>
+        <div class="text-gray-400 text-sm">二维码生成工具 v1.0</div>
+    </nav>
+
+    <main class="max-w-5xl mx-auto w-full grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+        
+        <section class="glass p-8 rounded-3xl space-y-6">
+            <h2 class="text-2xl font-bold mb-4">配置参数</h2>
+            
+            <div>
+                <label class="block text-gray-400 text-sm mb-2">链接或文本内容</label>
+                <textarea id="text-input" rows="3" 
+                    class="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 focus:outline-none focus:border-blue-500 text-white transition"
+                    placeholder="https://example.com"></textarea>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-gray-400 text-sm mb-2">二维码颜色</label>
+                    <input type="color" id="fg-color" value="#000000" class="w-full h-10 rounded-lg bg-transparent border-none cursor-pointer">
+                </div>
+                <div>
+                    <label class="block text-gray-400 text-sm mb-2">背景颜色</label>
+                    <input type="color" id="bg-color" value="#ffffff" class="w-full h-10 rounded-lg bg-transparent border-none cursor-pointer">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-gray-400 text-sm mb-2">导出尺寸 (px)</label>
+                <select id="size-select" class="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white outline-none">
+                    <option value="128">128 x 128</option>
+                    <option value="256" selected>256 x 256</option>
+                    <option value="512">512 x 512</option>
+                    <option value="1024">1024 x 1024</option>
+                </select>
+            </div>
+
+            <button id="download-btn" class="w-full py-4 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 font-bold hover:opacity-90 transition shadow-lg">
+                下载高清图片
+            </button>
+        </section>
+
+        <section class="glass p-8 rounded-3xl flex flex-col items-center justify-center min-h-[450px] relative">
+            <div class="absolute top-4 left-6 text-gray-500 text-xs font-mono uppercase tracking-widest">Live Preview</div>
+            
+            <div id="qrcode-container" class="bg-white/5 p-4 rounded-2xl border border-white/5 shadow-2xl">
+                <div id="qrcode"></div>
+            </div>
+
+            <p class="mt-8 text-gray-400 text-sm italic">预览图中显示的白边有助于提高扫描识别率</p>
+        </section>
+
+    </main>
+
+    <footer class="mt-auto py-8 text-center text-gray-600 text-xs">
+        &copy; 2024 Nexus Tools • Powered by QRCode.js
+    </footer>
+
+    <script>
+        const textInput = document.getElementById('text-input');
+        const fgColor = document.getElementById('fg-color');
+        const bgColor = document.getElementById('bg-color');
+        const sizeSelect = document.getElementById('size-select');
+        const qrcodeDiv = document.getElementById('qrcode');
+        const downloadBtn = document.getElementById('download-btn');
+
+        let qr = null;
+
+        // 初始化或更新二维码
+        function updateQRCode() {
+            const content = textInput.value.trim() || "https://nexus.io";
+            const size = parseInt(sizeSelect.value);
+
+            // 清空旧内容
+            qrcodeDiv.innerHTML = "";
+
+            // 创建新二维码
+            qr = new QRCode(qrcodeDiv, {
+                text: content,
+                width: size,
+                height: size,
+                colorDark: fgColor.value,
+                colorLight: bgColor.value,
+                correctLevel: QRCode.CorrectLevel.H
+            });
+        }
+
+        // 监听输入变化实现实时效果
+        [textInput, fgColor, bgColor, sizeSelect].forEach(el => {
+            el.addEventListener('input', updateQRCode);
+        });
+
+        // 下载功能
+        downloadBtn.addEventListener('click', () => {
+            const img = qrcodeDiv.querySelector('img');
+            const canvas = qrcodeDiv.querySelector('canvas');
+            
+            let downloadUrl = "";
+            if (img && img.src) {
+                downloadUrl = img.src;
+            } else if (canvas) {
+                downloadUrl = canvas.toDataURL("image/png");
+            }
+
+            if (downloadUrl) {
+                const link = document.createElement('a');
+                link.href = downloadUrl;
+                link.download = `nexus-qrcode-${Date.now()}.png`;
+                link.click();
+            } else {
+                alert("请先输入内容以生成二维码");
+            }
+        });
+
+        // 页面加载时执行一次
+        window.onload = updateQRCode;
+    </script>
+</body>
+</html>
