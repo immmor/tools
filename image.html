@@ -52,16 +52,49 @@
         <div class="text-2xl font-bold tracking-tighter gradient-text">immmor.LENS</div>
         <div class="flex items-center space-x-4">
             <label class="cursor-pointer bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg text-sm transition">
-                打开图片
+                打开
                 <input type="file" id="upload-input" accept="image/*" class="hidden">
             </label>
-            <button onclick="downloadImage()" class="glass px-4 py-2 rounded-lg text-sm hover:bg-white/10 transition">保存结果</button>
+            <button onclick="downloadImage()" class="glass px-4 py-2 rounded-lg text-sm hover:bg-white/10 transition">保存</button>
         </div>
     </nav>
 
     <main class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
         
         <aside class="lg:col-span-4 space-y-4">
+            <div class="glass p-6 rounded-3xl">
+                <h2 class="text-lg font-bold mb-6 flex items-center">
+                    <svg class="w-5 h-5 mr-2 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                    裁剪
+                </h2>
+                <div class="space-y-4">
+                    <div class="grid grid-cols-4 gap-2">
+                        <button onclick="setCropAspect(1,1)" class="glass px-3 py-2 rounded-lg text-xs hover:bg-white/10 transition">1:1</button>
+                        <button onclick="setCropAspect(16,9)" class="glass px-3 py-2 rounded-lg text-xs hover:bg-white/10 transition">16:9</button>
+                        <button onclick="setCropAspect(9,16)" class="glass px-3 py-2 rounded-lg text-xs hover:bg-white/10 transition">9:16</button>
+                        <button onclick="setCropAspect(0,0)" class="glass px-3 py-2 rounded-lg text-xs hover:bg-white/10 transition">自由</button>
+                    </div>
+                    <button onclick="cropImage()" class="w-full bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg text-sm transition">应用裁剪</button>
+                </div>
+            </div>
+
+            <div class="glass p-6 rounded-3xl">
+                <h2 class="text-lg font-bold mb-6 flex items-center">
+                    <svg class="w-5 h-5 mr-2 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                    旋转
+                </h2>
+                <div class="space-y-6">
+                    <div>
+                        <div class="flex justify-between text-xs mb-2 text-gray-400 uppercase">旋转角度 <span id="val-rotation">0°</span></div>
+                        <input type="range" id="rotation" min="0" max="359" value="0" class="w-full">
+                    </div>
+                    <div class="flex space-x-2">
+                        <button onclick="rotateImage(-90)" class="flex-1 glass px-4 py-2 rounded-lg text-sm hover:bg-white/10 transition">逆时针 90°</button>
+                        <button onclick="rotateImage(90)" class="flex-1 glass px-4 py-2 rounded-lg text-sm hover:bg-white/10 transition">顺时针 90°</button>
+                    </div>
+                </div>
+            </div>
+
             <div class="glass p-6 rounded-3xl">
                 <h2 class="text-lg font-bold mb-6 flex items-center">
                     <svg class="w-5 h-5 mr-2 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
@@ -93,6 +126,8 @@
 
                 <button onclick="resetFilters()" class="w-full mt-8 py-2 text-xs text-gray-500 hover:text-white transition uppercase tracking-widest">重置所有参数</button>
             </div>
+
+            
         </aside>
 
         <section class="lg:col-span-8 glass rounded-3xl overflow-hidden flex items-center justify-center bg-black/20 relative min-h-[500px]">
@@ -110,9 +145,11 @@
         const ctx = canvas.getContext('2d');
         const uploadInput = document.getElementById('upload-input');
         const placeholder = document.getElementById('placeholder-text');
-        const filters = ['brightness', 'contrast', 'saturate', 'grayscale', 'hue'];
+        const filters = ['brightness', 'contrast', 'saturate', 'grayscale', 'hue', 'rotation'];
         
         let originalImage = null;
+        let rotation = 0;
+        let cropAspect = 0;
 
         // 监听上传
         uploadInput.addEventListener('change', (e) => {
@@ -144,6 +181,7 @@
             const s = document.getElementById('saturate').value;
             const g = document.getElementById('grayscale').value;
             const h = document.getElementById('hue').value;
+            const r = document.getElementById('rotation').value;
 
             // 更新数值显示
             document.getElementById('val-brightness').innerText = b + '%';
@@ -151,6 +189,8 @@
             document.getElementById('val-saturate').innerText = s + '%';
             document.getElementById('val-grayscale').innerText = g + '%';
             document.getElementById('val-hue').innerText = h + '°';
+            document.getElementById('val-rotation').innerText = r + '°';
+            rotation = r;
 
             // 设置 Canvas 滤镜
             ctx.filter = `
@@ -162,7 +202,14 @@
             `;
             
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(originalImage, 0, 0);
+            ctx.save();
+            // 平移到画布中心
+            ctx.translate(canvas.width / 2, canvas.height / 2);
+            // 旋转图片
+            ctx.rotate((rotation * Math.PI) / 180);
+            // 绘制图片到旋转后的位置
+            ctx.drawImage(originalImage, -originalImage.width / 2, -originalImage.height / 2);
+            ctx.restore();
         }
 
         // 绑定所有滑动条事件
@@ -177,7 +224,72 @@
             document.getElementById('saturate').value = 100;
             document.getElementById('grayscale').value = 0;
             document.getElementById('hue').value = 0;
+            document.getElementById('rotation').value = 0;
+            rotation = 0;
             applyFilters();
+        }
+
+        // 旋转图片
+        function rotateImage(degrees) {
+            if (!originalImage) return;
+            let newRotation = (rotation + degrees) % 360;
+            if (newRotation < 0) newRotation += 360;
+            document.getElementById('rotation').value = newRotation;
+            applyFilters();
+        }
+
+        // 设置裁剪比例
+        function setCropAspect(width, height) {
+            cropAspect = width / height;
+        }
+
+        // 裁剪图片
+        function cropImage() {
+            if (!originalImage) return;
+            
+            let cropWidth, cropHeight;
+            
+            if (cropAspect === 0) {
+                // 自由裁剪（使用当前画布尺寸）
+                cropWidth = canvas.width;
+                cropHeight = canvas.height;
+            } else {
+                // 根据比例计算裁剪尺寸
+                if (originalImage.width / originalImage.height > cropAspect) {
+                    // 图片宽于目标比例，裁剪宽度
+                    cropHeight = originalImage.height;
+                    cropWidth = cropHeight * cropAspect;
+                } else {
+                    // 图片高于目标比例，裁剪高度
+                    cropWidth = originalImage.width;
+                    cropHeight = cropWidth / cropAspect;
+                }
+            }
+            
+            // 创建临时画布用于裁剪
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCanvas.width = cropWidth;
+            tempCanvas.height = cropHeight;
+            
+            // 从中心裁剪
+            const x = (originalImage.width - cropWidth) / 2;
+            const y = (originalImage.height - cropHeight) / 2;
+            
+            // 绘制裁剪后的图片到临时画布
+            tempCtx.drawImage(originalImage, x, y, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+            
+            // 更新原始图片为裁剪后的版本
+            const croppedImage = new Image();
+            croppedImage.onload = () => {
+                originalImage = croppedImage;
+                rotation = 0; // 裁剪后重置旋转角度
+                document.getElementById('rotation').value = 0;
+                canvas.width = cropWidth;
+                canvas.height = cropHeight;
+                applyFilters();
+            };
+            croppedImage.src = tempCanvas.toDataURL();
         }
 
         // 下载
