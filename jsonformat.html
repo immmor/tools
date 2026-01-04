@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>immmor JSON | 极客语法美化</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: radial-gradient(circle at top right, #1e293b, #0f172a, #000000);
+            min-height: 100vh;
+            color: white;
+            overflow: hidden;
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .gradient-text {
+            background: linear-gradient(90deg, #60a5fa, #a78bfa, #f472b6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        /* JSON 高亮颜色 */
+        .json-key { color: #f472b6; }      /* 粉红 */
+        .json-string { color: #4ade80; }   /* 绿色 */
+        .json-number { color: #fbbf24; }   /* 琥珀色 */
+        .json-boolean { color: #60a5fa; }  /* 蓝色 */
+        .json-null { color: #94a3b8; }     /* 灰色 */
+
+        #json-output {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: 'Fira Code', 'Monaco', monospace;
+            line-height: 1.6;
+        }
+        textarea {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255,255,255,0.1) transparent;
+        }
+    </style>
+</head>
+<body class="flex flex-col h-screen">
+
+    <nav class="h-16 glass flex justify-between items-center px-8 z-50">
+        <div class="flex items-center space-x-4">
+            <span class="text-xl font-bold tracking-tighter gradient-text">immmor.JSON</span>
+            <div class="h-4 w-[1px] bg-white/10 mx-2"></div>
+            <span class="text-[10px] text-gray-500 uppercase tracking-widest">格式化 & 语法高亮</span>
+        </div>
+        <div class="flex space-x-3">
+            <button onclick="copyRaw()" class="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-xs transition">复制纯文本</button>
+            <button onclick="formatJSON()" class="px-6 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-xs font-bold transition shadow-lg shadow-blue-500/20">美化 JSON</button>
+        </div>
+    </nav>
+
+    <main class="flex-1 flex overflow-hidden p-6 gap-6">
+        
+        <section class="flex-1 flex flex-col space-y-4">
+            <div class="flex justify-between items-center px-2">
+                <span class="text-xs text-gray-400 uppercase tracking-widest">原始数据输入</span>
+                <button onclick="clearAll()" class="text-xs text-gray-600 hover:text-red-400 transition">清空</button>
+            </div>
+            <textarea id="json-input" 
+                class="flex-1 w-full glass rounded-2xl p-6 text-sm font-mono outline-none focus:border-blue-500/50 transition resize-none bg-black/20"
+                placeholder='在此处粘贴复杂的 JSON 字符串...'></textarea>
+        </section>
+
+        <section class="flex-1 flex flex-col space-y-4">
+            <div class="flex justify-between items-center px-2">
+                <span class="text-xs text-gray-400 uppercase tracking-widest">美化预览</span>
+                <span id="error-msg" class="text-xs text-red-500 font-medium"></span>
+            </div>
+            <div class="flex-1 w-full glass rounded-2xl p-6 overflow-y-auto bg-black/40">
+                <pre id="json-output" class="text-sm"></pre>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const inputArea = document.getElementById('json-input');
+        const outputArea = document.getElementById('json-output');
+        const errorMsg = document.getElementById('error-msg');
+
+        // 核心格式化函数
+        function formatJSON() {
+            const rawValue = inputArea.value.trim();
+            if (!rawValue) {
+                outputArea.innerHTML = '';
+                errorMsg.innerText = '';
+                return;
+            }
+
+            try {
+                // 1. 解析 JSON (支持容错，处理一些非标准格式)
+                const jsonObj = JSON.parse(rawValue.replace(/'/g, '"'));
+                
+                // 2. 格式化并高亮
+                const formatted = JSON.stringify(jsonObj, null, 4);
+                outputArea.innerHTML = syntaxHighlight(formatted);
+                errorMsg.innerText = 'VALID JSON';
+                errorMsg.classList.replace('text-red-500', 'text-green-500');
+            } catch (e) {
+                // 错误定位
+                outputArea.innerText = rawValue;
+                errorMsg.innerText = 'INVALID: ' + e.message;
+                errorMsg.classList.replace('text-green-500', 'text-red-500');
+            }
+        }
+
+        // 语法高亮正则表达式逻辑
+        function syntaxHighlight(json) {
+            json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+                let cls = 'json-number';
+                if (/^"/.test(match)) {
+                    if (/:$/.test(match)) {
+                        cls = 'json-key';
+                    } else {
+                        cls = 'json-string';
+                    }
+                } else if (/true|false/.test(match)) {
+                    cls = 'json-boolean';
+                } else if (/null/.test(match)) {
+                    cls = 'json-null';
+                }
+                return '<span class="' + cls + '">' + match + '</span>';
+            });
+        }
+
+        function copyRaw() {
+            const raw = inputArea.value;
+            try {
+                const jsonObj = JSON.parse(raw);
+                const formatted = JSON.stringify(jsonObj, null, 4);
+                navigator.clipboard.writeText(formatted);
+                alert('已复制格式化后的文本');
+            } catch (e) {
+                navigator.clipboard.writeText(raw);
+                alert('已复制原始文本');
+            }
+        }
+
+        function clearAll() {
+            inputArea.value = '';
+            outputArea.innerHTML = '';
+            errorMsg.innerText = '';
+        }
+
+        // 监听实时变化（可选，如果数据量大建议手动点击按钮）
+        inputArea.addEventListener('input', () => {
+            if(inputArea.value.length < 5000) formatJSON();
+        });
+    </script>
+</body>
+</html>
