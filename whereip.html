@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus IP | 地理位置追踪</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: radial-gradient(circle at top right, #1e293b, #0f172a, #000000);
+            min-height: 100vh;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .gradient-text {
+            background: linear-gradient(90deg, #60a5fa, #4ade80);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        .pulse-green {
+            background: #4ade80;
+            box-shadow: 0 0 10px #4ade80;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+    </style>
+</head>
+<body class="p-4">
+
+    <main class="max-w-2xl w-full">
+        <div class="glass p-8 md:p-10 rounded-[2.5rem] shadow-2xl border border-white/5">
+            
+            <header class="mb-10 text-center">
+                <h1 class="text-3xl font-black tracking-tighter gradient-text uppercase">Nexus.IP</h1>
+                <p class="text-gray-500 text-[10px] uppercase tracking-[0.4em] mt-2">Global IP Locator</p>
+            </header>
+
+            <div class="relative mb-8">
+                <input type="text" id="ip-input" 
+                    class="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-5 text-lg font-mono outline-none focus:border-blue-500/50 transition bg-black/20"
+                    placeholder="输入 IP 地址 (例如: 8.8.8.8)">
+                <button onclick="fetchIPInfo()" 
+                    class="absolute right-3 top-3 bottom-3 px-6 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-bold transition">查询</button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="glass p-5 rounded-2xl">
+                    <p class="text-[10px] text-gray-500 uppercase mb-2">地理位置</p>
+                    <p id="res-location" class="text-lg font-medium">探测中...</p>
+                </div>
+                <div class="glass p-5 rounded-2xl">
+                    <p class="text-[10px] text-gray-500 uppercase mb-2">运营商 / ISP</p>
+                    <p id="res-isp" class="text-lg font-medium text-blue-400">探测中...</p>
+                </div>
+                <div class="glass p-5 rounded-2xl">
+                    <p class="text-[10px] text-gray-500 uppercase mb-2">公网 IP 地址</p>
+                    <p id="res-ip" class="text-lg font-mono text-purple-400">0.0.0.0</p>
+                </div>
+                <div class="glass p-5 rounded-2xl">
+                    <p class="text-[10px] text-gray-500 uppercase mb-2">时区 / 经纬度</p>
+                    <p id="res-coords" class="text-sm font-mono text-gray-300">Loading...</p>
+                </div>
+            </div>
+
+            <div class="mt-8 flex items-center justify-between text-[10px] text-gray-600">
+                <div class="flex items-center">
+                    <span class="status-dot pulse-green"></span>
+                    系统状态: 节点已连接
+                </div>
+                <button onclick="getLocalIP()" class="hover:text-blue-400 transition underline underline-offset-4">我的位置</button>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const ipInput = document.getElementById('ip-input');
+        const resIP = document.getElementById('res-ip');
+        const resLoc = document.getElementById('res-location');
+        const resISP = document.getElementById('res-isp');
+        const resCoords = document.getElementById('res-coords');
+
+        // 页面加载自动获取本地 IP
+        window.onload = getLocalIP;
+
+        async function getLocalIP() {
+            ipInput.value = '';
+            fetchIPInfo('');
+        }
+
+        async function fetchIPInfo(query = null) {
+            const target = query === null ? ipInput.value.trim() : query;
+            
+            // 简单加载反馈
+            resLoc.innerText = "Searching...";
+            resISP.innerText = "Searching...";
+            
+            try {
+                // 使用 ip-api.com (免费接口)
+                const response = await fetch(`http://ip-api.com/json/${target}?lang=zh-CN`);
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    resIP.innerText = data.query;
+                    resLoc.innerText = `${data.country} · ${data.regionName} · ${data.city}`;
+                    resISP.innerText = data.isp;
+                    resCoords.innerText = `${data.timezone} | ${data.lat}, ${data.lon}`;
+                } else {
+                    resLoc.innerText = "查询失败";
+                    resISP.innerText = "无效的 IP 地址";
+                }
+            } catch (err) {
+                resLoc.innerText = "API 连接失败";
+                resISP.innerText = "请检查网络或是否开启了广告拦截";
+            }
+        }
+
+        // 回车搜索
+        ipInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') fetchIPInfo();
+        });
+    </script>
+</body>
+</html>

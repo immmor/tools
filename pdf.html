@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>immmor PDF | 文档视觉实验室</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        body {
+            background: radial-gradient(circle at top right, #1e293b, #0f172a, #000000);
+            min-height: 100vh;
+            color: white;
+            font-family: system-ui, sans-serif;
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .gradient-text {
+            background: linear-gradient(90deg, #60a5fa, #4ade80);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .preview-card {
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .preview-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.4);
+        }
+        /* 隐藏滚动条但保留功能 */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body class="p-4 md:p-10">
+
+    <main class="max-w-5xl mx-auto">
+        <header class="flex flex-col md:flex-row justify-between items-center mb-10 gap-4">
+            <div>
+                <h1 class="text-3xl font-black tracking-tighter gradient-text">immmor.PDF</h1>
+                <p class="text-gray-500 text-xs mt-1 uppercase tracking-[0.3em]">Advanced PDF Engine</p>
+            </div>
+            <div class="glass p-1 rounded-xl flex">
+                <button onclick="switchMode('p2i')" id="tab-p2i" class="px-6 py-2 rounded-lg text-sm font-bold transition bg-blue-600">PDF 转图片</button>
+                <button onclick="switchMode('i2p')" id="tab-i2p" class="px-6 py-2 rounded-lg text-sm font-bold transition text-gray-400">图片 转 PDF</button>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <div class="lg:col-span-1 space-y-6">
+                <div class="glass p-6 rounded-3xl space-y-4">
+                    <div id="drop-zone" class="border-2 border-dashed border-white/10 rounded-2xl p-8 text-center hover:border-blue-500/50 transition relative">
+                        <input type="file" id="file-input" class="absolute inset-0 opacity-0 cursor-pointer" multiple>
+                        <svg class="w-10 h-10 text-gray-500 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                        <p id="hint-text" class="text-xs text-gray-400">拖拽文件至此或点击上传</p>
+                    </div>
+
+                    <div id="status-panel" class="hidden space-y-3">
+                        <div class="flex justify-between text-[10px] uppercase tracking-widest text-gray-500">
+                            <span id="task-status">就绪</span>
+                            <span id="progress-val">0%</span>
+                        </div>
+                        <div class="w-full h-1 bg-white/5 rounded-full overflow-hidden">
+                            <div id="progress-bar" class="w-0 h-full bg-blue-500 transition-all duration-300"></div>
+                        </div>
+                    </div>
+
+                    <button id="exec-btn" disabled class="w-full py-4 rounded-2xl bg-blue-600 hover:bg-blue-500 disabled:opacity-20 disabled:cursor-not-allowed font-bold text-sm transition shadow-lg shadow-blue-500/20">
+                        生成并导出
+                    </button>
+                </div>
+            </div>
+
+            <div class="lg:col-span-2">
+                <div class="glass rounded-3xl p-6 min-h-[400px]">
+                    <h3 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-6 flex justify-between">
+                        <span>内容预览预览</span>
+                        <span id="file-counter" class="text-blue-400">共 0 页/张</span>
+                    </h3>
+                    
+                    <div id="preview-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                        <div class="col-span-full py-20 text-center text-gray-600">
+                            <p class="text-sm">暂无预览内容，请先上传文件</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- PDF 详情查看模态框 -->
+    <div id="pdf-modal" class="fixed inset-0 bg-black/80 z-50 hidden flex items-center justify-center p-4">
+        <div class="relative max-w-4xl max-h-[90vh]">
+            <!-- <button onclick="closeModal()" class="absolute top-2 right-2 bg-red-600 text-white w-8 h-8 rounded-full flex items-center justify-center text-xl">×</button> -->
+            <img id="modal-image" class="max-w-full max-h-[90vh] object-contain" src="">
+            <div id="modal-page-info" class="absolute bottom-2 left-1/2 transform -translate-x-1/2 bg-black/60 text-white text-sm px-3 py-1 rounded-full">第 1 页</div>
+        </div>
+    </div>
+
+    <script>
+        let highResPages = [];
+        // 配置 PDF.js Worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+
+        let currentMode = 'p2i';
+        let selectedFiles = [];
+        
+        const fileInput = document.getElementById('file-input');
+        const previewGrid = document.getElementById('preview-grid');
+        const execBtn = document.getElementById('exec-btn');
+        const progressBar = document.getElementById('progress-bar');
+        const progressVal = document.getElementById('progress-val');
+        const statusPanel = document.getElementById('status-panel');
+        const taskStatus = document.getElementById('task-status');
+        const fileCounter = document.getElementById('file-counter');
+
+        function switchMode(mode) {
+            currentMode = mode;
+            document.getElementById('tab-p2i').className = mode === 'p2i' ? 'px-6 py-2 rounded-lg text-sm font-bold transition bg-blue-600' : 'px-6 py-2 rounded-lg text-sm font-bold transition text-gray-400';
+            document.getElementById('tab-i2p').className = mode === 'i2p' ? 'px-6 py-2 rounded-lg text-sm font-bold transition bg-blue-600' : 'px-6 py-2 rounded-lg text-sm font-bold transition text-gray-400';
+            fileInput.accept = mode === 'p2i' ? '.pdf' : 'image/*';
+            fileInput.multiple = mode === 'i2p';
+            resetUI();
+        }
+
+        function resetUI() {
+            previewGrid.innerHTML = '<div class="col-span-full py-20 text-center text-gray-600"><p class="text-sm">暂无预览内容，请先上传文件</p></div>';
+            execBtn.disabled = true;
+            statusPanel.classList.add('hidden');
+            fileCounter.innerText = '共 0 页/张';
+        }
+
+        fileInput.addEventListener('change', async (e) => {
+            const files = Array.from(e.target.files);
+            if (!files.length) return;
+            
+            previewGrid.innerHTML = '';
+            execBtn.disabled = false;
+            
+            if (currentMode === 'p2i') {
+                renderPdfPreview(files[0]);
+            } else {
+                renderImagePreview(files);
+            }
+        });
+
+        // --- 图片转 PDF：预览逻辑 ---
+        function renderImagePreview(files) {
+            selectedFiles = files;
+            fileCounter.innerText = `共 ${files.length} 张图片`;
+            files.forEach((file, index) => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const div = document.createElement('div');
+                    div.className = "preview-card glass p-2 rounded-xl relative group";
+                    div.innerHTML = `
+                        <img src="${e.target.result}" class="w-full h-32 object-cover rounded-lg">
+                        <div class="absolute top-2 right-2 bg-black/60 text-[10px] px-2 py-1 rounded-md opacity-0 group-hover:opacity-100 transition">${(file.size/1024).toFixed(1)} KB</div>
+                    `;
+                    previewGrid.appendChild(div);
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // --- PDF 转图片：预览逻辑 ---
+        async function renderPdfPreview(file) {
+            statusPanel.classList.remove('hidden');
+            taskStatus.innerText = "解析 PDF 中...";
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+            fileCounter.innerText = `共 ${pdf.numPages} 页`;
+            highResPages = []; // 清空高清页面缓存
+
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                // 生成预览用低分辨率图
+                const viewportPreview = page.getViewport({ scale: 0.3 });
+                const canvasPreview = document.createElement('canvas');
+                const contextPreview = canvasPreview.getContext('2d');
+                canvasPreview.height = viewportPreview.height;
+                canvasPreview.width = viewportPreview.width;
+                await page.render({ canvasContext: contextPreview, viewport: viewportPreview }).promise;
+
+                // 生成高清图用于细节查看
+                const viewportHighRes = page.getViewport({ scale: 2.0 });
+                const canvasHighRes = document.createElement('canvas');
+                const contextHighRes = canvasHighRes.getContext('2d');
+                canvasHighRes.height = viewportHighRes.height;
+                canvasHighRes.width = viewportHighRes.width;
+                await page.render({ canvasContext: contextHighRes, viewport: viewportHighRes }).promise;
+                highResPages.push(canvasHighRes.toDataURL('image/png'));
+                
+                const div = document.createElement('div');
+                div.className = "preview-card glass p-2 rounded-xl cursor-pointer";
+                div.innerHTML = `<img src="${canvasPreview.toDataURL()}" class="w-full h-auto rounded-lg shadow-sm" onclick="showHighResPage(${i-1}, ${pdf.numPages})">
+                                <p class="text-[10px] text-center mt-2 text-gray-500">第 ${i} 页</p>`;
+                previewGrid.appendChild(div);
+                
+                const progress = Math.round((i / pdf.numPages) * 100);
+                progressBar.style.width = progress + '%';
+                progressVal.innerText = progress + '%';
+            }
+            taskStatus.innerText = "预览已生成，点击页面查看细节";
+        }
+
+        // 显示高清PDF页面
+        function showHighResPage(pageIndex, totalPages) {
+            const modal = document.getElementById('pdf-modal');
+            const modalImage = document.getElementById('modal-image');
+            const modalInfo = document.getElementById('modal-page-info');
+            modalImage.src = highResPages[pageIndex];
+            modalInfo.innerText = `第 ${pageIndex + 1} 页 / 共 ${totalPages} 页`;
+            modal.classList.remove('hidden');
+        }
+
+        // 关闭模态框
+        function closeModal() {
+            document.getElementById('pdf-modal').classList.add('hidden');
+        }
+
+        // 点击模态框背景关闭
+        document.getElementById('pdf-modal').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('pdf-modal')) {
+                closeModal();
+            }
+        });
+
+        // --- 最终执行逻辑 ---
+        execBtn.addEventListener('click', async () => {
+            statusPanel.classList.remove('hidden');
+            execBtn.disabled = true;
+
+            if (currentMode === 'p2i') {
+                // PDF 转图片：高质量重新渲染并下载
+                const file = fileInput.files[0];
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    taskStatus.innerText = `正在导出第 ${i} 页...`;
+                    const page = await pdf.getPage(i);
+                    const viewport = page.getViewport({ scale: 2.0 }); // 导出用高倍率
+                    const canvas = document.createElement('canvas');
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+                    await page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise;
+                    
+                    const link = document.createElement('a');
+                    link.download = `Page_${i}.png`;
+                    link.href = canvas.toDataURL('image/png');
+                    link.click();
+                }
+            } else {
+                // 图片转 PDF
+                const { jsPDF } = window.jspdf;
+                const pdf = new jsPDF();
+                
+                for (let i = 0; i < selectedFiles.length; i++) {
+                    taskStatus.innerText = `正在合成第 ${i+1} 张...`;
+                    const imgData = await new Promise(resolve => {
+                        const reader = new FileReader();
+                        reader.onload = e => resolve(e.target.result);
+                        reader.readAsDataURL(selectedFiles[i]);
+                    });
+
+                    const img = new Image();
+                    img.src = imgData;
+                    await new Promise(r => img.onload = r);
+
+                    const pageWidth = pdf.internal.pageSize.getWidth();
+                    const pageHeight = pdf.internal.pageSize.getHeight();
+                    const ratio = Math.min(pageWidth / img.width, pageHeight / img.height);
+                    
+                    if (i > 0) pdf.addPage();
+                    pdf.addImage(imgData, 'JPEG', 0, 0, img.width * ratio, img.height * ratio);
+                    
+                    const p = Math.round(((i + 1) / selectedFiles.length) * 100);
+                    progressBar.style.width = p + '%';
+                    progressVal.innerText = p + '%';
+                }
+                pdf.save("immmor_converted.pdf");
+            }
+            taskStatus.innerText = "任务已完成";
+            execBtn.disabled = false;
+        });
+    </script>
+</body>
+</html>

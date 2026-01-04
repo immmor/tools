@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>immmor Base | 进制转换矩阵</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: radial-gradient(circle at top right, #1e293b, #0f172a, #000000);
+            min-height: 100vh;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .gradient-text {
+            background: linear-gradient(90deg, #60a5fa, #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .input-group:focus-within label {
+            color: #60a5fa;
+            letter-spacing: 0.2em;
+        }
+        input {
+            font-family: 'Fira Code', 'Monaco', monospace;
+        }
+        /* 隐藏 Chrome 的数字箭头 */
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button { -webkit-appearance: none; }
+    </style>
+</head>
+<body class="p-4">
+
+    <main class="max-w-2xl w-full">
+        <div class="glass p-8 md:p-12 rounded-[2.5rem] shadow-2xl border border-white/5">
+            
+            <header class="mb-10 text-center">
+                <h1 class="text-3xl font-black tracking-tighter gradient-text">immmor.BASE</h1>
+                <p class="text-gray-500 text-[10px] uppercase tracking-[0.4em] mt-2">Base Conversion Matrix</p>
+            </header>
+
+            <div class="grid grid-cols-1 gap-6">
+                <div class="input-group space-y-2">
+                    <div class="flex justify-between items-center px-1">
+                        <label class="text-[10px] font-bold text-gray-500 uppercase transition-all">Decimal / 十进制</label>
+                        <span class="text-[10px] text-gray-700 font-mono">BASE 10</span>
+                    </div>
+                    <input type="text" id="base-10" data-base="10" placeholder="0"
+                        class="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-xl outline-none focus:border-blue-500/50 transition bg-black/20">
+                </div>
+
+                <div class="input-group space-y-2">
+                    <div class="flex justify-between items-center px-1">
+                        <label class="text-[10px] font-bold text-gray-500 uppercase transition-all">Binary / 二进制</label>
+                        <span class="text-[10px] text-gray-700 font-mono">BASE 2</span>
+                    </div>
+                    <input type="text" id="base-2" data-base="2" placeholder="0000"
+                        class="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-xl outline-none focus:border-blue-500/50 transition bg-black/20">
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="input-group space-y-2">
+                        <div class="flex justify-between items-center px-1">
+                            <label class="text-[10px] font-bold text-gray-500 uppercase transition-all">Hex / 十六进制</label>
+                            <span class="text-[10px] text-gray-700 font-mono">0x</span>
+                        </div>
+                        <div class="relative">
+                            <input type="text" id="base-16" data-base="16" placeholder="00"
+                                class="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-xl outline-none focus:border-blue-500/50 transition bg-black/20 uppercase">
+                            <div id="color-preview" class="absolute right-4 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full border border-white/20 hidden"></div>
+                        </div>
+                    </div>
+
+                    <div class="input-group space-y-2">
+                        <div class="flex justify-between items-center px-1">
+                            <label class="text-[10px] font-bold text-gray-500 uppercase transition-all">Octal / 八进制</label>
+                            <span class="text-[10px] text-gray-700 font-mono">BASE 8</span>
+                        </div>
+                        <input type="text" id="base-8" data-base="8" placeholder="0"
+                            class="w-full bg-white/5 border border-white/10 rounded-2xl px-6 py-4 text-xl outline-none focus:border-blue-500/50 transition bg-black/20">
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-10 pt-6 border-t border-white/5 flex justify-between items-center">
+                <button onclick="clearAll()" class="text-[10px] font-bold text-gray-600 hover:text-red-400 uppercase tracking-widest transition">Reset Matrix</button>
+                <div id="bit-count" class="text-[10px] font-mono text-gray-600">BITS: 0</div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const inputs = document.querySelectorAll('input[data-base]');
+        const colorPreview = document.getElementById('color-preview');
+        const bitCount = document.getElementById('bit-count');
+
+        inputs.forEach(input => {
+            input.addEventListener('input', (e) => {
+                const base = parseInt(input.dataset.base);
+                let value = input.value.trim();
+
+                if (value === '') {
+                    clearAll();
+                    return;
+                }
+
+                try {
+                    // 使用 BigInt 处理超大数字转换
+                    let decimalValue;
+                    if (base === 16) {
+                        decimalValue = BigInt('0x' + value);
+                    } else if (base === 2) {
+                        decimalValue = BigInt('0b' + value);
+                    } else if (base === 8) {
+                        decimalValue = BigInt('0o' + value);
+                    } else {
+                        decimalValue = BigInt(value);
+                    }
+
+                    updateAllInputs(decimalValue, input.id);
+                } catch (err) {
+                    // 如果输入不合法，可以高亮显示错误或保持原样
+                    input.classList.add('text-red-400');
+                    setTimeout(() => input.classList.remove('text-red-400'), 500);
+                }
+            });
+        });
+
+        function updateAllInputs(bigIntValue, sourceId) {
+            inputs.forEach(input => {
+                if (input.id !== sourceId) {
+                    const base = parseInt(input.dataset.base);
+                    input.value = bigIntValue.toString(base).toUpperCase();
+                }
+            });
+
+            // 更新位宽显示
+            bitCount.innerText = `BITS: ${bigIntValue.toString(2).length}`;
+
+            // 16进制颜色预览
+            const hex = bigIntValue.toString(16);
+            if (hex.length <= 6) {
+                const padHex = hex.padStart(6, '0');
+                colorPreview.style.display = 'block';
+                colorPreview.style.backgroundColor = '#' + padHex;
+            } else {
+                colorPreview.style.display = 'none';
+            }
+        }
+
+        function clearAll() {
+            inputs.forEach(input => input.value = '');
+            colorPreview.style.display = 'none';
+            bitCount.innerText = `BITS: 0`;
+        }
+    </script>
+</body>
+</html>
