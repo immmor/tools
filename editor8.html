@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>INDUSTRIAL_CONSOLE_V10_PRO</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        :root {
+            --amber: #ffb000;
+            --amber-dim: #714e00;
+            --bg: #12100b;
+            --panel-bg: #1c1912;
+            --border-w: 2px;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; cursor: default; }
+        
+        body, html {
+            margin: 0; padding: 0; height: 100vh; width: 100vw;
+            background: var(--bg); color: var(--amber);
+            font-family: 'Courier New', Courier, monospace; overflow: hidden;
+            background-image: linear-gradient(rgba(18, 16, 11, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 255, 0, 0.06));
+            background-size: 100% 4px, 3px 100%;
+        }
+
+        .header {
+            height: 40px; border-bottom: var(--border-w) solid var(--amber);
+            display: flex; align-items: center; padding: 0 15px;
+            font-size: 14px; font-weight: bold; background: var(--panel-bg);
+            text-shadow: 0 0 5px var(--amber); gap: 20px;
+        }
+
+        .menu-btn { cursor: pointer !important; padding: 5px 10px; border: 1px solid transparent; }
+        .menu-btn:hover { border-color: var(--amber); background: rgba(255, 176, 0, 0.1); }
+
+        .workspace { display: flex; flex-direction: row; height: calc(100vh - 40px); width: 100%; position: relative; }
+
+        .panel { 
+            background: var(--panel-bg); display: flex; flex-direction: column; 
+            overflow: hidden; position: relative; height: 100%;
+        }
+
+        .panel.maximized {
+            position: fixed !important; top: 0 !important; left: 0 !important;
+            width: 100% !important; height: 100% !important; z-index: 500;
+        }
+
+        .divider-h { width: 6px; background: var(--amber-dim); cursor: col-resize !important; flex-shrink: 0; }
+        .divider-h:hover, .divider-h.active { background: var(--amber); box-shadow: 0 0 10px var(--amber); }
+
+        .divider-v { height: 6px; background: var(--amber-dim); cursor: row-resize !important; flex-shrink: 0; }
+        .divider-v:hover, .divider-v.active { background: var(--amber); box-shadow: 0 0 10px var(--amber); }
+
+        .p-head {
+            height: 30px; border-bottom: 1px solid var(--amber-dim);
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 10px; font-size: 11px; background: rgba(113, 78, 0, 0.1);
+        }
+        .ctrl { cursor: pointer !important; padding: 2px 6px; border: 1px solid var(--amber-dim); }
+        .ctrl:hover { background: var(--amber); color: var(--bg); }
+
+        #explorer { width: 200px; border-right: 1px solid var(--amber-dim); }
+        .file-item { padding: 12px 15px; font-size: 13px; cursor: pointer !important; border-bottom: 1px solid rgba(113, 78, 0, 0.2); }
+        .file-item.active { background: var(--amber); color: var(--bg); font-weight: bold; }
+
+        #main-stack { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+        #editor {
+            flex: 1; background: transparent; border: none; outline: none;
+            padding: 20px; color: var(--amber); font-size: 16px;
+            line-height: 1.5; resize: none; font-family: inherit; cursor: text !important;
+        }
+
+        #terminal { height: 180px; border-top: var(--border-w) solid var(--amber); }
+        #term-out { flex: 1; padding: 10px; overflow-y: auto; font-size: 12px; color: rgba(255, 176, 0, 0.8); white-space: pre-wrap; word-break: break-all; }
+        .term-input { display: flex; padding: 8px 10px; background: #000; border-top: 1px solid var(--amber-dim); }
+        #cmd-in { background: transparent; border: none; outline: none; flex: 1; color: #fff; font-family: inherit; cursor: text !important; }
+
+        #ai-panel { width: 280px; border-left: 1px solid var(--amber-dim); }
+        #ai-chat { flex: 1; padding: 15px; overflow-y: auto; font-size: 13px; scroll-behavior: smooth; }
+        
+        .msg { margin-bottom: 15px; line-height: 1.4; border-left: 2px solid var(--amber-dim); padding-left: 10px; word-wrap: break-word; overflow-wrap: break-word; white-space: pre-wrap; }
+        .msg.ai { border-left-color: var(--amber); }
+        .msg.user { color: #fff; opacity: 0.8; }
+        
+        /* 自定义下拉菜单风格 */
+        .ai-tools { padding: 8px 10px; background: rgba(113, 78, 0, 0.1); border-top: 1px solid var(--amber-dim); font-size: 10px; }
+        .custom-select { 
+            background: #000; color: var(--amber); border: 1px solid var(--amber-dim); 
+            font-size: 10px; width: 100%; outline: none; padding: 4px;
+            appearance: none; -webkit-appearance: none; cursor: pointer !important;
+        }
+
+        .ai-input-area { padding: 10px; background: rgba(0,0,0,0.3); border-top: 1px solid var(--amber-dim); display: flex; gap: 5px; }
+        #ai-in { background: transparent; border: 1px solid var(--amber-dim); color: #fff; flex: 1; padding: 5px; outline: none; cursor: text !important; }
+        .ai-btn { background: var(--amber-dim); color: #fff; border: none; padding: 5px 10px; cursor: pointer !important; font-size: 10px; }
+        .ai-btn:hover { background: var(--amber); color: var(--bg); }
+
+        .inject-btn { display: inline-block; margin-top: 8px; font-size: 9px; padding: 2px 6px; border: 1px solid var(--amber); cursor: pointer !important; color: var(--amber); }
+        .inject-btn:hover { background: var(--amber); color: #000; }
+
+        /* 统一菜单样式 */
+        #ctx, .custom-modal {
+            position: fixed; display: none; background: var(--panel-bg);
+            border: 2px solid var(--amber); z-index: 1000; min-width: 200px;
+            box-shadow: 8px 8px 0px #000;
+        }
+        .opt { padding: 12px 15px; font-size: 12px; font-weight: bold; cursor: pointer !important; }
+        .opt:hover { background: var(--amber); color: var(--bg); }
+
+        /* 自定义弹窗 */
+        .modal-overlay {
+            position: fixed; top:0; left:0; width:100%; height:100%;
+            background: rgba(0,0,0,0.8); z-index: 2000; display: none;
+            align-items: center; justify-content: center;
+        }
+        .custom-modal { display: block; position: relative; width: 300px; }
+        .modal-body { padding: 20px; }
+        .modal-input { width: 100%; background: #000; border: 1px solid var(--amber); color: #fff; padding: 8px; outline: none; font-family: inherit; margin-top: 10px; }
+        .modal-btns { display: flex; justify-content: flex-end; gap: 10px; margin-top: 15px; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+        <div style="display: flex; gap: 0px;">
+            <div class="menu-btn" onclick="handleCtx(event, 10, 40)">FILE</div>
+            <div class="menu-btn" onclick="saveZip()">ARCHIVE</div>
+            <div class="menu-btn" onclick="clearTerm()">RESET</div>
+        </div>
+        <div style="text-shadow: 0 0 10px var(--amber);">IMMMOR</div>
+    </div>
+</div>
+
+<div class="workspace">
+    <aside class="panel" id="explorer" oncontextmenu="handleCtx(event)">
+        <div class="p-head">
+            <span>FILESYSTEM</span>
+            <span class="ctrl" onclick="toggleMax('explorer')">◰</span>
+        </div>
+        <div id="file-list"></div>
+    </aside>
+
+    <div class="divider-h" id="h-drag-left"></div>
+
+    <div id="main-stack">
+        <main class="panel" id="editor-p" style="flex:1">
+            <div class="p-head">
+                <span id="cur-filename">DATA_NODE.01</span>
+                <span class="ctrl" onclick="toggleMax('editor-p')">◰</span>
+            </div>
+            <textarea id="editor" spellcheck="false" oninput="autoSave()"></textarea>
+        </main>
+        
+        <div class="divider-v" id="v-drag"></div>
+
+        <footer class="panel" id="terminal">
+            <div class="p-head">
+                <span>COMM_LINK</span>
+                <span class="ctrl" onclick="toggleMax('terminal')">◰</span>
+            </div>
+            <div id="term-out">Awaiting command input... (Type 'help' for list)</div>
+            <div class="term-input">
+                <span style="margin-right:10px">>></span>
+                <input type="text" id="cmd-in" autocomplete="off" spellcheck="false">
+            </div>
+        </footer>
+    </div>
+
+    <div class="divider-h" id="h-drag-right"></div>
+
+    <aside class="panel" id="ai-panel">
+        <div class="p-head">
+            <span>NEURAL_LINK</span>
+            <span class="ctrl" onclick="toggleMax('ai-panel')">◰</span>
+        </div>
+        <div id="ai-chat">
+            <div class="msg ai">SYSTEM: Neural connection established. Select context and query.</div>
+        </div>
+        <div class="ai-tools">
+            <label style="display:block; margin-bottom:5px">CONTEXT_NODE:</label>
+            <select id="ai-ctx-select" class="custom-select">
+                <option value="none">-- NO_CONTEXT --</option>
+            </select>
+        </div>
+        <div class="ai-input-area">
+            <input type="text" id="ai-in" placeholder="Query..." autocomplete="off">
+            <button class="ai-btn" onclick="sendAi()">SEND</button>
+        </div>
+    </aside>
+</div>
+
+<div id="ctx">
+    <div class="opt" onclick="openModal()">[+] NEW_DATA_NODE</div>
+    <div style="border-top:1px solid var(--amber-dim); margin:4px 0;"></div>
+    <div class="opt" onclick="saveActive()">DOWNLOAD_ACTIVE_NODE</div>
+    <div class="opt" onclick="saveZip()">ARCHIVE_ALL_NODES</div>
+    <div class="opt" onclick="clearTerm()">RESET_CONSOLE</div>
+</div>
+
+<div id="modal-overlay" class="modal-overlay">
+    <div class="custom-modal">
+        <div class="p-head"><span>SYSTEM_PROMPT</span></div>
+        <div class="modal-body">
+            <div>ENTER NEW DATA NODE NAME:</div>
+            <input type="text" id="modal-input" class="modal-input" placeholder="NODE_NAME.txt">
+            <div class="modal-btns">
+                <button class="ai-btn" onclick="closeModal()">CANCEL</button>
+                <button class="ai-btn" style="background:var(--amber); color:#000" onclick="confirmModal()">CONFIRM</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let storage = JSON.parse(localStorage.getItem('ind_console_storage')) || {
+        'PROTOCOL.txt': 'SYSTEM OVERRIDE: ACTIVE\nENCRYPTION: ENABLED',
+        'SENSORS.log': 'TEMP: 42C\nSTATUS: NOMINAL',
+        'MODULE_0.js': 'function init() {\n  return true;\n}'
+    };
+    let activeFile = localStorage.getItem('ind_console_active') || 'PROTOCOL.txt';
+
+    function autoSave() {
+        storage[activeFile] = document.getElementById('editor').value;
+        localStorage.setItem('ind_console_storage', JSON.stringify(storage));
+        localStorage.setItem('ind_console_active', activeFile);
+    }
+
+    function initResizer(bar, target, isH, isRight = false) {
+        let dragging = false;
+        const start = () => { dragging = true; bar.classList.add('active'); };
+        const stop = () => { dragging = false; bar.classList.remove('active'); };
+        const move = (e) => {
+            if (!dragging) return;
+            const x = e.touches ? e.touches[0].clientX : e.clientX;
+            const y = e.touches ? e.touches[0].clientY : e.clientY;
+            if (isH) {
+                if (isRight) {
+                    let p = 100 - (x / window.innerWidth) * 100;
+                    if (p < 2) p = 0; if (p > 95) p = 100;
+                    target.style.width = p + '%';
+                } else {
+                    let p = (x / window.innerWidth) * 100;
+                    if (p < 2) p = 0; if (p > 95) p = 100;
+                    target.style.width = p + '%';
+                }
+            } else {
+                let rect = document.getElementById('main-stack').getBoundingClientRect();
+                let relY = y - rect.top;
+                let p = 100 - (relY / rect.height * 100);
+                if (p < 5) p = 0; if (p > 95) p = 100;
+                target.style.height = p + '%';
+            }
+        };
+        bar.addEventListener('mousedown', start);
+        bar.addEventListener('touchstart', start);
+        document.addEventListener('mousemove', move);
+        document.addEventListener('touchmove', move, { passive: false });
+        document.addEventListener('mouseup', stop);
+        document.addEventListener('touchend', stop);
+    }
+    initResizer(document.getElementById('h-drag-left'), document.getElementById('explorer'), true);
+    initResizer(document.getElementById('h-drag-right'), document.getElementById('ai-panel'), true, true);
+    initResizer(document.getElementById('v-drag'), document.getElementById('terminal'), false);
+
+    function toggleMax(id) { document.getElementById(id).classList.toggle('maximized'); }
+
+    function renderFiles() {
+        const list = document.getElementById('file-list');
+        const ctxSel = document.getElementById('ai-ctx-select');
+        list.innerHTML = '';
+        const currentCtx = ctxSel.value;
+        ctxSel.innerHTML = '<option value="none">-- NO_CONTEXT --</option>';
+
+        Object.keys(storage).forEach(k => {
+            const div = document.createElement('div');
+            div.className = `file-item ${k === activeFile ? 'active' : ''}`;
+            div.innerText = k;
+            div.onclick = () => {
+                autoSave();
+                activeFile = k;
+                document.getElementById('editor').value = storage[k];
+                document.getElementById('cur-filename').innerText = k;
+                renderFiles();
+            };
+            list.appendChild(div);
+
+            const opt = document.createElement('option');
+            opt.value = k;
+            opt.innerText = k;
+            if (k === currentCtx) opt.selected = true;
+            ctxSel.appendChild(opt);
+        });
+    }
+
+    // Modal Logic
+    function openModal() {
+        ctx.style.display = 'none';
+        document.getElementById('modal-overlay').style.display = 'flex';
+        document.getElementById('modal-input').value = "NODE_" + Date.now() + ".txt";
+        document.getElementById('modal-input').focus();
+    }
+    function closeModal() { document.getElementById('modal-overlay').style.display = 'none'; }
+    function confirmModal() {
+        const name = document.getElementById('modal-input').value.trim();
+        if (name) {
+            storage[name] = "// NEW_NODE_INITIALIZED";
+            activeFile = name;
+            renderFiles();
+            document.getElementById('editor').value = storage[name];
+            autoSave();
+            closeModal();
+        }
+    }
+
+    async function sendAi() {
+        const input = document.getElementById('ai-in');
+        const chat = document.getElementById('ai-chat');
+        const ctxFile = document.getElementById('ai-ctx-select').value;
+        const query = input.value.trim();
+        if (!query) return;
+
+        const uMsg = document.createElement('div');
+        uMsg.className = 'msg user';
+        uMsg.innerText = `[CTX:${ctxFile}] > ${query}`;
+        chat.appendChild(uMsg);
+        input.value = '';
+
+        const aiMsg = document.createElement('div');
+        aiMsg.className = 'msg ai';
+        aiMsg.innerText = 'AI: ';
+        chat.appendChild(aiMsg);
+        
+        let contextContent = ctxFile !== 'none' ? `\n(Analyzing ${ctxFile}...)\n` : "";
+        let codeSnippet = "\n// SUGGESTED_CODE\nfunction sync() {\n  console.log('SYNC_COMPLETE');\n}";
+        const response = `Neural Link response for [${query}]: ${contextContent}Analysis complete. Recommendation: Apply patch to optimize node performance.${codeSnippet}`;
+        
+        let i = 0;
+        const timer = setInterval(() => {
+            aiMsg.innerText += response[i];
+            i++;
+            chat.scrollTop = chat.scrollHeight;
+            if (i >= response.length) {
+                clearInterval(timer);
+                const btn = document.createElement('div');
+                btn.className = 'inject-btn';
+                btn.innerText = '>> INSERT_INTO_ACTIVE_NODE';
+                btn.onclick = () => {
+                    document.getElementById('editor').value += codeSnippet;
+                    autoSave();
+                    logTerm(`AI_PATCH_INJECTED -> ${activeFile}`);
+                };
+                aiMsg.appendChild(document.createElement('br'));
+                aiMsg.appendChild(btn);
+                chat.scrollTop = chat.scrollHeight;
+            }
+        }, 10);
+    }
+
+    const cmdIn = document.getElementById('cmd-in');
+    const termOut = document.getElementById('term-out');
+    function logTerm(text, color = 'rgba(255, 176, 0, 0.8)') {
+        const div = document.createElement('div');
+        div.style.color = color;
+        div.innerText = text;
+        termOut.appendChild(div);
+        termOut.scrollTop = termOut.scrollHeight;
+    }
+
+    cmdIn.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+            const val = cmdIn.value.trim();
+            if (!val) return;
+            logTerm(`>> ${val}`, '#fff');
+            const parts = val.split(' ');
+            const cmd = parts[0].toLowerCase();
+            const args = parts.slice(1);
+            switch(cmd) {
+                case 'ls': logTerm(Object.keys(storage).join('    ')); break;
+                case 'help': logTerm('CMDS: ls, touch, cat, rm, status, clear'); break;
+                case 'touch': if(args[0]) { storage[args[0]] = "//"; renderFiles(); autoSave(); } break;
+                case 'clear': termOut.innerHTML = ''; break;
+                case 'status': logTerm('STORAGE: LOCAL_CACHE_ACTIVE'); break;
+                default: logTerm(`UNKNOWN: ${cmd}`, '#aa0000');
+            }
+            cmdIn.value = '';
+        }
+    };
+
+    const ctxMenu = document.getElementById('ctx');
+    function handleCtx(e, x, y) {
+        e.preventDefault();
+        ctxMenu.style.display = 'block';
+        ctxMenu.style.left = (x || e.pageX || e.touches[0].pageX) + 'px';
+        ctxMenu.style.top = (y || e.pageY || e.touches[0].pageY) + 'px';
+    }
+    document.addEventListener('click', (e) => { if (!ctxMenu.contains(e.target)) ctxMenu.style.display = 'none'; });
+
+    function saveActive() {
+        const b = new Blob([document.getElementById('editor').value], {type:'text/plain'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(b); a.download = activeFile; a.click();
+    }
+    async function saveZip() {
+        autoSave();
+        const zip = new JSZip();
+        Object.keys(storage).forEach(k => zip.file(k, storage[k]));
+        const b = await zip.generateAsync({type:"blob"});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(b); a.download = "console_archive.zip"; a.click();
+    }
+    function clearTerm() { termOut.innerHTML = 'READY.'; }
+
+    // Init
+    renderFiles();
+    document.getElementById('editor').value = storage[activeFile] || "";
+    document.getElementById('cur-filename').innerText = activeFile;
+    document.getElementById('modal-input').onkeydown = (e) => { if(e.key === 'Enter') confirmModal(); };
+    document.getElementById('ai-in').onkeydown = (e) => { if(e.key === 'Enter') sendAi(); };
+</script>
+</body>
+</html>

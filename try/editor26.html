@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>NEURAL_LINK // V8.0</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        :root {
+            --cyan: #00f2ff;
+            --dim-cyan: rgba(0, 242, 255, 0.2);
+            --bg: #010a14;
+            --panel-bg: rgba(5, 15, 25, 0.9);
+            --glass: rgba(0, 242, 255, 0.03);
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; cursor: default; }
+        body, html { 
+            margin: 0; padding: 0; height: 100vh; width: 100vw; 
+            background: var(--bg); color: var(--cyan); 
+            font-family: 'Consolas', 'Liberation Mono', monospace; overflow: hidden;
+        }
+
+        /* 统一指针反馈 */
+        .can-drag-h { cursor: col-resize !important; }
+        .can-drag-v { cursor: row-resize !important; }
+        .clickable { cursor: pointer !important; }
+        .text-input { cursor: text !important; }
+
+        /* --- 布局容器 --- */
+        .workspace { display: flex; flex-direction: row; height: 100vh; width: 100%; position: relative; }
+        .panel { background: var(--panel-bg); display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--dim-cyan); }
+        .panel.maximized { position: fixed !important; top: 0; left: 0; width: 100% !important; height: 100% !important; z-index: 1000; }
+
+        /* --- 分割条 --- */
+        .divider-h { width: 4px; background: var(--dim-cyan); z-index: 100; flex-shrink: 0; transition: 0.2s; }
+        .divider-h:hover, .divider-h.active { background: var(--cyan); box-shadow: 0 0 10px var(--cyan); }
+        .divider-v { height: 4px; background: var(--dim-cyan); z-index: 100; flex-shrink: 0; }
+        .divider-v:hover, .divider-v.active { background: var(--cyan); }
+
+        /* --- 面板组件 --- */
+        .p-head { height: 30px; background: var(--glass); border-bottom: 1px solid var(--dim-cyan); display: flex; align-items: center; justify-content: space-between; padding: 0 10px; font-size: 10px; letter-spacing: 1px; flex-shrink: 0; }
+        
+        #explorer { width: 180px; }
+        .file-item { padding: 10px; font-size: 12px; border-bottom: 1px solid var(--dim-cyan); transition: 0.2s; }
+        .file-item.active { background: var(--cyan); color: #000; font-weight: bold; }
+
+        #main-core { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+        #editor { flex: 1; background: transparent; border: none; outline: none; padding: 20px; color: #fff; font-size: 14px; line-height: 1.5; resize: none; font-family: inherit; }
+
+        #terminal { height: 140px; border-top: 1px solid var(--cyan); }
+        #term-out { flex: 1; padding: 10px; overflow-y: auto; font-size: 11px; color: #8bbabc; }
+
+        #ai-panel { width: 260px; border-left: 1px solid var(--dim-cyan); }
+        #ai-chat { flex: 1; overflow-y: auto; padding: 10px; font-size: 12px; line-height: 1.6; }
+        .ai-msg { margin-bottom: 15px; padding: 8px; border-left: 2px solid var(--cyan); background: rgba(0, 242, 255, 0.05); }
+        .ai-input-row { padding: 10px; border-top: 1px solid var(--dim-cyan); display: flex; }
+        #ai-in { background: transparent; border: 1px solid var(--dim-cyan); color: #fff; flex: 1; outline: none; padding: 5px; font-size: 12px; }
+
+        /* --- 右键菜单 --- */
+        #menu { position: fixed; display: none; background: #050f19; border: 1px solid var(--cyan); z-index: 2000; min-width: 160px; box-shadow: 0 0 15px rgba(0,242,255,0.3); }
+        .menu-opt { padding: 12px; font-size: 11px; transition: 0.2s; }
+        .menu-opt:hover { background: var(--cyan); color: #000; }
+    </style>
+</head>
+<body oncontextmenu="return false;">
+
+<div class="workspace">
+    <aside class="panel" id="explorer" onmousedown="handleTouchStart(event)" ontouchstart="handleTouchStart(event)" onmouseup="handleTouchEnd()" ontouchend="handleTouchEnd()">
+        <div class="p-head"><span>DATA_STREAM</span><span class="clickable" onclick="toggleMax('explorer')">[ ⛶ ]</span></div>
+        <div id="file-list"></div>
+    </aside>
+
+    <div class="divider-h can-drag-h" id="h-drag-left"></div>
+
+    <div id="main-core">
+        <main class="panel" id="editor-p" style="flex:1">
+            <div class="p-head"><span id="cur-tab">NODE_01.js</span><span class="clickable" onclick="toggleMax('editor-p')">[ ⛶ ]</span></div>
+            <textarea id="editor" class="text-input" spellcheck="false"></textarea>
+        </main>
+        
+        <div class="divider-v can-drag-v" id="v-drag"></div>
+
+        <footer class="panel" id="terminal">
+            <div class="p-head"><span>COMMAND_LINK</span><span class="clickable" onclick="toggleMax('terminal')">[ ⛶ ]</span></div>
+            <div id="term-out">System Online...</div>
+        </footer>
+    </div>
+
+    <div class="divider-h can-drag-h" id="h-drag-right"></div>
+
+    <aside class="panel" id="ai-panel">
+        <div class="p-head"><span>AI_NEURAL_GEN</span><span class="clickable" onclick="toggleMax('ai-panel')">[ ⛶ ]</span></div>
+        <div id="ai-chat">
+            <div class="ai-msg">你好。我是神经链路助理。我可以帮你生成代码或分析逻辑。</div>
+        </div>
+        <div class="ai-input-row">
+            <input type="text" id="ai-in" class="text-input" placeholder="输入指令..." autocomplete="off">
+        </div>
+    </aside>
+</div>
+
+<div id="menu">
+    <div class="menu-opt clickable" onclick="newFile()">[+] NEW_FILE</div>
+    <div class="menu-opt clickable" onclick="exportZip()">ARCHIVE_PROJECT</div>
+</div>
+
+<script>
+    let files = {'main.js': 'console.log("Neural link active");', 'core.py': 'print("System running")'};
+    let activeKey = 'main.js';
+
+    // 1. 拖拽引擎 (支持多面板)
+    function setupDrag(bar, target, type) {
+        let dragging = false;
+        bar.onmousedown = bar.ontouchstart = () => { dragging = true; bar.classList.add('active'); };
+        document.onmousemove = document.ontouchmove = (e) => {
+            if (!dragging) return;
+            let x = e.touches ? e.touches[0].clientX : e.clientX;
+            let y = e.touches ? e.touches[0].clientY : e.clientY;
+            if (type === 'H-LEFT') {
+                let p = (x / window.innerWidth) * 100;
+                target.style.width = (p < 3 ? 0 : p) + '%';
+            } else if (type === 'H-RIGHT') {
+                let p = 100 - (x / window.innerWidth) * 100;
+                target.style.width = (p < 3 ? 0 : p) + '%';
+            } else if (type === 'V') {
+                let rect = document.getElementById('main-core').getBoundingClientRect();
+                let p = 100 - ((y - rect.top) / rect.height * 100);
+                target.style.height = (p < 5 ? 0 : p) + '%';
+            }
+        };
+        document.onmouseup = document.ontouchend = () => { dragging = false; bar.classList.remove('active'); };
+    }
+    setupDrag(document.getElementById('h-drag-left'), document.getElementById('explorer'), 'H-LEFT');
+    setupDrag(document.getElementById('h-drag-right'), document.getElementById('ai-panel'), 'H-RIGHT');
+    setupDrag(document.getElementById('v-drag'), document.getElementById('terminal'), 'V');
+
+    // 2. 长按唤出菜单逻辑
+    let touchTimer;
+    function handleTouchStart(e) {
+        const x = e.touches ? e.touches[0].pageX : e.pageX;
+        const y = e.touches ? e.touches[0].pageY : e.pageY;
+        // 如果是右键直接触发
+        if(e.button === 2) { showMenu(x, y); return; }
+        // 针对触摸屏的长按模拟
+        touchTimer = setTimeout(() => showMenu(x, y), 500);
+    }
+    function handleTouchEnd() { clearTimeout(touchTimer); }
+    function showMenu(x, y) {
+        const menu = document.getElementById('menu');
+        menu.style.display = 'block';
+        menu.style.left = x + 'px'; menu.style.top = y + 'px';
+    }
+    document.addEventListener('click', () => document.getElementById('menu').style.display = 'none');
+
+    // 3. AI 对话丝滑回复
+    const aiIn = document.getElementById('ai-in');
+    const aiChat = document.getElementById('ai-chat');
+    aiIn.onkeydown = (e) => {
+        if (e.key === 'Enter' && aiIn.value) {
+            const userVal = aiIn.value;
+            aiChat.innerHTML += `<div style="text-align:right; margin-bottom:10px; color:#fff">${userVal}</div>`;
+            aiIn.value = '';
+            streamReply("正在接入神经元... 建议在 " + activeKey + " 中增加错误处理逻辑。需要我生成代码段吗？");
+        }
+    };
+
+    function streamReply(text) {
+        const msgDiv = document.createElement('div');
+        msgDiv.className = 'ai-msg';
+        aiChat.appendChild(msgDiv);
+        let i = 0;
+        const timer = setInterval(() => {
+            msgDiv.innerText += text[i];
+            i++;
+            aiChat.scrollTop = aiChat.scrollHeight;
+            if (i >= text.length) clearInterval(timer);
+        }, 30).style; // 30ms 一个字符，极其丝滑
+    }
+
+    // 4. 基础功能
+    function render() {
+        const list = document.getElementById('file-list');
+        list.innerHTML = '';
+        Object.keys(files).forEach(k => {
+            const div = document.createElement('div');
+            div.className = `file-item clickable ${k === activeKey ? 'active' : ''}`;
+            div.innerText = k;
+            div.onclick = () => {
+                files[activeKey] = document.getElementById('editor').value;
+                activeKey = k;
+                document.getElementById('editor').value = files[k];
+                document.getElementById('cur-tab').innerText = k;
+                render();
+            };
+            list.appendChild(div);
+        });
+    }
+
+    function newFile() {
+        const n = prompt("NEW_NODE_NAME:");
+        if(n) { files[n] = ""; render(); }
+    }
+
+    function toggleMax(id) { document.getElementById(id).classList.toggle('maximized'); }
+
+    async function exportZip() {
+        const zip = new JSZip();
+        Object.keys(files).forEach(k => zip.file(k, files[k]));
+        const b = await zip.generateAsync({type:"blob"});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(b); a.download = "neural_project.zip"; a.click();
+    }
+
+    render();
+    document.getElementById('editor').value = files[activeKey];
+</script>
+</body>
+</html>
