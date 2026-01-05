@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>NEURAL_LINK // OS_ENVIRONMENT</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        :root {
+            --link-blue: #00d4ff;
+            --deep-space: #010a14;
+            --glass-bg: rgba(5, 15, 25, 0.85);
+            --border: rgba(0, 212, 255, 0.2);
+        }
+
+        * { box-sizing: border-box; cursor: crosshair; }
+        body, html {
+            margin: 0; padding: 0; height: 100vh;
+            background: radial-gradient(circle at center, #0a192f 0%, #020617 100%);
+            color: var(--link-blue); font-family: 'IBM Plex Mono', monospace;
+            overflow: hidden;
+        }
+
+        /* --- 顶栏控制中心 --- */
+        .nav-deck {
+            height: 50px; background: rgba(0,0,0,0.4); border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; padding: 0 25px; justify-content: space-between;
+            backdrop-filter: blur(10px); z-index: 100;
+        }
+
+        .sys-info { font-weight: 800; letter-spacing: 3px; font-size: 14px; }
+        .tab-btn {
+            background: transparent; border: 1px solid var(--border); color: #4e7a94;
+            padding: 5px 15px; border-radius: 4px; font-size: 11px; cursor: pointer; transition: 0.3s;
+        }
+        .tab-btn.active { color: var(--link-blue); border-color: var(--link-blue); box-shadow: 0 0 10px rgba(0,212,255,0.3); }
+
+        /* --- 核心布局 (联动平铺) --- */
+        .grid-container {
+            display: flex; height: calc(100vh - 50px); width: 100vw; overflow: hidden;
+        }
+
+        .main-stack { display: flex; flex-direction: column; flex: 1; height: 100%; min-width: 0; }
+        .editor-zone { display: flex; flex: 1; min-height: 0; }
+
+        /* --- 面板通用样式 --- */
+        .panel {
+            background: var(--glass-bg); border: 1px solid var(--border);
+            display: flex; flex-direction: column; overflow: hidden; position: relative;
+        }
+        .panel-header {
+            padding: 10px 15px; background: rgba(0, 212, 255, 0.05);
+            border-bottom: 1px solid var(--border); font-size: 10px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .panel-ctrls i { cursor: pointer; margin-left: 12px; transition: 0.3s; }
+        .panel-ctrls i:hover { color: #fff; transform: scale(1.2); }
+
+        /* --- 组件详情 --- */
+        #explorer { width: 260px; }
+        .file-node {
+            padding: 12px 20px; font-size: 13px; border-bottom: 1px solid rgba(0,212,255,0.05);
+            transition: 0.2s; display: flex; align-items: center; gap: 10px;
+        }
+        .file-node:hover { background: rgba(0, 212, 255, 0.1); }
+        .file-node.active { background: rgba(0, 212, 255, 0.15); border-left: 4px solid var(--link-blue); color: #fff; }
+
+        #code-editor {
+            flex: 1; background: transparent; border: none; color: #cedceb;
+            padding: 25px; font-family: inherit; font-size: 15px; outline: none; resize: none;
+        }
+
+        #terminal { height: 220px; border-top: 2px solid var(--link-blue); }
+        #term-log { flex: 1; padding: 15px; overflow-y: auto; font-size: 12px; line-height: 1.6; color: #78a1bb; }
+        .input-row { display: flex; padding: 10px 15px; background: #000; border-top: 1px solid var(--border); }
+        #cmd-in { background: transparent; border: none; color: #fff; flex: 1; outline: none; margin-left: 10px; font-family: inherit; }
+
+        /* --- 联动拖拽条 --- */
+        .divider-h { width: 4px; cursor: col-resize; transition: 0.3s; }
+        .divider-h:hover { background: var(--link-blue); box-shadow: 0 0 10px var(--link-blue); }
+        .divider-v { height: 4px; cursor: row-resize; transition: 0.3s; }
+        .divider-v:hover { background: var(--link-blue); box-shadow: 0 0 10px var(--link-blue); }
+
+        /* --- 右键菜单 --- */
+        #menu-custom {
+            position: fixed; background: #0a192f; border: 1px solid var(--link-blue);
+            display: none; z-index: 1000; width: 200px; padding: 5px 0;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+        }
+        .menu-btn { padding: 10px 20px; font-size: 12px; transition: 0.2s; }
+        .menu-btn:hover { background: var(--link-blue); color: #000; }
+
+        /* --- 状态切换 --- */
+        .full-screen { position: fixed !important; top: 0; left: 0; width: 100vw !important; height: 100vh !important; z-index: 500; }
+        .hide { display: none !important; }
+    </style>
+</head>
+<body oncontextmenu="event.preventDefault(); triggerMenu(event);">
+
+<header class="nav-deck">
+    <div class="sys-info">NEURAL_LINK // TERMINAL</div>
+    <div style="display: flex; gap: 10px;">
+        <button class="tab-btn active" id="sw-exp" onclick="toggleLayout('explorer')">FILES</button>
+        <button class="tab-btn active" id="sw-trm" onclick="toggleLayout('terminal')">SHELL</button>
+    </div>
+</header>
+
+<div class="grid-container">
+    <aside class="panel" id="explorer">
+        <div class="panel-header">
+            <span>FILE_SYSTEM</span>
+            <div class="panel-ctrls"><i class="fa-solid fa-up-right-and-down-left-from-center" onclick="goMax('explorer')"></i></div>
+        </div>
+        <div id="file-tree"></div>
+    </aside>
+
+    <div class="divider-h" id="h-drag"></div>
+
+    <div class="main-stack" id="stack">
+        <div class="editor-zone">
+            <main class="panel" id="editor" style="flex: 1;">
+                <div class="panel-header">
+                    <span id="label-file">kernel.js</span>
+                    <div class="panel-ctrls"><i class="fa-solid fa-up-right-and-down-left-from-center" onclick="goMax('editor')"></i></div>
+                </div>
+                <textarea id="code-editor" spellcheck="false"></textarea>
+            </main>
+        </div>
+
+        <div class="divider-v" id="v-drag"></div>
+
+        <footer class="panel" id="terminal">
+            <div class="panel-header">
+                <span>ACTIVE_SHELL</span>
+                <div class="panel-ctrls"><i class="fa-solid fa-up-right-and-down-left-from-center" onclick="goMax('terminal')"></i></div>
+            </div>
+            <div id="term-log">Link established. System ready for input.</div>
+            <div class="input-row">
+                <span style="color: #fff">#</span>
+                <input type="text" id="cmd-in" autocomplete="off" spellcheck="false">
+            </div>
+        </footer>
+    </div>
+</div>
+
+<div id="menu-custom">
+    <div class="menu-btn" onclick="saveAndDownload()"><i class="fa-solid fa-download"></i> Download Single</div>
+    <div class="menu-btn" onclick="packZip()"><i class="fa-solid fa-file-zipper"></i> Pack Project (ZIP)</div>
+</div>
+
+<script>
+    // 1. 虚拟文件系统
+    let project = {
+        'kernel.js': '// Neural Kernel\nconsole.log("Core active.");',
+        'config.json': '{\n  "mode": "NEURAL",\n  "version": 1.4\n}',
+        'index.html': '<div>Link Established</div>'
+    };
+    let activeKey = 'kernel.js';
+
+    function refreshTree() {
+        const tree = document.getElementById('file-tree');
+        tree.innerHTML = '';
+        Object.keys(project).forEach(k => {
+            const div = document.createElement('div');
+            div.className = `file-node ${k === activeKey ? 'active' : ''}`;
+            div.innerHTML = `<i class="fa-solid fa-file-code"></i> ${k}`;
+            div.onclick = () => {
+                project[activeKey] = document.getElementById('code-editor').value;
+                activeKey = k;
+                document.getElementById('code-editor').value = project[k];
+                document.getElementById('label-file').innerText = k;
+                refreshTree();
+            };
+            tree.appendChild(div);
+        });
+    }
+
+    // 2. 联动拖拽与平铺逻辑
+    const bindResize = (bar, target, isV) => {
+        bar.onmousedown = (e) => {
+            document.onmousemove = (ev) => {
+                if(isV) {
+                    const h = window.innerHeight - ev.clientY - 10;
+                    if(h < 40) { target.style.height = '0px'; toggleLayout('terminal', true); }
+                    else { target.style.height = h + 'px'; toggleLayout('terminal', false, true); }
+                } else {
+                    const w = ev.clientX;
+                    if(w < 40) { target.style.width = '0px'; toggleLayout('explorer', true); }
+                    else { target.style.width = w + 'px'; toggleLayout('explorer', false, true); }
+                }
+            };
+            document.onmouseup = () => document.onmousemove = null;
+        };
+    };
+    bindResize(document.getElementById('h-drag'), document.getElementById('explorer'), false);
+    bindResize(document.getElementById('v-drag'), document.getElementById('terminal'), true);
+
+    // 3. 全屏最大化
+    function goMax(id) {
+        const el = document.getElementById(id);
+        const alreadyMax = el.classList.contains('full-screen');
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('full-screen'));
+        if(!alreadyMax) {
+            el.classList.add('full-screen');
+            logShell(`UI: Panel ${id} entering focus mode.`);
+        }
+    }
+
+    function toggleLayout(id, forceHide, forceShow) {
+        const p = document.getElementById(id);
+        const btn = document.getElementById(id === 'explorer' ? 'sw-exp' : 'sw-trm');
+        if(forceHide) { p.classList.add('hide'); btn.classList.remove('active'); }
+        else if(forceShow) { p.classList.remove('hide'); btn.classList.add('active'); }
+        else { p.classList.toggle('hide'); btn.classList.toggle('active'); }
+    }
+
+    // 4. 终端指令
+    const shellLog = document.getElementById('term-log');
+    const shellIn = document.getElementById('cmd-in');
+    
+    const shellCmds = {
+        'help': () => 'cmds: ls, touch, rm, cat, clear, zip, download, date',
+        'ls': () => Object.keys(project).join('  '),
+        'date': () => new Date().toString(),
+        'clear': () => { shellLog.innerHTML = ''; return ''; },
+        'touch': (a) => { if(!a[0]) return 'err: name?'; project[a[0]] = ''; refreshTree(); return 'node initialized'; },
+        'rm': (a) => { delete project[a[0]]; refreshTree(); return 'node purged'; },
+        'cat': (a) => project[a[0]] || 'null link',
+        'zip': () => { packZip(); return 'packaging stream...'; },
+        'download': () => { saveAndDownload(); return 'streaming local file...'; }
+    };
+
+    shellIn.onkeydown = (e) => {
+        if(e.key === 'Enter') {
+            const raw = shellIn.value.trim();
+            const [c, ...a] = raw.split(' ');
+            logShell(`<span style="color:#fff"># ${raw}</span>`);
+            if(shellCmds[c]) logShell(shellCmds[c](a));
+            else if(raw) logShell('unknown stream command');
+            shellIn.value = '';
+        }
+    };
+
+    function logShell(m) {
+        const d = document.createElement('div');
+        d.innerHTML = m;
+        shellLog.appendChild(d);
+        shellLog.scrollTop = shellLog.scrollHeight;
+    }
+
+    // 5. 右键与 ZIP 下载
+    const ctx = document.getElementById('menu-custom');
+    function triggerMenu(e) {
+        ctx.style.display = 'block';
+        ctx.style.left = e.pageX + 'px'; ctx.style.top = e.pageY + 'px';
+    }
+    document.onclick = () => ctx.style.display = 'none';
+
+    function saveAndDownload() {
+        project[activeKey] = document.getElementById('code-editor').value;
+        const b = new Blob([project[activeKey]], {type: 'text/plain'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(b); a.download = activeKey; a.click();
+    }
+
+    async function packZip() {
+        project[activeKey] = document.getElementById('code-editor').value;
+        const zip = new JSZip();
+        Object.keys(project).forEach(k => zip.file(k, project[k]));
+        const content = await zip.generateAsync({type: "blob"});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(content); a.download = "neural_project.zip"; a.click();
+    }
+
+    // Init
+    refreshTree();
+    document.getElementById('code-editor').value = project[activeKey];
+</script>
+</body>
+</html>

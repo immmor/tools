@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>INDUSTRIAL_CONSOLE_V7</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        :root {
+            --amber: #ffb000;
+            --amber-dim: #714e00;
+            --bg: #12100b;
+            --panel-bg: #1c1912;
+            --border-w: 2px;
+        }
+
+        /* 1. 基础指针逻辑 */
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; cursor: default; }
+        
+        body, html {
+            margin: 0; padding: 0; height: 100vh; width: 100vw;
+            background: var(--bg); color: var(--amber);
+            font-family: 'Courier New', Courier, monospace; overflow: hidden;
+            /* 模拟扫描线效果 */
+            background-image: linear-gradient(rgba(18, 16, 11, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 4px, 3px 100%;
+        }
+
+        /* 2. 顶栏 */
+        .header {
+            height: 40px; border-bottom: var(--border-w) solid var(--amber);
+            display: flex; align-items: center; padding: 0 15px;
+            font-size: 14px; font-weight: bold; background: var(--panel-bg);
+            text-shadow: 0 0 5px var(--amber);
+        }
+
+        /* 3. 核心布局：强制左右结构 */
+        .workspace { display: flex; flex-direction: row; height: calc(100vh - 40px); width: 100%; position: relative; }
+
+        .panel { 
+            background: var(--panel-bg); display: flex; flex-direction: column; 
+            overflow: hidden; position: relative; height: 100%;
+        }
+
+        .panel.maximized {
+            position: fixed !important; top: 0 !important; left: 0 !important;
+            width: 100% !important; height: 100% !important; z-index: 500;
+        }
+
+        /* 4. 拖拽条：指针变样反馈 */
+        .divider-h { width: 6px; background: var(--amber-dim); cursor: col-resize !important; flex-shrink: 0; }
+        .divider-h:hover, .divider-h.active { background: var(--amber); box-shadow: 0 0 10px var(--amber); }
+
+        .divider-v { height: 6px; background: var(--amber-dim); cursor: row-resize !important; flex-shrink: 0; }
+        .divider-v:hover, .divider-v.active { background: var(--amber); box-shadow: 0 0 10px var(--amber); }
+
+        /* 5. 面板头部 */
+        .p-head {
+            height: 30px; border-bottom: 1px solid var(--amber-dim);
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 10px; font-size: 11px; background: rgba(113, 78, 0, 0.1);
+        }
+        .ctrl { cursor: pointer !important; padding: 2px 6px; border: 1px solid var(--amber-dim); }
+        .ctrl:hover { background: var(--amber); color: var(--bg); }
+
+        /* 6. 内容区 */
+        #explorer { width: 200px; border-right: 1px solid var(--amber-dim); }
+        .file-item { padding: 12px 15px; font-size: 13px; cursor: pointer !important; border-bottom: 1px solid rgba(113, 78, 0, 0.2); }
+        .file-item.active { background: var(--amber); color: var(--bg); font-weight: bold; }
+
+        #main-stack { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+        #editor {
+            flex: 1; background: transparent; border: none; outline: none;
+            padding: 20px; color: var(--amber); font-size: 16px;
+            line-height: 1.5; resize: none; font-family: inherit; cursor: text !important;
+        }
+
+        #terminal { height: 180px; border-top: var(--border-w) solid var(--amber); }
+        #term-out { flex: 1; padding: 10px; overflow-y: auto; font-size: 12px; color: rgba(255, 176, 0, 0.8); }
+        .term-input { display: flex; padding: 8px 10px; background: #000; border-top: 1px solid var(--amber-dim); }
+        #cmd-in { background: transparent; border: none; outline: none; flex: 1; color: #fff; font-family: inherit; cursor: text !important; }
+
+        /* 7. 右键菜单 */
+        #ctx {
+            position: fixed; display: none; background: var(--panel-bg);
+            border: 2px solid var(--amber); z-index: 1000; min-width: 200px;
+            box-shadow: 8px 8px 0px #000;
+        }
+        .opt { padding: 12px 15px; font-size: 12px; font-weight: bold; cursor: pointer !important; }
+        .opt:hover { background: var(--amber); color: var(--bg); }
+    </style>
+</head>
+<body oncontextmenu="handleCtx(event)">
+
+<div class="header">STATUS: SYSTEM_READY // FREQ: 60Hz</div>
+
+<div class="workspace">
+    <aside class="panel" id="explorer">
+        <div class="p-head">
+            <span>FILESYSTEM</span>
+            <span class="ctrl" onclick="toggleMax('explorer')">◰</span>
+        </div>
+        <div id="file-list"></div>
+    </aside>
+
+    <div class="divider-h" id="h-drag"></div>
+
+    <div id="main-stack">
+        <main class="panel" id="editor-p" style="flex:1">
+            <div class="p-head">
+                <span id="cur-filename">DATA_NODE.01</span>
+                <span class="ctrl" onclick="toggleMax('editor-p')">◰</span>
+            </div>
+            <textarea id="editor" spellcheck="false"></textarea>
+        </main>
+        
+        <div class="divider-v" id="v-drag"></div>
+
+        <footer class="panel" id="terminal">
+            <div class="p-head">
+                <span>COMM_LINK</span>
+                <span class="ctrl" onclick="toggleMax('terminal')">◰</span>
+            </div>
+            <div id="term-out">Awaiting command input...</div>
+            <div class="term-input">
+                <span style="margin-right:10px">>></span>
+                <input type="text" id="cmd-in" autocomplete="off" spellcheck="false">
+            </div>
+        </footer>
+    </div>
+</div>
+
+<div id="ctx">
+    <div class="opt" onclick="createNewFile()">[+] NEW_DATA_NODE</div>
+    <div style="border-top:1px solid var(--amber-dim); margin:4px 0;"></div>
+    <div class="opt" onclick="saveActive()">DOWNLOAD_ACTIVE_NODE</div>
+    <div class="opt" onclick="saveZip()">ARCHIVE_ALL_NODES</div>
+    <div class="opt" onclick="clearTerm()">RESET_CONSOLE</div>
+</div>
+
+<script>
+    // 1. 数据模型
+    let storage = {
+        'PROTOCOL.txt': 'SYSTEM OVERRIDE: ACTIVE\nENCRYPTION: ENABLED',
+        'SENSORS.log': 'TEMP: 42C\nSTATUS: NOMINAL',
+        'MODULE_0.js': 'function init() {\n  return true;\n}'
+    };
+    let activeFile = 'PROTOCOL.txt';
+
+    // 2. 拖拽引擎（支持全端左右拖拽与磁吸）
+    function initResizer(bar, target, isH) {
+        let dragging = false;
+        const start = () => { dragging = true; bar.classList.add('active'); };
+        const stop = () => { dragging = false; bar.classList.remove('active'); };
+        const move = (e) => {
+            if (!dragging) return;
+            const x = e.touches ? e.touches[0].clientX : e.clientX;
+            const y = e.touches ? e.touches[0].clientY : e.clientY;
+
+            if (isH) {
+                let p = (x / window.innerWidth) * 100;
+                if (p < 5) p = 0; if (p > 95) p = 100;
+                target.style.width = p + '%';
+            } else {
+                let rect = document.getElementById('main-stack').getBoundingClientRect();
+                let relY = y - rect.top;
+                let p = 100 - (relY / rect.height * 100);
+                if (p < 5) p = 0; if (p > 95) p = 100;
+                target.style.height = p + '%';
+            }
+        };
+        bar.addEventListener('mousedown', start);
+        bar.addEventListener('touchstart', start);
+        document.addEventListener('mousemove', move);
+        document.addEventListener('touchmove', move, { passive: false });
+        document.addEventListener('mouseup', stop);
+        document.addEventListener('touchend', stop);
+    }
+    initResizer(document.getElementById('h-drag'), document.getElementById('explorer'), true);
+    initResizer(document.getElementById('v-drag'), document.getElementById('terminal'), false);
+
+    // 3. 功能函数
+    function toggleMax(id) { document.getElementById(id).classList.toggle('maximized'); }
+
+    function renderFiles() {
+        const list = document.getElementById('file-list');
+        list.innerHTML = '';
+        Object.keys(storage).forEach(k => {
+            const div = document.createElement('div');
+            div.className = `file-item ${k === activeFile ? 'active' : ''}`;
+            div.innerText = k;
+            div.onclick = () => {
+                storage[activeFile] = document.getElementById('editor').value;
+                activeFile = k;
+                document.getElementById('editor').value = storage[k];
+                document.getElementById('cur-filename').innerText = k;
+                renderFiles();
+            };
+            list.appendChild(div);
+        });
+    }
+
+    // --- 新建文件逻辑 ---
+    function createNewFile() {
+        const name = prompt("ENTER NEW DATA NODE NAME:", "NODE_" + Date.now() + ".txt");
+        if (name) {
+            storage[name] = "// NEW_NODE_INITIALIZED";
+            activeFile = name;
+            renderFiles();
+            document.getElementById('editor').value = storage[name];
+        }
+    }
+
+    // 4. 终端逻辑
+    const cmdIn = document.getElementById('cmd-in');
+    const termOut = document.getElementById('term-out');
+    cmdIn.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+            const val = cmdIn.value.trim();
+            const log = document.createElement('div');
+            log.innerHTML = `<span style="color:#fff">>> ${val}</span>`;
+            termOut.appendChild(log);
+            
+            const [cmd, ...args] = val.split(' ');
+            if (cmd === 'ls') {
+                const r = document.createElement('div');
+                r.innerText = Object.keys(storage).join('  ');
+                termOut.appendChild(r);
+            } else if (cmd === 'clear') {
+                termOut.innerHTML = '';
+            } else if (cmd === 'touch') {
+                if(args[0]) { storage[args[0]] = ""; renderFiles(); }
+            }
+            
+            cmdIn.value = '';
+            termOut.scrollTop = termOut.scrollHeight;
+        }
+    };
+
+    // 5. 右键菜单
+    const ctx = document.getElementById('ctx');
+    function handleCtx(e) {
+        e.preventDefault();
+        ctx.style.display = 'block';
+        ctx.style.left = e.pageX + 'px';
+        ctx.style.top = e.pageY + 'px';
+    }
+    document.onclick = () => ctx.style.display = 'none';
+
+    function saveActive() {
+        const b = new Blob([document.getElementById('editor').value], {type:'text/plain'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(b); a.download = activeFile; a.click();
+    }
+
+    async function saveZip() {
+        storage[activeFile] = document.getElementById('editor').value;
+        const zip = new JSZip();
+        Object.keys(storage).forEach(k => zip.file(k, storage[k]));
+        const b = await zip.generateAsync({type:"blob"});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(b); a.download = "console_archive.zip"; a.click();
+    }
+
+    function clearTerm() { termOut.innerHTML = 'READY.'; }
+
+    renderFiles();
+    document.getElementById('editor').value = storage[activeFile];
+</script>
+</body>
+</html>

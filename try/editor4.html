@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QuantumEdit: Futuristic Code Editor</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* --- 1. 全局变量与基础样式 --- */
+        :root {
+            --bg-dark: #120A2E; /* 深邃背景 */
+            --glass-bg: rgba(255, 255, 255, 0.08); /* 玻璃背景 */
+            --glass-border: rgba(255, 255, 255, 0.15); /* 玻璃边框 */
+            --accent-blue: #00E5FF; /* 亮青色霓虹 */
+            --accent-purple: #9D00FF; /* 亮紫色霓虹 */
+            --text-light: #E0E0E0;
+            --text-muted: #888;
+            --font-mono: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+            --transition-speed: 0.3s ease-out;
+            --shadow-light: 0 0 15px rgba(0, 229, 255, 0.3), 0 0 30px rgba(157, 0, 255, 0.2); /* 混合霓虹阴影 */
+        }
+
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&display=swap'); /* 引入 Fira Code 字体 */
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            height: 100vh;
+            background: linear-gradient(135deg, var(--bg-dark) 0%, #000000 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Segoe UI', sans-serif;
+            color: var(--text-light);
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* --- 2. 主容器 (QuantumEdit Window) --- */
+        .quantum-editor-window {
+            width: 90vw;
+            height: 85vh;
+            background: var(--glass-bg);
+            border-radius: 20px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            backdrop-filter: blur(15px); /* 毛玻璃核心 */
+            -webkit-backdrop-filter: blur(15px); /* Safari 兼容 */
+            border: 1px solid var(--glass-border);
+            box-shadow: var(--shadow-light);
+            position: relative;
+        }
+
+        /* --- 3. 顶部工具栏 (Header) --- */
+        .editor-header {
+            padding: 15px 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--glass-border);
+            background: rgba(255, 255, 255, 0.05); /* 更亮的玻璃背景 */
+            z-index: 10;
+        }
+
+        .header-left, .header-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .header-logo {
+            font-family: 'Quantico', sans-serif; /* 可以尝试引入更科技感的字体 */
+            font-size: 20px;
+            font-weight: bold;
+            color: var(--accent-blue);
+            text-shadow: 0 0 8px var(--accent-blue);
+            letter-spacing: 1px;
+        }
+
+        .header-icon {
+            font-size: 18px;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: color var(--transition-speed), text-shadow var(--transition-speed);
+        }
+        .header-icon:hover {
+            color: var(--accent-blue);
+            text-shadow: 0 0 5px var(--accent-blue);
+        }
+
+        /* --- 4. 主编辑区 (Code Editor Area) --- */
+        .editor-main {
+            flex: 1;
+            display: flex;
+            position: relative; /* 用于定位侧边栏 */
+        }
+
+        /* --- 5. 文件/项目侧边栏 (Sidebar) --- */
+        .sidebar {
+            width: 280px;
+            background: rgba(0, 0, 0, 0.3); /* 比主区域更深的玻璃 */
+            border-right: 1px solid var(--glass-border);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            transform: translateX(0);
+            transition: transform var(--transition-speed);
+            z-index: 5;
+            position: absolute;
+            height: 100%;
+            left: 0;
+            top: 0;
+        }
+
+        .sidebar.hidden {
+            transform: translateX(-100%);
+        }
+
+        .sidebar-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .sidebar-header h3 {
+            margin: 0;
+            font-size: 14px;
+            color: var(--accent-blue);
+            text-shadow: 0 0 5px rgba(0, 229, 255, 0.4);
+        }
+
+        .file-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            overflow-y: auto; /* 允许文件列表滚动 */
+            flex: 1;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 10px;
+            margin-bottom: 5px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: background var(--transition-speed), color var(--transition-speed);
+        }
+        .file-item:hover {
+            background: rgba(0, 229, 255, 0.1);
+            color: var(--accent-blue);
+        }
+        .file-item.active {
+            background: rgba(0, 229, 255, 0.2);
+            color: var(--accent-blue);
+            border-left: 2px solid var(--accent-blue);
+            font-weight: bold;
+        }
+
+        .file-item i { font-size: 14px; }
+        .file-item.html i { color: #E44D26; }
+        .file-item.css i { color: #264DE4; }
+        .file-item.js i { color: #F7DF1E; }
+
+        /* --- 6. 代码编辑器区域 --- */
+        .code-panel-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: transparent; /* 背景由主容器提供 */
+            padding-left: 280px; /* 为侧边栏预留空间 */
+            transition: padding-left var(--transition-speed);
+        }
+        .code-panel-wrapper.sidebar-hidden {
+            padding-left: 0;
+        }
+
+
+        .code-tabs {
+            display: flex;
+            border-bottom: 1px solid var(--glass-border);
+            background: rgba(0,0,0,0.2);
+            padding-left: 10px;
+            flex-wrap: wrap; /* 允许标签换行 */
+        }
+
+        .tab-item {
+            padding: 8px 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: var(--text-muted);
+            cursor: pointer;
+            border-right: 1px solid rgba(0,0,0,0.3);
+            border-bottom: 2px solid transparent;
+            transition: background var(--transition-speed), color var(--transition-speed), border-bottom var(--transition-speed);
+        }
+        .tab-item:hover {
+            background: rgba(0, 229, 255, 0.05);
+            color: var(--text-light);
+        }
+        .tab-item.active {
+            color: var(--accent-blue);
+            background: rgba(0, 229, 255, 0.1);
+            border-bottom: 2px solid var(--accent-blue);
+        }
+        .tab-item .fa-xmark {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-left: 5px;
+            transition: color var(--transition-speed);
+        }
+        .tab-item .fa-xmark:hover { color: var(--text-light); }
+
+        .code-area {
+            flex: 1;
+            display: flex;
+            font-family: var(--font-mono);
+            font-size: 14px;
+            line-height: 1.6;
+            padding: 20px 0; /* 内部留白 */
+            overflow: auto;
+            position: relative;
+        }
+
+        .line-numbers {
+            width: 50px;
+            color: rgba(255, 255, 255, 0.2);
+            text-align: right;
+            padding-right: 15px;
+            user-select: none;
+            flex-shrink: 0; /* 防止挤压行号 */
+        }
+        .line-numbers span {
+            display: block;
+            height: 1.6em; /* 与行高一致 */
+        }
+
+        .code-content {
+            flex: 1;
+            padding-right: 20px; /* 防止内容贴边 */
+            white-space: pre-wrap; /* 自动换行 */
+            word-break: break-all; /* 防止长单词溢出 */
+            overflow-x: hidden; /* 隐藏代码区的水平滚动条 */
+        }
+
+        /* 代码高亮 (One Dark Pro 风格，融入霓虹色) */
+        .code-content .keyword { color: var(--accent-purple); } /* 紫色 */
+        .code-content .func { color: var(--accent-blue); } /* 青色 */
+        .code-content .string { color: #A5D6A7; } /* 柔和绿色 */
+        .code-content .variable { color: #FFAB91; } /* 柔和橙色 */
+        .code-content .comment { color: #607D8B; font-style: italic; } /* 暗蓝色 */
+        .code-content .tag { color: #E06C75; } /* 红色标签 */
+        .code-content .attribute { color: #D19A66; } /* 黄色属性 */
+        .code-content .punctuation { color: #CFCFCF; } /* 标点符号 */
+
+        .cursor {
+            border-left: 2px solid var(--accent-blue);
+            margin-left: 2px;
+            animation: blink 0.8s infinite;
+            display: inline-block;
+            height: 1.2em; /* 与字体大小和行高匹配 */
+            vertical-align: middle;
+        }
+        @keyframes blink { 50% { opacity: 0; } }
+
+
+        /* --- 7. 底部控制台 (Console / Terminal) --- */
+        .editor-footer {
+            height: 150px;
+            background: rgba(0, 0, 0, 0.3);
+            border-top: 1px solid var(--glass-border);
+            padding: 15px 20px;
+            transform: translateY(0);
+            transition: transform var(--transition-speed);
+            z-index: 10;
+        }
+
+        .editor-footer.hidden {
+            transform: translateY(100%);
+        }
+
+        .footer-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .footer-header h4 {
+            margin: 0;
+            font-size: 13px;
+            color: var(--accent-purple);
+            text-shadow: 0 0 5px rgba(157, 0, 255, 0.4);
+        }
+
+        .terminal-output {
+            background: rgba(0,0,0,0.5);
+            border-radius: 5px;
+            padding: 10px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            color: var(--text-light);
+            height: calc(100% - 30px);
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .terminal-output .prompt { color: var(--accent-blue); }
+        .terminal-output .command { color: var(--text-light); }
+        .terminal-output .response { color: var(--text-muted); }
+    </style>
+</head>
+<body>
+
+<div class="quantum-editor-window">
+    <header class="editor-header">
+        <div class="header-left">
+            <span class="header-logo">QuantumEdit</span>
+            <i class="fas fa-folder-open header-icon" id="toggle-sidebar"></i>
+            <i class="fas fa-file-code header-icon"></i>
+            <i class="fas fa-search header-icon"></i>
+        </div>
+        <div class="header-right">
+            <i class="fas fa-terminal header-icon" id="toggle-terminal"></i>
+            <i class="fas fa-bell header-icon"></i>
+            <i class="fas fa-cog header-icon"></i>
+        </div>
+    </header>
+
+    <main class="editor-main">
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h3>PROJECT_QUANTUM</h3>
+                <i class="fas fa-plus header-icon"></i>
+            </div>
+            <ul class="file-list">
+                <li class="file-item html active" data-file-path="src/index.html">
+                    <i class="fas fa-file-code"></i> index.html
+                </li>
+                <li class="file-item css" data-file-path="src/styles/main.css">
+                    <i class="fas fa-file-code"></i> main.css
+                </li>
+                <li class="file-item js" data-file-path="src/scripts/app.js">
+                    <i class="fas fa-file-code"></i> app.js
+                </li>
+                <li class="file-item" data-file-path="README.md">
+                    <i class="fas fa-file-alt"></i> README.md
+                </li>
+            </ul>
+        </aside>
+
+        <section class="code-panel-wrapper" id="code-panel-wrapper">
+            <div class="code-tabs" id="code-tabs">
+                <div class="tab-item active" data-file-path="src/index.html">
+                    <i class="fas fa-file-code"></i> src/index.html <i class="fas fa-xmark"></i>
+                </div>
+                </div>
+            <div class="code-area">
+                <div class="line-numbers" id="line-numbers">
+                    </div>
+                <pre class="code-content" id="code-content"></pre><span class="cursor"></span>
+            </div>
+        </section>
+    </main>
+
+    <footer class="editor-footer" id="editor-footer">
+        <div class="footer-header">
+            <h4>TERMINAL</h4>
+            <i class="fas fa-times header-icon" id="close-terminal"></i>
+        </div>
+        <div class="terminal-output">
+            <span class="prompt">guest@quantum_dev:~/$ </span><span class="command">npm start</span><br>
+            <span class="response">Starting development server...</span><br>
+            <span class="response">[QuantumEdit] Ready for quantum coding.</span>
+        </div>
+    </footer>
+</div>
+
+<script>
+    const files = {
+        'src/index.html': `
+<span class="tag">&lt;!DOCTYPE html&gt;</span>
+<span class="tag">&lt;html</span> <span class="attribute">lang</span>=<span class="string">"en"</span><span class="tag">&gt;</span>
+<span class="tag">&lt;head&gt;</span>
+    <span class="tag">&lt;meta</span> <span class="attribute">charset</span>=<span class="string">"UTF-8"</span><span class="tag">&gt;</span>
+    <span class="tag">&lt;meta</span> <span class="attribute">name</span>=<span class="string">"viewport"</span> <span class="attribute">content</span>=<span class="string">"width=device-width, initial-scale=1.0"</span><span class="tag">&gt;</span>
+    <span class="tag">&lt;title&gt;</span>Quantum Project<span class="tag">&lt;/title&gt;</span>
+    <span class="tag">&lt;link</span> <span class="attribute">rel</span>=<span class="string">"stylesheet"</span> <span class="attribute">href</span>=<span class="string">"styles/main.css"</span><span class="tag">&gt;</span>
+<span class="tag">&lt;/head&gt;</span>
+<span class="tag">&lt;body&gt;</span>
+    <span class="tag">&lt;div</span> <span class="attribute">id</span>=<span class="string">"app"</span><span class="tag">&gt;</span>
+        <span class="tag">&lt;h1&gt;</span>Welcome to QuantumEdit<span class="tag">&lt;/h1&gt;</span>
+        <span class="tag">&lt;p&gt;</span>This is a futuristic code editor concept.<span class="tag">&lt;/p&gt;</span>
+        <span class="tag">&lt;button</span> <span class="attribute">class</span>=<span class="string">"neon-button"</span><span class="tag">&gt;</span>Run Code<span class="tag">&lt;/button&gt;</span>
+    <span class="tag">&lt;/div&gt;</span>
+    <span class="tag">&lt;script</span> <span class="attribute">src</span>=<span class="string">"scripts/app.js"</span><span class="tag">&gt;&lt;/script&gt;</span>
+<span class="tag">&lt;/body&gt;</span>
+<span class="tag">&lt;/html&gt;</span>
+        `.trim(),
+        'src/styles/main.css': `
+<span class="comment">/* QuantumEdit Styles */</span>
+<span class="keyword">body</span> {
+    <span class="variable">font-family</span>: 'Arial', sans-serif;
+    <span class="variable">background-color</span>: <span class="func">var</span>(<span class="string">--bg-dark</span>);
+    <span class="variable">color</span>: <span class="func">var</span>(<span class="string">--text-light</span>);
+}
+
+<span class="keyword">.neon-button</span> {
+    <span class="variable">padding</span>: 10px 20px;
+    <span class="variable">background</span>: <span class="func">linear-gradient</span>(45deg, <span class="func">var</span>(<span class="string">--accent-blue</span>), <span class="func">var</span>(<span class="string">--accent-purple</span>));
+    <span class="variable">border</span>: none;
+    <span class="variable">border-radius</span>: 8px;
+    <span class="variable">color</span>: <span class="string">white</span>;
+    <span class="variable">text-shadow</span>: <span class="string">0 0 5px rgba(0, 229, 255, 0.7)</span>;
+    <span class="variable">box-shadow</span>: <span class="string">0 0 15px rgba(0, 229, 255, 0.5), 0 0 25px rgba(157, 0, 255, 0.5)</span>;
+    <span class="variable">cursor</span>: pointer;
+    <span class="variable">transition</span>: <span class="func">all</span> 0.3s ease;
+}
+<span class="keyword">.neon-button</span>:<span class="variable">hover</span> {
+    <span class="variable">transform</span>: <span class="func">scale</span>(1.05);
+    <span class="variable">box-shadow</span>: <span class="string">0 0 20px rgba(0, 229, 255, 0.8), 0 0 30px rgba(157, 0, 255, 0.8)</span>;
+}
+        `.trim(),
+        'src/scripts/app.js': `
+<span class="comment">// QuantumEdit Application Logic</span>
+<span class="keyword">const</span> <span class="variable">app</span> = <span class="func">document</span>.<span class="func">getElementById</span>(<span class="string">'app'</span>);
+<span class="keyword">const</span> <span class="variable">runButton</span> = <span class="func">document</span>.<span class="func">querySelector</span>(<span class="string">'.neon-button'</span>);
+
+<span class="keyword">function</span> <span class="func">initialize</span>() {
+    <span class="variable">console</span>.<span class="func">log</span>(<span class="string">'QuantumEdit initialized successfully!'</span>);
+    <span class="variable">runButton</span>.<span class="func">addEventListener</span>(<span class="string">'click'</span>, <span class="func">handleRunCode</span>);
+}
+
+<span class="keyword">function</span> <span class="func">handleRunCode</span>() {
+    <span class="variable">console</span>.<span class="func">log</span>(<span class="string">'Executing code in quantum environment...'</span>);
+    <span class="comment">// Simulate code execution</span>
+    <span class="func">alert</span>(<span class="string">'Code Compiled and Executed!'</span>);
+}
+
+<span class="func">initialize</span>();
+        `.trim(),
+        'README.md': `
+# Quantum Project
+
+This is a demonstration project built with QuantumEdit.
+
+## Features:
+* Futuristic UI
+* Glassmorphism design
+* Code Highlighting
+* Toggleable Sidebar & Terminal
+        `.trim()
+    };
+
+    const sidebar = document.getElementById('sidebar');
+    const toggleSidebarBtn = document.getElementById('toggle-sidebar');
+    const editorFooter = document.getElementById('editor-footer');
+    const toggleTerminalBtn = document.getElementById('toggle-terminal');
+    const closeTerminalBtn = document.getElementById('close-terminal');
+    const fileList = document.querySelector('.file-list');
+    const codeTabs = document.getElementById('code-tabs');
+    const codeContent = document.getElementById('code-content');
+    const lineNumbers = document.getElementById('line-numbers');
+    const codePanelWrapper = document.getElementById('code-panel-wrapper');
+
+    let openFiles = {}; // { filePath: content, tabElement: HTMLElement }
+    let activeFile = null;
+
+    // --- 侧边栏/终端开关逻辑 ---
+    toggleSidebarBtn.addEventListener('click', () => {
+        sidebar.classList.toggle('hidden');
+        codePanelWrapper.classList.toggle('sidebar-hidden'); // 调整主内容区填充
+    });
+
+    toggleTerminalBtn.addEventListener('click', () => {
+        editorFooter.classList.toggle('hidden');
+    });
+    closeTerminalBtn.addEventListener('click', () => {
+        editorFooter.classList.add('hidden');
+    });
+
+    // --- 文件点击切换逻辑 ---
+    fileList.addEventListener('click', (event) => {
+        const fileItem = event.target.closest('.file-item');
+        if (fileItem) {
+            const filePath = fileItem.dataset.filePath;
+            openFile(filePath);
+        }
+    });
+
+    codeTabs.addEventListener('click', (event) => {
+        const tabItem = event.target.closest('.tab-item');
+        if (!tabItem) return;
+
+        if (event.target.classList.contains('fa-xmark')) {
+            // 关闭标签页
+            closeFile(tabItem.dataset.filePath);
+        } else {
+            // 切换标签页
+            openFile(tabItem.dataset.filePath);
+        }
+    });
+
+    function openFile(filePath) {
+        // 移除所有激活状态
+        document.querySelectorAll('.file-item').forEach(item => item.classList.remove('active'));
+        document.querySelectorAll('.tab-item').forEach(item => item.classList.remove('active'));
+
+        // 设置侧边栏文件激活
+        const sidebarFileItem = document.querySelector(`.file-item[data-file-path="${filePath}"]`);
+        if (sidebarFileItem) sidebarFileItem.classList.add('active');
+
+        // 如果文件未打开，则创建标签页并添加内容
+        if (!openFiles[filePath]) {
+            const tabElement = document.createElement('div');
+            tabElement.classList.add('tab-item');
+            tabElement.dataset.filePath = filePath;
+            tabElement.innerHTML = `<i class="fas fa-file-code"></i> ${filePath.split('/').pop()} <i class="fas fa-xmark"></i>`;
+            codeTabs.appendChild(tabElement);
+            openFiles[filePath] = { content: files[filePath], tabElement: tabElement };
+        }
+
+        // 设置标签页激活
+        openFiles[filePath].tabElement.classList.add('active');
+
+        // 更新代码内容
+        codeContent.innerHTML = openFiles[filePath].content;
+        updateLineNumbers();
+        activeFile = filePath;
+    }
+
+    function closeFile(filePathToClose) {
+        if (!openFiles[filePathToClose]) return;
+
+        openFiles[filePathToClose].tabElement.remove();
+        delete openFiles[filePathToClose];
+
+        // 如果关闭的是当前活动文件
+        if (activeFile === filePathToClose) {
+            const remainingFiles = Object.keys(openFiles);
+            if (remainingFiles.length > 0) {
+                openFile(remainingFiles[0]); // 切换到第一个打开的文件
+            } else {
+                // 没有打开的文件了，清空编辑器
+                codeContent.innerHTML = '';
+                lineNumbers.innerHTML = '';
+                activeFile = null;
+                // 移除侧边栏激活状态
+                document.querySelectorAll('.file-item').forEach(item => item.classList.remove('active'));
+            }
+        }
+    }
+
+    function updateLineNumbers() {
+        const lines = codeContent.innerText.split('\n').length;
+        lineNumbers.innerHTML = Array.from({ length: lines }, (_, i) => `<span>${i + 1}</span>`).join('');
+    }
+
+    // 初始加载
+    document.addEventListener('DOMContentLoaded', () => {
+        openFile('src/index.html'); // 默认打开第一个文件
+    });
+</script>
+
+</body>
+</html>

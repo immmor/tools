@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>AERO_SYSTEM // NEBULA_CORE</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        :root {
+            --cyan: #00f3ff;
+            --purple: #bc00ff;
+            --glass: rgba(10, 20, 30, 0.6);
+            --border: rgba(0, 243, 255, 0.3);
+        }
+
+        * { box-sizing: border-box; cursor: url('https://cur.cursors-4u.net/navigation/nav-1.cur'), auto; }
+        body, html {
+            margin: 0; padding: 0; height: 100vh;
+            background: #020a12 url('https://images.unsplash.com/photo-1475274047050-1d0c0975c63e?auto=format&fit=crop&w=1920&q=80') center/cover no-repeat;
+            color: var(--cyan); font-family: 'Segoe UI', system-ui; overflow: hidden;
+        }
+
+        /* 扫描线动画 */
+        body::before {
+            content: ""; position: absolute; top:0; left:0; width:100%; height:100%;
+            background: linear-gradient(0deg, transparent 50%, rgba(0, 243, 255, 0.05) 50%);
+            background-size: 100% 4px; pointer-events: none; z-index: 5;
+        }
+
+        /* --- 顶部控制矩阵 --- */
+        .matrix-header {
+            height: 60px; backdrop-filter: blur(10px); background: rgba(0,0,0,0.4);
+            border-bottom: 1px solid var(--border); display: flex; align-items: center;
+            padding: 0 30px; justify-content: space-between; z-index: 10;
+        }
+
+        .switch-box { display: flex; gap: 20px; }
+        .hud-btn {
+            background: transparent; border: 1px solid var(--border); color: var(--cyan);
+            padding: 6px 15px; border-radius: 20px; font-size: 12px; cursor: pointer;
+            transition: all 0.3s; text-transform: uppercase; letter-spacing: 1px;
+        }
+        .hud-btn:hover, .hud-btn.active { background: var(--cyan); color: #000; box-shadow: 0 0 15px var(--cyan); }
+
+        /* --- 主布局 --- */
+        .viewport {
+            display: flex; height: calc(100vh - 60px); padding: 20px; gap: 15px;
+        }
+
+        .glass-panel {
+            background: var(--glass); border: 1px solid var(--border);
+            backdrop-filter: blur(20px); border-radius: 8px; display: flex;
+            flex-direction: column; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        }
+
+        /* --- 侧边栏 --- */
+        #explorer { width: 280px; min-width: 0; }
+        .file-row {
+            padding: 12px 20px; font-size: 14px; border-bottom: 1px solid rgba(0,243,255,0.1);
+            display: flex; align-items: center; gap: 10px; transition: 0.2s;
+        }
+        .file-row:hover { background: rgba(0,243,255,0.1); }
+        .file-row.active { border-left: 4px solid var(--purple); background: rgba(188,0,255,0.1); color: #fff; }
+
+        /* --- 编辑器 --- */
+        #editor { flex: 1; min-width: 0; }
+        #code-view {
+            flex: 1; background: transparent; border: none; color: #fff;
+            padding: 25px; font-family: 'Consolas', monospace; font-size: 16px;
+            outline: none; resize: none; line-height: 1.6;
+        }
+
+        /* --- 终端 --- */
+        #terminal { height: 200px; min-height: 0; border-top: 2px solid var(--purple); }
+        .term-body { flex: 1; padding: 15px; overflow-y: auto; font-family: monospace; font-size: 13px; }
+        .term-input {
+            background: rgba(0,0,0,0.5); padding: 10px 15px; display: flex; align-items: center;
+        }
+        #cmd-in { background: transparent; border: none; color: var(--cyan); flex: 1; outline: none; margin-left: 10px; }
+
+        /* --- 拖拽条 --- */
+        .resizer-h { width: 6px; cursor: col-resize; }
+        .resizer-v { height: 6px; cursor: row-resize; }
+
+        /* --- 右键菜单 --- */
+        #ctx-menu {
+            position: fixed; width: 200px; background: rgba(5, 15, 25, 0.95);
+            border: 1px solid var(--cyan); z-index: 1000; display: none;
+            border-radius: 4px; box-shadow: 0 0 20px var(--cyan);
+        }
+        .ctx-item {
+            padding: 10px 20px; font-size: 13px; color: var(--cyan); transition: 0.2s;
+        }
+        .ctx-item:hover { background: var(--cyan); color: #000; cursor: pointer; }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body oncontextmenu="event.preventDefault(); openCtx(event);">
+
+<header class="matrix-header">
+    <div style="font-size: 18px; font-weight: bold; letter-spacing: 5px;">AERO <span style="color:var(--purple)">SYSTEM</span></div>
+    <div class="switch-box">
+        <button class="hud-btn active" id="sw-exp" onclick="toggleHud('explorer')">Explorer</button>
+        <button class="hud-btn active" id="sw-trm" onclick="toggleHud('terminal')">Terminal</button>
+    </div>
+</header>
+
+<div class="viewport">
+    <div style="display:flex; flex:1; flex-direction:column;">
+        <div style="display:flex; flex:1; gap:0;">
+            <aside class="glass-panel" id="explorer">
+                <div style="padding:15px; font-size:11px; color:var(--purple); text-transform:uppercase">Project Explorer</div>
+                <div id="file-list"></div>
+            </aside>
+
+            <div class="resizer-h" id="h-drag"></div>
+
+            <main class="glass-panel" id="editor">
+                <div style="padding:10px 20px; background: rgba(0,243,255,0.05); font-size:12px; display:flex; justify-content:space-between">
+                    <span id="active-filename">core.js</span>
+                    <span style="opacity:0.6">SYNC_ENABLED</span>
+                </div>
+                <textarea id="code-view" spellcheck="false"></textarea>
+            </main>
+        </div>
+
+        <div class="resizer-v" id="v-drag"></div>
+
+        <footer class="glass-panel" id="terminal">
+            <div class="term-body" id="term-out">
+                <div style="color:var(--purple)">Aero Kernel v1.0.4 initialized...</div>
+                <div>Welcome, Operator. Type 'help' for instructions.</div>
+            </div>
+            <div class="term-input">
+                <span>➜</span>
+                <input type="text" id="cmd-in" autocomplete="off" spellcheck="false">
+            </div>
+        </footer>
+    </div>
+</div>
+
+<div id="ctx-menu">
+    <div class="ctx-item" onclick="downloadCurrent()"><i class="fa-solid fa-download"></i> Download Current</div>
+    <div class="ctx-item" onclick="exportZip()"><i class="fa-solid fa-file-zipper"></i> ZIP All Project</div>
+</div>
+
+<script>
+    // --- 1. 虚拟文件系统 ---
+    let fs = {
+        'core.js': 'function start() {\n  console.log("Aero System Online");\n}',
+        'index.html': '<h1>Holographic UI</h1>',
+        'theme.css': ':root { --glow: #00f3ff; }'
+    };
+    let activeFile = 'core.js';
+
+    function renderFiles() {
+        const list = document.getElementById('file-list');
+        list.innerHTML = '';
+        Object.keys(fs).forEach(name => {
+            const div = document.createElement('div');
+            div.className = `file-row ${name === activeFile ? 'active' : ''}`;
+            div.innerHTML = `<i class="fa-regular fa-file"></i> ${name}`;
+            div.onclick = () => {
+                fs[activeFile] = document.getElementById('code-view').value;
+                activeFile = name;
+                document.getElementById('code-view').value = fs[name];
+                document.getElementById('active-filename').innerText = name;
+                renderFiles();
+            };
+            list.appendChild(div);
+        });
+    }
+
+    // --- 2. 终端增强系统 ---
+    const tOut = document.getElementById('term-out');
+    const tIn = document.getElementById('cmd-in');
+
+    const cmdLib = {
+        'help': () => 'Available: ls, touch, rm, cat, clear, download, date, whoami',
+        'ls': () => Object.keys(fs).join('   '),
+        'date': () => new Date().toLocaleString(),
+        'whoami': () => 'user@nebula-core',
+        'clear': () => { tOut.innerHTML = ''; return ''; },
+        'touch': (args) => { if(!args[0]) return 'usage: touch [filename]'; fs[args[0]] = ''; renderFiles(); return 'File created.'; },
+        'rm': (args) => { if(!fs[args[0]]) return 'File not found.'; delete fs[args[0]]; renderFiles(); return 'File deleted.'; },
+        'cat': (args) => { if(!fs[args[0]]) return 'File not found.'; return `<div style="color:#fff">${fs[args[0]]}</div>`; },
+        'download': () => { downloadCurrent(); return 'Preparing download...'; }
+    };
+
+    tIn.onkeydown = (e) => {
+        if(e.key === 'Enter') {
+            const val = tIn.value.trim();
+            const [cmd, ...args] = val.split(' ');
+            printLog(`<span style="color:var(--purple)">➜</span> ${val}`);
+            
+            if(cmdLib[cmd]) {
+                const res = cmdLib[cmd](args);
+                if(res) printLog(res);
+            } else if(val !== "") {
+                printLog(`Command not found: ${cmd}`);
+            }
+            tIn.value = '';
+        }
+    };
+
+    function printLog(html) {
+        const div = document.createElement('div');
+        div.innerHTML = html;
+        tOut.appendChild(div);
+        tOut.scrollTop = tOut.scrollHeight;
+    }
+
+    // --- 3. 拖拽与面板开关 ---
+    function toggleHud(id) {
+        const p = document.getElementById(id);
+        const btn = document.getElementById(id === 'explorer' ? 'sw-exp' : 'sw-trm');
+        p.classList.toggle('hidden');
+        btn.classList.toggle('active');
+    }
+
+    const setResizer = (bar, target, isV) => {
+        bar.onmousedown = (e) => {
+            document.onmousemove = (ev) => {
+                if(isV) {
+                    const h = window.innerHeight - ev.clientY - 20;
+                    if(h < 40) { target.classList.add('hidden'); document.getElementById('sw-trm').classList.remove('active'); }
+                    else { target.classList.remove('hidden'); target.style.height = h + 'px'; document.getElementById('sw-trm').classList.add('active'); }
+                } else {
+                    const w = ev.clientX - 20;
+                    if(w < 40) { target.classList.add('hidden'); document.getElementById('sw-exp').classList.remove('active'); }
+                    else { target.classList.remove('hidden'); target.style.width = w + 'px'; document.getElementById('sw-exp').classList.add('active'); }
+                }
+            };
+            document.onmouseup = () => document.onmousemove = null;
+        };
+    };
+    setResizer(document.getElementById('h-drag'), document.getElementById('explorer'), false);
+    setResizer(document.getElementById('v-drag'), document.getElementById('terminal'), true);
+
+    // --- 4. 右键菜单与下载 ---
+    const ctx = document.getElementById('ctx-menu');
+    function openCtx(e) {
+        ctx.style.display = 'block';
+        ctx.style.left = e.pageX + 'px'; ctx.style.top = e.pageY + 'px';
+    }
+    document.onclick = () => ctx.style.display = 'none';
+
+    function downloadCurrent() {
+        fs[activeFile] = document.getElementById('code-view').value;
+        const blob = new Blob([fs[activeFile]], {type: 'text/plain'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = activeFile;
+        a.click();
+        printLog(`Downloaded: ${activeFile}`);
+    }
+
+    async function exportZip() {
+        fs[activeFile] = document.getElementById('code-view').value;
+        const zip = new JSZip();
+        Object.keys(fs).forEach(k => zip.file(k, fs[k]));
+        const content = await zip.generateAsync({type: "blob"});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(content);
+        a.download = "aero_export.zip";
+        a.click();
+        printLog("ZIP Archive generated.");
+    }
+
+    // 初始化
+    renderFiles();
+    document.getElementById('code-view').value = fs[activeFile];
+</script>
+</body>
+</html>

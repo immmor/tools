@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>AETHER_OS // MINIMALIST WORKSPACE</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --glass: rgba(20, 25, 30, 0.85);
+            --accent: #7d5fff; /* 柔和紫色 */
+            --border: rgba(255, 255, 255, 0.1);
+            --text: #d1d8e0;
+        }
+
+        * { box-sizing: border-box; transition: background 0.3s, border-color 0.3s; }
+        body, html {
+            margin: 0; padding: 0; height: 100vh;
+            background: radial-gradient(circle at center, #1e272e 0%, #050505 100%);
+            color: var(--text); font-family: 'Inter', sans-serif; overflow: hidden;
+        }
+
+        /* --- 顶栏 --- */
+        .top-nav {
+            height: 40px; display: flex; align-items: center; padding: 0 20px;
+            background: rgba(0,0,0,0.3); border-bottom: 1px solid var(--border);
+            justify-content: space-between; font-size: 13px; letter-spacing: 1px;
+        }
+
+        /* --- 主容器 --- */
+        .workspace {
+            display: flex; height: calc(100vh - 40px); padding: 10px; gap: 8px;
+        }
+
+        /* --- 面板基础 --- */
+        .panel {
+            background: var(--glass); border: 1px solid var(--border);
+            border-radius: 12px; display: flex; flex-direction: column;
+            backdrop-filter: blur(15px); overflow: hidden; position: relative;
+        }
+
+        .panel-header {
+            padding: 10px 15px; font-size: 11px; font-weight: 600;
+            border-bottom: 1px solid var(--border); color: #888;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+
+        /* --- 资源管理器 --- */
+        #sidebar { width: 220px; min-width: 0px; }
+        .file-list { padding: 10px; }
+        .file-item {
+            padding: 8px 12px; border-radius: 6px; cursor: pointer;
+            font-size: 13px; margin-bottom: 2px;
+        }
+        .file-item:hover { background: rgba(255,255,255,0.05); }
+        .file-item.active { background: rgba(125, 95, 255, 0.2); color: #fff; }
+
+        /* --- 编辑器 --- */
+        #editor { flex: 1; min-width: 0; }
+        #code-area {
+            flex: 1; background: transparent; border: none; color: #eee;
+            padding: 20px; font-family: 'Fira Code', monospace; font-size: 15px;
+            line-height: 1.6; resize: none; outline: none;
+        }
+
+        /* --- 终端 --- */
+        #terminal { height: 180px; min-height: 0; margin-top: 8px; }
+        .term-out {
+            flex: 1; padding: 12px; font-size: 12px; overflow-y: auto;
+            color: #7bed9f; font-family: monospace;
+        }
+        .term-input-row {
+            padding: 8px 15px; background: rgba(0,0,0,0.2); border-top: 1px solid var(--border);
+            display: flex; align-items: center;
+        }
+        #term-input {
+            background: transparent; border: none; color: #fff; flex: 1;
+            margin-left: 10px; outline: none; font-family: monospace;
+        }
+
+        /* --- 拖拽条 --- */
+        .resizer-h { width: 4px; cursor: col-resize; border-radius: 2px; }
+        .resizer-h:hover { background: var(--accent); }
+        .resizer-v { height: 4px; cursor: row-resize; border-radius: 2px; }
+        .resizer-v:hover { background: var(--accent); }
+
+        /* --- 控制中心 (左下角浮动) --- */
+        .controls {
+            position: absolute; bottom: 20px; left: 20px; display: flex; gap: 10px;
+            z-index: 100; background: rgba(0,0,0,0.5); padding: 8px; border-radius: 30px;
+            border: 1px solid var(--border);
+        }
+        .ctrl-btn {
+            width: 35px; height: 35px; border-radius: 50%; border: none;
+            background: #2f3542; color: #fff; cursor: pointer; transition: 0.2s;
+        }
+        .ctrl-btn.active { background: var(--accent); box-shadow: 0 0 15px var(--accent); }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<nav class="top-nav">
+    <div style="font-weight: bold; color: var(--accent)">AETHER_CORE v6.0</div>
+    <div id="file-path">PROJECT_ROOT / src / main.js</div>
+    <div style="opacity: 0.5"><i class="fa-solid fa-cloud"></i> Synced</div>
+</nav>
+
+<div class="workspace">
+    <div class="main-layout" style="display: flex; flex: 1; flex-direction: column;">
+        <div style="display: flex; flex: 1; gap: 8px;">
+            <aside class="panel" id="sidebar">
+                <div class="panel-header">EXPLORER</div>
+                <div class="file-list">
+                    <div class="file-item active" onclick="loadFile('main.js')"><i class="fa-brands fa-js"></i> main.js</div>
+                    <div class="file-item" onclick="loadFile('data.json')"><i class="fa-solid fa-database"></i> data.json</div>
+                    <div class="file-item" onclick="loadFile('index.html')"><i class="fa-solid fa-code"></i> index.html</div>
+                </div>
+            </aside>
+
+            <div class="resizer-h" id="h-drag"></div>
+
+            <main class="panel" id="editor">
+                <div class="panel-header">EDITOR <span id="current-file">main.js</span></div>
+                <textarea id="code-area" spellcheck="false">function welcome() {
+    console.log("Welcome to Aether OS");
+}</textarea>
+            </main>
+        </div>
+
+        <div class="resizer-v" id="v-drag"></div>
+
+        <footer class="panel" id="terminal">
+            <div class="panel-header">TERMINAL</div>
+            <div class="term-out" id="term-out">
+                [Aether] Session started on 2026-01-05.
+                Type 'help' for instructions.
+            </div>
+            <div class="term-input-row">
+                <span style="color: var(--accent)">➜</span>
+                <input type="text" id="term-input" autocomplete="off" spellcheck="false">
+            </div>
+        </footer>
+    </div>
+</div>
+
+<div class="controls">
+    <button class="ctrl-btn active" id="toggle-sidebar" title="切换侧边栏"><i class="fa-solid fa-columns"></i></button>
+    <button class="ctrl-btn active" id="toggle-terminal" title="切换终端"><i class="fa-solid fa-terminal"></i></button>
+    <button class="ctrl-btn" onclick="clearTerm()" title="清空终端"><i class="fa-solid fa-trash"></i></button>
+</div>
+
+<script>
+    // --- 1. 面板尺寸调整 ---
+    const setupDrag = (resizer, target, mode) => {
+        resizer.onmousedown = (e) => {
+            document.onmousemove = (ev) => {
+                if (mode === 'H') {
+                    const width = ev.clientX - 20;
+                    if (width < 30) {
+                        target.classList.add('hidden');
+                        document.getElementById('toggle-sidebar').classList.remove('active');
+                    } else {
+                        target.classList.remove('hidden');
+                        target.style.width = width + 'px';
+                        document.getElementById('toggle-sidebar').classList.add('active');
+                    }
+                } else {
+                    const height = window.innerHeight - ev.clientY - 60;
+                    if (height < 30) {
+                        target.classList.add('hidden');
+                        document.getElementById('toggle-terminal').classList.remove('active');
+                    } else {
+                        target.classList.remove('hidden');
+                        target.style.height = height + 'px';
+                        document.getElementById('toggle-terminal').classList.add('active');
+                    }
+                }
+            };
+            document.onmouseup = () => document.onmousemove = null;
+        };
+    };
+
+    setupDrag(document.getElementById('h-drag'), document.getElementById('sidebar'), 'H');
+    setupDrag(document.getElementById('v-drag'), document.getElementById('terminal'), 'V');
+
+    // --- 2. 面板开关控制 ---
+    document.getElementById('toggle-sidebar').onclick = function() {
+        const sidebar = document.getElementById('sidebar');
+        sidebar.classList.toggle('hidden');
+        this.classList.toggle('active');
+    };
+
+    document.getElementById('toggle-terminal').onclick = function() {
+        const terminal = document.getElementById('terminal');
+        terminal.classList.toggle('hidden');
+        this.classList.toggle('active');
+    };
+
+    // --- 3. 模拟文件系统 ---
+    const db = {
+        'main.js': 'function welcome() {\n    console.log("Welcome to Aether OS");\n}',
+        'data.json': '{\n  "id": "Aether-01",\n  "status": "online"\n}',
+        'index.html': '<html>\n  <body>\n    <h1>Aether Minimalist</h1>\n  </body>\n</html>'
+    };
+
+    function loadFile(name) {
+        document.querySelectorAll('.file-item').forEach(i => i.classList.remove('active'));
+        event.currentTarget.classList.add('active');
+        document.getElementById('code-area').value = db[name];
+        document.getElementById('current-file').innerText = name;
+        printTerm(`Loading context: ${name}`);
+    }
+
+    // --- 4. 终端逻辑 ---
+    const termInput = document.getElementById('term-input');
+    const termOut = document.getElementById('term-out');
+
+    function printTerm(msg) {
+        const div = document.createElement('div');
+        div.textContent = `> ${msg}`;
+        termOut.appendChild(div);
+        termOut.scrollTop = termOut.scrollHeight;
+    }
+
+    function clearTerm() { termOut.innerHTML = ''; }
+
+    termInput.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+            const cmd = termInput.value;
+            printTerm(cmd);
+            if (cmd === 'help') printTerm('Commands: ls, clear, date, status');
+            else if (cmd === 'ls') printTerm(Object.keys(db).join('  '));
+            else if (cmd === 'clear') clearTerm();
+            else if (cmd === 'date') printTerm(new Date().toLocaleString());
+            else if (cmd === 'status') printTerm('All systems operational.');
+            else if (cmd !== '') printTerm('Unknown command.');
+            termInput.value = '';
+        }
+    };
+</script>
+
+</body>
+</html>

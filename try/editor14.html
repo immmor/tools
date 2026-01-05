@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>QUANTUM_GRID // NODE_OS</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        :root {
+            --bg: #020205;
+            --accent: #00ffcc;
+            --border: #1a1a2e;
+            --panel: #0a0a12;
+            --text: #a0a0b8;
+        }
+
+        * { box-sizing: border-box; cursor: crosshair; }
+        body, html {
+            margin: 0; padding: 0; height: 100vh;
+            background: var(--bg); color: var(--text);
+            font-family: 'Fira Code', monospace; overflow: hidden;
+        }
+
+        /* --- 顶部控制栏 --- */
+        .top-bar {
+            height: 40px; border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; padding: 0 15px;
+            justify-content: space-between; background: #000;
+        }
+
+        .btn-group { display: flex; gap: 8px; }
+        .sys-btn {
+            background: transparent; border: 1px solid var(--border);
+            color: var(--text); padding: 2px 10px; font-size: 11px;
+            cursor: pointer; transition: 0.2s;
+        }
+        .sys-btn:hover, .sys-btn.active { border-color: var(--accent); color: var(--accent); }
+
+        /* --- 核心容器 (平铺布局) --- */
+        .workspace {
+            display: flex; height: calc(100vh - 40px); width: 100vw;
+        }
+
+        .main-col { display: flex; flex-direction: column; flex: 1; height: 100%; overflow: hidden; }
+        .top-row { display: flex; flex: 1; min-height: 0; width: 100%; }
+
+        /* --- 面板样式 --- */
+        .panel {
+            background: var(--panel); border: 1px solid var(--border);
+            display: flex; flex-direction: column; position: relative;
+            min-width: 0; min-height: 0;
+        }
+
+        .panel-header {
+            height: 30px; background: rgba(255,255,255,0.02);
+            border-bottom: 1px solid var(--border);
+            display: flex; justify-content: space-between;
+            align-items: center; padding: 0 10px; font-size: 10px; letter-spacing: 1px;
+        }
+
+        .panel-actions i { cursor: pointer; margin-left: 10px; opacity: 0.5; }
+        .panel-actions i:hover { opacity: 1; color: var(--accent); }
+
+        /* --- 特定面板内容 --- */
+        #explorer { width: 250px; }
+        .file-link {
+            padding: 8px 15px; font-size: 13px; display: block;
+            border-bottom: 1px solid var(--border); transition: 0.2s;
+        }
+        .file-link:hover { background: rgba(0, 255, 204, 0.05); }
+        .file-link.active { color: var(--accent); background: rgba(0, 255, 204, 0.1); border-left: 3px solid var(--accent); }
+
+        #code-editor {
+            flex: 1; background: transparent; border: none; color: #fff;
+            padding: 20px; font-family: inherit; font-size: 15px; outline: none; resize: none;
+        }
+
+        #terminal { height: 200px; }
+        .term-log { flex: 1; padding: 15px; overflow-y: auto; font-size: 12px; color: #00ff66; }
+        .term-input { padding: 10px; background: #000; display: flex; align-items: center; border-top: 1px solid var(--border); }
+        #cmd-in { background: transparent; border: none; color: #fff; flex: 1; outline: none; margin-left: 10px; font-family: inherit; }
+
+        /* --- 拖拽分割线 --- */
+        .resizer-h { width: 4px; cursor: col-resize; background: transparent; z-index: 5; }
+        .resizer-h:hover { background: var(--accent); }
+        .resizer-v { height: 4px; cursor: row-resize; background: transparent; z-index: 5; }
+        .resizer-v:hover { background: var(--accent); }
+
+        /* --- 右键菜单 --- */
+        #context-menu {
+            position: fixed; background: #111; border: 1px solid var(--accent);
+            display: none; z-index: 1000; width: 180px; box-shadow: 0 0 15px rgba(0,255,204,0.3);
+        }
+        .menu-item { padding: 10px 15px; font-size: 12px; }
+        .menu-item:hover { background: var(--accent); color: #000; }
+
+        /* 状态类 */
+        .maximized { position: absolute !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; z-index: 50 !important; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body oncontextmenu="event.preventDefault(); showMenu(event);">
+
+<header class="top-bar">
+    <div style="font-weight: bold; font-size: 14px; color: var(--accent)">QUANTUM_GRID v2.1</div>
+    <div class="btn-group">
+        <button class="sys-btn active" id="btn-side" onclick="toggleLayout('explorer')">SIDEBAR</button>
+        <button class="sys-btn active" id="btn-term" onclick="toggleLayout('terminal')">TERMINAL</button>
+        <button class="sys-btn" onclick="zipAll()"><i class="fa-solid fa-file-zipper"></i> ZIP</button>
+    </div>
+</header>
+
+<div class="workspace">
+    <aside class="panel" id="explorer">
+        <div class="panel-header">
+            <span>EXPLORER</span>
+            <div class="panel-actions"><i class="fa-solid fa-expand" onclick="maximize('explorer')"></i></div>
+        </div>
+        <div id="file-list"></div>
+    </aside>
+
+    <div class="resizer-h" id="h-drag"></div>
+
+    <div class="main-col" id="center-zone">
+        <div class="top-row">
+            <main class="panel" style="flex: 1;" id="editor-panel">
+                <div class="panel-header">
+                    <span id="cur-file">main.js</span>
+                    <div class="panel-actions"><i class="fa-solid fa-expand" onclick="maximize('editor-panel')"></i></div>
+                </div>
+                <textarea id="code-editor" spellcheck="false"></textarea>
+            </main>
+        </div>
+
+        <div class="resizer-v" id="v-drag"></div>
+
+        <footer class="panel" id="terminal">
+            <div class="panel-header">
+                <span>VIRTUAL_TERMINAL</span>
+                <div class="panel-actions"><i class="fa-solid fa-expand" onclick="maximize('terminal')"></i></div>
+            </div>
+            <div class="term-log" id="term-out">System Booted. Type 'help'.</div>
+            <div class="term-input">
+                <span>&gt;</span>
+                <input type="text" id="cmd-in" autocomplete="off" spellcheck="false">
+            </div>
+        </footer>
+    </div>
+</div>
+
+<div id="context-menu">
+    <div class="menu-item" onclick="downloadActive()">Download Current File</div>
+    <div class="menu-item" onclick="zipAll()">Download Full ZIP</div>
+</div>
+
+<script>
+    // --- 1. 模拟文件系统与初始化 ---
+    let files = {
+        'main.js': 'console.log("Grid Ready");',
+        'init.cfg': 'DEBUG=true\nTHEME=QUANTUM',
+        'readme.md': '# GridOS\nTiling layout active.'
+    };
+    let activeFile = 'main.js';
+
+    function renderFileList() {
+        const list = document.getElementById('file-list');
+        list.innerHTML = '';
+        Object.keys(files).forEach(name => {
+            const d = document.createElement('div');
+            d.className = `file-link ${name === activeFile ? 'active' : ''}`;
+            d.innerText = name;
+            d.onclick = () => {
+                files[activeFile] = document.getElementById('code-editor').value;
+                activeFile = name;
+                document.getElementById('code-editor').value = files[name];
+                document.getElementById('cur-file').innerText = name;
+                renderFileList();
+            };
+            list.appendChild(d);
+        });
+    }
+
+    // --- 2. 平铺拖拽引擎 (联动逻辑) ---
+    const setupDrag = (bar, panelA, panelB, isVertical) => {
+        bar.onmousedown = (e) => {
+            document.onmousemove = (ev) => {
+                if (isVertical) {
+                    // 终端高度联动：总高度 - 鼠标位置 = 终端高度
+                    const totalH = document.getElementById('center-zone').offsetHeight;
+                    const h = totalH - (ev.clientY - 40);
+                    if (h < 30) { panelB.style.height = '0px'; }
+                    else { panelB.style.height = h + 'px'; }
+                } else {
+                    // 侧边栏宽度联动
+                    const w = ev.clientX;
+                    if (w < 40) { panelA.style.width = '0px'; }
+                    else { panelA.style.width = w + 'px'; }
+                }
+            };
+            document.onmouseup = () => document.onmousemove = null;
+        };
+    };
+
+    setupDrag(document.getElementById('h-drag'), document.getElementById('explorer'), null, false);
+    setupDrag(document.getElementById('v-drag'), null, document.getElementById('terminal'), true);
+
+    // --- 3. 最大化占据逻辑 ---
+    function maximize(id) {
+        const target = document.getElementById(id);
+        const isMax = target.classList.contains('maximized');
+        
+        // 先清除所有最大化
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('maximized'));
+        
+        if (!isMax) {
+            target.classList.add('maximized');
+            printTerm(`Panel [${id}] maximized. Full viewport occupied.`);
+        }
+    }
+
+    function toggleLayout(id) {
+        const p = document.getElementById(id);
+        const btn = document.getElementById(id === 'explorer' ? 'btn-side' : 'btn-term');
+        p.classList.toggle('hidden');
+        btn.classList.toggle('active');
+    }
+
+    // --- 4. 增强版终端命令 ---
+    const tOut = document.getElementById('term-out');
+    const cmdIn = document.getElementById('cmd-in');
+    
+    const cmds = {
+        'help': () => 'cmds: ls, touch, rm, cat, clear, download, zip, status, date',
+        'ls': () => Object.keys(files).join('  '),
+        'date': () => new Date().toString(),
+        'clear': () => { tOut.innerHTML = ''; return ''; },
+        'status': () => 'CPU_LOAD: 5% | BUFFER: STABLE | LINK: ENCRYPTED',
+        'touch': (a) => { if(!a[0]) return 'need name'; files[a[0]] = ''; renderFileList(); return 'created'; },
+        'rm': (a) => { delete files[a[0]]; renderFileList(); return 'deleted'; },
+        'cat': (a) => files[a[0]] || 'not found',
+        'download': () => { downloadActive(); return 'triggering download...'; },
+        'zip': () => { zipAll(); return 'packaging...'; }
+    };
+
+    cmdIn.onkeydown = (e) => {
+        if(e.key === 'Enter') {
+            const raw = cmdIn.value.trim();
+            const [c, ...args] = raw.split(' ');
+            printTerm(`> ${raw}`, '#fff');
+            if(cmds[c]) printTerm(cmds[c](args));
+            else if(raw) printTerm('command not found');
+            cmdIn.value = '';
+        }
+    };
+
+    function printTerm(m, color) {
+        const d = document.createElement('div');
+        if(color) d.style.color = color;
+        d.textContent = m;
+        tOut.appendChild(d);
+        tOut.scrollTop = tOut.scrollHeight;
+    }
+
+    // --- 5. 右键与下载逻辑 ---
+    const ctx = document.getElementById('context-menu');
+    function showMenu(e) {
+        ctx.style.display = 'block';
+        ctx.style.left = e.pageX + 'px'; ctx.style.top = e.pageY + 'px';
+    }
+    document.onclick = () => ctx.style.display = 'none';
+
+    function downloadActive() {
+        files[activeFile] = document.getElementById('code-editor').value;
+        const b = new Blob([files[activeFile]], {type: 'text/plain'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(b); a.download = activeFile; a.click();
+    }
+
+    async function zipAll() {
+        files[activeFile] = document.getElementById('code-editor').value;
+        const zip = new JSZip();
+        Object.keys(files).forEach(k => zip.file(k, files[k]));
+        const content = await zip.generateAsync({type: "blob"});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(content); a.download = "quantum_project.zip"; a.click();
+    }
+
+    // 初始化
+    renderFileList();
+    document.getElementById('code-editor').value = files[activeFile];
+</script>
+</body>
+</html>

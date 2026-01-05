@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>NEON_BLUEPRINT // V6</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        :root {
+            --neon-cyan: #00f2ff;
+            --dark-blue: #000b14;
+            --grid-line: rgba(0, 242, 255, 0.1);
+            --panel-bg: rgba(0, 11, 20, 0.9);
+        }
+
+        /* 1. 基础指针逻辑：回归原生但强调交互 */
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; cursor: default; }
+        
+        body, html {
+            margin: 0; padding: 0; height: 100vh; width: 100vw;
+            background-color: var(--dark-blue);
+            /* 蓝图网格背景 */
+            background-image: 
+                linear-gradient(var(--grid-line) 1px, transparent 1px),
+                linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+            background-size: 30px 30px;
+            color: var(--neon-cyan); font-family: 'Segoe UI', Monaco, monospace;
+            overflow: hidden;
+        }
+
+        /* 2. 顶栏：纤细且信息明确 */
+        .top-nav {
+            height: 40px; border-bottom: 1px solid var(--neon-cyan);
+            display: flex; align-items: center; padding: 0 15px;
+            font-size: 11px; letter-spacing: 2px; text-transform: uppercase;
+        }
+
+        /* 3. 核心布局：全平台统一水平排列 */
+        .workspace { 
+            display: flex; flex-direction: row; 
+            height: calc(100vh - 40px); width: 100%; position: relative; 
+        }
+
+        .panel { 
+            background: var(--panel-bg); display: flex; flex-direction: column; 
+            overflow: hidden; position: relative; height: 100%;
+            border-right: 1px solid var(--grid-line);
+        }
+
+        /* 面板最大化 */
+        .panel.maximized {
+            position: fixed !important; top: 0 !important; left: 0 !important;
+            width: 100% !important; height: 100% !important;
+            z-index: 500; border: none !important; background: var(--dark-blue);
+        }
+
+        /* 4. 拖拽条：指针变样关键 */
+        .divider-h { 
+            width: 4px; background: var(--grid-line); 
+            cursor: col-resize !important; z-index: 100; flex-shrink: 0;
+        }
+        .divider-h:hover, .divider-h.active { background: var(--neon-cyan); box-shadow: 0 0 10px var(--neon-cyan); }
+
+        .divider-v { 
+            height: 4px; background: var(--grid-line); 
+            cursor: row-resize !important; z-index: 100; flex-shrink: 0;
+        }
+        .divider-v:hover, .divider-v.active { background: var(--neon-cyan); box-shadow: 0 0 10px var(--neon-cyan); }
+
+        /* 5. 面板头部 */
+        .p-header {
+            height: 28px; background: rgba(0, 242, 255, 0.05);
+            border-bottom: 1px solid var(--grid-line);
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 10px; font-size: 10px; flex-shrink: 0;
+        }
+        .btn-max { cursor: pointer !important; opacity: 0.6; transition: 0.2s; }
+        .btn-max:hover { opacity: 1; color: #fff; }
+
+        /* 6. 内容区 */
+        #explorer { width: 220px; min-width: 0; }
+        .file-item { 
+            padding: 10px 15px; font-size: 12px; border-bottom: 1px solid var(--grid-line);
+            cursor: pointer !important; white-space: nowrap; overflow: hidden;
+        }
+        .file-item:hover { background: rgba(0, 242, 255, 0.05); }
+        .file-item.active { border-left: 3px solid var(--neon-cyan); background: rgba(0, 242, 255, 0.1); color: #fff; }
+
+        #main-stack { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+        #code-editor {
+            flex: 1; background: transparent; border: none; outline: none;
+            padding: 20px; color: #fff; font-size: 14px; line-height: 1.5;
+            resize: none; font-family: 'Consolas', monospace; cursor: text !important;
+        }
+
+        #terminal { height: 180px; min-height: 0; border-top: 1px solid var(--grid-line); }
+        #term-out { flex: 1; padding: 10px; overflow-y: auto; font-size: 11px; color: #8bbabc; }
+        .input-box { display: flex; padding: 5px 10px; background: rgba(0,0,0,0.3); border-top: 1px solid var(--grid-line); }
+        #cmd-in { 
+            background: transparent; border: none; outline: none; flex: 1; 
+            color: var(--neon-cyan); font-family: monospace; cursor: text !important;
+        }
+
+        /* 7. 右键菜单 */
+        #ctx-menu {
+            position: fixed; display: none; background: var(--dark-blue);
+            border: 1px solid var(--neon-cyan); z-index: 1000; min-width: 180px;
+            box-shadow: 0 0 20px rgba(0, 242, 255, 0.2);
+        }
+        .menu-opt { padding: 10px 15px; font-size: 11px; cursor: pointer !important; }
+        .menu-opt:hover { background: var(--neon-cyan); color: var(--dark-blue); }
+    </style>
+</head>
+<body oncontextmenu="handleCtx(event)">
+
+<nav class="top-nav">System_Status: Optimal // Node_06</nav>
+
+<div class="workspace">
+    <aside class="panel" id="explorer">
+        <div class="p-header">
+            <span>Explorer.log</span>
+            <span class="btn-max" onclick="toggleMax('explorer')">⛶</span>
+        </div>
+        <div id="file-list"></div>
+    </aside>
+
+    <div class="divider-h" id="h-drag"></div>
+
+    <div id="main-stack">
+        <main class="panel" id="editor-p" style="flex:1">
+            <div class="p-header">
+                <span id="active-tab">source.js</span>
+                <span class="btn-max" onclick="toggleMax('editor-p')">⛶</span>
+            </div>
+            <textarea id="code-editor" spellcheck="false"></textarea>
+        </main>
+        
+        <div class="divider-v" id="v-drag"></div>
+
+        <footer class="panel" id="terminal">
+            <div class="p-header">
+                <span>Console.sh</span>
+                <span class="btn-max" onclick="toggleMax('terminal')">⛶</span>
+            </div>
+            <div id="term-out">Console Ready... Type 'help' for commands.</div>
+            <div class="input-box">
+                <span style="margin-right:8px">></span>
+                <input type="text" id="cmd-in" autocomplete="off" spellcheck="false">
+            </div>
+        </footer>
+    </div>
+</div>
+
+<div id="ctx-menu">
+    <div class="menu-opt" onclick="exportSingle()">DOWNLOAD_FILE</div>
+    <div class="menu-opt" onclick="exportZip()">ARCHIVE_ALL_ZIP</div>
+    <div style="border-top:1px solid var(--grid-line); margin:2px 0;"></div>
+    <div class="menu-opt" onclick="termAction('clear')">CLEAR_CONSOLE</div>
+</div>
+
+<script>
+    // --- 数据存储 ---
+    let files = {
+        'main.py': 'def start():\n    print("Blueprint Online")\n\nstart()',
+        'styles.css': ':root {\n  --neon: #00f2ff;\n}',
+        'core.json': '{\n  "version": "6.0.2",\n  "status": "active"\n}'
+    };
+    let activeKey = 'main.py';
+
+    // --- 响应式拖拽逻辑 ---
+    function initDrag(bar, target, isHorizontal) {
+        let dragging = false;
+        const start = () => { dragging = true; bar.classList.add('active'); };
+        const end = () => { dragging = false; bar.classList.remove('active'); };
+        
+        const move = (e) => {
+            if (!dragging) return;
+            const x = e.touches ? e.touches[0].clientX : e.clientX;
+            const y = e.touches ? e.touches[0].clientY : e.clientY;
+
+            if (isHorizontal) {
+                let p = (x / window.innerWidth) * 100;
+                if (p < 4) p = 0; // 磁吸隐藏预览区
+                if (p > 96) p = 100;
+                target.style.width = p + '%';
+            } else {
+                let rect = document.getElementById('main-stack').getBoundingClientRect();
+                let relativeY = y - rect.top;
+                let p = 100 - (relativeY / rect.height * 100);
+                if (p < 5) p = 0; // 磁吸隐藏终端
+                if (p > 95) p = 100;
+                target.style.height = p + '%';
+            }
+        };
+
+        bar.addEventListener('mousedown', start);
+        bar.addEventListener('touchstart', start);
+        document.addEventListener('mousemove', move);
+        document.addEventListener('touchmove', move, { passive: false });
+        document.addEventListener('mouseup', end);
+        document.addEventListener('touchend', end);
+    }
+    initDrag(document.getElementById('h-drag'), document.getElementById('explorer'), true);
+    initDrag(document.getElementById('v-drag'), document.getElementById('terminal'), false);
+
+    // --- 面板控制 ---
+    function toggleMax(id) {
+        document.getElementById(id).classList.toggle('maximized');
+    }
+
+    // --- 界面渲染 ---
+    function render() {
+        const list = document.getElementById('file-list');
+        list.innerHTML = '';
+        Object.keys(files).forEach(k => {
+            const div = document.createElement('div');
+            div.className = `file-item ${k === activeKey ? 'active' : ''}`;
+            div.innerText = k;
+            div.onclick = () => {
+                files[activeKey] = document.getElementById('code-editor').value;
+                activeKey = k;
+                document.getElementById('code-editor').value = files[k];
+                document.getElementById('active-tab').innerText = k;
+                render();
+            };
+            list.appendChild(div);
+        });
+    }
+
+    // --- 终端模拟 ---
+    const shellIn = document.getElementById('cmd-in');
+    const shellOut = document.getElementById('term-out');
+    shellIn.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+            const val = shellIn.value.trim();
+            const d = document.createElement('div');
+            d.innerHTML = `<span style="color:#fff">$ ${val}</span>`;
+            shellOut.appendChild(d);
+            
+            const [cmd, ...args] = val.split(' ');
+            if(cmd === 'ls') {
+                const r = document.createElement('div');
+                r.innerText = Object.keys(files).join('  ');
+                shellOut.appendChild(r);
+            } else if(cmd === 'clear') {
+                shellOut.innerHTML = '';
+            } else if(cmd === 'help') {
+                const r = document.createElement('div');
+                r.innerText = 'Commands: ls, clear, help, date, touch [file]';
+                shellOut.appendChild(r);
+            } else if(cmd === 'date') {
+                const r = document.createElement('div');
+                r.innerText = new Date().toLocaleString();
+                shellOut.appendChild(r);
+            } else if(cmd === 'touch' && args[0]) {
+                files[args[0]] = ""; render();
+                const r = document.createElement('div');
+                r.innerText = `Created ${args[0]}`;
+                shellOut.appendChild(r);
+            }
+            
+            shellIn.value = '';
+            shellOut.scrollTop = shellOut.scrollHeight;
+        }
+    };
+
+    // --- 右键与导出 ---
+    const menu = document.getElementById('ctx-menu');
+    function handleCtx(e) {
+        e.preventDefault();
+        menu.style.display = 'block';
+        menu.style.left = e.pageX + 'px';
+        menu.style.top = e.pageY + 'px';
+    }
+    document.onclick = () => menu.style.display = 'none';
+
+    function exportSingle() {
+        const b = new Blob([document.getElementById('code-editor').value], {type: 'text/plain'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(b); a.download = activeKey; a.click();
+    }
+
+    async function exportZip() {
+        files[activeKey] = document.getElementById('code-editor').value;
+        const zip = new JSZip();
+        Object.keys(files).forEach(k => zip.file(k, files[k]));
+        const b = await zip.generateAsync({type: "blob"});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(b); a.download = "blueprint_project.zip"; a.click();
+    }
+
+    function termAction(act) { if(act === 'clear') shellOut.innerHTML = ''; }
+
+    render();
+    document.getElementById('code-editor').value = files[activeKey];
+</script>
+</body>
+</html>

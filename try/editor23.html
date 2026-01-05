@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PAPER_OS // FLEX_LAYOUT</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        :root {
+            --paper: #f4f4f4;
+            --ink: #1a1a1a;
+            --border-w: 2px;
+            --active-gray: #e0e0e0;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; cursor: default; }
+        body, html { margin: 0; padding: 0; height: 100vh; width: 100vw; background: var(--paper); color: var(--ink); font-family: "Courier New", monospace; overflow: hidden; }
+
+        /* --- 顶栏 --- */
+        .top-bar {
+            height: 40px; border-bottom: var(--border-w) solid var(--ink);
+            display: flex; align-items: center; padding: 0 15px; font-size: 11px; font-weight: bold;
+            background: #fff; z-index: 101; position: relative;
+        }
+
+        /* --- 核心布局：强制水平排列 --- */
+        .workspace { 
+            display: flex; 
+            flex-direction: row; /* 确保移动端也是横向拖拽预览区 */
+            height: calc(100vh - 40px); 
+            width: 100%; 
+            position: relative; 
+        }
+        
+        .panel { 
+            background: #fff; display: flex; flex-direction: column; overflow: hidden; 
+            position: relative; height: 100%;
+        }
+
+        /* --- 最大化逻辑 --- */
+        .panel.maximized {
+            position: fixed !important; top: 0 !important; left: 0 !important;
+            width: 100% !important; height: 100% !important;
+            z-index: 200; border: none !important;
+        }
+
+        /* --- 拖拽条 --- */
+        .divider-h { 
+            width: 6px; /* 增加宽度方便手机触摸 */
+            background: #ddd; 
+            cursor: col-resize !important; 
+            z-index: 50; 
+            flex-shrink: 0;
+            transition: background 0.2s;
+        }
+        .divider-h:hover, .divider-h.active { background: var(--ink); }
+
+        .divider-v { 
+            height: 6px; 
+            background: #ddd; 
+            cursor: row-resize !important; 
+            z-index: 50; 
+            flex-shrink: 0;
+            transition: background 0.2s;
+        }
+        .divider-v:hover, .divider-v.active { background: var(--ink); }
+
+        /* --- 面板控制 --- */
+        .panel-header {
+            height: 30px; background: #fff; border-bottom: 1px solid var(--ink);
+            display: flex; align-items: center; justify-content: space-between; padding: 0 10px;
+            font-size: 9px; font-weight: bold; text-transform: uppercase; flex-shrink: 0;
+        }
+        .win-ctrl { cursor: pointer !important; padding: 2px 5px; }
+        .win-ctrl:hover { background: var(--ink); color: #fff; }
+
+        /* --- 侧边栏 --- */
+        #explorer { width: 200px; border-right: 1px solid #ccc; min-width: 0; }
+        .file-list { flex: 1; overflow-y: auto; }
+        .file-item { padding: 12px 15px; font-size: 12px; border-bottom: 1px solid #eee; cursor: pointer !important; white-space: nowrap; overflow: hidden; }
+        .file-item.active { background: var(--ink); color: #fff; }
+
+        /* --- 编辑/终端容器 --- */
+        #main-stack { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+        #code-editor {
+            flex: 1; background: transparent; border: none; outline: none;
+            padding: 20px; color: var(--ink); font-size: 14px; resize: none; font-family: inherit;
+        }
+
+        #terminal { height: 160px; border-top: 1px solid #ccc; min-height: 0; }
+        #term-out { flex: 1; padding: 10px; overflow-y: auto; font-size: 11px; line-height: 1.4; }
+        .input-row { display: flex; padding: 8px 10px; border-top: 1px solid #eee; background: #fdfdfd; }
+        #cmd-in { background: transparent; border: none; outline: none; flex: 1; font-family: monospace; cursor: text !important; }
+
+        /* --- 右键菜单 --- */
+        #ctx-menu {
+            position: fixed; display: none; background: #fff; border: 2px solid var(--ink);
+            z-index: 1000; min-width: 160px; box-shadow: 6px 6px 0px #ccc;
+        }
+        .menu-item { padding: 12px 15px; font-size: 11px; font-weight: bold; cursor: pointer !important; }
+        .menu-item:hover { background: var(--ink); color: #fff; }
+    </style>
+</head>
+<body oncontextmenu="handleCtx(event)">
+
+<header class="top-bar">STATION_ID // TERMINAL_V5.2</header>
+
+<div class="workspace">
+    <aside class="panel" id="explorer">
+        <div class="panel-header">
+            <span>FILES</span>
+            <span class="win-ctrl" onclick="toggleMax('explorer')">[ MAX ]</span>
+        </div>
+        <div class="file-list" id="file-list"></div>
+    </aside>
+
+    <div class="divider-h" id="h-drag"></div>
+
+    <div id="main-stack">
+        <main class="panel" id="editor-panel" style="flex:1">
+            <div class="panel-header">
+                <span id="active-filename">buffer.txt</span>
+                <span class="win-ctrl" onclick="toggleMax('editor-panel')">[ MAX ]</span>
+            </div>
+            <textarea id="code-editor" spellcheck="false"></textarea>
+        </main>
+        
+        <div class="divider-v" id="v-drag"></div>
+
+        <footer class="panel" id="terminal">
+            <div class="panel-header">
+                <span>TERMINAL</span>
+                <span class="win-ctrl" onclick="toggleMax('terminal')">[ MAX ]</span>
+            </div>
+            <div id="term-out">READY.</div>
+            <div class="input-row">
+                <span style="margin-right:8px">$</span>
+                <input type="text" id="cmd-in" autocomplete="off" spellcheck="false">
+            </div>
+        </footer>
+    </div>
+</div>
+
+<div id="ctx-menu">
+    <div class="menu-item" onclick="exportFile()">EXPORT CURRENT</div>
+    <div class="menu-item" onclick="archiveProject()">ARCHIVE PROJECT (ZIP)</div>
+    <div style="border-top:1px solid var(--ink); margin:2px 0;"></div>
+    <div class="menu-item" onclick="termAction('clear')">CLEAR TERMINAL</div>
+</div>
+
+<script>
+    // 1. 数据层
+    let storage = {
+        'main.asm': '; Paper OS Assembly\nMOV AX, 4C00h\nINT 21h',
+        'config.sys': 'FILES=30\nBUFFERS=20',
+        'readme.md': '# SYSTEM OK\nAll systems functional.'
+    };
+    let currentKey = 'main.asm';
+
+    // 2. 增强型拖拽逻辑（核心修改：左右、上下逻辑统一且支持吸附）
+    function setupDrag(bar, target, isHorizontal) {
+        let isDragging = false;
+
+        const start = () => { isDragging = true; bar.classList.add('active'); };
+        const end = () => { isDragging = false; bar.classList.remove('active'); };
+
+        const move = (e) => {
+            if (!isDragging) return;
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+            if (isHorizontal) {
+                let p = (clientX / window.innerWidth) * 100;
+                if (p < 3) p = 0; // 磁吸隐藏
+                if (p > 97) p = 100;
+                target.style.width = p + '%';
+            } else {
+                let rect = document.getElementById('main-stack').getBoundingClientRect();
+                let relativeY = clientY - rect.top;
+                let p = (relativeY / rect.height) * 100;
+                // 终端高度计算（从下往上）
+                let termP = 100 - p;
+                if (termP < 5) termP = 0;
+                if (termP > 95) termP = 100;
+                target.style.height = termP + '%';
+            }
+        };
+
+        bar.addEventListener('mousedown', start);
+        bar.addEventListener('touchstart', start);
+        document.addEventListener('mousemove', move);
+        document.addEventListener('touchmove', move, { passive: false });
+        document.addEventListener('mouseup', end);
+        document.addEventListener('touchend', end);
+    }
+
+    setupDrag(document.getElementById('h-drag'), document.getElementById('explorer'), true);
+    setupDrag(document.getElementById('v-drag'), document.getElementById('terminal'), false);
+
+    // 3. 最大化逻辑
+    function toggleMax(id) {
+        document.getElementById(id).classList.toggle('maximized');
+    }
+
+    // 4. 渲染与交互
+    function render() {
+        const list = document.getElementById('file-list');
+        list.innerHTML = '';
+        Object.keys(storage).forEach(k => {
+            const div = document.createElement('div');
+            div.className = `file-item ${k === currentKey ? 'active' : ''}`;
+            div.innerText = k.toUpperCase();
+            div.onclick = () => {
+                storage[currentKey] = document.getElementById('code-editor').value;
+                currentKey = k;
+                document.getElementById('code-editor').value = storage[k];
+                document.getElementById('active-filename').innerText = k;
+                render();
+            };
+            list.appendChild(div);
+        });
+    }
+
+    // 终端系统
+    const shellIn = document.getElementById('cmd-in');
+    const shellOut = document.getElementById('term-out');
+    shellIn.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+            const val = shellIn.value.trim();
+            const d = document.createElement('div');
+            d.innerHTML = `<b>$ ${val}</b>`;
+            shellOut.appendChild(d);
+            
+            if(val === 'ls') {
+                const r = document.createElement('div');
+                r.innerText = Object.keys(storage).join('  ');
+                shellOut.appendChild(r);
+            } else if(val === 'clear') {
+                shellOut.innerHTML = '';
+            }
+            
+            shellIn.value = '';
+            shellOut.scrollTop = shellOut.scrollHeight;
+        }
+    };
+
+    // 5. 右键功能
+    const ctx = document.getElementById('ctx-menu');
+    function handleCtx(e) {
+        e.preventDefault();
+        ctx.style.display = 'block';
+        ctx.style.left = e.pageX + 'px';
+        ctx.style.top = e.pageY + 'px';
+    }
+    document.onclick = () => ctx.style.display = 'none';
+
+    function exportFile() {
+        const b = new Blob([document.getElementById('code-editor').value], {type: 'text/plain'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(b); a.download = currentKey; a.click();
+    }
+
+    async function archiveProject() {
+        storage[currentKey] = document.getElementById('code-editor').value;
+        const zip = new JSZip();
+        Object.keys(storage).forEach(k => zip.file(k, storage[k]));
+        const b = await zip.generateAsync({type: "blob"});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(b); a.download = "ink_project.zip"; a.click();
+    }
+
+    render();
+    document.getElementById('code-editor').value = storage[currentKey];
+</script>
+</body>
+</html>

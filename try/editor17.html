@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRYSTAL_SHELL // BIO_OS</title>
+    <style>
+        :root {
+            --glass: rgba(255, 255, 255, 0.05);
+            --crystal-glow: #00f2ff;
+            --text-main: #e0faff;
+            --bg-deep: #03080a;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        
+        body, html {
+            margin: 0; padding: 0; height: 100vh; width: 100vw;
+            background: radial-gradient(circle at top right, #0a1f26 0%, #03080a 100%);
+            color: var(--text-main); font-family: 'Segoe UI', system-ui, sans-serif;
+            overflow: hidden; touch-action: none;
+        }
+
+        /* --- 萤火虫指针 (PC端显示) --- */
+        #bio-cursor {
+            width: 12px; height: 12px; background: var(--crystal-glow);
+            border-radius: 50%; position: fixed; pointer-events: none;
+            z-index: 10000; box-shadow: 0 0 15px var(--crystal-glow);
+            transition: transform 0.1s ease-out;
+            display: none;
+        }
+        @media (pointer: fine) { #bio-cursor { display: block; } * { cursor: none; } }
+
+        /* --- 顶栏 --- */
+        .nav-bar {
+            height: 60px; display: flex; align-items: center; justify-content: space-between;
+            padding: 0 20px; border-bottom: 1px solid rgba(0, 242, 255, 0.1);
+            backdrop-filter: blur(15px); background: rgba(0,0,0,0.3);
+        }
+
+        .sys-title { font-weight: 200; letter-spacing: 5px; font-size: 14px; color: var(--crystal-glow); }
+        .mode-tags { display: flex; gap: 8px; }
+        .tag {
+            padding: 4px 12px; border: 1px solid var(--crystal-glow);
+            font-size: 10px; border-radius: 20px; cursor: pointer;
+        }
+
+        /* --- 响应式布局容器 --- */
+        .main-container {
+            display: flex; height: calc(100vh - 60px); width: 100%;
+            position: relative; transition: all 0.3s;
+        }
+
+        /* 手机端面板切换逻辑 */
+        @media (max-width: 768px) {
+            .main-container { flex-direction: column; }
+            #explorer { width: 100% !important; height: 40% !important; }
+            #editor-area { height: 60% !important; }
+            .divider-h { display: none !important; }
+        }
+
+        .panel {
+            background: var(--glass); display: flex; flex-direction: column;
+            border: 1px solid rgba(255,255,255,0.05); position: relative;
+        }
+
+        /* --- 拖拽条 --- */
+        .divider-h {
+            width: 6px; background: rgba(0, 242, 255, 0.05);
+            cursor: col-resize; transition: 0.3s;
+        }
+        .divider-h:hover { background: var(--crystal-glow); }
+
+        .divider-v {
+            height: 6px; background: rgba(0, 242, 255, 0.05);
+            cursor: row-resize;
+        }
+
+        /* --- 内部组件 --- */
+        #explorer { width: 250px; min-width: 50px; }
+        #editor-area { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+        
+        .file-list { padding: 15px; }
+        .file-item {
+            padding: 10px; margin-bottom: 5px; border-radius: 8px;
+            font-size: 13px; color: rgba(255,255,255,0.6); transition: 0.3s;
+        }
+        .file-item.active { background: rgba(0, 242, 255, 0.15); color: var(--crystal-glow); }
+
+        #code-editor {
+            flex: 1; background: transparent; border: none; outline: none;
+            padding: 20px; color: #fff; font-family: monospace; font-size: 14px;
+            resize: none;
+        }
+
+        #terminal {
+            height: 200px; min-height: 40px; background: rgba(0,0,0,0.4);
+            font-family: monospace; font-size: 12px;
+        }
+
+        .log-area { flex: 1; overflow-y: auto; padding: 10px; color: var(--crystal-glow); opacity: 0.7; }
+
+        /* 菜单 */
+        #menu {
+            position: fixed; display: none; background: rgba(5, 20, 25, 0.9);
+            border: 1px solid var(--crystal-glow); padding: 10px; border-radius: 8px;
+            z-index: 999; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        .menu-item { padding: 8px 20px; font-size: 12px; white-space: nowrap; }
+        .menu-item:hover { background: var(--crystal-glow); color: #000; }
+
+    </style>
+</head>
+<body oncontextmenu="event.preventDefault(); showMenu(event)">
+
+<div id="bio-cursor"></div>
+
+<header class="nav-bar">
+    <div class="sys-title">BIO_LINK // V3</div>
+    <div class="mode-tags">
+        <div class="tag" onclick="togglePanel('explorer')">FILES</div>
+        <div class="tag" onclick="togglePanel('terminal')">NODE</div>
+    </div>
+</header>
+
+<div class="main-container" id="container">
+    <aside class="panel" id="explorer">
+        <div class="file-list" id="file-list"></div>
+    </aside>
+
+    <div class="divider-h" id="h-drag"></div>
+
+    <div id="editor-area">
+        <main class="panel" style="flex: 1;">
+            <textarea id="code-editor" spellcheck="false"></textarea>
+        </main>
+        
+        <div class="divider-v" id="v-drag"></div>
+
+        <footer class="panel" id="terminal">
+            <div class="log-area" id="log-area">> BIO-OS INITIATED...<br>> SYNC COMPLETE.</div>
+        </footer>
+    </div>
+</div>
+
+<div id="menu">
+    <div class="menu-item" onclick="downloadFile()">EXPORT_PULSE</div>
+    <div class="menu-item" onclick="location.reload()">REBOOT_SYSTEM</div>
+</div>
+
+<script>
+    // 1. 萤火虫指针
+    const cursor = document.getElementById('bio-cursor');
+    document.addEventListener('mousemove', (e) => {
+        cursor.style.transform = `translate(${e.clientX}px, ${e.clientY}px)`;
+    });
+
+    // 2. 增强型拖拽逻辑
+    const hDrag = document.getElementById('h-drag');
+    const vDrag = document.getElementById('v-drag');
+    const explorer = document.getElementById('explorer');
+    const terminal = document.getElementById('terminal');
+
+    // 水平拖拽
+    hDrag.onmousedown = (e) => {
+        document.onmousemove = (ev) => {
+            let width = (ev.clientX / window.innerWidth) * 100;
+            if (width > 5 && width < 50) {
+                explorer.style.width = width + '%';
+            }
+        };
+        document.onmouseup = () => document.onmousemove = null;
+    };
+
+    // 垂直拖拽
+    vDrag.onmousedown = (e) => {
+        document.onmousemove = (ev) => {
+            let height = ((window.innerHeight - ev.clientY) / window.innerHeight) * 100;
+            if (height > 5 && height < 70) {
+                terminal.style.height = height + '%';
+            }
+        };
+        document.onmouseup = () => document.onmousemove = null;
+    };
+
+    // 3. 文件系统
+    let files = {
+        'dna_helix.bio': '// Genetic Sequence\nATGC_SYNTHESIS_RUN(0.85);',
+        'neural_map.json': '{\n  "synapse_count": 4096,\n  "signal": "stable"\n}',
+        'index.html': '<div class="crystal">Pulse</div>'
+    };
+    let activeFile = 'dna_helix.bio';
+
+    function renderFiles() {
+        const container = document.getElementById('file-list');
+        container.innerHTML = '';
+        Object.keys(files).forEach(name => {
+            const div = document.createElement('div');
+            div.className = `file-item ${name === activeFile ? 'active' : ''}`;
+            div.innerText = `⊙ ${name}`;
+            div.onclick = () => {
+                files[activeFile] = document.getElementById('code-editor').value;
+                activeFile = name;
+                document.getElementById('code-editor').value = files[name];
+                renderFiles();
+            };
+            container.appendChild(div);
+        });
+    }
+
+    // 4. 手机端/响应式功能
+    function togglePanel(id) {
+        const el = document.getElementById(id);
+        if (window.innerWidth <= 768) {
+            // 手机端简单的隐藏/显示切换
+            el.style.display = el.style.display === 'none' ? 'flex' : 'none';
+        } else {
+            // PC端切换
+            el.style.display = el.style.display === 'none' ? 'flex' : 'none';
+        }
+    }
+
+    // 5. 右键菜单
+    const menu = document.getElementById('menu');
+    function showMenu(e) {
+        menu.style.display = 'block';
+        menu.style.left = e.pageX + 'px';
+        menu.style.top = e.pageY + 'px';
+    }
+    document.onclick = () => menu.style.display = 'none';
+
+    function downloadFile() {
+        const content = document.getElementById('code-editor').value;
+        const blob = new Blob([content], {type: 'text/plain'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = activeFile; a.click();
+    }
+
+    // 初始化
+    renderFiles();
+    document.getElementById('code-editor').value = files[activeFile];
+
+    // 处理窗口缩放防止错位
+    window.onresize = () => {
+        if (window.innerWidth <= 768) {
+            explorer.style.width = '100%';
+            terminal.style.height = '150px';
+        }
+    };
+</script>
+</body>
+</html>

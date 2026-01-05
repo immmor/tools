@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PAPER_OS // V5</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        :root {
+            --paper-white: #f4f4f4;
+            --ink-black: #1a1a1a;
+            --ink-gray: #d1d1d1;
+            --active-gray: #e0e0e0;
+        }
+
+        /* 1. 基础指针设置 */
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; cursor: default; }
+        
+        body, html {
+            margin: 0; padding: 0; height: 100vh; width: 100vw;
+            background: var(--paper-white); color: var(--ink-black);
+            font-family: "Segoe UI", "PingFang SC", sans-serif; overflow: hidden;
+        }
+
+        /* 2. 顶栏：纸质标签感 */
+        .top-deck {
+            height: 45px; border-bottom: 2px solid var(--ink-black);
+            display: flex; align-items: center; padding: 0 20px;
+            font-size: 12px; font-weight: 800; letter-spacing: 2px;
+            background: #fff;
+        }
+
+        /* 3. 布局与拖拽 */
+        .workspace { display: flex; height: calc(100vh - 45px); width: 100%; }
+        
+        @media (max-width: 768px) {
+            .workspace { flex-direction: column; }
+            #explorer { width: 100% !important; height: 30% !important; border-right: none !important; border-bottom: 2px solid var(--ink-black); }
+            .divider-h { display: none; }
+        }
+
+        .panel { background: #fff; display: flex; flex-direction: column; overflow: hidden; }
+
+        /* 指针在拖拽区变样 */
+        .divider-h {
+            width: 4px; background: var(--ink-gray); cursor: col-resize !important; 
+            z-index: 10; transition: background 0.2s;
+        }
+        .divider-h:hover, .divider-h.active { background: var(--ink-black); }
+
+        .divider-v {
+            height: 4px; background: var(--ink-gray); cursor: row-resize !important;
+            z-index: 10; transition: background 0.2s;
+        }
+        .divider-v:hover, .divider-v.active { background: var(--ink-black); }
+
+        /* 4. 文件列表 */
+        #explorer { width: 200px; border-right: 2px solid var(--ink-black); }
+        .file-item {
+            padding: 12px 20px; font-size: 13px; border-bottom: 1px solid var(--ink-gray);
+            cursor: pointer !important; transition: 0.2s;
+        }
+        .file-item:hover { background: var(--paper-white); }
+        .file-item.active { background: var(--ink-black); color: #fff; }
+
+        /* 5. 编辑器 */
+        #main-area { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+        #editor {
+            flex: 1; background: transparent; border: none; outline: none;
+            padding: 25px; color: var(--ink-black); font-size: 15px;
+            line-height: 1.6; resize: none; font-family: "Cascadia Code", monospace;
+        }
+
+        /* 6. 终端命令 */
+        #terminal { height: 160px; min-height: 0; border-top: 2px solid var(--ink-black); background: var(--paper-white); }
+        .term-out { flex: 1; padding: 12px; overflow-y: auto; font-size: 12px; font-family: monospace; }
+        .term-input-line {
+            display: flex; padding: 10px; border-top: 1px solid var(--ink-gray); background: #fff;
+        }
+        .term-input-line span { font-weight: bold; margin-right: 8px; }
+        #cmd-in {
+            background: transparent; border: none; color: var(--ink-black);
+            flex: 1; outline: none; font-family: monospace; cursor: text !important;
+        }
+
+        /* 7. 右键菜单 */
+        #ctx-menu {
+            position: fixed; display: none; background: #fff; border: 2px solid var(--ink-black);
+            padding: 4px 0; z-index: 1000; box-shadow: 6px 6px 0px var(--ink-gray);
+        }
+        .menu-opt { padding: 10px 25px; font-size: 12px; font-weight: bold; cursor: pointer !important; }
+        .menu-opt:hover { background: var(--ink-black); color: #fff; }
+    </style>
+</head>
+<body oncontextmenu="handleCtx(event)">
+
+<header class="top-deck">FILE_SYSTEM // INK_VIEW_V5</header>
+
+<div class="workspace">
+    <aside class="panel" id="explorer">
+        <div id="file-list"></div>
+    </aside>
+
+    <div class="divider-h" id="h-drag"></div>
+
+    <section id="main-area">
+        <textarea id="editor" spellcheck="false"></textarea>
+
+        <div class="divider-v" id="v-drag"></div>
+
+        <footer class="panel" id="terminal">
+            <div class="term-out" id="term-out">System initialized. Type 'help' for available tasks.</div>
+            <div class="term-input-line">
+                <span>$</span>
+                <input type="text" id="cmd-in" autocomplete="off" spellcheck="false">
+            </div>
+        </footer>
+    </section>
+</div>
+
+<div id="ctx-menu">
+    <div class="menu-opt" onclick="downloadActive()">DOWNLOAD CURRENT</div>
+    <div class="menu-opt" onclick="downloadFullZip()">ARCHIVE PROJECT (ZIP)</div>
+    <div style="border-top:1px solid var(--ink-black); margin:4px 0;"></div>
+    <div class="menu-opt" onclick="clearOutput()">CLEAR TERMINAL</div>
+</div>
+
+<script>
+    // 1. 文件系统数据
+    let vfs = {
+        'index.js': 'console.log("Hello Paper OS");',
+        'style.css': 'body { background: white; }',
+        'manual.txt': 'Right click to export files.'
+    };
+    let activeKey = 'index.js';
+
+    // 2. 增强拖拽（带指针反馈和磁吸）
+    function setupResizer(bar, target, isH) {
+        let dragging = false;
+        const onStart = (e) => { dragging = true; bar.classList.add('active'); };
+        const onEnd = () => { dragging = false; bar.classList.remove('active'); };
+        const onMove = (e) => {
+            if (!dragging) return;
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+            if (isH) {
+                let p = (clientX / window.innerWidth) * 100;
+                if (p < 5) p = 0; if (p > 95) p = 100;
+                target.style.width = p + '%';
+            } else {
+                let p = ((window.innerHeight - clientY) / window.innerHeight) * 100;
+                if (p < 5) p = 0; if (p > 90) p = 100;
+                target.style.height = p + '%';
+            }
+        };
+        bar.addEventListener('mousedown', onStart);
+        bar.addEventListener('touchstart', onStart);
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('touchmove', onMove, { passive: false });
+        document.addEventListener('mouseup', onEnd);
+        document.addEventListener('touchend', onEnd);
+    }
+    setupResizer(document.getElementById('h-drag'), document.getElementById('explorer'), true);
+    setupResizer(document.getElementById('v-drag'), document.getElementById('terminal'), false);
+
+    // 3. UI 渲染
+    function renderList() {
+        const list = document.getElementById('file-list');
+        list.innerHTML = '';
+        Object.keys(vfs).forEach(k => {
+            const el = document.createElement('div');
+            el.className = `file-item ${k === activeKey ? 'active' : ''}`;
+            el.innerText = k.toUpperCase();
+            el.onclick = () => {
+                vfs[activeKey] = document.getElementById('editor').value;
+                activeKey = k;
+                document.getElementById('editor').value = vfs[k];
+                renderList();
+            };
+            list.appendChild(el);
+        });
+    }
+
+    // 4. Linux 终端模拟
+    const cmdIn = document.getElementById('cmd-in');
+    const termOut = document.getElementById('term-out');
+    const shell = {
+        'help': () => 'ls, touch [name], rm [name], clear, date, pwd',
+        'ls': () => Object.keys(vfs).join('  '),
+        'pwd': () => '/users/admin/workspace',
+        'date': () => new Date().toLocaleTimeString(),
+        'clear': () => { termOut.innerHTML = ''; return ''; },
+        'touch': (a) => { if(a[0]) { vfs[a[0]] = ''; renderList(); return `Created ${a[0]}`; } return 'Missing filename'; },
+        'rm': (a) => { if(vfs[a[0]]) { delete vfs[a[0]]; renderList(); return `Deleted ${a[0]}`; } return 'File not found'; }
+    };
+
+    cmdIn.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+            const raw = cmdIn.value.trim();
+            const [c, ...a] = raw.split(' ');
+            const line = document.createElement('div');
+            line.innerHTML = `<strong>$ ${raw}</strong>`;
+            termOut.appendChild(line);
+
+            if (shell[c]) {
+                const res = shell[c](a);
+                if (res) {
+                    const r = document.createElement('div');
+                    r.innerText = res;
+                    termOut.appendChild(r);
+                }
+            } else if(raw) {
+                const err = document.createElement('div');
+                err.innerText = `Command '${c}' not recognized.`;
+                termOut.appendChild(err);
+            }
+            cmdIn.value = '';
+            termOut.scrollTop = termOut.scrollHeight;
+        }
+    };
+
+    // 5. 右键菜单功能
+    const menu = document.getElementById('ctx-menu');
+    function handleCtx(e) {
+        e.preventDefault();
+        menu.style.display = 'block';
+        menu.style.left = e.pageX + 'px';
+        menu.style.top = e.pageY + 'px';
+    }
+    document.onclick = () => menu.style.display = 'none';
+
+    function downloadActive() {
+        const b = new Blob([document.getElementById('editor').value], {type: 'text/plain'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(b); a.download = activeKey; a.click();
+    }
+
+    async function downloadFullZip() {
+        vfs[activeKey] = document.getElementById('editor').value;
+        const zip = new JSZip();
+        Object.keys(vfs).forEach(k => zip.file(k, vfs[k]));
+        const b = await zip.generateAsync({type: "blob"});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(b); a.download = "project_archive.zip"; a.click();
+    }
+
+    function clearOutput() { termOut.innerHTML = 'READY.'; }
+
+    // 初始化内容
+    renderList();
+    document.getElementById('editor').value = vfs[activeKey];
+</script>
+</body>
+</html>

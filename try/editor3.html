@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Cyber VSCode Pro - Monaco Edition</title>
+    <link rel="stylesheet" data-name="vs/editor/editor.main" href="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.1/min/vs/editor/editor.main.min.css">
+    <style>
+        :root {
+            --bg: #0d1117;
+            --sidebar-bg: #161b22;
+            --activity-bg: #0b0e14;
+            --accent: #58a6ff;
+            --border: rgba(255, 255, 255, 0.1);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; cursor: none !important; }
+
+        body {
+            background-color: var(--bg);
+            color: #c9d1d9;
+            font-family: 'Segoe UI', sans-serif;
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* --- 极致指针 --- */
+        #cursor-dot { width: 4px; height: 4px; background: #fff; position: fixed; border-radius: 50%; pointer-events: none; z-index: 10000; }
+        #cursor-ring { width: 30px; height: 30px; border: 1.5px solid var(--accent); position: fixed; border-radius: 50%; pointer-events: none; z-index: 9999; box-shadow: 0 0 15px rgba(88, 166, 255, 0.3); }
+
+        /* --- 布局结构 --- */
+        .activity-bar { width: 50px; background: var(--activity-bg); display: flex; flex-direction: column; align-items: center; padding-top: 15px; border-right: 1px solid var(--border); }
+        .sidebar { width: 220px; background: var(--sidebar-bg); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+        .main-view { flex: 1; display: flex; flex-direction: column; position: relative; }
+
+        .sidebar-header { padding: 10px 20px; font-size: 11px; text-transform: uppercase; color: #8b949e; letter-spacing: 1px; border-bottom: 1px solid var(--border); }
+        .file-item { padding: 8px 20px; font-size: 13px; color: #8b949e; transition: 0.2s; }
+        .file-item:hover { background: rgba(255,255,255,0.05); color: #fff; }
+        .file-item.active { background: rgba(88,166,255,0.1); color: var(--accent); border-left: 2px solid var(--accent); }
+
+        /* --- 编辑器 & 终端 --- */
+        #editor-container { flex: 3; width: 100%; }
+        .terminal-container { flex: 1; background: #000; border-top: 5px solid var(--sidebar-bg); padding: 10px; font-family: 'Consolas', monospace; font-size: 13px; overflow-y: auto; }
+        .terminal-header { color: var(--accent); margin-bottom: 5px; font-weight: bold; }
+
+        /* --- 通知弹窗 --- */
+        #notification {
+            position: fixed; bottom: 20px; right: -300px; width: 250px;
+            background: var(--sidebar-bg); border: 1px solid var(--accent);
+            padding: 15px; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            transition: 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); z-index: 10001;
+        }
+
+        /* 覆盖 Monaco 默认样式 */
+        .monaco-editor { padding-top: 10px; }
+    </style>
+</head>
+<body>
+
+    <div id="cursor-dot"></div>
+    <div id="cursor-ring"></div>
+
+    <div class="activity-bar">
+        <div style="width: 25px; height: 25px; background: #333; border-radius: 4px; margin-bottom: 20px;"></div>
+        <div style="width: 25px; height: 25px; background: #333; border-radius: 4px;"></div>
+    </div>
+
+    <div class="sidebar">
+        <div class="sidebar-header">Explorer</div>
+        <div class="file-item active" onclick="changeModel('js')">index.js</div>
+        <div class="file-item" onclick="changeModel('html')">index.html</div>
+        <div class="file-item" onclick="changeModel('css')">style.css</div>
+    </div>
+
+    <div class="main-view">
+        <div id="editor-container"></div>
+        <div class="terminal-container">
+            <div class="terminal-header">TERMINAL</div>
+            <div style="color: #3fb950;">user@cyber-pc:~/project$ <span id="terminal-text">npm start</span></div>
+            <div style="color: #d1d1d1;">> Compiled successfully. Editor ready at localhost:3000</div>
+        </div>
+    </div>
+
+    <div id="notification">
+        <div style="font-weight: bold; color: var(--accent);">System</div>
+        <div id="notif-msg" style="font-size: 12px; margin-top: 5px;">File saved successfully.</div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.1/min/vs/loader.min.js"></script>
+    <script>
+        // 1. 响应式指针逻辑
+        const dot = document.getElementById('cursor-dot');
+        const ring = document.getElementById('cursor-ring');
+        let mX = 0, mY = 0, rX = 0, rY = 0;
+
+        window.addEventListener('mousemove', e => {
+            mX = e.clientX; mY = e.clientY;
+            dot.style.transform = `translate(${mX}px, ${mY}px)`;
+        });
+
+        function updateCursor() {
+            rX += (mX - rX) * 0.15;
+            rY += (mY - rY) * 0.15;
+            ring.style.transform = `translate(${rX - 13}px, ${rY - 13}px)`;
+            requestAnimationFrame(updateCursor);
+        }
+        updateCursor();
+
+        // 2. 初始化 Monaco Editor
+        let editor;
+        require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.34.1/min/vs' }});
+        require(['vs/editor/editor.main'], function() {
+            editor = monaco.editor.create(document.getElementById('editor-container'), {
+                value: [
+                    'function helloWorld() {',
+                    '\tconsole.log("Welcome to Cyber VSCode!");',
+                    '}'
+                ].join('\n'),
+                language: 'javascript',
+                theme: 'vs-dark',
+                automaticLayout: true,
+                fontSize: 14,
+                fontFamily: 'Fira Code, Consolas',
+                cursorSmoothCaretAnimation: true,
+                minimap: { enabled: true }
+            });
+
+            // 添加保存快捷键监听
+            editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, function() {
+                showNotification("File auto-saved to cloud.");
+            });
+        });
+
+        // 3. 切换文件功能
+        const codes = {
+            js: 'function init() {\n  console.log("Hello JS");\n}',
+            html: '<div class="container">\n  <h1>Hello Cyber</h1>\n</div>',
+            css: '.container {\n  color: #58a6ff;\n  display: flex;\n}'
+        };
+
+        function changeModel(type) {
+            const model = monaco.editor.createModel(codes[type], type === 'js' ? 'javascript' : type);
+            editor.setModel(model);
+            
+            document.querySelectorAll('.file-item').forEach(el => el.classList.remove('active'));
+            event.target.classList.add('active');
+            showNotification(`Switched to ${type} mode`);
+        }
+
+        // 4. 通知系统
+        function showNotification(msg) {
+            const notif = document.getElementById('notification');
+            document.getElementById('notif-msg').innerText = msg;
+            notif.style.right = '20px';
+            setTimeout(() => { notif.style.right = '-300px'; }, 3000);
+        }
+
+        // 指针在编辑器上的交互反馈
+        document.getElementById('editor-container').addEventListener('mouseenter', () => {
+            ring.style.width = '50px'; ring.style.height = '50px';
+            ring.style.borderColor = 'rgba(88,166,255,0.3)';
+        });
+        document.getElementById('editor-container').addEventListener('mouseleave', () => {
+            ring.style.width = '30px'; ring.style.height = '30px';
+            ring.style.borderColor = 'var(--accent)';
+        });
+    </script>
+</body>
+</html>

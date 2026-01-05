@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>INDUSTRIAL_OS // TERMINAL_V2</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        :root {
+            --amber: #ffb000;
+            --amber-dim: rgba(255, 176, 0, 0.15);
+            --industrial-bg: #0f0e0d;
+            --panel-bg: #1a1816;
+            --border-thick: 2px solid #3d3428;
+            --scanline: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+        }
+
+        /* --- 1. 自定义指针风格 --- */
+        * { 
+            box-sizing: border-box; 
+            cursor: none; /* 隐藏原生指针 */
+        }
+
+        #custom-cursor {
+            width: 20px;
+            height: 20px;
+            border: 1px solid var(--amber);
+            position: fixed;
+            pointer-events: none;
+            z-index: 9999;
+            transition: transform 0.1s ease-out;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #custom-cursor::after {
+            content: '';
+            width: 4px;
+            height: 4px;
+            background: var(--amber);
+        }
+
+        body, html {
+            margin: 0; padding: 0; height: 100vh;
+            background-color: var(--industrial-bg);
+            background-image: var(--scanline);
+            background-size: 100% 4px, 3px 100%;
+            color: var(--amber); font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+        }
+
+        /* --- 2. 工业风顶栏 --- */
+        .nav-deck {
+            height: 60px; background: #221f1c; border-bottom: 3px solid #3d3428;
+            display: flex; align-items: center; padding: 0 30px; justify-content: space-between;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+
+        .sys-info { font-weight: bold; text-transform: uppercase; letter-spacing: 2px; text-shadow: 0 0 5px var(--amber); }
+
+        .tab-btn {
+            background: #2d2a26; border: 1px solid #4d4539; color: #887b66;
+            padding: 8px 20px; margin-left: 10px; font-weight: bold; transition: 0.2s;
+        }
+        .tab-btn.active { 
+            background: var(--amber); color: #000; 
+            box-shadow: 0 0 15px var(--amber-dim);
+        }
+
+        /* --- 布局容器 --- */
+        .grid-container {
+            display: flex; height: calc(100vh - 60px); width: 100vw;
+        }
+
+        .panel {
+            background: var(--panel-bg); border: var(--border-thick);
+            margin: 5px; display: flex; flex-direction: column;
+        }
+
+        .panel-header {
+            padding: 8px 15px; background: #2d2a26;
+            border-bottom: 2px solid #3d3428; font-size: 12px;
+            display: flex; justify-content: space-between;
+        }
+
+        /* --- 文件树 (复古列表) --- */
+        #explorer { width: 280px; }
+        .file-node {
+            padding: 15px; border-bottom: 1px solid #2d2a26;
+            font-size: 14px; text-transform: uppercase;
+        }
+        .file-node:hover { background: var(--amber-dim); }
+        .file-node.active { background: var(--amber-dim); color: #fff; border-right: 5px solid var(--amber); }
+
+        /* --- 编辑器区域 --- */
+        #code-editor {
+            flex: 1; background: #141210; border: none; color: #eec170;
+            padding: 20px; font-size: 16px; outline: none; resize: none;
+            line-height: 1.5;
+        }
+
+        /* --- 终端 (蒸汽感) --- */
+        #terminal { height: 250px; }
+        #term-log { flex: 1; padding: 15px; overflow-y: auto; font-size: 13px; color: #9c8b73; }
+        .input-row { display: flex; padding: 10px; background: #0c0b0a; border-top: var(--border-thick); }
+        #cmd-in { background: transparent; border: none; color: var(--amber); flex: 1; outline: none; margin-left: 10px; }
+
+        /* --- 拖拽条 --- */
+        .divider-h { width: 8px; cursor: col-resize; background: #221f1c; }
+        .divider-v { height: 8px; cursor: row-resize; background: #221f1c; }
+
+        /* 右键菜单 */
+        #menu-custom {
+            position: fixed; background: #2d2a26; border: 2px solid var(--amber);
+            display: none; z-index: 1000; width: 220px;
+        }
+        .menu-btn { padding: 12px 20px; font-size: 12px; color: var(--amber); border-bottom: 1px solid #3d3428; }
+        .menu-btn:hover { background: var(--amber); color: #000; }
+
+        .hide { display: none !important; }
+    </style>
+</head>
+<body oncontextmenu="event.preventDefault(); triggerMenu(event);">
+
+<div id="custom-cursor"></div>
+
+<header class="nav-deck">
+    <div class="sys-info">[ INDUSTRIAL_UNIT_72 // CMD ]</div>
+    <div>
+        <button class="tab-btn active" id="sw-exp" onclick="toggleLayout('explorer')">DRIVE_A</button>
+        <button class="tab-btn active" id="sw-trm" onclick="toggleLayout('terminal')">OUTPUT</button>
+    </div>
+</header>
+
+<div class="grid-container">
+    <aside class="panel" id="explorer">
+        <div class="panel-header"><span>EXT_DRIVE_CONTENT</span></div>
+        <div id="file-tree"></div>
+    </aside>
+
+    <div class="divider-h" id="h-drag"></div>
+
+    <div class="main-stack" style="display:flex; flex-direction:column; flex:1;">
+        <main class="panel" id="editor" style="flex:1;">
+            <div class="panel-header"><span id="label-file">data.log</span></div>
+            <textarea id="code-editor" spellcheck="false"></textarea>
+        </main>
+
+        <div class="divider-v" id="v-drag"></div>
+
+        <footer class="panel" id="terminal">
+            <div class="panel-header"><span>SYSTEM_OUTPUT</span></div>
+            <div id="term-log">>> INITIALIZING HYDRAULIC SYSTEMS...<br>>> STEAM PRESSURE NOMINAL.</div>
+            <div class="input-row">
+                <span>>></span>
+                <input type="text" id="cmd-in" autocomplete="off" spellcheck="false">
+            </div>
+        </footer>
+    </div>
+</div>
+
+<div id="menu-custom">
+    <div class="menu-btn" onclick="saveAndDownload()">EXTRACT_FILE</div>
+    <div class="menu-btn" onclick="packZip()">ARCHIVE_PROJECT</div>
+</div>
+
+<script>
+    // 指针跟随逻辑
+    const cursor = document.getElementById('custom-cursor');
+    document.addEventListener('mousemove', (e) => {
+        cursor.style.left = e.clientX - 10 + 'px';
+        cursor.style.top = e.clientY - 10 + 'px';
+    });
+
+    // 虚拟文件系统
+    let project = {
+        'manual.cfg': '# SYSTEM CONFIG\nPRESSURE=100\nTEMP=340',
+        'engine.log': '08:00 - Boiler Online\n08:15 - Valve Open',
+        'auth.key': 'KEY_0192_X'
+    };
+    let activeKey = 'manual.cfg';
+
+    function refreshTree() {
+        const tree = document.getElementById('file-tree');
+        tree.innerHTML = '';
+        Object.keys(project).forEach(k => {
+            const div = document.createElement('div');
+            div.className = `file-node ${k === activeKey ? 'active' : ''}`;
+            div.innerText = `> ${k}`;
+            div.onclick = () => {
+                project[activeKey] = document.getElementById('code-editor').value;
+                activeKey = k;
+                document.getElementById('code-editor').value = project[k];
+                document.getElementById('label-file').innerText = k;
+                refreshTree();
+            };
+            tree.appendChild(div);
+        });
+    }
+
+    // 布局控制
+    function toggleLayout(id) {
+        const p = document.getElementById(id);
+        p.classList.toggle('hide');
+        document.getElementById(id === 'explorer' ? 'sw-exp' : 'sw-trm').classList.toggle('active');
+    }
+
+    // 终端模拟
+    const shellIn = document.getElementById('cmd-in');
+    const shellLog = document.getElementById('term-log');
+
+    shellIn.onkeydown = (e) => {
+        if(e.key === 'Enter') {
+            const val = shellIn.value;
+            const d = document.createElement('div');
+            d.innerHTML = `<span style="color:#fff">> ${val}</span><br>EXECUTING... SUCCESS.`;
+            shellLog.appendChild(d);
+            shellIn.value = '';
+            shellLog.scrollTop = shellLog.scrollHeight;
+        }
+    };
+
+    // 右键
+    const ctx = document.getElementById('menu-custom');
+    function triggerMenu(e) {
+        ctx.style.display = 'block';
+        ctx.style.left = e.pageX + 'px'; ctx.style.top = e.pageY + 'px';
+    }
+    document.onclick = () => ctx.style.display = 'none';
+
+    // 初始化
+    refreshTree();
+    document.getElementById('code-editor').value = project[activeKey];
+</script>
+</body>
+</html>

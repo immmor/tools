@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Void OS // Root Access</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        :root {
+            --accent: #ff0055; /* 赛博红 */
+            --bg: #050505;
+            --surface: rgba(18, 18, 18, 0.95);
+            --border: #222;
+        }
+
+        * { box-sizing: border-box; cursor: default; }
+        body, html {
+            margin: 0; padding: 0; height: 100vh;
+            background: var(--bg); color: #ececec;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            overflow: hidden;
+        }
+
+        /* --- 顶栏 --- */
+        .status-bar {
+            height: 35px; background: #000; border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; padding: 0 15px; justify-content: space-between;
+            font-size: 11px; z-index: 100;
+        }
+
+        .toggle-group { display: flex; gap: 10px; }
+        .switch {
+            padding: 3px 10px; border: 1px solid var(--border); border-radius: 2px;
+            cursor: pointer; opacity: 0.5; transition: 0.3s;
+        }
+        .switch.on { opacity: 1; border-color: var(--accent); color: var(--accent); }
+
+        /* --- 主容器 --- */
+        .container {
+            display: flex; height: calc(100vh - 35px); padding: 8px; gap: 8px;
+        }
+
+        .panel {
+            background: var(--surface); border: 1px solid var(--border);
+            display: flex; flex-direction: column; overflow: hidden;
+            border-radius: 4px;
+        }
+
+        /* --- 侧边栏 --- */
+        #sidebar { width: 220px; min-width: 0; }
+        .file-item {
+            padding: 10px 15px; font-size: 13px; border-bottom: 1px solid #111;
+        }
+        .file-item:hover { background: #1a1a1a; }
+        .file-item.active { background: #222; color: var(--accent); border-left: 2px solid var(--accent); }
+
+        /* --- 编辑器 --- */
+        #editor { flex: 1; min-width: 0; }
+        #code-box {
+            flex: 1; width: 100%; height: 100%; background: transparent;
+            border: none; color: #fff; padding: 25px; font-family: inherit;
+            font-size: 14px; resize: none; outline: none; line-height: 1.7;
+            cursor: text;
+        }
+
+        /* --- 终端 --- */
+        #terminal { height: 180px; min-height: 0; }
+        #term-out { flex: 1; padding: 12px; font-size: 12px; color: #888; overflow-y: auto; }
+        .prompt-row {
+            display: flex; padding: 8px 12px; background: #000; border-top: 1px solid var(--border);
+        }
+        #term-in { background: transparent; border: none; color: var(--accent); flex: 1; outline: none; margin-left: 8px; }
+
+        /* --- 右键菜单 --- */
+        #context-menu {
+            position: fixed; width: 180px; background: #1a1a1a; border: 1px solid var(--border);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); z-index: 1000; display: none;
+            border-radius: 4px; padding: 5px 0;
+        }
+        .menu-item {
+            padding: 8px 15px; font-size: 12px; transition: 0.2s;
+        }
+        .menu-item:hover { background: var(--accent); color: #fff; cursor: pointer; }
+
+        /* --- 拖拽 --- */
+        .resizer-h { width: 4px; cursor: col-resize; }
+        .resizer-h:hover { background: var(--accent); }
+        .resizer-v { height: 4px; cursor: row-resize; }
+        .resizer-v:hover { background: var(--accent); }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body oncontextmenu="return false;"> <div class="status-bar">
+    <div class="toggle-group">
+        <span style="font-weight:bold; margin-right:15px">VOID_OS_BETA</span>
+        <div class="switch on" id="sw-sidebar" onclick="togglePanel('sidebar')">EXPLORER</div>
+        <div class="switch on" id="sw-terminal" onclick="togglePanel('terminal')">TERMINAL</div>
+    </div>
+    <div style="color: #444">2026-01-05 21:46</div>
+</div>
+
+<div class="container">
+    <div style="display:flex; flex:1; flex-direction:column;">
+        <div style="display:flex; flex:1; gap:4px">
+            <aside class="panel" id="sidebar" oncontextmenu="showMenu(event, 'sidebar')">
+                <div id="file-list"></div>
+            </aside>
+
+            <div class="resizer-h" id="h-drag"></div>
+
+            <main class="panel" id="editor" oncontextmenu="showMenu(event, 'editor')">
+                <textarea id="code-box" spellcheck="false"></textarea>
+            </main>
+        </div>
+
+        <div class="resizer-v" id="v-drag"></div>
+
+        <footer class="panel" id="terminal" oncontextmenu="showMenu(event, 'terminal')">
+            <div id="term-out">Initializing system kernel... Ready.</div>
+            <div class="prompt-row">
+                <span style="color:var(--accent)">#</span>
+                <input type="text" id="term-in" autocomplete="off" spellcheck="false">
+            </div>
+        </footer>
+    </div>
+</div>
+
+<div id="context-menu">
+    <div class="menu-item" id="menu-download-single" onclick="downloadFile()">Download File</div>
+    <div class="menu-item" id="menu-download-all" onclick="downloadAll()">ZIP All Files</div>
+    <div class="menu-item" onclick="hideMenu()">Cancel</div>
+</div>
+
+<script>
+    // --- 1. 虚拟文件系统 ---
+    const fs = {
+        'core_logic.js': 'console.log("VOID OS ACTIVE");\n\nfunction boot() {\n  return "System Ready";\n}',
+        'config.yml': 'version: 1.0.4\nsecurity: max\nencryption: true',
+        'init.sh': '#!/bin/bash\necho "Setting up void network..."\nifconfig eth0 up'
+    };
+    let activeFile = 'core_logic.js';
+
+    function renderFiles() {
+        const list = document.getElementById('file-list');
+        list.innerHTML = '';
+        Object.keys(fs).forEach(name => {
+            const div = document.createElement('div');
+            div.className = `file-item ${name === activeFile ? 'active' : ''}`;
+            div.innerText = name;
+            div.onclick = () => {
+                fs[activeFile] = document.getElementById('code-box').value;
+                activeFile = name;
+                document.getElementById('code-box').value = fs[name];
+                renderFiles();
+            };
+            list.appendChild(div);
+        });
+    }
+
+    // --- 2. 右键菜单逻辑 ---
+    const menu = document.getElementById('context-menu');
+    function showMenu(e, type) {
+        e.preventDefault();
+        menu.style.display = 'block';
+        menu.style.left = e.pageX + 'px';
+        menu.style.top = e.pageY + 'px';
+    }
+
+    function hideMenu() { menu.style.display = 'none'; }
+    document.addEventListener('click', hideMenu);
+
+    // --- 3. 下载功能 ---
+    function downloadFile() {
+        const content = document.getElementById('code-box').value;
+        const blob = new Blob([content], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = activeFile;
+        a.click();
+        logTerm(`Downloaded: ${activeFile}`);
+    }
+
+    async function downloadAll() {
+        fs[activeFile] = document.getElementById('code-box').value;
+        const zip = new JSZip();
+        Object.keys(fs).forEach(k => zip.file(k, fs[k]));
+        const content = await zip.generateAsync({type:"blob"});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(content);
+        a.download = "void_project_bundle.zip";
+        a.click();
+        logTerm("Package void_project_bundle.zip exported.");
+    }
+
+    // --- 4. 面板动态调整与开关 ---
+    function togglePanel(id) {
+        const p = document.getElementById(id);
+        const sw = document.getElementById(`sw-${id}`);
+        p.classList.toggle('hidden');
+        sw.classList.toggle('on');
+    }
+
+    const setupResize = (bar, target, isV) => {
+        bar.onmousedown = (e) => {
+            document.onmousemove = (ev) => {
+                if(isV) {
+                    const h = window.innerHeight - ev.clientY - 10;
+                    if(h < 40) { target.classList.add('hidden'); document.getElementById('sw-terminal').classList.remove('on'); }
+                    else { target.classList.remove('hidden'); target.style.height = h + 'px'; }
+                } else {
+                    const w = ev.clientX - 10;
+                    if(w < 40) { target.classList.add('hidden'); document.getElementById('sw-sidebar').classList.remove('on'); }
+                    else { target.classList.remove('hidden'); target.style.width = w + 'px'; }
+                }
+            };
+            document.onmouseup = () => document.onmousemove = null;
+        };
+    };
+    setupResize(document.getElementById('h-drag'), document.getElementById('sidebar'), false);
+    setupResize(document.getElementById('v-drag'), document.getElementById('terminal'), true);
+
+    // --- 5. 终端逻辑 ---
+    const tIn = document.getElementById('term-in');
+    const tOut = document.getElementById('term-out');
+    function logTerm(msg) {
+        tOut.innerHTML += `<div>> ${msg}</div>`;
+        tOut.scrollTop = tOut.scrollHeight;
+    }
+    tIn.onkeydown = (e) => {
+        if(e.key === 'Enter') {
+            const val = tIn.value.toLowerCase();
+            logTerm(`<span style="color:#fff">${tIn.value}</span>`);
+            if(val === 'ls') logTerm(Object.keys(fs).join('  '));
+            else if(val === 'clear') tOut.innerHTML = '';
+            else logTerm(`Command '${val}' not recognized.`);
+            tIn.value = '';
+        }
+    };
+
+    // 初始化
+    renderFiles();
+    document.getElementById('code-box').value = fs[activeFile];
+</script>
+</body>
+</html>

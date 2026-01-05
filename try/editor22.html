@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PAPER_OS // MAX_EXPAND</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        :root {
+            --paper: #f4f4f4;
+            --ink: #1a1a1a;
+            --border-w: 2px;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; cursor: default; }
+        body, html { margin: 0; padding: 0; height: 100vh; width: 100vw; background: var(--paper); color: var(--ink); font-family: "Courier New", monospace; overflow: hidden; }
+
+        /* --- 顶栏 --- */
+        .top-bar {
+            height: 40px; border-bottom: var(--border-w) solid var(--ink);
+            display: flex; align-items: center; padding: 0 15px; font-size: 12px; font-weight: bold;
+        }
+
+        /* --- 容器布局 --- */
+        .workspace { display: flex; height: calc(100vh - 40px); width: 100%; position: relative; }
+        
+        .panel { 
+            background: #fff; display: flex; flex-direction: column; overflow: hidden; 
+            transition: z-index 0.3s; position: relative;
+        }
+
+        /* --- 最大化状态逻辑 --- */
+        .panel.maximized {
+            position: fixed !important; top: 40px !important; left: 0 !important;
+            width: 100% !important; height: calc(100vh - 40px) !important;
+            z-index: 100; border: none !important;
+        }
+
+        /* --- 响应式设定 --- */
+        @media (max-width: 768px) {
+            .workspace { flex-direction: column; }
+            #explorer { width: 100%; height: 30%; border-right: none !important; border-bottom: var(--border-w) solid var(--ink); }
+            .divider-h { width: 100% !important; height: 6px !important; cursor: row-resize !important; }
+        }
+
+        /* --- 拖拽条与指针 --- */
+        .divider-h { width: 4px; background: #ccc; cursor: col-resize !important; z-index: 50; }
+        .divider-h:hover { background: var(--ink); }
+        .divider-v { height: 4px; background: #ccc; cursor: row-resize !important; z-index: 50; }
+        .divider-v:hover { background: var(--ink); }
+
+        /* --- 面板头部控制 --- */
+        .panel-header {
+            height: 30px; background: #fff; border-bottom: 1px solid var(--ink);
+            display: flex; align-items: center; justify-content: space-between; padding: 0 10px;
+            font-size: 10px; font-weight: bold; text-transform: uppercase;
+        }
+        .win-ctrl { cursor: pointer !important; padding: 2px 5px; border: 1px solid transparent; }
+        .win-ctrl:hover { border-color: var(--ink); }
+
+        /* --- 内部组件 --- */
+        #explorer { width: 200px; border-right: var(--border-w) solid var(--ink); }
+        .file-item { padding: 10px 15px; font-size: 12px; border-bottom: 1px solid #eee; cursor: pointer !important; }
+        .file-item.active { background: var(--ink); color: #fff; }
+
+        #editor-pane { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+        #code-editor {
+            flex: 1; background: transparent; border: none; outline: none;
+            padding: 20px; color: var(--ink); font-size: 14px; resize: none;
+        }
+
+        #terminal { height: 150px; border-top: var(--border-w) solid var(--ink); }
+        #term-out { flex: 1; padding: 10px; overflow-y: auto; font-size: 11px; background: #fdfdfd; }
+        .input-line { display: flex; padding: 5px 10px; border-top: 1px solid #eee; }
+        #cmd-in { background: transparent; border: none; outline: none; flex: 1; font-family: monospace; cursor: text !important; }
+
+        /* --- 右键菜单 --- */
+        #menu {
+            position: fixed; display: none; background: #fff; border: 2px solid var(--ink);
+            z-index: 1000; min-width: 150px; box-shadow: 4px 4px 0px #ccc;
+        }
+        .menu-item { padding: 10px 15px; font-size: 11px; font-weight: bold; cursor: pointer !important; }
+        .menu-item:hover { background: var(--ink); color: #fff; }
+    </style>
+</head>
+<body oncontextmenu="showCtx(event)">
+
+<header class="top-bar">PROJECT_ROOT // v5.1</header>
+
+<div class="workspace">
+    <aside class="panel" id="explorer">
+        <div class="panel-header">
+            <span>Explorer</span>
+            <span class="win-ctrl" onclick="toggleMax('explorer')">[ MAX ]</span>
+        </div>
+        <div id="file-list"></div>
+    </aside>
+
+    <div class="divider-h" id="h-drag"></div>
+
+    <section id="editor-pane">
+        <main class="panel" id="editor-main" style="flex:1">
+            <div class="panel-header">
+                <span id="cur-file">file.txt</span>
+                <span class="win-ctrl" onclick="toggleMax('editor-main')">[ MAX ]</span>
+            </div>
+            <textarea id="code-editor" spellcheck="false"></textarea>
+        </main>
+        
+        <div class="divider-v" id="v-drag"></div>
+
+        <footer class="panel" id="terminal">
+            <div class="panel-header">
+                <span>Terminal</span>
+                <span class="win-ctrl" onclick="toggleMax('terminal')">[ MAX ]</span>
+            </div>
+            <div id="term-out">System standby.</div>
+            <div class="input-line">
+                <span style="margin-right:8px">></span>
+                <input type="text" id="cmd-in" autocomplete="off" spellcheck="false">
+            </div>
+        </footer>
+    </section>
+</div>
+
+<div id="menu">
+    <div class="menu-item" onclick="downloadCur()">EXPORT_FILE</div>
+    <div class="menu-item" onclick="downloadAll()">ARCHIVE_PROJECT</div>
+</div>
+
+<script>
+    // 1. 虚拟文件系统
+    let project = {
+        'init.js': 'console.log("System Start");',
+        'core.css': 'body { filter: grayscale(1); }',
+        'index.html': '<h1>Paper OS</h1>'
+    };
+    let activeKey = 'init.js';
+
+    // 2. 最大化切换逻辑
+    function toggleMax(id) {
+        const el = document.getElementById(id);
+        const btn = el.querySelector('.win-ctrl');
+        if (el.classList.contains('maximized')) {
+            el.classList.remove('maximized');
+            btn.innerText = '[ MAX ]';
+        } else {
+            // 先清除其他面板的最大化（可选）
+            document.querySelectorAll('.panel').forEach(p => p.classList.remove('maximized'));
+            el.classList.add('maximized');
+            btn.innerText = '[ RESTORE ]';
+        }
+    }
+
+    // 3. 增强型拖拽（支持极小化吸附）
+    function initDrag(bar, target, isH) {
+        let dragging = false;
+        bar.addEventListener('mousedown', () => dragging = true);
+        bar.addEventListener('touchstart', () => dragging = true);
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!dragging) return;
+            const x = e.touches ? e.touches[0].clientX : e.clientX;
+            const y = e.touches ? e.touches[0].clientY : e.clientY;
+
+            if (isH) {
+                let p = (x / window.innerWidth) * 100;
+                if (p < 5) p = 0; // 手机和PC端均可吸附至0
+                if (p > 95) p = 100;
+                target.style.width = p + '%';
+            } else {
+                let p = ((window.innerHeight - y) / window.innerHeight) * 100;
+                if (p < 5) p = 0;
+                if (p > 90) p = 100;
+                target.style.height = p + '%';
+            }
+        });
+
+        document.addEventListener('mouseup', () => dragging = false);
+        document.addEventListener('touchend', () => dragging = false);
+    }
+    initDrag(document.getElementById('h-drag'), document.getElementById('explorer'), true);
+    initDrag(document.getElementById('v-drag'), document.getElementById('terminal'), false);
+
+    // 4. 基础渲染与终端
+    function render() {
+        const list = document.getElementById('file-list');
+        list.innerHTML = '';
+        Object.keys(project).forEach(k => {
+            const div = document.createElement('div');
+            div.className = `file-item ${k === activeKey ? 'active' : ''}`;
+            div.innerText = k;
+            div.onclick = () => {
+                project[activeKey] = document.getElementById('code-editor').value;
+                activeKey = k;
+                document.getElementById('code-editor').value = project[k];
+                document.getElementById('cur-file').innerText = k;
+                render();
+            };
+            list.appendChild(div);
+        });
+    }
+
+    const cmdIn = document.getElementById('cmd-in');
+    const termOut = document.getElementById('term-out');
+    cmdIn.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+            const val = cmdIn.value.trim();
+            const log = document.createElement('div');
+            log.innerHTML = `<strong>$ ${val}</strong>`;
+            termOut.appendChild(log);
+            
+            // 简单命令实现
+            if(val === 'ls') {
+                const res = document.createElement('div');
+                res.innerText = Object.keys(project).join('  ');
+                termOut.appendChild(res);
+            } else if(val === 'help') {
+                const res = document.createElement('div');
+                res.innerText = 'ls, clear, date, help';
+                termOut.appendChild(res);
+            } else if(val === 'clear') {
+                termOut.innerHTML = '';
+            }
+            
+            cmdIn.value = '';
+            termOut.scrollTop = termOut.scrollHeight;
+        }
+    };
+
+    // 5. 右键功能
+    const menu = document.getElementById('menu');
+    function showCtx(e) {
+        e.preventDefault();
+        menu.style.display = 'block';
+        menu.style.left = e.pageX + 'px';
+        menu.style.top = e.pageY + 'px';
+    }
+    document.onclick = () => menu.style.display = 'none';
+
+    function downloadCur() {
+        const b = new Blob([document.getElementById('code-editor').value], {type: 'text/plain'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(b); a.download = activeKey; a.click();
+    }
+
+    async function downloadAll() {
+        project[activeKey] = document.getElementById('code-editor').value;
+        const zip = new JSZip();
+        Object.keys(project).forEach(k => zip.file(k, project[k]));
+        const b = await zip.generateAsync({type: "blob"});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(b); a.download = "project.zip"; a.click();
+    }
+
+    render();
+    document.getElementById('code-editor').value = project[activeKey];
+</script>
+</body>
+</html>

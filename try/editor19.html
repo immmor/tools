@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>VOID_OS // PRO_EDITION</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        :root {
+            --accent: #ffffff;
+            --bg: #000000;
+            --panel: #0a0a0a;
+            --border: #1a1a1a;
+            --text-dim: #666;
+            --text-main: #eee;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; font-family: 'IBM Plex Mono', monospace; }
+        body, html { margin: 0; padding: 0; height: 100vh; width: 100vw; background: var(--bg); color: var(--text-main); overflow: hidden; }
+
+        /* --- 动态指针 --- */
+        #ring { width: 24px; height: 24px; border: 1px solid var(--accent); border-radius: 50%; position: fixed; pointer-events: none; z-index: 9999; transition: transform 0.15s ease-out; display: flex; align-items: center; justify-content: center; mix-blend-mode: difference; }
+        @media (pointer: coarse) { #ring { display: none; } * { cursor: default; } }
+        @media (pointer: fine) { * { cursor: none; } }
+
+        /* --- 导航栏 --- */
+        .top-nav { height: 50px; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid var(--border); background: var(--bg); }
+        .logo { font-size: 12px; letter-spacing: 5px; font-weight: 800; color: var(--accent); }
+        .nav-actions { display: flex; gap: 20px; font-size: 11px; color: var(--text-dim); }
+        .nav-actions span { cursor: pointer; transition: 0.2s; }
+        .nav-actions span:hover { color: var(--accent); }
+
+        /* --- 核心布局 --- */
+        .workspace { display: flex; height: calc(100vh - 50px); width: 100%; position: relative; }
+        @media (max-width: 768px) { .workspace { flex-direction: column; } #explorer { width: 100% !important; height: 30% !important; border-right: none !important; } .divider-h { display: none; } }
+
+        .panel { background: var(--panel); display: flex; flex-direction: column; overflow: hidden; position: relative; }
+        
+        /* 拖拽条 */
+        .divider-h { width: 2px; background: var(--border); cursor: col-resize; z-index: 10; transition: background 0.3s; }
+        .divider-h:hover, .divider-h.active { background: var(--accent); width: 4px; }
+        .divider-v { height: 2px; background: var(--border); cursor: row-resize; z-index: 10; transition: background 0.3s; }
+        .divider-v:hover, .divider-v.active { background: var(--accent); height: 4px; }
+
+        /* --- 文件系统 --- */
+        #explorer { width: 220px; min-width: 0; border-right: 1px solid var(--border); }
+        .file-item { padding: 12px 20px; font-size: 12px; color: var(--text-dim); border-bottom: 1px solid #111; transition: 0.2s; }
+        .file-item.active { background: #111; color: var(--accent); border-left: 3px solid var(--accent); }
+
+        /* --- 编辑器 --- */
+        #editor-pane { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+        #code-area { flex: 1; background: var(--bg); border: none; outline: none; padding: 25px; color: var(--text-main); font-size: 14px; line-height: 1.6; resize: none; }
+
+        /* --- 终端 --- */
+        #terminal { height: 200px; min-height: 0; border-top: 1px solid var(--border); background: #000; }
+        #term-out { flex: 1; padding: 15px; overflow-y: auto; font-size: 12px; color: #888; line-height: 1.5; }
+        .term-input-row { display: flex; padding: 10px 15px; background: #050505; border-top: 1px solid #111; }
+        .term-input-row span { color: var(--accent); margin-right: 10px; }
+        #cmd-in { background: transparent; border: none; color: #fff; flex: 1; outline: none; font-size: 12px; }
+
+        /* --- 右键菜单 --- */
+        #ctx-menu { position: fixed; display: none; background: #0f0f0f; border: 1px solid var(--border); padding: 5px 0; z-index: 10000; min-width: 160px; box-shadow: 0 10px 30px rgba(0,0,0,0.8); }
+        .menu-item { padding: 10px 20px; font-size: 11px; color: #aaa; transition: 0.2s; }
+        .menu-item:hover { background: var(--accent); color: #000; }
+    </style>
+</head>
+<body oncontextmenu="handleContextMenu(event)">
+
+<div id="ring"></div>
+
+<nav class="top-nav">
+    <div class="logo">VOID_OS</div>
+    <div class="nav-actions">
+        <span onclick="toggleSidebar()">[ SIDEBAR ]</span>
+    </div>
+</nav>
+
+<div class="workspace">
+    <aside class="panel" id="explorer">
+        <div id="file-list"></div>
+    </aside>
+
+    <div class="divider-h" id="h-drag"></div>
+
+    <section id="editor-pane">
+        <textarea id="code-area" spellcheck="false"></textarea>
+        
+        <div class="divider-v" id="v-drag"></div>
+
+        <footer class="panel" id="terminal">
+            <div id="term-out">VOID Kernel 4.0.1 LTS initialized. Type 'help' for commands.</div>
+            <div class="term-input-row">
+                <span>$</span>
+                <input type="text" id="cmd-in" autocomplete="off" spellcheck="false">
+            </div>
+        </footer>
+    </section>
+</div>
+
+<div id="ctx-menu">
+    <div class="menu-item" onclick="downloadSingle()">DOWNLOAD_CURRENT</div>
+    <div class="menu-item" onclick="packZip()">DOWNLOAD_PROJECT_ZIP</div>
+    <div style="border-top:1px solid #221; margin:5px 0;"></div>
+    <div class="menu-item" onclick="location.reload()">REBOOT_SYSTEM</div>
+</div>
+
+<script>
+    // 1. 指针跟随
+    const ring = document.getElementById('ring');
+    document.addEventListener('mousemove', e => {
+        ring.style.transform = `translate(${e.clientX - 12}px, ${e.clientY - 12}px)`;
+    });
+
+    // 2. 增强拖拽（物理吸附逻辑）
+    function setupDrag(bar, target, isHorizontal) {
+        let dragging = false;
+        const start = () => { dragging = true; bar.classList.add('active'); };
+        const end = () => { dragging = false; bar.classList.remove('active'); };
+        
+        const move = (e) => {
+            if (!dragging) return;
+            const x = e.touches ? e.touches[0].clientX : e.clientX;
+            const y = e.touches ? e.touches[0].clientY : e.clientY;
+
+            if (isHorizontal) {
+                let p = (x / window.innerWidth) * 100;
+                if (p < 5) p = 0; // 磁吸关闭
+                if (p > 95) p = 100; // 磁吸全满
+                target.style.width = p + '%';
+            } else {
+                let p = ((window.innerHeight - y) / window.innerHeight) * 100;
+                if (p < 5) p = 0;
+                if (p > 90) p = 100;
+                target.style.height = p + '%';
+            }
+        };
+
+        bar.addEventListener('mousedown', start);
+        bar.addEventListener('touchstart', start);
+        document.addEventListener('mousemove', move);
+        document.addEventListener('touchmove', move, { passive: false });
+        document.addEventListener('mouseup', end);
+        document.addEventListener('touchend', end);
+    }
+    setupDrag(document.getElementById('h-drag'), document.getElementById('explorer'), true);
+    setupDrag(document.getElementById('v-drag'), document.getElementById('terminal'), false);
+
+    // 3. 文件系统
+    let project = {
+        'main.py': 'def void():\n    print("Welcome to the Void")\n\nvoid()',
+        'config.yml': 'system: void\nversion: 4.0\nstatus: stable',
+        'notes.txt': 'Everything is data.'
+    };
+    let activeFile = 'main.py';
+
+    function renderFiles() {
+        const list = document.getElementById('file-list');
+        list.innerHTML = '';
+        Object.keys(project).forEach(name => {
+            const div = document.createElement('div');
+            div.className = `file-item ${name === activeFile ? 'active' : ''}`;
+            div.innerText = name;
+            div.onclick = () => {
+                project[activeFile] = document.getElementById('code-area').value;
+                activeFile = name;
+                document.getElementById('code-area').value = project[name];
+                renderFiles();
+            };
+            list.appendChild(div);
+        });
+    }
+
+    // 4. 终端命令系统
+    const cmdIn = document.getElementById('cmd-in');
+    const termOut = document.getElementById('term-out');
+    let currentDir = '/root';
+
+    const commands = {
+        'help': () => 'Available: ls, touch, rm, cat, clear, pwd, whoami, date, echo',
+        'ls': () => Object.keys(project).join('  '),
+        'pwd': () => currentDir,
+        'whoami': () => 'void_user',
+        'date': () => new Date().toLocaleString(),
+        'clear': () => { termOut.innerHTML = ''; return ''; },
+        'echo': (args) => args.join(' '),
+        'touch': (args) => { if(!args[0]) return 'Usage: touch <filename>'; project[args[0]] = ''; renderFiles(); return `Created ${args[0]}`; },
+        'rm': (args) => { if(!project[args[0]]) return 'File not found'; delete project[args[0]]; renderFiles(); return `Deleted ${args[0]}`; },
+        'cat': (args) => project[args[0]] || 'File not found'
+    };
+
+    cmdIn.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+            const raw = cmdIn.value.trim();
+            const [cmd, ...args] = raw.split(' ');
+            
+            const line = document.createElement('div');
+            line.innerHTML = `<span style="color:#fff">$ ${raw}</span>`;
+            termOut.appendChild(line);
+
+            if (commands[cmd]) {
+                const res = commands[cmd](args);
+                if (res) {
+                    const resLine = document.createElement('div');
+                    resLine.innerText = res;
+                    termOut.appendChild(resLine);
+                }
+            } else if (raw !== '') {
+                const err = document.createElement('div');
+                err.innerText = `sh: command not found: ${cmd}`;
+                termOut.appendChild(err);
+            }
+
+            cmdIn.value = '';
+            termOut.scrollTop = termOut.scrollHeight;
+        }
+    };
+
+    // 5. 右键与下载逻辑
+    const menu = document.getElementById('ctx-menu');
+    function handleContextMenu(e) {
+        e.preventDefault();
+        menu.style.display = 'block';
+        menu.style.left = e.pageX + 'px';
+        menu.style.top = e.pageY + 'px';
+    }
+    document.onclick = () => menu.style.display = 'none';
+
+    function downloadSingle() {
+        const content = document.getElementById('code-area').value;
+        const blob = new Blob([content], {type: 'text/plain'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = activeFile; a.click();
+    }
+
+    async function packZip() {
+        project[activeFile] = document.getElementById('code-area').value;
+        const zip = new JSZip();
+        Object.keys(project).forEach(k => zip.file(k, project[k]));
+        const content = await zip.generateAsync({type: "blob"});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(content); a.download = "void_project.zip"; a.click();
+    }
+
+    function toggleSidebar() {
+        const exp = document.getElementById('explorer');
+        exp.style.width = exp.style.width === '0%' ? '220px' : '0%';
+    }
+
+    // Init
+    renderFiles();
+    document.getElementById('code-area').value = project[activeFile];
+</script>
+</body>
+</html>

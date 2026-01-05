@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Nebula OS - File System</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        :root {
+            --accent: #00ffcc;
+            --bg: #0a0e14;
+            --panel: rgba(20, 28, 38, 0.9);
+            --border: rgba(0, 255, 204, 0.2);
+        }
+
+        * { box-sizing: border-box; }
+        body, html {
+            margin: 0; padding: 0; height: 100vh;
+            background: var(--bg); color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+
+        /* --- 顶部全局菜单 --- */
+        .os-header {
+            height: 45px; background: rgba(0,0,0,0.5); border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; padding: 0 20px; justify-content: space-between;
+            backdrop-filter: blur(10px);
+        }
+
+        .controls-group { display: flex; gap: 15px; align-items: center; }
+        .nav-btn {
+            background: none; border: 1px solid var(--border); color: #888;
+            padding: 5px 12px; border-radius: 4px; cursor: pointer; font-size: 12px;
+            transition: 0.3s;
+        }
+        .nav-btn.active { color: var(--accent); border-color: var(--accent); box-shadow: 0 0 10px var(--accent); }
+        .download-all { background: var(--accent); color: #000; border: none; font-weight: bold; }
+
+        /* --- 工作区布局 --- */
+        .workspace {
+            display: flex; height: calc(100vh - 45px); padding: 15px; gap: 10px;
+        }
+
+        .panel {
+            background: var(--panel); border: 1px solid var(--border);
+            border-radius: 12px; display: flex; flex-direction: column; overflow: hidden;
+        }
+
+        /* --- 侧边栏 --- */
+        #sidebar { width: 280px; min-width: 0; }
+        .file-row {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 10px 15px; border-bottom: 1px solid rgba(255,255,255,0.05); cursor: pointer;
+        }
+        .file-row:hover { background: rgba(0,255,204,0.1); }
+        .file-row.active { border-left: 4px solid var(--accent); background: rgba(0,255,204,0.05); }
+        .file-actions i { color: #555; margin-left: 10px; transition: 0.3s; }
+        .file-actions i:hover { color: var(--accent); }
+
+        /* --- 编辑器 --- */
+        #editor { flex: 1; min-width: 0; }
+        #code-input {
+            flex: 1; background: transparent; border: none; color: #ced4da;
+            padding: 20px; font-family: 'Consolas', monospace; font-size: 14px;
+            line-height: 1.6; resize: none; outline: none;
+        }
+
+        /* --- 终端 --- */
+        #terminal { height: 180px; min-height: 0; }
+        .term-body { flex: 1; padding: 15px; font-family: monospace; font-size: 13px; color: var(--accent); overflow-y: auto; }
+        .term-input-box { display: flex; padding: 10px; background: rgba(0,0,0,0.3); }
+        .term-input-box input { background: transparent; border: none; color: #fff; flex: 1; outline: none; margin-left: 10px; }
+
+        /* --- 拖拽条 --- */
+        .resizer-h { width: 6px; cursor: col-resize; transition: 0.3s; }
+        .resizer-h:hover { background: var(--accent); }
+        .resizer-v { height: 6px; cursor: row-resize; transition: 0.3s; }
+        .resizer-v:hover { background: var(--accent); }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<header class="os-header">
+    <div class="controls-group">
+        <span style="font-weight: bold; color: var(--accent); margin-right: 20px;">NEBULA_OS</span>
+        <button class="nav-btn active" id="btn-side">EXPLORER</button>
+        <button class="nav-btn active" id="btn-term">TERMINAL</button>
+    </div>
+    <div class="controls-group">
+        <button class="nav-btn download-all" onclick="downloadAll()"><i class="fa-solid fa-file-zipper"></i> ZIP ALL</button>
+    </div>
+</header>
+
+<div class="workspace">
+    <div style="display: flex; flex: 1; flex-direction: column;">
+        <div style="display: flex; flex: 1; gap: 5px;">
+            <aside class="panel" id="sidebar">
+                <div style="padding: 15px; font-size: 12px; color: #666; font-weight: bold; border-bottom: 1px solid var(--border)">ROOT / PROJECT</div>
+                <div id="file-list">
+                    </div>
+            </aside>
+
+            <div class="resizer-h" id="h-move"></div>
+
+            <main class="panel" id="editor">
+                <div style="padding: 10px 20px; background: rgba(0,255,204,0.05); font-size: 12px; display: flex; justify-content: space-between;">
+                    <span id="active-name">untitled.js</span>
+                    <i class="fa-solid fa-floppy-disk" title="Save to virtual memory" style="cursor:pointer" onclick="saveCurrent()"></i>
+                </div>
+                <textarea id="code-input" spellcheck="false"></textarea>
+            </main>
+        </div>
+
+        <div class="resizer-v" id="v-move"></div>
+
+        <footer class="panel" id="terminal">
+            <div class="term-body" id="term-out">Nebula OS Terminal v4.0... Ready.</div>
+            <div class="term-input-box">
+                <span style="color: var(--accent)">$</span>
+                <input type="text" id="term-in" placeholder="Enter command..." autocomplete="off">
+            </div>
+        </footer>
+    </div>
+</div>
+
+<script>
+    // 1. 初始化文件数据
+    const files = {
+        'index.html': '<!DOCTYPE html>\n<html>\n<body>\n  <h1>Nebula OS</h1>\n</body>\n</html>',
+        'app.js': 'console.log("System Running...");\nfunction neb() { return true; }',
+        'styles.css': 'body { background: #000; color: #0f0; }',
+        'README.md': '# Project Nebula\nFull file system support included.'
+    };
+    let currentFile = 'app.js';
+
+    // 2. 渲染文件列表及下载按钮
+    function renderFileList() {
+        const list = document.getElementById('file-list');
+        list.innerHTML = '';
+        Object.keys(files).forEach(name => {
+            const div = document.createElement('div');
+            div.className = `file-row ${name === currentFile ? 'active' : ''}`;
+            div.innerHTML = `
+                <span onclick="openFile('${name}')"><i class="fa-regular fa-file-code"></i> ${name}</span>
+                <div class="file-actions">
+                    <i class="fa-solid fa-download" onclick="downloadSingle('${name}')" title="下载此文件"></i>
+                </div>
+            `;
+            list.appendChild(div);
+        });
+    }
+
+    function openFile(name) {
+        files[currentFile] = document.getElementById('code-input').value; // 保存旧文件
+        currentFile = name;
+        document.getElementById('code-input').value = files[name];
+        document.getElementById('active-name').innerText = name;
+        renderFileList();
+    }
+
+    function saveCurrent() {
+        files[currentFile] = document.getElementById('code-input').value;
+        logTerm(`System: ${currentFile} saved to virtual buffer.`);
+    }
+
+    // 3. 下载功能实现
+    function downloadSingle(name) {
+        const content = name === currentFile ? document.getElementById('code-input').value : files[name];
+        const blob = new Blob([content], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = name;
+        a.click();
+        URL.revokeObjectURL(url);
+        logTerm(`Exported: ${name}`);
+    }
+
+    async function downloadAll() {
+        saveCurrent();
+        const zip = new JSZip();
+        Object.keys(files).forEach(name => {
+            zip.file(name, files[name]);
+        });
+        const content = await zip.generateAsync({ type: "blob" });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(content);
+        a.download = "nebula_project.zip";
+        a.click();
+        logTerm(`System: Package nebula_project.zip generated.`);
+    }
+
+    // 4. 面板调整逻辑
+    const setupResize = (resizer, target, isVertical) => {
+        resizer.onmousedown = (e) => {
+            document.onmousemove = (ev) => {
+                if(isVertical) {
+                    const h = window.innerHeight - ev.clientY - 20;
+                    if(h < 30) { target.classList.add('hidden'); document.getElementById('btn-term').classList.remove('active'); }
+                    else { target.classList.remove('hidden'); target.style.height = h + 'px'; }
+                } else {
+                    const w = ev.clientX - 20;
+                    if(w < 30) { target.classList.add('hidden'); document.getElementById('btn-side').classList.remove('active'); }
+                    else { target.classList.remove('hidden'); target.style.width = w + 'px'; }
+                }
+            };
+            document.onmouseup = () => document.onmousemove = null;
+        };
+    };
+    setupResize(document.getElementById('h-move'), document.getElementById('sidebar'), false);
+    setupResize(document.getElementById('v-move'), document.getElementById('terminal'), true);
+
+    // 开关按钮
+    document.getElementById('btn-side').onclick = function() {
+        const s = document.getElementById('sidebar');
+        s.classList.toggle('hidden');
+        this.classList.toggle('active');
+    };
+    document.getElementById('btn-term').onclick = function() {
+        const t = document.getElementById('terminal');
+        t.classList.toggle('hidden');
+        this.classList.toggle('active');
+    };
+
+    // 5. 终端逻辑
+    const termIn = document.getElementById('term-in');
+    const termOut = document.getElementById('term-out');
+    function logTerm(msg) {
+        termOut.innerHTML += `<div>> ${msg}</div>`;
+        termOut.scrollTop = termOut.scrollHeight;
+    }
+    termIn.onkeydown = (e) => {
+        if(e.key === 'Enter') {
+            const cmd = termIn.value.toLowerCase();
+            logTerm(`<span style="color:#fff">${termIn.value}</span>`);
+            if(cmd === 'ls') logTerm(Object.keys(files).join('  '));
+            else if(cmd === 'download --all') downloadAll();
+            else if(cmd === 'help') logTerm('Commands: ls, clear, help, date');
+            else if(cmd === 'clear') termOut.innerHTML = '';
+            else logTerm(`Unknown command: ${cmd}`);
+            termIn.value = '';
+        }
+    };
+
+    // 初始化加载
+    renderFileList();
+    document.getElementById('code-input').value = files[currentFile];
+</script>
+
+</body>
+</html>

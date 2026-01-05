@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>AETHER_COMMAND // PRO_EDITION</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --accent: #00ff9d; /* 荧光绿 */
+            --bg-deep: #050505;
+            --bg-panel: rgba(15, 15, 15, 0.95);
+            --border: rgba(0, 255, 157, 0.2);
+            --font-main: 'JetBrains Mono', 'Fira Code', monospace;
+        }
+
+        * { box-sizing: border-box; }
+        body, html {
+            margin: 0; padding: 0; height: 100vh;
+            background: var(--bg-deep); color: #fff;
+            font-family: var(--font-main); overflow: hidden;
+        }
+
+        /* --- 核心布局结构 --- */
+        .workspace {
+            display: flex; height: 100vh; padding: 5px; gap: 5px;
+        }
+
+        /* 左侧活动条 (Activity Bar) */
+        .activity-bar {
+            width: 50px; background: var(--bg-panel);
+            border: 1px solid var(--border);
+            display: flex; flex-direction: column; align-items: center;
+            padding: 20px 0; gap: 30px; border-radius: 4px;
+        }
+
+        .activity-bar i {
+            font-size: 20px; color: #444; cursor: pointer; transition: 0.3s;
+        }
+        .activity-bar i.active, .activity-bar i:hover {
+            color: var(--accent); text-shadow: 0 0 10px var(--accent);
+        }
+
+        /* 主体布局 */
+        .main-layout {
+            display: flex; flex: 1; flex-direction: column; gap: 5px;
+        }
+
+        .top-row { display: flex; flex: 1; gap: 5px; min-height: 0; }
+
+        /* --- 面板通用样式 --- */
+        .panel {
+            background: var(--bg-panel); border: 1px solid var(--border);
+            border-radius: 4px; display: flex; flex-direction: column;
+            overflow: hidden; position: relative;
+        }
+
+        .panel-header {
+            padding: 8px 12px; background: rgba(255, 255, 255, 0.03);
+            border-bottom: 1px solid var(--border); font-size: 11px;
+            display: flex; justify-content: space-between; align-items: center;
+            letter-spacing: 1px;
+        }
+
+        /* --- 侧边栏 (Explorer) --- */
+        #sidebar { width: 250px; transition: opacity 0.2s; }
+
+        /* --- 编辑器 --- */
+        #editor { flex: 1; }
+        #code-input {
+            flex: 1; background: transparent; border: none; color: #d1d1d1;
+            padding: 20px; font-family: inherit; font-size: 14px;
+            line-height: 1.6; resize: none; outline: none;
+        }
+
+        /* --- 终端 --- */
+        #terminal { height: 200px; }
+        .terminal-content {
+            flex: 1; padding: 10px; font-size: 12px; overflow-y: auto;
+            color: var(--accent); background: rgba(0,0,0,0.4);
+        }
+        .term-input-line {
+            display: flex; padding: 5px 10px; border-top: 1px solid var(--border);
+        }
+        .term-input-line input {
+            background: transparent; border: none; color: #fff;
+            flex: 1; font-family: inherit; outline: none; margin-left: 10px;
+        }
+
+        /* --- 拖拽控制器 (Resizers) --- */
+        .resizer-h {
+            width: 4px; cursor: col-resize; background: transparent; transition: 0.3s;
+        }
+        .resizer-h:hover { background: var(--accent); }
+
+        .resizer-v {
+            height: 4px; cursor: row-resize; background: transparent; transition: 0.3s;
+        }
+        .resizer-v:hover { background: var(--accent); }
+
+        /* --- 工具类 --- */
+        .hidden { display: none !important; }
+        .file-item {
+            padding: 8px 15px; font-size: 13px; cursor: pointer; color: #888;
+        }
+        .file-item:hover { background: rgba(0, 255, 157, 0.1); color: #fff; }
+        .file-item.active { color: var(--accent); border-left: 2px solid var(--accent); }
+    </style>
+</head>
+<body>
+
+<div class="workspace">
+    <nav class="activity-bar">
+        <i class="fa-solid fa-folder-closed active" id="btn-toggle-sidebar" title="资源管理器"></i>
+        <i class="fa-solid fa-terminal" id="btn-toggle-terminal" title="系统终端"></i>
+        <i class="fa-solid fa-gear" style="margin-top: auto;"></i>
+    </nav>
+
+    <div class="main-layout">
+        <div class="top-row">
+            <aside class="panel" id="sidebar">
+                <div class="panel-header">EXPLORER <i class="fa-solid fa-chevron-left" style="cursor:pointer" onclick="toggleSidebar()"></i></div>
+                <div id="file-list">
+                    <div class="file-item active" onclick="switchFile('main.py')">main.py</div>
+                    <div class="file-item" onclick="switchFile('config.json')">config.json</div>
+                    <div class="file-item" onclick="switchFile('styles.css')">styles.css</div>
+                </div>
+            </aside>
+
+            <div class="resizer-h" id="resizer-h"></div>
+
+            <main class="panel" id="editor">
+                <div class="panel-header">
+                    <span id="tab-name">main.py</span>
+                    <span style="color: var(--accent)">● EDITING</span>
+                </div>
+                <textarea id="code-input" spellcheck="false"></textarea>
+            </main>
+        </div>
+
+        <div class="resizer-v" id="resizer-v"></div>
+
+        <footer class="panel" id="terminal">
+            <div class="panel-header">SYSTEM_TERMINAL <i class="fa-solid fa-xmark" style="cursor:pointer" onclick="toggleTerminal()"></i></div>
+            <div class="terminal-content" id="terminal-out">
+                <div>[SYSTEM] Initializing Aether Command Kernel...</div>
+                <div>[STATUS] Core ready. Type 'help' to begin.</div>
+            </div>
+            <div class="term-input-line">
+                <span style="color: var(--accent)">>></span>
+                <input type="text" id="term-in" autocomplete="off" spellcheck="false">
+            </div>
+        </footer>
+    </div>
+</div>
+
+<script>
+    // --- 1. 面板动态拖拽引擎 ---
+    const resizerH = document.getElementById('resizer-h');
+    const resizerV = document.getElementById('resizer-v');
+    const sidebar = document.getElementById('sidebar');
+    const terminal = document.getElementById('terminal');
+
+    // 水平拖拽 (侧边栏宽度)
+    resizerH.onmousedown = (e) => {
+        document.onmousemove = (e) => {
+            let width = e.clientX - 60; // 减去 activity-bar 宽度
+            if (width < 30) {
+                sidebar.classList.add('hidden');
+            } else {
+                sidebar.classList.remove('hidden');
+                sidebar.style.width = width + 'px';
+            }
+        };
+        document.onmouseup = () => document.onmousemove = null;
+    };
+
+    // 垂直拖拽 (终端高度)
+    resizerV.onmousedown = (e) => {
+        document.onmousemove = (e) => {
+            let height = window.innerHeight - e.clientY - 10;
+            if (height < 30) {
+                terminal.classList.add('hidden');
+            } else {
+                terminal.classList.remove('hidden');
+                terminal.style.height = height + 'px';
+            }
+        };
+        document.onmouseup = () => document.onmousemove = null;
+    };
+
+    // --- 2. 按钮开关逻辑 ---
+    function toggleSidebar() {
+        sidebar.classList.toggle('hidden');
+        document.getElementById('btn-toggle-sidebar').classList.toggle('active');
+    }
+    function toggleTerminal() {
+        terminal.classList.toggle('hidden');
+        document.getElementById('btn-toggle-terminal').classList.toggle('active');
+    }
+
+    document.getElementById('btn-toggle-sidebar').onclick = toggleSidebar;
+    document.getElementById('btn-toggle-terminal').onclick = toggleTerminal;
+
+    // --- 3. 文件系统与编辑功能 ---
+    const fileData = {
+        'main.py': 'def start():\n    print("Aether Initialized")\n\nif __name__ == "__main__":\n    start()',
+        'config.json': '{\n  "version": "1.0.4",\n  "mode": "PRO",\n  "theme": "NeonGreen"\n}',
+        'styles.css': 'body {\n  background: #000;\n  filter: hue-rotate(90deg);\n}'
+    };
+
+    function switchFile(name) {
+        document.querySelectorAll('.file-item').forEach(el => el.classList.remove('active'));
+        event.target.classList.add('active');
+        document.getElementById('tab-name').innerText = name;
+        document.getElementById('code-input').value = fileData[name];
+        printLog(`System: Switched to ${name}`);
+    }
+
+    // --- 4. 终端输入功能 ---
+    const termIn = document.getElementById('term-in');
+    const termOut = document.getElementById('terminal-out');
+
+    function printLog(text) {
+        const div = document.createElement('div');
+        div.textContent = `> ${text}`;
+        termOut.appendChild(div);
+        termOut.scrollTop = termOut.scrollHeight;
+    }
+
+    termIn.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+            const cmd = termIn.value;
+            printLog(`$ ${cmd}`);
+            processCmd(cmd);
+            termIn.value = '';
+        }
+    };
+
+    function processCmd(cmd) {
+        const c = cmd.toLowerCase().trim();
+        if (c === 'help') printLog('Commands: help, ls, clear, status, full');
+        else if (c === 'ls') printLog(Object.keys(fileData).join('  '));
+        else if (c === 'clear') termOut.innerHTML = '';
+        else if (c === 'status') printLog('CPU: 12% | MEM: 450MB | NET: ONLINE');
+        else if (c === 'full') {
+             // 模拟“占满屏幕”的指令
+             sidebar.classList.add('hidden');
+             terminal.classList.add('hidden');
+             printLog('Layout optimized for Focus Mode.');
+        }
+        else if (cmd !== '') printLog(`Error: Command '${cmd}' not found.`);
+    }
+
+    // 初始化
+    document.getElementById('code-input').value = fileData['main.py'];
+</script>
+
+</body>
+</html>

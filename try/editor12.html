@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>INDUSTRIAL_NODE_X7</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        :root {
+            --safety-orange: #ff9800;
+            --danger-red: #f44336;
+            --bg-metal: #0d0e10;
+            --panel-inner: #151719;
+            --border-width: 2px;
+        }
+
+        * { box-sizing: border-box; cursor: crosshair; }
+        body, html {
+            margin: 0; padding: 0; height: 100vh;
+            background: var(--bg-metal); color: var(--safety-orange);
+            font-family: 'Courier New', Courier, monospace; overflow: hidden;
+        }
+
+        /* --- 顶栏：开关控制中心 --- */
+        .control-deck {
+            height: 50px; background: #000; border-bottom: var(--border-width) solid var(--safety-orange);
+            display: flex; align-items: center; padding: 0 20px; gap: 20px;
+            box-shadow: 0 5px 15px rgba(255, 152, 0, 0.1);
+        }
+
+        .toggle-switch {
+            padding: 5px 15px; border: 1px solid var(--safety-orange); font-size: 12px;
+            cursor: pointer; background: transparent; color: var(--safety-orange);
+            transition: 0.2s;
+        }
+        .toggle-switch.active { background: var(--safety-orange); color: #000; font-weight: bold; }
+
+        /* --- 布局容器 --- */
+        .main-frame {
+            display: flex; height: calc(100vh - 50px); padding: 10px; gap: 10px;
+        }
+
+        .panel {
+            background: var(--panel-inner); border: var(--border-width) solid #333;
+            display: flex; flex-direction: column; position: relative;
+        }
+        .panel-header {
+            padding: 5px 10px; background: #222; font-size: 11px; 
+            border-bottom: 1px solid #333; display: flex; justify-content: space-between;
+        }
+
+        /* --- 侧边栏 --- */
+        #sidebar { width: 260px; min-width: 0; }
+        .file-entry {
+            padding: 10px; border-bottom: 1px solid #222; font-size: 13px;
+            display: flex; justify-content: space-between;
+        }
+        .file-entry:hover { background: rgba(255,152,0,0.1); }
+        .file-entry.selected { border-left: 4px solid var(--safety-orange); background: #1a1c1e; }
+
+        /* --- 编辑器 --- */
+        #editor-pane { flex: 1; min-width: 0; }
+        #code-input {
+            flex: 1; background: transparent; border: none; color: #fff;
+            padding: 20px; font-family: inherit; font-size: 16px; outline: none; resize: none;
+        }
+
+        /* --- 终端 --- */
+        #terminal-pane { height: 220px; min-height: 0; border-color: var(--safety-orange); }
+        .term-scroll { flex: 1; padding: 15px; overflow-y: auto; font-size: 13px; }
+        .input-line { display: flex; padding: 10px; background: #000; align-items: center; }
+        #cmd-in { background: transparent; border: none; color: #fff; flex: 1; outline: none; margin-left: 10px; }
+
+        /* --- 右键菜单 --- */
+        #ctx-menu {
+            position: fixed; background: #222; border: 1px solid var(--safety-orange);
+            z-index: 1000; display: none; width: 200px;
+        }
+        .ctx-item { padding: 10px 15px; font-size: 12px; }
+        .ctx-item:hover { background: var(--safety-orange); color: #000; }
+
+        /* --- 拖拽条 --- */
+        .resizer-h { width: 8px; cursor: col-resize; background: #1a1a1a; border: 1px solid #333; }
+        .resizer-v { height: 8px; cursor: row-resize; background: #1a1a1a; border: 1px solid #333; }
+
+        .hidden { display: none !important; }
+        .cmd-color { color: #fff; }
+    </style>
+</head>
+<body oncontextmenu="event.preventDefault(); showCtx(event);">
+
+<header class="control-deck">
+    <div style="font-weight: 900; letter-spacing: 2px;">NODE_X7 // INDUSTRIAL</div>
+    <div class="toggle-switch active" id="sw-side" onclick="toggleComp('sidebar')">STORAGE_UNIT</div>
+    <div class="toggle-switch active" id="sw-term" onclick="toggleComp('terminal-pane')">COMMS_LINK</div>
+</header>
+
+<div class="main-frame">
+    <div style="display:flex; flex:1; flex-direction:column;">
+        <div style="display:flex; flex:1; gap:0;">
+            <aside class="panel" id="sidebar">
+                <div class="panel-header">FILE_SYSTEM</div>
+                <div id="file-list"></div>
+            </aside>
+
+            <div class="resizer-h" id="h-drag"></div>
+
+            <main class="panel" id="editor-pane">
+                <div class="panel-header">CORE_BUFFER <span id="cur-filename">none</span></div>
+                <textarea id="code-input" spellcheck="false"></textarea>
+            </main>
+        </div>
+
+        <div class="resizer-v" id="v-drag"></div>
+
+        <footer class="panel" id="terminal-pane">
+            <div class="panel-header">COMMAND_INTERFACE</div>
+            <div class="term-scroll" id="term-out">
+                <div>* INITIALIZING COMMAND INTERFACE...</div>
+                <div>* READY. TYPE 'HELP' FOR LIST OF OPERATIONAL COMMANDS.</div>
+            </div>
+            <div class="input-line">
+                <span>SYSTEM@X7:~$</span>
+                <input type="text" id="cmd-in" autocomplete="off" spellcheck="false">
+            </div>
+        </footer>
+    </div>
+</div>
+
+<div id="ctx-menu">
+    <div class="ctx-item" onclick="downloadCurrent()">DOWNLOAD_ACTIVE_FILE</div>
+    <div class="ctx-item" onclick="zipArchive()">ARCHIVE_ALL_UNITS (ZIP)</div>
+</div>
+
+<script>
+    // --- 虚拟文件系统与路径 ---
+    let fs = {
+        'root': {
+            'main.hex': 'INIT_SEQUENCE: 0x01\nRUN_LEVEL: 5',
+            'security.log': 'AUTH_SUCCESS: admin\nUPLINK_STABLE: 100%',
+            'notes.txt': 'Industrial Node X7 setup complete.'
+        }
+    };
+    let currentDir = 'root';
+    let activeFile = 'main.hex';
+
+    function updateFiles() {
+        const list = document.getElementById('file-list');
+        list.innerHTML = '';
+        Object.keys(fs[currentDir]).forEach(name => {
+            const div = document.createElement('div');
+            div.className = `file-entry ${name === activeFile ? 'selected' : ''}`;
+            div.innerHTML = `<span><i class="fa-solid fa-microchip"></i> ${name}</span>`;
+            div.onclick = () => {
+                save();
+                activeFile = name;
+                document.getElementById('code-input').value = fs[currentDir][name];
+                document.getElementById('cur-filename').innerText = name;
+                updateFiles();
+            };
+            list.appendChild(div);
+        });
+    }
+
+    // --- 强大的命令处理器 ---
+    const commands = {
+        'help': () => 'AVAILABLE: ls, cd, cat, touch, mkdir, rm, date, clear, download, whoami, version',
+        'ls': () => Object.keys(fs[currentDir]).join('   '),
+        'date': () => new Date().toString(),
+        'whoami': () => 'operator_id_8829',
+        'version': () => 'NODE_OS v9.4.1-STABLE',
+        'clear': () => { document.getElementById('term-out').innerHTML = ''; return ''; },
+        'ls': () => {
+            return Object.keys(fs[currentDir]).map(item => `[DIR] ${item}`).join('<br>') || 'EMPTY_DIRECTORY';
+        },
+        'touch': (args) => {
+            if(!args[0]) return 'ERR: NAME_REQUIRED';
+            fs[currentDir][args[0]] = '';
+            updateFiles();
+            return `CREATED: ${args[0]}`;
+        },
+        'rm': (args) => {
+            if(!args[0] || !fs[currentDir][args[0]]) return 'ERR: FILE_NOT_FOUND';
+            delete fs[currentDir][args[0]];
+            updateFiles();
+            return `DELETED: ${args[0]}`;
+        },
+        'cat': (args) => {
+            if(!args[0] || !fs[currentDir][args[0]]) return 'ERR: FILE_NOT_FOUND';
+            return `<pre class="cmd-color">${fs[currentDir][args[0]]}</pre>`;
+        },
+        'download': (args) => {
+            if(args[0] === '--all') { zipArchive(); return 'ARCHIVING...'; }
+            downloadCurrent();
+            return 'DOWNLOADING_ACTIVE...';
+        }
+    };
+
+    const cmdIn = document.getElementById('cmd-in');
+    cmdIn.onkeydown = (e) => {
+        if(e.key === 'Enter') {
+            const val = cmdIn.value.trim();
+            const [base, ...args] = val.split(' ');
+            printTerm(`SYSTEM@X7:~$ ${val}`, 'safety-orange');
+            
+            if(commands[base]) {
+                const res = commands[base](args);
+                if(res) printTerm(res);
+            } else if(val !== "") {
+                printTerm(`UNRECOGNIZED_COMMAND: ${base}`, 'danger-red');
+            }
+            cmdIn.value = '';
+        }
+    };
+
+    function printTerm(text, colorClass = '') {
+        const out = document.getElementById('term-out');
+        const div = document.createElement('div');
+        if(colorClass) div.style.color = `var(--${colorClass})`;
+        div.innerHTML = text;
+        out.appendChild(div);
+        out.scrollTop = out.scrollHeight;
+    }
+
+    // --- 面板控制 & 拖拽 ---
+    function toggleComp(id) {
+        const p = document.getElementById(id);
+        const sw = document.getElementById(id === 'sidebar' ? 'sw-side' : 'sw-term');
+        p.classList.toggle('hidden');
+        sw.classList.toggle('active');
+    }
+
+    const setupDrag = (bar, target, isV) => {
+        bar.onmousedown = () => {
+            document.onmousemove = (e) => {
+                if(isV) {
+                    let h = window.innerHeight - e.clientY - 10;
+                    if(h < 40) { target.classList.add('hidden'); document.getElementById('sw-term').classList.remove('active'); }
+                    else { target.classList.remove('hidden'); target.style.height = h + 'px'; document.getElementById('sw-term').classList.add('active'); }
+                } else {
+                    let w = e.clientX - 15;
+                    if(w < 40) { target.classList.add('hidden'); document.getElementById('sw-side').classList.remove('active'); }
+                    else { target.classList.remove('hidden'); target.style.width = w + 'px'; document.getElementById('sw-side').classList.add('active'); }
+                }
+            };
+            document.onmouseup = () => document.onmousemove = null;
+        };
+    };
+    setupDrag(document.getElementById('h-drag'), document.getElementById('sidebar'), false);
+    setupDrag(document.getElementById('v-drag'), document.getElementById('terminal-pane'), true);
+
+    // --- 右键与下载 ---
+    const ctx = document.getElementById('ctx-menu');
+    function showCtx(e) {
+        ctx.style.display = 'block';
+        ctx.style.left = e.pageX + 'px'; ctx.style.top = e.pageY + 'px';
+    }
+    document.onclick = () => ctx.style.display = 'none';
+
+    function save() { fs[currentDir][activeFile] = document.getElementById('code-input').value; }
+
+    function downloadCurrent() {
+        save();
+        const blob = new Blob([fs[currentDir][activeFile]], {type:'text/plain'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = activeFile;
+        a.click();
+    }
+
+    async function zipArchive() {
+        save();
+        const zip = new JSZip();
+        Object.keys(fs[currentDir]).forEach(k => zip.file(k, fs[currentDir][k]));
+        const content = await zip.generateAsync({type:"blob"});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(content);
+        a.download = "X7_INDUSTRIAL_EXPORT.zip";
+        a.click();
+    }
+
+    // 初始化
+    updateFiles();
+    document.getElementById('code-input').value = fs[currentDir][activeFile];
+    document.getElementById('cur-filename').innerText = activeFile;
+</script>
+</body>
+</html>

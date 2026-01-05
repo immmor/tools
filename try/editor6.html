@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Quantum Flux Editor</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --glow-cyan: #00e5ff;
+            --dark-space: #050a0f;
+            --panel-hex: rgba(10, 20, 30, 0.9);
+            --border-color: rgba(0, 229, 255, 0.3);
+        }
+
+        * { box-sizing: border-box; }
+        body, html {
+            margin: 0; padding: 0;
+            height: 100vh;
+            background: var(--dark-space);
+            color: #fff;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+        }
+
+        /* 背景纹理 */
+        body::before {
+            content: "";
+            position: absolute;
+            width: 100%; height: 100%;
+            background-image: linear-gradient(var(--border-color) 1px, transparent 1px),
+                              linear-gradient(90deg, var(--border-color) 1px, transparent 1px);
+            background-size: 50px 50px;
+            opacity: 0.05;
+            z-index: -1;
+        }
+
+        /* --- 布局容器 --- */
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            padding: 10px;
+        }
+
+        .main-layout {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            gap: 5px;
+        }
+
+        /* --- 通用面板样式 --- */
+        .panel {
+            background: var(--panel-hex);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* --- 拖拽条 (Resizer) --- */
+        .resizer-h {
+            width: 5px;
+            cursor: col-resize;
+            background: transparent;
+            transition: background 0.3s;
+        }
+        .resizer-h:hover { background: var(--glow-cyan); }
+
+        .resizer-v {
+            height: 5px;
+            cursor: row-resize;
+            background: transparent;
+            transition: background 0.3s;
+        }
+        .resizer-v:hover { background: var(--glow-cyan); }
+
+        /* --- 侧边栏 --- */
+        #sidebar {
+            width: 260px;
+            min-width: 150px;
+            max-width: 500px;
+        }
+
+        .panel-header {
+            padding: 10px 15px;
+            background: rgba(0, 229, 255, 0.1);
+            font-size: 12px;
+            letter-spacing: 2px;
+            color: var(--glow-cyan);
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        /* --- 编辑器 --- */
+        #editor {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .editor-content {
+            flex: 1;
+            padding: 20px;
+            font-family: 'Monaco', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            background: rgba(0,0,0,0.3);
+            overflow: auto;
+            white-space: pre;
+        }
+
+        /* --- 终端 --- */
+        #terminal {
+            height: 200px;
+            min-height: 100px;
+            max-height: 600px;
+            margin-top: 5px;
+        }
+
+        .terminal-log {
+            flex: 1;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            color: #aaa;
+            overflow-y: auto;
+        }
+
+        /* --- 互动元素 --- */
+        .file-link {
+            padding: 8px 15px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: 0.2s;
+        }
+        .file-link:hover { background: rgba(0,229,255,0.15); color: var(--glow-cyan); }
+        .file-link.active { color: var(--glow-cyan); border-right: 3px solid var(--glow-cyan); }
+
+        /* 代码高亮 */
+        .cyan { color: var(--glow-cyan); }
+        .purple { color: #d486ff; }
+        .gray { color: #666; }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <header class="panel" style="margin-bottom: 5px; padding: 10px 20px; flex-direction: row; justify-content: space-between; align-items: center;">
+        <div style="font-weight: 900; color: var(--glow-cyan);">FLUX_OS v4.0</div>
+        <div style="font-size: 12px; color: #555;">STATUS: <span style="color: #0f0;">ENCRYPTED</span></div>
+    </header>
+
+    <div class="main-layout">
+        <div class="panel" id="sidebar">
+            <div class="panel-header">PROJECT_FILES</div>
+            <div style="padding: 10px 0;">
+                <div class="file-link active" onclick="loadContent('Main.fx')">Main.fx</div>
+                <div class="file-link" onclick="loadContent('Core.js')">Core.js</div>
+                <div class="file-link" onclick="loadContent('Kernel.py')">Kernel.py</div>
+            </div>
+        </div>
+
+        <div class="resizer-h" id="resizer-sidebar"></div>
+
+        <div class="panel" id="editor">
+            <div class="panel-header">
+                <span>BUFFER_VIEW</span>
+                <i class="fas fa-microchip"></i>
+            </div>
+            <div class="editor-content" id="code-box"></div>
+        </div>
+    </div>
+
+    <div class="resizer-v" id="resizer-terminal"></div>
+
+    <div class="panel" id="terminal">
+        <div class="panel-header">SYSTEM_CONSOLE</div>
+        <div class="terminal-log" id="term-box">
+            <div>> Flux Kernel Initialized...</div>
+            <div>> Waiting for input...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 1. 面板尺寸调整逻辑
+    const setupResizer = (resizerId, panelId, direction) => {
+        const resizer = document.getElementById(resizerId);
+        const panel = document.getElementById(panelId);
+        
+        resizer.addEventListener('mousedown', (e) => {
+            document.body.style.cursor = direction === 'h' ? 'col-resize' : 'row-resize';
+            
+            const doDrag = (e) => {
+                if (direction === 'h') {
+                    panel.style.width = e.clientX + 'px';
+                } else {
+                    panel.style.height = (window.innerHeight - e.clientY) + 'px';
+                }
+            };
+
+            const stopDrag = () => {
+                document.body.style.cursor = 'default';
+                document.removeEventListener('mousemove', doDrag);
+                document.removeEventListener('mouseup', stopDrag);
+            };
+
+            document.addEventListener('mousemove', doDrag);
+            document.addEventListener('mouseup', stopDrag);
+        });
+    };
+
+    setupResizer('resizer-sidebar', 'sidebar', 'h');
+    setupResizer('resizer-terminal', 'terminal', 'v');
+
+    // 2. 文件内容系统
+    const db = {
+        'Main.fx': `<span class="purple">module</span> <span class="cyan">QuantumLink</span> {\n  <span class="purple">init</span>() {\n    <span class="gray">// 链接神经元网络</span>\n    this.bind(<span class="cyan">'0.0.0.0'</span>);\n  }\n}`,
+        'Core.js': `<span class="purple">export const</span> <span class="cyan">sync</span> = <span class="purple">async</span> () => {\n  <span class="purple">await</span> fetch(<span class="st">'/api/v1/flux'</span>);\n  console.log(<span class="cyan">'Data Stream Stable'</span>);\n};`,
+        'Kernel.py': `<span class="purple">def</span> <span class="cyan">calculate_flux</span>():\n    <span class="purple">return</span> [x*2 <span class="purple">for</span> x <span class="purple">in</span> range(10)]\n\n<span class="gray"># System start</span>\nprint(<span class="cyan">calculate_flux()</span>)`
+    };
+
+    function loadContent(file) {
+        document.querySelectorAll('.file-link').forEach(el => el.classList.remove('active'));
+        event.target.classList.add('active');
+        document.getElementById('code-box').innerHTML = db[file];
+        logTerminal(`Switching to context: ${file}`);
+    }
+
+    function logTerminal(msg) {
+        const box = document.getElementById('term-box');
+        const line = document.createElement('div');
+        line.textContent = `> ${msg}`;
+        box.appendChild(line);
+        box.scrollTop = box.scrollHeight;
+    }
+
+    // 初始加载
+    document.getElementById('code-box').innerHTML = db['Main.fx'];
+</script>
+
+</body>
+</html>

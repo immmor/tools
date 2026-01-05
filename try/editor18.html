@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>MINIMAL_OS // V4</title>
+    <style>
+        :root {
+            --accent: #ffffff;
+            --bg: #000000;
+            --panel: #0a0a0a;
+            --border: #1a1a1a;
+            --text: #888888;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; font-family: 'Inter', system-ui, sans-serif; }
+        
+        body, html {
+            margin: 0; padding: 0; height: 100vh; width: 100vw;
+            background: var(--bg); color: var(--text); overflow: hidden;
+        }
+
+        /* --- 极简指针 --- */
+        #cursor-ring {
+            width: 20px; height: 20px; border: 1px solid var(--accent);
+            border-radius: 50%; position: fixed; pointer-events: none;
+            z-index: 9999; transition: transform 0.1s ease-out, width 0.3s, height 0.3s;
+            display: flex; align-items: center; justify-content: center;
+        }
+        #cursor-ring::after { content: ''; width: 2px; height: 2px; background: var(--accent); border-radius: 50%; }
+        @media (pointer: coarse) { #cursor-ring { display: none; } } /* 移动端隐藏指针 */
+
+        /* --- 导航栏 --- */
+        .top-nav {
+            height: 50px; display: flex; align-items: center; justify-content: space-between;
+            padding: 0 20px; border-bottom: 1px solid var(--border);
+        }
+        .logo { font-size: 12px; letter-spacing: 4px; color: var(--accent); font-weight: bold; }
+        .controls { display: flex; gap: 15px; }
+        .icon-btn { cursor: pointer; font-size: 18px; color: var(--text); transition: 0.3s; }
+        .icon-btn:hover { color: var(--accent); }
+
+        /* --- 核心容器 --- */
+        .workspace {
+            display: flex; height: calc(100vh - 50px); width: 100%;
+            position: relative; flex-direction: row;
+        }
+
+        /* 移动端自动转为垂直布局 */
+        @media (max-width: 768px) {
+            .workspace { flex-direction: column; }
+            #explorer { width: 100% !important; border-right: none !important; border-bottom: 1px solid var(--border); }
+            .divider-h { display: none; }
+        }
+
+        .panel { background: var(--panel); display: flex; flex-direction: column; overflow: hidden; }
+
+        /* --- 强化的拖拽条 --- */
+        .divider-h {
+            width: 4px; background: var(--border); cursor: col-resize;
+            transition: background 0.3s; z-index: 10;
+        }
+        .divider-h:hover, .divider-h.active { background: var(--accent); }
+
+        .divider-v {
+            height: 4px; background: var(--border); cursor: row-resize;
+            transition: background 0.3s; z-index: 10;
+        }
+        .divider-v:hover, .divider-v.active { background: var(--accent); }
+
+        /* --- 面板内容 --- */
+        #explorer { width: 200px; min-width: 0; border-right: 1px solid var(--border); }
+        #main-editor { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+        .file-item {
+            padding: 12px 20px; font-size: 11px; letter-spacing: 1px;
+            border-bottom: 1px solid var(--border); cursor: pointer;
+        }
+        .file-item.active { background: #111; color: var(--accent); border-left: 2px solid var(--accent); }
+
+        #editor-field {
+            flex: 1; background: var(--bg); border: none; outline: none;
+            padding: 30px; color: #eee; font-size: 14px; line-height: 1.6; resize: none;
+        }
+
+        #shell { height: 180px; min-height: 0; border-top: 1px solid var(--border); }
+        .shell-output { flex: 1; padding: 15px; overflow-y: auto; font-family: monospace; font-size: 11px; }
+
+        /* 吸附关闭状态 */
+        .collapsed { display: none !important; }
+    </style>
+</head>
+<body>
+
+<div id="cursor-ring"></div>
+
+<nav class="top-nav">
+    <div class="logo">VOID_OS</div>
+    <div class="controls">
+        <span class="icon-btn" onclick="toggleSidebar()">◫</span>
+        <span class="icon-btn" onclick="saveFile()">💾</span>
+    </div>
+</nav>
+
+<div class="workspace" id="warpper">
+    <aside class="panel" id="explorer">
+        <div id="file-list"></div>
+    </aside>
+
+    <div class="divider-h" id="h-drag"></div>
+
+    <div id="main-editor">
+        <main class="panel" style="flex: 1;">
+            <textarea id="editor-field" spellcheck="false"></textarea>
+        </main>
+
+        <div class="divider-v" id="v-drag"></div>
+
+        <footer class="panel" id="shell">
+            <div class="shell-output" id="output">SYSTEM_READY...<br>AWAITING_INPUT_</div>
+        </footer>
+    </div>
+</div>
+
+<script>
+    // 1. 指针交互
+    const ring = document.getElementById('cursor-ring');
+    document.addEventListener('mousemove', (e) => {
+        ring.style.transform = `translate(${e.clientX - 10}px, ${e.clientY - 10}px)`;
+    });
+    document.addEventListener('mousedown', () => ring.style.transform += ' scale(0.7)');
+    document.addEventListener('mouseup', () => ring.style.transform = ring.style.transform.replace(' scale(0.7)', ''));
+
+    // 2. 增强拖拽逻辑 (支持极值吸附)
+    function initResizer(bar, target, type) {
+        let isMoving = false;
+
+        const start = (e) => {
+            isMoving = true;
+            bar.classList.add('active');
+            document.body.style.cursor = type === 'h' ? 'col-resize' : 'row-resize';
+        };
+
+        const move = (e) => {
+            if (!isMoving) return;
+            let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            let clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+            if (type === 'h') {
+                let perc = (clientX / window.innerWidth) * 100;
+                // 极值吸附：小于5%自动归零，大于95%自动铺满
+                if (perc < 5) perc = 0;
+                if (perc > 95) perc = 100;
+                target.style.width = perc + '%';
+            } else {
+                let offset = window.innerHeight - clientY;
+                let perc = (offset / window.innerHeight) * 100;
+                if (perc < 5) perc = 0;
+                if (perc > 90) perc = 100;
+                target.style.height = perc + '%';
+            }
+        };
+
+        const end = () => {
+            isMoving = false;
+            bar.classList.remove('active');
+            document.body.style.cursor = 'default';
+        };
+
+        bar.addEventListener('mousedown', start);
+        bar.addEventListener('touchstart', start);
+        document.addEventListener('mousemove', move);
+        document.addEventListener('touchmove', move, { passive: false });
+        document.addEventListener('mouseup', end);
+        document.addEventListener('touchend', end);
+    }
+
+    initResizer(document.getElementById('h-drag'), document.getElementById('explorer'), 'h');
+    initResizer(document.getElementById('v-drag'), document.getElementById('shell'), 'v');
+
+    // 3. 文件管理
+    const files = {
+        'ABSTRACT.md': '# THE VOID\nNothingness is the ultimate form.',
+        'CORE.sys': '01010110 01001111 01001001 01000100',
+        'STYLE.css': 'body { filter: grayscale(1); }'
+    };
+    let activeName = 'ABSTRACT.md';
+
+    function renderFiles() {
+        const list = document.getElementById('file-list');
+        list.innerHTML = '';
+        Object.keys(files).forEach(name => {
+            const el = document.createElement('div');
+            el.className = `file-item ${name === activeName ? 'active' : ''}`;
+            el.innerText = name;
+            el.onclick = () => {
+                files[activeName] = document.getElementById('editor-field').value;
+                activeName = name;
+                document.getElementById('editor-field').value = files[name];
+                renderFiles();
+            };
+            list.appendChild(el);
+        });
+    }
+
+    // 4. 功能接口
+    function toggleSidebar() {
+        const exp = document.getElementById('explorer');
+        exp.style.width = exp.style.width === '0%' ? '200px' : '0%';
+    }
+
+    function saveFile() {
+        const blob = new Blob([document.getElementById('editor-field').value], {type: 'text/plain'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = activeName; a.click();
+    }
+
+    // 初始化内容
+    renderFiles();
+    document.getElementById('editor-field').value = files[activeName];
+
+</script>
+</body>
+</html>

@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>NEON-CORE // INTERACTIVE SHELL</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --neon: #00f2ff;
+            --pink: #ff007f;
+            --bg: #02060a;
+            --panel: rgba(0, 30, 45, 0.7);
+        }
+
+        * { box-sizing: border-box; }
+        body, html {
+            margin: 0; padding: 0;
+            height: 100vh;
+            background: var(--bg);
+            color: var(--neon);
+            font-family: 'Consolas', 'Courier New', monospace;
+            overflow: hidden;
+        }
+
+        /* 扫描线效果 */
+        body::before {
+            content: "";
+            position: absolute; top:0; left:0; width:100%; height:100%;
+            background: repeating-linear-gradient(0deg, transparent 0, rgba(0,242,255,0.03) 1px, transparent 2px);
+            pointer-events: none; z-index: 10;
+        }
+
+        /* --- 顶栏 --- */
+        .status-bar {
+            height: 30px;
+            background: rgba(0, 242, 255, 0.1);
+            border-bottom: 1px solid var(--neon);
+            display: flex; align-items: center;
+            padding: 0 15px; font-size: 11px; justify-content: space-between;
+        }
+
+        /* --- 主布局 --- */
+        .app-shell {
+            display: flex; flex-direction: column;
+            height: calc(100vh - 30px);
+            padding: 10px; gap: 10px;
+        }
+
+        .main-row { display: flex; flex: 1; gap: 10px; overflow: hidden; }
+
+        /* --- 面板样式 --- */
+        .glass-panel {
+            background: var(--panel);
+            border: 1px solid rgba(0, 242, 255, 0.3);
+            box-shadow: 0 0 15px rgba(0, 242, 255, 0.1);
+            backdrop-filter: blur(10px);
+            display: flex; flex-direction: column;
+            position: relative;
+        }
+
+        .panel-tab {
+            padding: 5px 15px; background: rgba(0, 242, 255, 0.2);
+            font-size: 11px; border-bottom: 1px solid rgba(0, 242, 255, 0.3);
+            display: flex; justify-content: space-between;
+        }
+
+        /* --- 侧边栏 --- */
+        #sidebar { width: 220px; min-width: 120px; }
+        .file-entry {
+            padding: 8px 15px; font-size: 13px; cursor: pointer;
+            border-left: 2px solid transparent;
+        }
+        .file-entry:hover { background: rgba(0, 242, 255, 0.1); }
+        .file-entry.active { border-left-color: var(--pink); color: #fff; background: rgba(255, 0, 127, 0.1); }
+
+        /* --- 编辑器 --- */
+        #editor-container { flex: 1; min-width: 200px; }
+        #code-area {
+            flex: 1; width: 100%; background: transparent;
+            border: none; color: #fff; padding: 20px;
+            font-family: inherit; font-size: 15px; resize: none; outline: none;
+            line-height: 1.5;
+        }
+
+        /* --- 终端 (关键功能升级) --- */
+        #terminal-area { height: 200px; min-height: 50px; }
+        #term-output {
+            flex: 1; padding: 10px; overflow-y: auto; font-size: 12px;
+            color: #aaa; white-space: pre-wrap;
+        }
+        .term-input-row {
+            display: flex; align-items: center; padding: 5px 10px;
+            border-top: 1px solid rgba(0, 242, 255, 0.2);
+            background: rgba(0,0,0,0.3);
+        }
+        .prompt { color: var(--pink); margin-right: 8px; font-weight: bold; }
+        #cmd-input {
+            background: transparent; border: none; color: var(--neon);
+            flex: 1; font-family: inherit; font-size: 12px; outline: none;
+        }
+
+        /* --- 拖拽条 --- */
+        .resizer-h { width: 4px; cursor: col-resize; transition: 0.3s; }
+        .resizer-h:hover { background: var(--neon); box-shadow: 0 0 10px var(--neon); }
+        .resizer-v { height: 4px; cursor: row-resize; transition: 0.3s; }
+        .resizer-v:hover { background: var(--neon); box-shadow: 0 0 10px var(--neon); }
+
+        .cyan { color: var(--neon); }
+        .pink { color: var(--pink); }
+    </style>
+</head>
+<body>
+
+<div class="status-bar">
+    <div>SYSTEM: <span class="cyan">ACTIVE</span> | UPLINK: <span class="cyan">SECURE</span></div>
+    <div>NEON_CORE OS v5.2</div>
+</div>
+
+<div class="app-shell">
+    <div class="main-row">
+        <div class="glass-panel" id="sidebar">
+            <div class="panel-tab">EXPLORER</div>
+            <div id="file-tree">
+                <div class="file-entry active" onclick="openFile('main.js')">main.js</div>
+                <div class="file-entry" onclick="openFile('kernel.cfg')">kernel.cfg</div>
+                <div class="file-entry" onclick="openFile('readme.txt')">readme.txt</div>
+            </div>
+        </div>
+
+        <div class="resizer-h" id="h-move"></div>
+
+        <div class="glass-panel" id="editor-container">
+            <div class="panel-tab">
+                <span id="active-file-name">main.js</span>
+                <span class="pink">EDIT_MODE</span>
+            </div>
+            <textarea id="code-area" spellcheck="false"></textarea>
+        </div>
+    </div>
+
+    <div class="resizer-v" id="v-move"></div>
+
+    <div class="glass-panel" id="terminal-area">
+        <div class="panel-tab">TERMINAL // SYSTEM_ACCESS</div>
+        <div id="term-output">NeonCore(tm) Shell v1.0.4\nType 'help' to see available commands.\n</div>
+        <div class="term-input-row">
+            <span class="prompt">root@neon-dev:~#</span>
+            <input type="text" id="cmd-input" spellcheck="false" autocomplete="off">
+        </div>
+    </div>
+</div>
+
+<script>
+    // 1. 面板尺寸动态调整
+    const setupDrag = (bar, panel, isVertical) => {
+        bar.onmousedown = (e) => {
+            document.onmousemove = (ev) => {
+                if(isVertical) {
+                    const h = window.innerHeight - ev.clientY - 20;
+                    panel.style.height = h + 'px';
+                } else {
+                    panel.style.width = ev.clientX + 'px';
+                }
+            };
+            document.onmouseup = () => document.onmousemove = null;
+        };
+    };
+
+    setupDrag(document.getElementById('h-move'), document.getElementById('sidebar'), false);
+    setupDrag(document.getElementById('v-move'), document.getElementById('terminal-area'), true);
+
+    // 2. 文件系统逻辑
+    const files = {
+        'main.js': '// Neon OS Main Kernel\nfunction sync() {\n  return "Uplink Established";\n}',
+        'kernel.cfg': 'MAX_POWER=100\nENCRYPTION=AES_256\nNODE_NAME=NEON_STATION_01',
+        'readme.txt': 'Welcome to the futuristic code editor.\n- Drag borders to resize.\n- Type commands in terminal.\n- Edit code directly.'
+    };
+
+    function openFile(name) {
+        document.querySelectorAll('.file-entry').forEach(e => e.classList.remove('active'));
+        event.target.classList.add('active');
+        document.getElementById('active-file-name').innerText = name;
+        document.getElementById('code-area').value = files[name];
+        printTerm(`Loaded file: ${name}`, 'cyan');
+    }
+
+    // 3. 核心功能：交互式终端命令处理器
+    const cmdInput = document.getElementById('cmd-input');
+    const termOut = document.getElementById('term-output');
+
+    function printTerm(text, color = '') {
+        const div = document.createElement('div');
+        if(color) div.className = color;
+        div.textContent = text;
+        termOut.appendChild(div);
+        termOut.scrollTop = termOut.scrollHeight;
+    }
+
+    cmdInput.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+            const cmd = cmdInput.value.trim().toLowerCase();
+            printTerm(`root@neon-dev:~# ${cmdInput.value}`, 'pink');
+            
+            // 模拟命令分发
+            switch(cmd) {
+                case 'help':
+                    printTerm('Available: help, ls, clear, date, status, echo [text], whoami');
+                    break;
+                case 'ls':
+                    printTerm(Object.keys(files).join('  '));
+                    break;
+                case 'clear':
+                    termOut.innerHTML = '';
+                    break;
+                case 'date':
+                    printTerm(new Date().toString());
+                    break;
+                case 'status':
+                    printTerm('SYSTEM: OPTIMAL\nNETWORK: SECURE\nCPU: 12%');
+                    break;
+                case 'whoami':
+                    printTerm('root_administrator_01');
+                    break;
+                default:
+                    if(cmd.startsWith('echo ')) {
+                        printTerm(cmd.slice(5));
+                    } else if(cmd !== '') {
+                        printTerm(`Command not found: ${cmd}`, 'pink');
+                    }
+            }
+            cmdInput.value = '';
+        }
+    };
+
+    // 初始化内容
+    document.getElementById('code-area').value = files['main.js'];
+</script>
+
+</body>
+</html>
