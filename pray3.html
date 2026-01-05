@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>古寺禅音 · 在线礼佛</title>
+    <style>
+        /* 整体意境设定 */
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #1a0f0a; /* 深焦茶色，模拟古寺暗处 */
+            overflow: hidden;
+            font-family: "Long Cang", "STKaiti", "楷体", serif;
+        }
+
+        /* 殿堂背景渐变：模拟烛光照亮佛像 */
+        .temple-hall {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at 50% 40%, #5c4033 0%, #1a0f0a 70%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* 烟雾特效 Canvas */
+        #smoke-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            opacity: 0.4;
+        }
+
+        /* 佛像主体 */
+        .buddha-statue {
+            width: 320px;
+            height: 450px;
+            cursor: pointer;
+            filter: drop-shadow(0 0 30px rgba(255, 174, 0, 0.2));
+            transition: transform 0.2s;
+            z-index: 5;
+            user-select: none;
+            /* 模拟呼吸灯效果 */
+            animation: glow 4s ease-in-out infinite;
+        }
+        .buddha-statue:active {
+            transform: scale(0.98);
+        }
+
+        @keyframes glow {
+            0%, 100% { filter: drop-shadow(0 0 20px rgba(255, 180, 0, 0.1)); }
+            50% { filter: drop-shadow(0 0 50px rgba(255, 180, 0, 0.4)); }
+        }
+
+        /* 烛火 */
+        .candle-container {
+            position: absolute;
+            bottom: 15%;
+            width: 100%;
+            display: flex;
+            justify-content: space-around;
+            max-width: 600px;
+        }
+        .candle {
+            width: 4px;
+            height: 60px;
+            background: #800000;
+            position: relative;
+        }
+        .flame {
+            position: absolute;
+            top: -15px;
+            left: -3px;
+            width: 10px;
+            height: 15px;
+            background: #ff9900;
+            border-radius: 50% 50% 20% 20%;
+            box-shadow: 0 0 15px #ff9900;
+            animation: flicker 0.1s infinite alternate;
+        }
+
+        @keyframes flicker {
+            0% { transform: scale(1); opacity: 0.9; }
+            100% { transform: scale(1.1) translateX(1px); opacity: 1; }
+        }
+
+        /* 功德显示 */
+        .merit-board {
+            position: absolute;
+            top: 10%;
+            right: 5%;
+            writing-mode: vertical-rl;
+            color: #d4af37;
+            border: 2px solid #d4af37;
+            padding: 20px 10px;
+            font-size: 24px;
+            letter-spacing: 8px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 5px;
+        }
+
+        /* 点击飘出的文字 */
+        .floating-merit {
+            position: absolute;
+            color: #d4af37;
+            font-size: 28px;
+            font-weight: bold;
+            pointer-events: none;
+            animation: floatUp 1.5s ease-out forwards;
+            text-shadow: 1px 1px 2px #000;
+        }
+
+        @keyframes floatUp {
+            0% { transform: translateY(0); opacity: 0; }
+            20% { opacity: 1; }
+            100% { transform: translateY(-120px); opacity: 0; }
+        }
+
+        /* 底部操作栏 */
+        .bottom-nav {
+            position: absolute;
+            bottom: 5%;
+            color: #8b7355;
+            font-size: 18px;
+            letter-spacing: 2px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="temple-hall">
+        <canvas id="smoke-canvas"></canvas>
+
+        <div class="merit-board">
+            已积功德：<span id="score">零</span>
+        </div>
+
+        <!-- 这里使用的是 emoji，你可以替换为写实的佛像图片透明 PNG -->
+        <div class="buddha-statue" onclick="pray(event)">
+            <div style="font-size: 280px; text-align: center; line-height: 1;">🧘</div>
+        </div>
+
+        <div class="candle-container">
+            <div class="candle"><div class="flame"></div></div>
+            <div class="candle"><div class="flame"></div></div>
+        </div>
+
+        <div class="bottom-nav">
+            点击佛像 · 虔诚叩拜
+        </div>
+    </div>
+
+    <!-- 敲击木鱼的声音 -->
+    <audio id="muyu-sound" src="assets.mixkit.co"></audio>
+
+    <script>
+        let count = 0;
+        const scoreEl = document.getElementById('score');
+        const sound = document.getElementById('muyu-sound');
+
+        // 数字转中文大写（增加仪式感）
+        function toChinese(num) {
+            const digits = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+            if (num < 10) return digits[num];
+            return num; // 超过10个简单显示，也可扩展
+        }
+
+        function pray(e) {
+            count++;
+            scoreEl.innerText = count;
+            
+            // 播放声音
+            sound.currentTime = 0;
+            sound.play();
+
+            // 生成飘动文字
+            createFloatingText(e.clientX, e.clientY);
+        }
+
+        function createFloatingText(x, y) {
+            const el = document.createElement('div');
+            el.className = 'floating-merit';
+            el.innerText = '功德 +1';
+            el.style.left = x - 40 + 'px';
+            el.style.top = y - 50 + 'px';
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 1500);
+        }
+
+        // 烟雾粒子效果
+        const canvas = document.getElementById('smoke-canvas');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+
+        function initCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+
+        class SmokeParticle {
+            constructor() {
+                this.x = Math.random() * canvas.width;
+                this.y = canvas.height + Math.random() * 100;
+                this.size = Math.random() * 40 + 20;
+                this.speedY = Math.random() * 0.5 + 0.2;
+                this.opacity = Math.random() * 0.5;
+            }
+            update() {
+                this.y -= this.speedY;
+                if (this.y < -50) {
+                    this.y = canvas.height + 50;
+                    this.x = Math.random() * canvas.width;
+                }
+            }
+            draw() {
+                ctx.fillStyle = `rgba(200, 200, 200, ${this.opacity})`;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        for(let i=0; i<30; i++) particles.push(new SmokeParticle());
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            particles.forEach(p => { p.update(); p.draw(); });
+            requestAnimationFrame(animate);
+        }
+
+        window.addEventListener('resize', initCanvas);
+        initCanvas();
+        animate();
+    </script>
+</body>
+</html>

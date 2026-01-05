@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blade Interface 2026</title>
+    <style>
+        :root {
+            --bg-color: #010101;
+            --blade-blue: #0080ff;
+            --blade-accent: #ff0055;
+            --glass-base: rgba(255, 255, 255, 0.03);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: "JetBrains Mono", "Segoe UI", sans-serif; }
+
+        body {
+            background: var(--bg-color);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            overflow: hidden;
+            color: #fff;
+        }
+
+        /* 3D 扫描背景 */
+        .scan-grid {
+            position: fixed;
+            inset: 0;
+            background: 
+                linear-gradient(rgba(0, 128, 255, 0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 128, 255, 0.05) 1px, transparent 1px);
+            background-size: 100px 100px;
+            transform: perspective(500px) rotateX(60deg) translateY(-100px);
+            z-index: -1;
+            animation: gridMove 20s linear infinite;
+        }
+
+        @keyframes gridMove {
+            from { background-position: 0 0; }
+            to { background-position: 0 1000px; }
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1100px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            padding: 40px;
+        }
+
+        #chatDisplay {
+            flex: 1;
+            overflow-y: auto;
+            scrollbar-width: none;
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+            padding: 50px 0;
+        }
+        #chatDisplay::-webkit-scrollbar { display: none; }
+
+        /* 折叠展开动画核心 */
+        .blade-msg {
+            position: relative;
+            max-width: 80%;
+            background: var(--glass-base);
+            border-left: 3px solid var(--blade-blue);
+            padding: 20px 25px;
+            backdrop-filter: blur(10px);
+            /* 2026 折叠效果 */
+            transform: scaleY(0);
+            transform-origin: top;
+            animation: bladeOpen 0.5s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+        }
+
+        @keyframes bladeOpen {
+            to { transform: scaleY(1); }
+        }
+
+        .user-msg {
+            align-self: flex-end;
+            border-left: none;
+            border-right: 3px solid var(--blade-accent);
+            text-align: right;
+            transform-origin: bottom;
+        }
+
+        /* 虹彩边框 */
+        .blade-msg::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border: 1px solid rgba(255,255,255,0.1);
+            pointer-events: none;
+            transition: 0.3s;
+        }
+
+        .blade-msg:hover::after {
+            box-shadow: 0 0 15px rgba(0, 128, 255, 0.2);
+            border: 1px solid rgba(0, 128, 255, 0.4);
+        }
+
+        .label {
+            font-size: 10px;
+            letter-spacing: 5px;
+            color: var(--blade-blue);
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+
+        .user-msg .label { color: var(--blade-accent); }
+
+        .content {
+            font-size: 16px;
+            line-height: 1.7;
+            font-weight: 300;
+        }
+
+        /* 底部输入模块 */
+        .input-bar {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.08);
+            padding: 10px 30px;
+            display: flex;
+            align-items: center;
+            border-radius: 4px;
+        }
+
+        #bladeInput {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: #fff;
+            padding: 15px 0;
+            font-size: 15px;
+            outline: none;
+            letter-spacing: 1px;
+        }
+
+        .btn-blade {
+            background: transparent;
+            border: 1px solid var(--blade-blue);
+            color: var(--blade-blue);
+            padding: 8px 20px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: 0.3s;
+        }
+
+        .btn-blade:hover {
+            background: var(--blade-blue);
+            color: #000;
+        }
+
+        /* 字符扫描光标 */
+        .typing-cursor {
+            border-right: 2px solid var(--blade-blue);
+            animation: blink 0.8s infinite;
+        }
+
+        @keyframes blink { 50% { opacity: 0; } }
+    </style>
+</head>
+<body>
+
+<div class="scan-grid"></div>
+
+<div class="container">
+    <div id="chatDisplay">
+        <div class="blade-msg">
+            <div class="label">System.Interface</div>
+            <div class="content">2026 光刃折叠协议已就绪。所有传输均已加密。</div>
+        </div>
+    </div>
+
+    <div class="input-bar">
+        <input type="text" id="bladeInput" placeholder="ENTER COMMAND..." autocomplete="off">
+        <button class="btn-blade" onclick="send()">EXECUTE</button>
+    </div>
+</div>
+
+<script>
+    const display = document.getElementById('chatDisplay');
+    const input = document.getElementById('bladeInput');
+
+    input.addEventListener('keypress', (e) => { if(e.key === 'Enter') send(); });
+
+    function send() {
+        const text = input.value.trim();
+        if(!text) return;
+
+        createMsg('USER.ID', text, 'user-msg');
+        input.value = '';
+        
+        setTimeout(() => aiReply(text), 600);
+    }
+
+    function createMsg(label, text, className = '') {
+        const div = document.createElement('div');
+        div.className = `blade-msg ${className}`;
+        div.innerHTML = `<div class="label">${label}</div><div class="content">${text}</div>`;
+        display.appendChild(div);
+        scroll();
+        return div;
+    }
+
+    function aiReply() {
+        const msg = createMsg('AI.CORE', '', '');
+        const content = msg.querySelector('.content');
+        content.classList.add('typing-cursor');
+        
+        const response = "2026 风格的核心在于『结构的展开』。您观察到的 Y 轴缩放动画模拟了高维度折叠空间的物理特性。界面的冷色调配以极简的 Monospace 字体，旨在为您提供最精准、最无干扰的沉浸式 AI 体验。";
+        
+        let i = 0;
+        const timer = setInterval(() => {
+            if(i < response.length) {
+                content.innerText += response[i];
+                i++;
+                if(i % 5 === 0) scroll();
+            } else {
+                clearInterval(timer);
+                content.classList.remove('typing-cursor');
+            }
+        }, 30);
+    }
+
+    function scroll() {
+        display.scrollTo({ top: display.scrollHeight, behavior: 'smooth' });
+    }
+</script>
+
+</body>
+</html>

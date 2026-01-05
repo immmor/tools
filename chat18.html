@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cyberpunk AI 2026</title>
+    <style>
+        :root {
+            --bg-color: #0d0d1a;
+            --neon-pink: #ff00ff;
+            --neon-cyan: #00ffff;
+            --text-glow: rgba(255, 0, 255, 0.7);
+        }
+
+        /* 赛博字体，硬朗机械感 */
+        @import url('fonts.googleapis.com');
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Roboto Mono', monospace; }
+
+        body {
+            background-color: var(--bg-color);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            overflow: hidden;
+            color: var(--neon-cyan);
+        }
+
+        /* 故障风背景与扫描线 */
+        .glitch-bg {
+            position: fixed;
+            inset: 0;
+            background: linear-gradient(rgba(0, 0, 0, 0.8) 0%, rgba(13, 13, 26, 0.9) 100%),
+                        linear-gradient(90deg, rgba(0, 255, 255, 0.05) 1px, transparent 1px),
+                        linear-gradient(rgba(0, 255, 255, 0.05) 1px, transparent 1px);
+            background-size: 40px 40px, 100% 100%;
+            animation: scanline 4s linear infinite;
+            z-index: -1;
+        }
+
+        @keyframes scanline {
+            0% { background-position: 0 0; }
+            100% { background-position: 0 100%; }
+        }
+
+        .container {
+            width: 100%;
+            max-width: 900px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            position: relative;
+        }
+
+        #chatFeed {
+            flex: 1;
+            overflow-y: auto;
+            scrollbar-width: none;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            padding-bottom: 20px;
+        }
+        #chatFeed::-webkit-scrollbar { display: none; }
+
+        /* 消息框：霓虹描边与故障风 */
+        .neon-packet {
+            max-width: 85%;
+            padding: 10px 15px;
+            border: 1px solid rgba(0, 255, 255, 0.5);
+            background: rgba(0, 0, 0, 0.6);
+            box-shadow: 0 0 10px var(--text-glow);
+            animation: neonFade 0.5s ease-out forwards;
+        }
+
+        @keyframes neonFade {
+            from { opacity: 0; transform: skewX(-5deg) scaleX(0.9); }
+            to { opacity: 1; transform: skewX(0deg) scaleX(1); }
+        }
+
+        .user-packet {
+            align-self: flex-end;
+            border-color: rgba(255, 0, 255, 0.5);
+            color: var(--neon-pink);
+            box-shadow: 0 0 10px rgba(255, 0, 255, 0.7);
+        }
+        
+        .content {
+            font-size: 14px;
+            line-height: 1.4;
+            text-shadow: 0 0 5px currentColor; /* 利用描边感 */
+        }
+
+        /* 输入控制台：赛博终端 */
+        .terminal-input {
+            background: #000;
+            border: 2px solid #333;
+            padding: 15px;
+            display: flex;
+            gap: 10px;
+            position: relative;
+            margin-top: 20px;
+        }
+
+        #commandLine {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--neon-cyan);
+            font-size: 16px;
+            padding: 0;
+            outline: none;
+            letter-spacing: 2px;
+        }
+
+        .send-key {
+            background: var(--neon-cyan);
+            color: #000;
+            border: none;
+            padding: 10px 15px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 0 15px var(--neon-cyan);
+            transition: 0.1s;
+        }
+
+        .send-key:active {
+            /* 物理按键反馈 */
+            transform: translateY(2px) scale(0.95); 
+            box-shadow: 0 0 5px var(--neon-cyan);
+        }
+
+        /* 故障光标 */
+        .glitch-cursor::after {
+            content: "█";
+            animation: glitchCursor 0.5s infinite steps(2);
+            margin-left: 5px;
+            display: inline-block;
+            color: var(--neon-pink);
+        }
+
+        @keyframes glitchCursor {
+            0% { transform: translate(1px, 1px) scaleX(1); opacity: 1; }
+            50% { transform: translate(-1px, -1px) scaleX(0.8); opacity: 0.7; }
+            100% { transform: translate(1px, 1px) scaleX(1); opacity: 1; }
+        }
+
+    </style>
+</head>
+<body>
+
+<div class="glitch-bg"></div>
+
+<div class="container">
+    <div id="chatFeed">
+        <div class="neon-packet">
+            <div class="content">[SYS_ONLINE] > 2026 Cyberpunk Matrix Interface active. Neural link stable.</div>
+        </div>
+    </div>
+
+    <div class="terminal-input">
+        <input type="text" id="commandLine" placeholder="ENTER COMMAND..." autocomplete="off">
+        <button class="send-key" onclick="execute()">EXEC</button>
+    </div>
+</div>
+
+<script>
+    const feed = document.getElementById('chatFeed');
+    const lineInput = document.getElementById('commandLine');
+
+    lineInput.addEventListener('keypress', (e) => {
+        if(e.key === 'Enter') execute();
+    });
+
+    function execute() {
+        const command = lineInput.value.trim();
+        if(!command) return;
+
+        addPacket(`[USER_INPUT] > ${command}`, 'user-packet');
+        lineInput.value = '';
+        
+        setTimeout(() => aiResponse(command), 600);
+    }
+
+    function addPacket(text, className = '') {
+        const packet = document.createElement('div');
+        packet.className = `neon-packet ${className}`;
+        packet.innerHTML = `<div class="content">${text}</div>`;
+        feed.appendChild(packet);
+        scroll();
+        return packet;
+    }
+
+    function aiResponse(command) {
+        const packet = addPacket('[PROCESSING]...', 'ai-packet glitch-cursor');
+        const responseText = `[AI_MATRIX_RPLY] > Command "${command}" executed. Cyberpunk aesthetics in 2026 rely heavily on simulated glitches, high-contrast neon colors, and monospaced fonts to evoke a sense of high-tech, low-life futurism.`;
+        
+        let i = 0;
+        const timer = setInterval(() => {
+            if(i < responseText.length) {
+                packet.querySelector('.content').innerText = responseText.substring(0, i + 1);
+                i++;
+                if(i % 5 === 0) scroll();
+            } else {
+                clearInterval(timer);
+                packet.classList.remove('glitch-cursor');
+            }
+        }, 20);
+    }
+
+    function scroll() {
+        feed.scrollTo({ top: feed.scrollHeight, behavior: 'smooth' });
+    }
+</script>
+</body>
+</html>

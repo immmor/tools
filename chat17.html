@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Liquid Horizon 2026</title>
+    <style>
+        :root {
+            --horizon-cyan: #00fff2;
+            --horizon-purple: #7000ff;
+            --text-white: rgba(255, 255, 255, 0.95);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: "Inter", "HarmonyOS Sans", sans-serif; }
+
+        body {
+            background: #000;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            overflow: hidden;
+            perspective: 1500px;
+        }
+
+        /* 动态流动背景 */
+        .liquid-bg {
+            position: fixed;
+            inset: 0;
+            background: radial-gradient(circle at 50% 50%, #080a1a 0%, #000 100%);
+            z-index: -1;
+        }
+
+        .aurora {
+            position: absolute;
+            width: 150%; height: 150%;
+            top: -25%; left: -25%;
+            background: conic-gradient(from 180deg at 50% 50%, transparent, var(--horizon-purple), var(--horizon-cyan), transparent);
+            animation: rotateAurora 30s linear infinite;
+            filter: blur(120px);
+            opacity: 0.15;
+        }
+
+        @keyframes rotateAurora {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .main-view {
+            width: 100%;
+            max-width: 900px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            padding: 80px 40px;
+        }
+
+        #messageFlow {
+            flex: 1;
+            overflow-y: auto;
+            scrollbar-width: none;
+            display: flex;
+            flex-direction: column;
+            gap: 120px; /* 极大的呼吸感 */
+            padding: 100px 0;
+            mask-image: linear-gradient(transparent, black 20%, black 80%, transparent);
+        }
+        #messageFlow::-webkit-scrollbar { display: none; }
+
+        /* 消息单元：无边框有机显影 */
+        .msg-unit {
+            opacity: 0;
+            transform: translateY(40px) skewY(1deg);
+            transition: all 1.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+            position: relative;
+        }
+
+        .msg-unit.active {
+            opacity: 1;
+            transform: translateY(0) skewY(0deg);
+        }
+
+        .role {
+            font-size: 10px;
+            letter-spacing: 6px;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.3);
+            margin-bottom: 25px;
+        }
+
+        .text-content {
+            font-size: 26px;
+            font-weight: 200;
+            line-height: 1.5;
+            letter-spacing: -0.5px;
+            /* 色散文字效果 */
+            text-shadow: 
+                1px 0 rgba(255,0,0,0.2), 
+                -1px 0 rgba(0,255,255,0.2);
+        }
+
+        .user-unit { text-align: right; }
+        .user-unit .text-content { color: var(--horizon-cyan); }
+
+        /* 输入底座：极简发光带 */
+        .bottom-shelf {
+            position: relative;
+            padding: 40px 0;
+        }
+
+        .glow-line {
+            width: 100%;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: 0.8s;
+        }
+
+        #horizonInput {
+            width: 100%;
+            background: transparent;
+            border: none;
+            color: white;
+            padding: 20px 0;
+            font-size: 18px;
+            outline: none;
+            text-align: center;
+            font-weight: 200;
+            letter-spacing: 4px;
+        }
+
+        .bottom-shelf:focus-within .glow-line {
+            background: linear-gradient(90deg, transparent, var(--horizon-cyan), transparent);
+            box-shadow: 0 0 20px var(--horizon-cyan);
+            transform: scaleX(1.1);
+        }
+
+        /* 文字逐个“凝结”效果 */
+        .char-ink {
+            display: inline-block;
+            filter: blur(10px);
+            opacity: 0;
+            animation: inkIn 0.8s forwards;
+        }
+
+        @keyframes inkIn {
+            to { filter: blur(0); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="liquid-bg">
+    <div class="aurora"></div>
+</div>
+
+<div class="main-view">
+    <div id="messageFlow">
+        <div class="msg-unit active">
+            <div class="role">Horizon Intelligence</div>
+            <div class="text-content">视域已展开。数据在 2026 年的流动不再受容器限制。</div>
+        </div>
+    </div>
+
+    <div class="bottom-shelf">
+        <div class="glow-line"></div>
+        <input type="text" id="horizonInput" placeholder="在此键入意识流..." autocomplete="off">
+    </div>
+</div>
+
+<script>
+    const flow = document.getElementById('messageFlow');
+    const input = document.getElementById('horizonInput');
+
+    input.addEventListener('keypress', (e) => {
+        if(e.key === 'Enter' && input.value.trim()) {
+            emit(input.value.trim());
+            input.value = '';
+        }
+    });
+
+    function emit(text) {
+        addMsg('Source', text, 'user-unit');
+        setTimeout(() => aiProcess(), 800);
+    }
+
+    function addMsg(sender, text, className = '') {
+        const div = document.createElement('div');
+        div.className = `msg-unit ${className}`;
+        div.innerHTML = `<div class="role">${sender}</div><div class="text-content">${text}</div>`;
+        flow.appendChild(div);
+        
+        setTimeout(() => div.classList.add('active'), 50);
+        scroll();
+        return div;
+    }
+
+    function aiProcess() {
+        const unit = addMsg('Horizon', '', 'ai-unit');
+        const body = unit.querySelector('.text-content');
+        const response = "2026 年的『流动视域』设计哲学，强调信息应当像光线一样自由。文字通过模糊到清晰的『凝结动画』显现，消除了所有交互的硬度。这一版界面利用色散阴影模拟了现实世界中由于高亮度产生的衍射现象。";
+        
+        let i = 0;
+        const timer = setInterval(() => {
+            if(i < response.length) {
+                const char = document.createElement('span');
+                char.className = 'char-ink';
+                char.innerText = response[i];
+                char.style.animationDelay = (i * 0.03) + 's';
+                body.appendChild(char);
+                i++;
+                if(i % 4 === 0) scroll();
+            } else {
+                clearInterval(timer);
+            }
+        }, 20);
+    }
+
+    function scroll() {
+        flow.scrollTo({ top: flow.scrollHeight, behavior: 'smooth' });
+    }
+</script>
+
+</body>
+</html>

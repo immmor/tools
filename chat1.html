@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Particle Cloud AI 2026</title>
+    <style>
+        :root {
+            --canvas-bg: #000;
+            --particle-color: #fff;
+            --accent-gold: #e2c28d; /* 2026 流行奢华科技色 */
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: "Cinzel", "Noto Serif SC", serif; }
+
+        body {
+            background: var(--canvas-bg);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            color: var(--particle-color);
+        }
+
+        /* 动态粒子背景 */
+        #bgCanvas {
+            position: fixed;
+            inset: 0;
+            z-index: -1;
+            filter: blur(1px);
+        }
+
+        /* 主容器：极简画廊质感 */
+        .main-frame {
+            width: 85vw;
+            max-width: 1200px;
+            height: 80vh;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        /* 消息展示区 */
+        #cloudViewport {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 80px;
+            padding: 100px 0;
+            scrollbar-width: none;
+            mask-image: linear-gradient(transparent, black 20%, black 80%, transparent);
+        }
+        #cloudViewport::-webkit-scrollbar { display: none; }
+
+        .cluster {
+            max-width: 700px;
+            opacity: 0;
+            transform: scale(0.95);
+            transition: 1.5s cubic-bezier(0.19, 1, 0.22, 1);
+        }
+
+        .cluster.active {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .ai-cluster { align-self: flex-start; }
+        .user-cluster { align-self: flex-end; text-align: right; }
+
+        /* 文字效果：尘埃汇聚 */
+        .text-particle {
+            font-size: 24px;
+            font-weight: 200;
+            line-height: 1.5;
+            letter-spacing: 2px;
+            background: linear-gradient(135deg, #fff, #666);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* 输入域：浮现式设计 */
+        .input-zen {
+            position: relative;
+            padding: 40px 0;
+            display: flex;
+            justify-content: center;
+            opacity: 0.3;
+            transition: 0.8s;
+        }
+
+        .input-zen:hover, .input-zen:focus-within {
+            opacity: 1;
+        }
+
+        #zenInput {
+            width: 100%;
+            max-width: 600px;
+            background: transparent;
+            border: none;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            color: #fff;
+            font-size: 18px;
+            padding: 15px;
+            text-align: center;
+            outline: none;
+            letter-spacing: 4px;
+        }
+
+        /* 装饰：光晕节点 */
+        .node-dot {
+            position: absolute;
+            width: 4px; height: 4px;
+            background: var(--accent-gold);
+            border-radius: 50%;
+            box-shadow: 0 0 15px var(--accent-gold);
+            top: -20px;
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="bgCanvas"></canvas>
+
+<div class="main-frame">
+    <div id="cloudViewport">
+        <div class="cluster ai-cluster active">
+            <div class="text-particle">始于尘埃，归于意识。请输入您的思想碎片。</div>
+        </div>
+    </div>
+
+    <div class="input-zen">
+        <div class="node-dot"></div>
+        <input type="text" id="zenInput" placeholder="在此低语..." autocomplete="off">
+    </div>
+</div>
+
+<script>
+    // 粒子背景引擎
+    const canvas = document.getElementById('bgCanvas');
+    const ctx = canvas.getContext('2d');
+    let particles = [];
+
+    function initCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+
+    class Particle {
+        constructor() {
+            this.x = Math.random() * canvas.width;
+            this.y = Math.random() * canvas.height;
+            this.size = Math.random() * 1.5;
+            this.speedX = Math.random() * 0.5 - 0.25;
+            this.speedY = Math.random() * 0.5 - 0.25;
+        }
+        update() {
+            this.x += this.speedX;
+            this.y += this.speedY;
+            if (this.x > canvas.width) this.x = 0;
+            if (this.x < 0) this.x = canvas.width;
+            if (this.y > canvas.height) this.y = 0;
+            if (this.y < 0) this.y = canvas.height;
+        }
+        draw() {
+            ctx.fillStyle = 'rgba(255,255,255,0.2)';
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    function createParticles() {
+        for (let i = 0; i < 150; i++) particles.push(new Particle());
+    }
+
+    function animate() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        particles.forEach(p => { p.update(); p.draw(); });
+        requestAnimationFrame(animate);
+    }
+
+    initCanvas(); createParticles(); animate();
+    window.onresize = initCanvas;
+
+    // 交互逻辑
+    const viewport = document.getElementById('cloudViewport');
+    const zenInput = document.getElementById('zenInput');
+
+    zenInput.addEventListener('keypress', (e) => {
+        if(e.key === 'Enter' && zenInput.value.trim()){
+            send(zenInput.value.trim());
+            zenInput.value = '';
+        }
+    });
+
+    function send(text) {
+        createCluster('user-cluster', text);
+        setTimeout(() => {
+            aiReply();
+        }, 1000);
+    }
+
+    function createCluster(type, text) {
+        const div = document.createElement('div');
+        div.className = `cluster ${type}`;
+        div.innerHTML = `<div class="text-particle">${text}</div>`;
+        viewport.appendChild(div);
+        setTimeout(() => div.classList.add('active'), 50);
+        scroll();
+        return div;
+    }
+
+    function aiReply() {
+        const cluster = createCluster('ai-cluster', '');
+        const target = cluster.querySelector('.text-particle');
+        const response = "2026 年的交互不仅仅是信息的交换，更是光影的重构。正如这些粒子，每一个字符都在寻找它在空间中的位置。你所见的这种『尘埃显影』特效，象征着 AI 生成内容的本质：从庞大的噪声中聚拢出有意义的秩序。";
+        
+        let i = 0;
+        const timer = setInterval(() => {
+            if(i < response.length) {
+                target.innerText += response[i];
+                i++;
+                if(i % 5 === 0) scroll();
+            } else {
+                clearInterval(timer);
+            }
+        }, 40);
+    }
+
+    function scroll() {
+        viewport.scrollTo({ top: viewport.scrollHeight, behavior: 'smooth' });
+    }
+</script>
+
+</body>
+</html>

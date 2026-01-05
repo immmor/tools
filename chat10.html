@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vector Stream AI 2026</title>
+    <style>
+        :root {
+            --stream-bg: #000205;
+            --stream-line: rgba(0, 180, 255, 0.15);
+            --stream-active: #00e1ff;
+            --font-main: "Fira Code", "Source Code Pro", monospace;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: var(--font-main); }
+
+        body {
+            background: var(--stream-bg);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            overflow: hidden;
+            color: #fff;
+        }
+
+        /* 动态矢量网格背景 */
+        .vector-space {
+            position: fixed;
+            inset: 0;
+            background-image: 
+                linear-gradient(var(--stream-line) 1px, transparent 1px),
+                linear-gradient(90deg, var(--stream-line) 1px, transparent 1px);
+            background-size: 50px 50px;
+            perspective: 1000px;
+            z-index: -1;
+            transform: rotateX(45deg) translateY(-20%);
+            animation: gridMove 10s linear infinite;
+        }
+
+        @keyframes gridMove {
+            from { background-position: 0 0; }
+            to { background-position: 0 50px; }
+        }
+
+        /* 核心界面布局 */
+        .interface {
+            width: 100%;
+            max-width: 1000px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            padding: 40px;
+            background: radial-gradient(circle at center, rgba(0, 30, 60, 0.2) 0%, transparent 70%);
+        }
+
+        #dataStream {
+            flex: 1;
+            overflow-y: auto;
+            scrollbar-width: none;
+            display: flex;
+            flex-direction: column;
+            gap: 40px;
+            padding: 60px 0;
+            mask-image: linear-gradient(transparent, black 10%, black 90%, transparent);
+        }
+        #dataStream::-webkit-scrollbar { display: none; }
+
+        /* 消息包：光流路径 */
+        .stream-packet {
+            position: relative;
+            max-width: 80%;
+            padding-left: 20px;
+            border-left: 2px solid var(--stream-active);
+            animation: packetIn 0.5s cubic-bezier(0.075, 0.82, 0.165, 1) forwards;
+        }
+
+        @keyframes packetIn {
+            from { opacity: 0; transform: translateX(-20px); filter: blur(10px); }
+            to { opacity: 1; transform: translateX(0); filter: blur(0); }
+        }
+
+        .user-packet {
+            align-self: flex-end;
+            border-left: none;
+            border-right: 2px solid #fff;
+            padding-left: 0;
+            padding-right: 20px;
+            text-align: right;
+        }
+
+        .label {
+            font-size: 10px;
+            letter-spacing: 3px;
+            color: var(--stream-active);
+            margin-bottom: 10px;
+            opacity: 0.8;
+        }
+
+        .content {
+            font-size: 16px;
+            line-height: 1.6;
+            color: rgba(255, 255, 255, 0.9);
+            word-break: break-all;
+        }
+
+        /* 输入模组：矢量控制台 */
+        .console-hub {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(0, 225, 255, 0.2);
+            border-radius: 4px;
+            padding: 20px 30px;
+            display: flex;
+            align-items: center;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+            position: relative;
+        }
+
+        .console-hub::before {
+            content: '';
+            position: absolute;
+            top: -1px; left: -1px; width: 10px; height: 10px;
+            border-top: 2px solid var(--stream-active);
+            border-left: 2px solid var(--stream-active);
+        }
+
+        #inputBuffer {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--stream-active);
+            font-size: 15px;
+            outline: none;
+            letter-spacing: 1px;
+        }
+
+        .transmit-btn {
+            background: transparent;
+            color: var(--stream-active);
+            border: 1px solid var(--stream-active);
+            padding: 8px 20px;
+            font-size: 12px;
+            cursor: pointer;
+            text-transform: uppercase;
+            transition: 0.3s;
+        }
+
+        .transmit-btn:hover {
+            background: var(--stream-active);
+            color: #000;
+            box-shadow: 0 0 15px var(--stream-active);
+        }
+
+        /* 能量线动画 */
+        .trace-line {
+            height: 1px;
+            background: var(--stream-active);
+            width: 0;
+            margin-bottom: 10px;
+            box-shadow: 0 0 10px var(--stream-active);
+        }
+    </style>
+</head>
+<body>
+
+<div class="vector-space"></div>
+
+<div class="interface">
+    <div id="dataStream">
+        <div class="stream-packet">
+            <div class="label">ENTRY_POINT_01</div>
+            <div class="content">矢量网格协议已就绪。正在监听 2026 频段数据流。</div>
+        </div>
+    </div>
+
+    <div class="console-hub">
+        <input type="text" id="inputBuffer" placeholder="TYPE_YOUR_COMMAND_HERE..." autocomplete="off">
+        <button class="transmit-btn" onclick="transmit()">Execute</button>
+    </div>
+</div>
+
+<script>
+    const stream = document.getElementById('dataStream');
+    const buffer = document.getElementById('inputBuffer');
+
+    buffer.addEventListener('keypress', (e) => { if(e.key === 'Enter') transmit(); });
+
+    function transmit() {
+        const val = buffer.value.trim();
+        if(!val) return;
+
+        addPacket('CLIENT_SRC', val, 'user-packet');
+        buffer.value = '';
+        scroll();
+
+        setTimeout(() => aiStream(val), 600);
+    }
+
+    function addPacket(label, text, className = '') {
+        const packet = document.createElement('div');
+        packet.className = `stream-packet ${className}`;
+        packet.innerHTML = `<div class="label">${label}</div><div class="content">${text}</div>`;
+        stream.appendChild(packet);
+        scroll();
+        return packet;
+    }
+
+    function aiStream(query) {
+        const packet = addPacket('SYSTEM_REPLY', '', '');
+        const content = packet.querySelector('.content');
+        
+        // 插入能量追踪线
+        const trace = document.createElement('div');
+        trace.className = 'trace-line';
+        packet.insertBefore(trace, content);
+        
+        const rawText = "数据流同步成功。本界面采用矢量网格与 45 度投影结合的设计语言，旨在模拟 2026 年高并发 AI 逻辑的实时处理感。能量追踪线（Trace Line）代表了数据链路的预热，随后的文字流通过逻辑缓冲区逐帧渲染。";
+        
+        let i = 0;
+        let traceWidth = 0;
+        
+        // 先跑能量线，再跑文字
+        const traceInterval = setInterval(() => {
+            traceWidth += 5;
+            trace.style.width = traceWidth + '%';
+            if(traceWidth >= 100) {
+                clearInterval(traceInterval);
+                startTyping();
+            }
+        }, 10);
+
+        function startTyping() {
+            const typing = setInterval(() => {
+                if(i < rawText.length) {
+                    content.innerText += rawText[i];
+                    i++;
+                    if(i % 4 === 0) scroll();
+                } else {
+                    clearInterval(typing);
+                }
+            }, 25);
+        }
+    }
+
+    function scroll() {
+        stream.scrollTo({ top: stream.scrollHeight, behavior: 'smooth' });
+    }
+</script>
+
+</body>
+</html>

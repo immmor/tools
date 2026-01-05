@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>大雄宝殿 · 虔诚供奉</title>
+    <style>
+        :root {
+            --temple-red: #5c1610;
+            --gold: #d4af37;
+            --smoke: rgba(220, 220, 220, 0.4);
+        }
+
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            background: #0a0503;
+            color: var(--gold);
+            font-family: "STKaiti", "楷体", serif;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* 殿堂深处光影 */
+        .shrine-hall {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 50% 35%, #4e3524 0%, #0a0503 75%),
+                url('www.transparenttextures.com');
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* 菩提叶飘落 Canvas */
+        #leaf-canvas {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        /* 功德榜卷轴 */
+        .merit-scroll {
+            position: absolute;
+            top: 40px;
+            right: 40px;
+            background: #f4e8c1;
+            color: #331100;
+            padding: 30px 15px;
+            writing-mode: vertical-rl;
+            border: 4px solid var(--temple-red);
+            box-shadow: 5px 5px 15px rgba(0,0,0,0.5);
+            font-size: 22px;
+            font-weight: bold;
+            z-index: 10;
+            border-radius: 2px;
+        }
+
+        /* 佛像主体 - 模拟呼吸感 */
+        .buddha-frame {
+            position: relative;
+            z-index: 2;
+            margin-top: -50px;
+            animation: buddha-glow 5s ease-in-out infinite;
+        }
+        .buddha-statue {
+            font-size: 200px;
+            filter: drop-shadow(0 0 30px rgba(212, 175, 55, 0.2));
+            user-select: none;
+        }
+
+        @keyframes buddha-glow {
+            0%, 100% { transform: scale(1); filter: brightness(1); }
+            50% { transform: scale(1.02); filter: brightness(1.2) drop-shadow(0 0 50px var(--gold)); }
+        }
+
+        /* 香案与香炉 */
+        .altar {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 220px;
+            background: linear-gradient(to top, #1a0a05, #3d1a10);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            z-index: 5;
+            border-top: 3px solid var(--gold);
+        }
+
+        .censer {
+            position: relative;
+            width: 180px;
+            height: 100px;
+            background: #222;
+            border: 5px solid #444;
+            border-radius: 0 0 60px 60px;
+            margin-top: -50px;
+            box-shadow: inset 0 -10px 30px #000, 0 10px 20px rgba(0,0,0,0.8);
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            padding-bottom: 20px;
+        }
+
+        /* 燃烧中的香 */
+        .burning-incense {
+            width: 4px;
+            height: 0;
+            background: linear-gradient(to top, #800000, #ff4500);
+            margin: 0 10px;
+            position: relative;
+            transition: height 0.5s;
+        }
+        .burning-incense.active {
+            height: 120px;
+            animation: incense-burn 60s linear forwards; /* 60秒烧完 */
+        }
+        @keyframes incense-burn {
+            to { height: 10px; opacity: 0.8; }
+        }
+
+        /* 烟雾 Canvas */
+        #smoke-canvas {
+            position: absolute;
+            bottom: 100px;
+            pointer-events: none;
+        }
+
+        /* 底部香架 */
+        .incense-tray {
+            margin-top: 60px;
+            display: flex;
+            gap: 30px;
+            padding: 20px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+        }
+        .unlit-stick {
+            width: 6px;
+            height: 100px;
+            background: #7e2217;
+            cursor: grab;
+            border-radius: 3px;
+            box-shadow: 0 0 5px #000;
+        }
+        .unlit-stick:hover { transform: translateY(-10px); background: #a52a2a; }
+
+        /* 提示 */
+        .instruction {
+            margin-top: 15px;
+            font-size: 18px;
+            letter-spacing: 3px;
+            color: #8b7355;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="leaf-canvas"></canvas>
+
+    <div class="shrine-hall">
+        <div class="merit-scroll">
+            万 德 庄 严 · 功 德 簿 <br>
+            <span style="font-size: 30px; color: #800000;" id="score">零</span>
+        </div>
+
+        <div class="buddha-frame">
+            <div class="buddha-statue">🧘</div>
+        </div>
+
+        <div class="altar">
+            <div class="censer" id="censer">
+                <canvas id="smoke-canvas" width="400" height="400"></canvas>
+                <div class="burning-incense" id="slot1"></div>
+                <div class="burning-incense" id="slot2"></div>
+                <div class="burning-incense" id="slot3"></div>
+            </div>
+
+            <div class="incense-tray">
+                <div class="unlit-stick" draggable="true" id="inc1"></div>
+                <div class="unlit-stick" draggable="true" id="inc2"></div>
+                <div class="unlit-stick" draggable="true" id="inc3"></div>
+            </div>
+            <div class="instruction">持至诚心 · 移香入炉</div>
+        </div>
+    </div>
+
+    <audio id="bell" src="assets.mixkit.co"></audio>
+
+    <script>
+        let count = 0;
+        let activeSticks = 0;
+        const scoreDisplay = document.getElementById('score');
+        const bell = document.getElementById('bell');
+        
+        // 1. 拖拽逻辑
+        document.querySelectorAll('.unlit-stick').forEach(s => {
+            s.addEventListener('dragstart', (e) => e.dataTransfer.setData('text', e.target.id));
+        });
+
+        const censer = document.getElementById('censer');
+        censer.addEventListener('dragover', (e) => e.preventDefault());
+        censer.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const id = e.dataTransfer.getData('text');
+            const stick = document.getElementById(id);
+            if(stick && activeSticks < 3) {
+                stick.style.visibility = 'hidden';
+                activeSticks++;
+                document.getElementById(`slot${activeSticks}`).classList.add('active');
+                
+                if(activeSticks === 3) {
+                    setTimeout(completeRite, 1000);
+                }
+            }
+        });
+
+        function completeRite() {
+            count++;
+            scoreDisplay.innerText = count;
+            bell.currentTime = 0;
+            bell.play();
+            
+            // 洒下金光粒子效果（此处逻辑可扩展）
+            
+            setTimeout(() => {
+                activeSticks = 0;
+                document.querySelectorAll('.burning-incense').forEach(s => s.classList.remove('active'));
+                document.querySelectorAll('.unlit-stick').forEach(s => s.style.visibility = 'visible');
+            }, 5000); // 5秒后可重新上香
+        }
+
+        // 2. 烟雾粒子系统 (Canvas)
+        const smokeCanvas = document.getElementById('smoke-canvas');
+        const sctx = smokeCanvas.getContext('2d');
+        let smokeParticles = [];
+
+        class Smoke {
+            constructor() {
+                this.x = 200 + (Math.random() - 0.5) * 40;
+                this.y = 380;
+                this.vx = (Math.random() - 0.5) * 0.8;
+                this.vy = -(Math.random() * 1 + 1);
+                this.radius = Math.random() * 5 + 2;
+                this.alpha = 0.5;
+            }
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.alpha -= 0.003;
+                this.radius += 0.1;
+            }
+            draw() {
+                sctx.beginPath();
+                sctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                sctx.fillStyle = `rgba(200, 200, 200, ${this.alpha})`;
+                sctx.fill();
+            }
+        }
+
+        // 3. 菩提叶飘落系统
+        const leafCanvas = document.getElementById('leaf-canvas');
+        const lctx = leafCanvas.getContext('2d');
+        let leaves = [];
+        function resize() { 
+            leafCanvas.width = window.innerWidth; 
+            leafCanvas.height = window.innerHeight; 
+        }
+        window.onresize = resize;
+        resize();
+
+        class Leaf {
+            constructor() {
+                this.x = Math.random() * leafCanvas.width;
+                this.y = -20;
+                this.r = Math.random() * 5 + 2;
+                this.v = Math.random() * 1 + 0.5;
+                this.swing = Math.random() * 2;
+            }
+            update() {
+                this.y += this.v;
+                this.x += Math.sin(this.y / 30) * this.swing;
+                if(this.y > leafCanvas.height) this.y = -20;
+            }
+            draw() {
+                lctx.fillStyle = "rgba(212, 175, 55, 0.3)";
+                lctx.beginPath();
+                lctx.ellipse(this.x, this.y, this.r, this.r*1.5, Math.PI/4, 0, Math.PI*2);
+                lctx.fill();
+            }
+        }
+        for(let i=0; i<20; i++) leaves.push(new Leaf());
+
+        function animate() {
+            // 清理烟雾
+            sctx.clearRect(0, 0, 400, 400);
+            if(activeSticks > 0) {
+                for(let i=0; i<activeSticks; i++) smokeParticles.push(new Smoke());
+            }
+            smokeParticles.forEach((p, i) => {
+                p.update();
+                p.draw();
+                if(p.alpha <= 0) smokeParticles.splice(i, 1);
+            });
+
+            // 清理叶子
+            lctx.clearRect(0, 0, leafCanvas.width, leafCanvas.height);
+            leaves.forEach(l => { l.update(); l.draw(); });
+
+            requestAnimationFrame(animate);
+        }
+        animate();
+    </script>
+</body>
+</html>

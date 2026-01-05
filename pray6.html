@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>古刹禅深 · 沉浸式供奉</title>
+    <style>
+        :root {
+            --gold: #d4af37;
+            --fire: #ff6a00;
+            --temple-dark: #120c0a;
+        }
+
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            background: var(--temple-dark);
+            color: var(--gold);
+            font-family: "STKaiti", "楷体", serif;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* 殿堂环境：增加暗角和景深 */
+        .temple-env {
+            position: relative;
+            width: 100%; height: 100%;
+            background: radial-gradient(circle at 50% 40%, #3a2a1d 0%, #050302 85%);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
+
+        /* 佛像光影追踪动画 */
+        .buddha-container {
+            position: relative;
+            z-index: 2;
+            animation: light-flicker 4s infinite alternate;
+        }
+        .buddha-statue {
+            font-size: 240px;
+            filter: drop-shadow(0 0 40px rgba(212, 175, 55, 0.15));
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        @keyframes light-flicker {
+            0% { filter: brightness(1) drop-shadow(-10px 0 30px rgba(255,165,0,0.2)); }
+            100% { filter: brightness(1.1) drop-shadow(10px 0 50px rgba(255,200,0,0.4)); }
+        }
+
+        /* 功德榜卷轴优化 */
+        .scroll-container {
+            position: absolute; top: 40px; right: 60px;
+            padding: 40px 15px;
+            background: #e6d5b8;
+            border-left: 2px solid #b3a284;
+            border-right: 2px solid #b3a284;
+            color: #4a2e23;
+            writing-mode: vertical-rl;
+            box-shadow: 10px 10px 30px rgba(0,0,0,0.5);
+        }
+        .scroll-container::before, .scroll-container::after {
+            content: ''; position: absolute; left: -5px; width: calc(100% + 10px); height: 10px; background: #8b4513; border-radius: 5px;
+        }
+        .scroll-container::before { top: -5px; } .scroll-container::after { bottom: -5px; }
+
+        /* 香案系统 */
+        .altar-table {
+            position: absolute; bottom: 0; width: 100%; height: 300px;
+            background: linear-gradient(to top, #0f0805, #2a1b15);
+            border-top: 2px solid #4a342a;
+            display: flex; flex-direction: column; align-items: center; z-index: 10;
+        }
+
+        /* 真实物理香炉 */
+        .censer-pro {
+            position: relative; width: 220px; height: 110px;
+            background: #1a1a1a; border: 6px solid #333;
+            border-radius: 0 0 100px 100px;
+            margin-top: -55px;
+            box-shadow: inset 0 -20px 40px #000, 0 15px 30px rgba(0,0,0,0.7);
+            display: flex; justify-content: center; align-items: flex-end; padding-bottom: 25px;
+        }
+
+        /* 蜡烛点火处 */
+        .candle-light {
+            position: absolute; top: 20px; width: 30px; height: 80px;
+            background: #800000; border-radius: 2px;
+        }
+        .candle-left { left: 15%; }
+        .candle-right { right: 15%; }
+        .flame {
+            position: absolute; top: -18px; left: 50%; transform: translateX(-50%);
+            width: 12px; height: 20px; background: var(--fire);
+            border-radius: 50% 50% 20% 20%;
+            box-shadow: 0 0 20px var(--fire);
+            animation: flame-wag 0.2s infinite alternate;
+        }
+
+        @keyframes flame-wag {
+            0% { transform: translateX(-50%) scale(1); opacity: 0.9; }
+            100% { transform: translateX(-48%) scale(1.1) skewX(2deg); opacity: 1; }
+        }
+
+        /* 供奉香 */
+        .incense-stick {
+            width: 5px; height: 120px; background: #5c1610;
+            cursor: grab; border-radius: 2px;
+            transition: transform 0.3s;
+        }
+        .incense-stick.lit::before {
+            content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+            width: 6px; height: 6px; background: #ff4500; border-radius: 50%;
+            box-shadow: 0 0 10px #ff4500;
+        }
+
+        /* 震动波纹（钟声可视化） */
+        .bell-ripple {
+            position: absolute; top: 40%; left: 50%;
+            width: 10px; height: 10px;
+            border: 2px solid var(--gold); border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none; opacity: 0;
+        }
+        .ripple-animate { animation: ripple-out 3s ease-out; }
+
+        @keyframes ripple-out {
+            0% { width: 0; height: 0; opacity: 0.8; }
+            100% { width: 800px; height: 800px; opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="temple-env">
+    <div id="ripple" class="bell-ripple"></div>
+
+    <div class="scroll-container">
+        诚 心 所 向 · 功 德 圆 满 <br>
+        <span style="font-size: 32px; font-family: 'Georgia';">累积次数：</span>
+        <span id="counter" style="font-size: 40px; color: #800000;">0</span>
+    </div>
+
+    <!-- 蜡烛（点火点） -->
+    <div class="candle-light candle-left"><div class="flame"></div></div>
+    <div class="candle-light candle-right"><div class="flame"></div></div>
+
+    <div class="buddha-container">
+        <div class="buddha-statue">🧘</div>
+    </div>
+
+    <div class="altar-table">
+        <div class="censer-pro" id="drop-zone">
+            <canvas id="smoke-layer" width="300" height="300" style="position:absolute; bottom:60px;"></canvas>
+            <div id="incense-box" style="display: flex; align-items: flex-end;"></div>
+        </div>
+
+        <div style="margin-top: 40px; display: flex; gap: 40px;">
+            <div class="incense-stick" draggable="true" id="stick1"></div>
+            <div class="incense-stick" draggable="true" id="stick2"></div>
+            <div class="incense-stick" draggable="true" id="stick3"></div>
+        </div>
+        
+        <p style="color: #664a3a; font-size: 14px; margin-top: 20px;">
+            提示：将香移至【烛火】点燃，再插入【香炉】
+        </p>
+    </div>
+</div>
+
+<audio id="bell-sfx" src="assets.mixkit.co"></audio>
+
+<script>
+    let merits = 0;
+    let litCount = 0;
+    const counterEl = document.getElementById('counter');
+    const bellSfx = document.getElementById('bell-sfx');
+
+    // 拖拽逻辑增强
+    document.querySelectorAll('.incense-stick').forEach(stick => {
+        stick.addEventListener('dragstart', (e) => {
+            e.dataTransfer.setData('id', e.target.id);
+        });
+    });
+
+    const dropZone = document.getElementById('drop-zone');
+    dropZone.addEventListener('dragover', e => e.preventDefault());
+    dropZone.addEventListener('drop', e => {
+        e.preventDefault();
+        const id = e.dataTransfer.getData('id');
+        const el = document.getElementById(id);
+        
+        // 逻辑：必须先靠近过火源（这里简化为拖拽即上香，可扩展点火逻辑）
+        if(el) {
+            el.style.display = 'none';
+            addIncenseToCenser();
+        }
+    });
+
+    function addIncenseToCenser() {
+        litCount++;
+        const s = document.createElement('div');
+        s.className = 'incense-stick lit';
+        s.style.height = '100px';
+        s.style.margin = '0 5px';
+        s.style.transition = 'height 30s linear';
+        document.getElementById('incense-box').appendChild(s);
+        
+        // 开始阴燃
+        setTimeout(() => s.style.height = '20px', 100);
+
+        if(litCount % 3 === 0) {
+            triggerSuccess();
+        }
+    }
+
+    function triggerSuccess() {
+        merits++;
+        counterEl.innerText = merits;
+        
+        // 播放钟声
+        bellSfx.currentTime = 0;
+        bellSfx.play();
+
+        // 视觉波纹
+        const rip = document.getElementById('ripple');
+        rip.classList.remove('ripple-animate');
+        void rip.offsetWidth; // trigger reflow
+        rip.classList.add('ripple-animate');
+
+        // 5秒后清理现场
+        setTimeout(() => {
+            document.getElementById('incense-box').innerHTML = '';
+            document.querySelectorAll('.incense-stick').forEach(i => i.style.display = 'block');
+        }, 5000);
+    }
+
+    // 粒子烟雾系统优化
+    const canvas = document.getElementById('smoke-layer');
+    const ctx = canvas.getContext('2d');
+    let particles = [];
+
+    class SmokeParticle {
+        constructor() {
+            this.x = canvas.width/2 + (Math.random()-0.5)*30;
+            this.y = canvas.height - 20;
+            this.vx = (Math.random()-0.5)*0.5;
+            this.vy = -Math.random()*0.8 - 0.5;
+            this.life = 1.0;
+            this.size = Math.random()*3 + 1;
+        }
+        draw() {
+            ctx.fillStyle = `rgba(200, 200, 200, ${this.life * 0.4})`;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size, 0, Math.PI*2);
+            ctx.fill();
+        }
+        update() {
+            this.x += this.vx + Math.sin(this.y/20)*0.2;
+            this.y += this.vy;
+            this.life -= 0.003;
+            this.size += 0.05;
+        }
+    }
+
+    function animate() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if(litCount % 3 !== 0 || litCount === 0) { // 有香在烧时产生烟
+            if(document.querySelectorAll('.lit').length > 0) {
+                for(let i=0; i<2; i++) particles.push(new SmokeParticle());
+            }
+        }
+        particles.forEach((p, i) => {
+            p.update(); p.draw();
+            if(p.life <= 0) particles.splice(i, 1);
+        });
+        requestAnimationFrame(animate);
+    }
+    animate();
+</script>
+
+</body>
+</html>
