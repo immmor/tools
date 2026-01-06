@@ -420,28 +420,54 @@
     }
 
     function initResizer(bar, target, isH, isRight = false) {
-        let dragging = false;
-        const start = () => { dragging = true; bar.classList.add('active'); };
-        const stop = () => { dragging = false; bar.classList.remove('active'); };
-        const move = (e) => {
-            if (!dragging) return;
-            const x = e.touches ? e.touches[0].clientX : e.clientX;
-            const y = e.touches ? e.touches[0].clientY : e.clientY;
-            if (isH) {
-                let p = isRight ? 100 - (x / window.innerWidth) * 100 : (x / window.innerWidth) * 100;
-                target.style.width = Math.min(Math.max(p, 0), 100) + '%';
-            } else {
-                let rect = document.getElementById('main-stack').getBoundingClientRect();
-                let p = 100 - ((y - rect.top) / rect.height * 100);
-                target.style.height = Math.min(Math.max(p, 0), 100) + '%';
-            }
-        };
-        bar.addEventListener('mousedown', start);
-        bar.addEventListener('touchstart', start);
-        document.addEventListener('mousemove', move);
-        document.addEventListener('mouseup', stop);
-    }
+    let dragging = false;
+    bar.style.touchAction = 'none'; // 核心：彻底禁用移动端默认手势冲突
 
+    const start = (e) => { 
+        dragging = true; 
+        bar.classList.add('active'); 
+        if (e.cancelable) e.preventDefault(); 
+    };
+
+    const stop = () => { 
+        dragging = false; 
+        bar.classList.remove('active'); 
+    };
+
+    const move = (e) => {
+        if (!dragging) return;
+
+        let clientX, clientY;
+        if (e.touches && e.touches.length > 0) {
+            clientX = e.touches[0].clientX;
+            clientY = e.touches[0].clientY;
+        } else {
+            clientX = e.clientX;
+            clientY = e.clientY;
+        }
+
+        if (isH) {
+            // 移除 Math.min/max 的限制，允许 0% 到 100%
+            let p = (clientX / window.innerWidth) * 100;
+            if (isRight) p = 100 - p;
+            target.style.width = p.toFixed(2) + '%'; 
+        } else {
+            let rect = document.getElementById('main-stack').getBoundingClientRect();
+            let p = 100 - ((clientY - rect.top) / rect.height * 100);
+            target.style.height = p.toFixed(2) + '%';
+        }
+    };
+
+    // 绑定鼠标事件
+    bar.addEventListener('mousedown', start);
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', stop);
+
+    // 绑定触摸事件（确保 passive 为 false）
+    bar.addEventListener('touchstart', start, { passive: false });
+    document.addEventListener('touchmove', move, { passive: false });
+    document.addEventListener('touchend', stop);
+}
     function toggleMax(id) { document.getElementById(id).classList.toggle('maximized'); }
 
     function renderFiles() {
@@ -470,7 +496,7 @@
             div.className = `file-item ${k === activeFile ? 'active' : ''} ${isFolder ? 'folder' : ''}`;
             div.style.paddingLeft = (15 + depth * 15) + 'px';
             
-            let iconStr = isFolder ? `<span class="file-icon ${expandedDirs.includes(k) ? 'open' : ''}">▶</span>` : '';
+            let iconStr = isFolder ? `<span class="file-icon ${expandedDirs.includes(k) ? 'open' : ''}">></span>` : '';
             const nameSpan = document.createElement('span');
             nameSpan.innerText = isFolder ? pathParts[pathParts.length-1] + '/' : pathParts[pathParts.length-1];
             
