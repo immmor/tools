@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>immmor code</title>
+    <link rel="icon" type="image/png" href="iwe.png">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
     <style>
@@ -72,14 +73,12 @@
             padding: 8px 15px; font-size: 13px; cursor: pointer !important; 
             border-bottom: 1px solid rgba(113, 78, 0, 0.05); 
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-            display: flex; align-items: center; gap: 8px;
+            display: flex; align-items: center; 
             color: var(--amber); opacity: 0.7;
         }
         .file-item:hover, .plugin-item:hover { background: rgba(255, 176, 0, 0.05); opacity: 0.9; }
-        .file-item.active { background: var(--amber); color: var(--bg); font-weight: bold; opacity: 1; }
-        .file-item.folder { color: #fff; font-weight: bold; opacity: 1; border-left: 2px solid var(--amber-dim); }
-        .file-icon { font-size: 12px; width: 14px; text-align: center; display: inline-block; transition: transform 0.2s; }
-        .file-icon.open { transform: rotate(90deg); }
+        .file-item.active { background: var(--amber); color: var(--bg) !important; font-weight: bold; opacity: 1; }
+        .file-item.folder { color: var(--amber); font-weight: bold; opacity: 1; border-left: 2px solid var(--amber-dim); }
 
         .plugin-item { justify-content: space-between; font-size: 11px; }
         .plugin-status { width: 8px; height: 8px; border-radius: 50%; background: var(--amber-dim); }
@@ -98,9 +97,16 @@
         }
 
         #terminal { height: 220px; border-top: var(--border-w) solid var(--amber); }
-        .term-tabs { display: flex; background: #000; border-bottom: 1px solid var(--amber-dim); }
-        .term-tab { padding: 5px 12px; font-size: 10px; border-right: 1px solid var(--amber-dim); cursor: pointer !important; opacity: 0.6; }
+        .term-tabs { display: flex; background: #000; border-bottom: 1px solid var(--amber-dim); overflow-x: auto; scrollbar-width: none; }
+        .term-tabs::-webkit-scrollbar { display: none; }
+        .term-tab { 
+            padding: 5px 12px; font-size: 10px; border-right: 1px solid var(--amber-dim); 
+            cursor: pointer !important; opacity: 0.6; display: flex; align-items: center; gap: 8px; 
+            white-space: nowrap;
+        }
         .term-tab.active { background: var(--amber-dim); color: #fff; opacity: 1; }
+        .term-close { font-size: 12px; font-weight: bold; cursor: pointer !important; color: var(--term-red); }
+        .term-close:hover { color: #fff; }
         
         .term-body { flex: 1; display: none; flex-direction: column; overflow: hidden; }
         .term-body.active { display: flex; }
@@ -234,7 +240,7 @@
             </div>
         </div>
         <div id="ai-chat">
-            <div class="msg ai">SYSTEM: Neural connection established. Select context and query.</div>
+            <div class="msg ai">SYSTEM: Connection established. Select context and query.</div>
         </div>
         <div class="ai-tools">
             <label style="display:block; margin-bottom:5px">CONTEXT_NODE:</label>
@@ -254,6 +260,7 @@
 <div id="ctx">
     <div class="opt" id="ctx-new-node" onclick="openModal()">[+] NEW_DATA_NODE</div>
     <div class="opt" id="ctx-rename" onclick="startRenameFromCtx()">[R] RENAME_NODE</div>
+    <div class="opt" id="ctx-delete" onclick="deleteNodeFromCtx()" style="color:var(--term-red)">[X] DELETE_NODE</div>
     <div class="opt" id="ctx-copy-path" onclick="copyPathFromCtx()">[C] COPY_PATH</div>
     <div style="border-top:1px solid var(--amber-dim); margin:4px 0;"></div>
     <div class="opt" onclick="saveActive()">DOWNLOAD_ACTIVE_NODE</div>
@@ -297,7 +304,7 @@
     let selectedAiCtx = 'none';
     let pyodideInstance = null;
     let ctxTarget = null;
-    let pluginCtxTarget = null; // 记录当前右键点击的插件索引
+    let pluginCtxTarget = null;
 
     // --- Plugins Logic ---
     function renderPlugins() {
@@ -413,61 +420,72 @@
     }
 
     function autoSave() {
-        if (!activeFile.endsWith('/')) storage[activeFile] = document.getElementById('editor').value;
+        if (storage[activeFile] !== undefined && !activeFile.endsWith('/')) {
+            storage[activeFile] = document.getElementById('editor').value;
+        }
         localStorage.setItem('ind_console_storage', JSON.stringify(storage));
         localStorage.setItem('ind_console_active', activeFile);
         localStorage.setItem('ind_console_expanded', JSON.stringify(expandedDirs));
     }
 
+    function addLog(txt, color = 'var(--amber)') {
+        if (activeTermId) {
+            const output = document.getElementById(activeTermId).querySelector('.term-out');
+            const d = document.createElement('div'); 
+            d.style.color = color; 
+            d.innerText = txt;
+            output.appendChild(d); 
+            output.scrollTop = output.scrollHeight;
+        } else {
+            console.log(txt);
+        }
+    }
+
     function initResizer(bar, target, isH, isRight = false) {
-    let dragging = false;
-    bar.style.touchAction = 'none'; // 核心：彻底禁用移动端默认手势冲突
+        let dragging = false;
+        bar.style.touchAction = 'none';
 
-    const start = (e) => { 
-        dragging = true; 
-        bar.classList.add('active'); 
-        if (e.cancelable) e.preventDefault(); 
-    };
+        const start = (e) => { 
+            dragging = true; 
+            bar.classList.add('active'); 
+            if (e.cancelable) e.preventDefault(); 
+        };
 
-    const stop = () => { 
-        dragging = false; 
-        bar.classList.remove('active'); 
-    };
+        const stop = () => { 
+            dragging = false; 
+            bar.classList.remove('active'); 
+        };
 
-    const move = (e) => {
-        if (!dragging) return;
+        const move = (e) => {
+            if (!dragging) return;
+            let clientX, clientY;
+            if (e.touches && e.touches.length > 0) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
 
-        let clientX, clientY;
-        if (e.touches && e.touches.length > 0) {
-            clientX = e.touches[0].clientX;
-            clientY = e.touches[0].clientY;
-        } else {
-            clientX = e.clientX;
-            clientY = e.clientY;
-        }
+            if (isH) {
+                let p = (clientX / window.innerWidth) * 100;
+                if (isRight) p = 100 - p;
+                target.style.width = p.toFixed(2) + '%'; 
+            } else {
+                let rect = document.getElementById('main-stack').getBoundingClientRect();
+                let p = 100 - ((clientY - rect.top) / rect.height * 100);
+                target.style.height = p.toFixed(2) + '%';
+            }
+        };
 
-        if (isH) {
-            // 移除 Math.min/max 的限制，允许 0% 到 100%
-            let p = (clientX / window.innerWidth) * 100;
-            if (isRight) p = 100 - p;
-            target.style.width = p.toFixed(2) + '%'; 
-        } else {
-            let rect = document.getElementById('main-stack').getBoundingClientRect();
-            let p = 100 - ((clientY - rect.top) / rect.height * 100);
-            target.style.height = p.toFixed(2) + '%';
-        }
-    };
+        bar.addEventListener('mousedown', start);
+        document.addEventListener('mousemove', move);
+        document.addEventListener('mouseup', stop);
+        bar.addEventListener('touchstart', start, { passive: false });
+        document.addEventListener('touchmove', move, { passive: false });
+        document.addEventListener('touchend', stop);
+    }
 
-    // 绑定鼠标事件
-    bar.addEventListener('mousedown', start);
-    document.addEventListener('mousemove', move);
-    document.addEventListener('mouseup', stop);
-
-    // 绑定触摸事件（确保 passive 为 false）
-    bar.addEventListener('touchstart', start, { passive: false });
-    document.addEventListener('touchmove', move, { passive: false });
-    document.addEventListener('touchend', stop);
-}
     function toggleMax(id) { document.getElementById(id).classList.toggle('maximized'); }
 
     function renderFiles() {
@@ -496,17 +514,13 @@
             div.className = `file-item ${k === activeFile ? 'active' : ''} ${isFolder ? 'folder' : ''}`;
             div.style.paddingLeft = (15 + depth * 15) + 'px';
             
-            let iconStr = isFolder ? `<span class="file-icon ${expandedDirs.includes(k) ? 'open' : ''}">></span>` : '';
             const nameSpan = document.createElement('span');
-            nameSpan.innerText = isFolder ? pathParts[pathParts.length-1] + '/' : pathParts[pathParts.length-1];
-            
-            div.innerHTML = iconStr;
+            nameSpan.innerText = pathParts[pathParts.length-1] + (isFolder ? '/' : '');
             div.appendChild(nameSpan);
             
             div.onclick = () => {
                 autoSave();
-                activeFile = k; // 更新当前激活节点（以便新建操作定位）
-                
+                activeFile = k;
                 if (isFolder) {
                     if (expandedDirs.includes(k)) {
                         expandedDirs = expandedDirs.filter(d => d !== k);
@@ -517,7 +531,7 @@
                     document.getElementById('editor').value = storage[k];
                     document.getElementById('cur-filename').innerText = k;
                 }
-                renderFiles(); // 重新渲染以应用 active 样式
+                renderFiles();
             };
             
             div.oncontextmenu = (e) => {
@@ -569,6 +583,27 @@
         autoSave(); renderFiles();
     }
 
+    function deleteNodeFromCtx() {
+        if (!ctxTarget) return;
+        const { path, isFolder } = ctxTarget;
+        if (confirm(`PURGE NODE: ${path}?`)) {
+            if (isFolder) {
+                Object.keys(storage).forEach(k => {
+                    if (k.startsWith(path)) delete storage[k];
+                });
+            } else {
+                delete storage[path];
+            }
+            if (activeFile.startsWith(path)) {
+                activeFile = Object.keys(storage).find(k => !k.endsWith('/')) || '';
+                document.getElementById('editor').value = storage[activeFile] || "";
+                document.getElementById('cur-filename').innerText = activeFile || "NO_NODE";
+            }
+            autoSave(); renderFiles();
+        }
+        document.getElementById('ctx').style.display = 'none';
+    }
+
     function copyPathFromCtx() {
         if (ctxTarget) {
             navigator.clipboard.writeText(ctxTarget.path);
@@ -598,7 +633,8 @@
     function addTerminal() {
         const id = 'term-' + (++termCount);
         const tab = document.createElement('div');
-        tab.className = 'term-tab'; tab.id = 'tab-' + id; tab.innerText = 'TERM_' + termCount;
+        tab.className = 'term-tab'; tab.id = 'tab-' + id;
+        tab.innerHTML = `<span>TERM_${termCount}</span><span class="term-close" onclick="removeTerminal(event, '${id}')">×</span>`;
         tab.onclick = () => switchTerminal(id);
         document.getElementById('term-tabs').appendChild(tab);
         const body = document.createElement('div');
@@ -609,12 +645,31 @@
         switchTerminal(id);
     }
 
+    function removeTerminal(e, id) {
+        e.stopPropagation();
+        const tabs = document.querySelectorAll('.term-tab');
+        if (tabs.length <= 1) return;
+        
+        const tab = document.getElementById('tab-' + id);
+        const body = document.getElementById(id);
+        const wasActive = tab.classList.contains('active');
+        
+        tab.remove();
+        body.remove();
+        
+        if (wasActive) {
+            const nextTab = document.querySelector('.term-tab');
+            if (nextTab) switchTerminal(nextTab.id.replace('tab-', ''));
+        }
+    }
+
     function switchTerminal(id) {
         document.querySelectorAll('.term-tab, .term-body').forEach(el => el.classList.remove('active'));
         document.getElementById('tab-' + id).classList.add('active');
         document.getElementById(id).classList.add('active');
         activeTermId = id;
-        document.getElementById(id).querySelector('.cmd-in').focus();
+        const input = document.getElementById(id).querySelector('.cmd-in');
+        if(input) input.focus();
     }
 
     async function handleCommand(id) {
@@ -648,9 +703,8 @@
     }
 
     function openModal() {
-        // 判定当前选中的节点，如果是文件夹则作为父目录，如果是文件则取其所在目录
-        const isFolder = activeFile.endsWith('/');
-        const parentDir = isFolder ? activeFile : (activeFile.includes('/') ? activeFile.substring(0, activeFile.lastIndexOf('/') + 1) : '');
+        const isFolder = activeFile && activeFile.endsWith('/');
+        const parentDir = activeFile ? (isFolder ? activeFile : (activeFile.includes('/') ? activeFile.substring(0, activeFile.lastIndexOf('/') + 1) : '')) : '';
         
         document.getElementById('modal-title').innerText = "NEW_NODE_CREATION";
         document.getElementById('modal-content').innerHTML = `
@@ -676,11 +730,11 @@
             if (type === 'folder') { 
                 if (!finalPath.endsWith('/')) finalPath += '/'; 
                 storage[finalPath] = "DIR"; 
-                activeFile = finalPath; // 选中新目录
+                activeFile = finalPath;
             } else { 
-                storage[finalPath] = ""; // 新建文件内容为空
-                activeFile = finalPath; // 自动切换到新文件
-                document.getElementById('editor').value = ""; // 清空编辑器
+                storage[finalPath] = ""; 
+                activeFile = finalPath;
+                document.getElementById('editor').value = ""; 
                 document.getElementById('cur-filename').innerText = finalPath;
             }
             renderFiles(); 
@@ -705,43 +759,101 @@
     }
 
     async function sendAi() {
-        const input = document.getElementById('ai-in');
-        const query = input.value.trim();
-        if (!query || !config.apiKey) return;
-        const chat = document.getElementById('ai-chat');
-        const uMsg = document.createElement('div');
-        uMsg.className = 'msg user'; uMsg.innerText = `[CTX:${selectedAiCtx}] > ${query}`;
-        chat.appendChild(uMsg); input.value = '';
-        const aiMsg = document.createElement('div');
-        aiMsg.className = 'msg ai'; aiMsg.innerText = 'AI: connecting...';
-        chat.appendChild(aiMsg); chat.scrollTop = chat.scrollHeight;
-        try {
-            let fullPrompt = selectedAiCtx !== 'none' ? `Context file ${selectedAiCtx}:\n${storage[selectedAiCtx]}\n\nQuery: ${query}` : query;
-            const response = await fetch(`${config.apiBaseUrl}/chat/completions`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.apiKey}` },
-                body: JSON.stringify({ model: 'gemini-flash-latest', messages: [{ role: 'user', content: fullPrompt }] })
-            });
-            const data = await response.json();
-            const reply = data.choices[0].message.content;
-            aiMsg.innerText = 'AI: ' + reply;
-            if (reply.includes('```')) {
-                const btn = document.createElement('div');
-                btn.className = 'inject-btn'; btn.innerText = '>> EXTRACT_CODE';
-                btn.onclick = () => { 
-                    const code = reply.split('```')[1].split('\n').slice(1).join('\n');
-                    document.getElementById('editor').value += "\n" + code; autoSave(); 
-                };
-                aiMsg.appendChild(document.createElement('br')); aiMsg.appendChild(btn);
-            }
-        } catch (err) { aiMsg.innerText = `[OFFLINE] Error: ${err.message}`; }
-    }
+    const input = document.getElementById('ai-in');
+    const query = input.value.trim();
+    if (!query || !config.apiKey) return;
 
+    const chat = document.getElementById('ai-chat');
+    const uMsg = document.createElement('div');
+    uMsg.className = 'msg user'; 
+    uMsg.innerText = `[CTX:${selectedAiCtx}] > ${query}`;
+    chat.appendChild(uMsg); 
+    input.value = '';
+
+    const aiMsg = document.createElement('div');
+    aiMsg.className = 'msg ai'; 
+    aiMsg.innerText = 'AI: connecting...'; // 初始状态显示连接中
+    chat.appendChild(aiMsg); 
+    
+    const scrollChat = () => chat.scrollTo({ top: chat.scrollHeight, behavior: 'smooth' });
+    scrollChat();
+
+    try {
+        const response = await fetch(`${config.apiBaseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json', 
+                'Authorization': `Bearer ${config.apiKey}` 
+            },
+            body: JSON.stringify({ 
+                model: 'gemini-flash-latest', 
+                messages: [{ 
+                    role: 'user', 
+                    content: selectedAiCtx !== 'none' ? `Context: ${storage[selectedAiCtx]}\n\nQuery: ${query}` : query 
+                }],
+                stream: false // 1. 关闭流式传输
+            })
+        });
+
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const data = await response.json();
+        const fullContent = data.choices[0].message.content; // 2. 获取完整文本
+        
+        // 3. 开始模拟打字效果 (应用 editor10.html 的逻辑)
+        aiMsg.innerText = 'AI: ';
+        let charIndex = 0;
+        const typingTimer = setInterval(() => {
+            aiMsg.innerText += fullContent[charIndex];
+            charIndex++;
+            scrollChat();
+
+            if (charIndex >= fullContent.length) {
+                clearInterval(typingTimer);
+                
+                // 4. 结束后添加代码提取按钮
+                if (fullContent.includes('```')) {
+                    const btn = document.createElement('div');
+                    btn.className = 'inject-btn'; 
+                    btn.innerText = '>> EXTRACT_CODE';
+                    btn.onclick = () => {
+                        const code = fullContent.split('```')[1].split('\n').slice(1).join('\n');
+                        document.getElementById('editor').value += "\n" + code;
+                        autoSave();
+                    };
+                    aiMsg.appendChild(document.createElement('br'));
+                    aiMsg.appendChild(btn);
+                    scrollChat();
+                }
+            }
+        }, 10); // 每 5 毫秒输出一个字符
+
+    } catch (err) { 
+        aiMsg.innerText = `AI: [ERR]: ${err.message}`; 
+        scrollChat();
+    }
+}
+function handleExtractButton(container) {
+    const text = container.innerText;
+    if (text.includes('```')) {
+        const btn = document.createElement('div');
+        btn.className = 'inject-btn'; 
+        btn.innerText = '>> EXTRACT_CODE';
+        btn.onclick = () => { 
+            const code = text.split('```')[1].split('\n').slice(1).join('\n');
+            document.getElementById('editor').value += "\n" + code; 
+            autoSave(); 
+        };
+        container.appendChild(document.createElement('br')); 
+        container.appendChild(btn);
+    }
+}
     function handleCtx(e, x, y) {
         e.preventDefault();
         const ctxMenu = document.getElementById('ctx');
         const isItem = e.target.closest('.file-item');
         document.getElementById('ctx-rename').classList.toggle('disabled', !isItem);
+        document.getElementById('ctx-delete').classList.toggle('disabled', !isItem);
         document.getElementById('ctx-copy-path').classList.toggle('disabled', !isItem);
         ctxMenu.style.display = 'block'; ctxMenu.style.left = (x || e.pageX) + 'px'; ctxMenu.style.top = (y || e.pageY) + 'px';
     }
