@@ -79,20 +79,6 @@
         .file-item.folder.active { border-left-color: var(--bg); }
         .file-icon { font-size: 14px; width: 16px; text-align: center; display: inline-block; }
 
-        /* 重命名输入框样式 */
-        .file-rename-input {
-            background: var(--amber);
-            color: var(--bg);
-            border: none;
-            outline: none;
-            font-family: inherit;
-            font-size: 13px;
-            width: 100%;
-            padding: 0;
-            margin: 0;
-            font-weight: bold;
-        }
-
         #main-stack { flex: 1; display: flex; flex-direction: column; min-width: 0; }
         #editor {
             flex: 1; background: transparent; border: none; outline: none;
@@ -147,7 +133,6 @@
         }
         .opt { padding: 12px 15px; font-size: 12px; font-weight: bold; cursor: pointer !important; }
         .opt:hover { background: var(--amber); color: var(--bg); }
-        .opt.disabled { opacity: 0.5; pointer-events: none; }
 
         .modal-overlay {
             position: fixed; top:0; left:0; width:100%; height:100%;
@@ -162,6 +147,18 @@
         .type-selector { display: flex; gap: 15px; margin-bottom: 10px; font-size: 11px; }
         .type-opt { cursor: pointer !important; display: flex; align-items: center; gap: 5px; }
         .type-opt input { cursor: pointer !important; accent-color: var(--amber); }
+
+        .file-rename-input {
+    background: var(--amber);
+    color: var(--bg);
+    border: none;
+    outline: none;
+    font-family: inherit;
+    font-size: 13px;
+    width: 100%;
+    padding: 0;
+    margin: 0;
+}
     </style>
 </head>
 <body>
@@ -245,7 +242,6 @@
 
 <div id="ctx">
     <div class="opt" id="ctx-new-node" onclick="openModal()">[+] NEW_DATA_NODE</div>
-    <div class="opt" id="ctx-rename" onclick="startRenameFromCtx()">[R] RENAME_NODE</div>
     <div style="border-top:1px solid var(--amber-dim); margin:4px 0;"></div>
     <div class="opt" onclick="saveActive()">DOWNLOAD_ACTIVE_NODE</div>
     <div class="opt" onclick="saveZip()">ARCHIVE_ALL_NODES</div>
@@ -275,7 +271,6 @@
     let activeTermId = null;
     let selectedAiCtx = 'none';
     let pyodideInstance = null;
-    let ctxTarget = null; // 用于右键重命名的临时存储
 
     // 初始化 Python WASM
     async function initPython() {
@@ -347,16 +342,10 @@
             div.className = `file-item ${k === activeFile ? 'active' : ''} ${isFolder ? 'folder' : ''}`;
             const depth = k.split('/').length - (isFolder ? 2 : 1);
             div.style.paddingLeft = (15 + depth * 15) + 'px';
-            
             const icon = isFolder ? '<span class="file-icon">⊞</span>' : '';
-            const nameSpan = document.createElement('span');
-            nameSpan.innerText = isFolder ? k : k.split('/').pop();
-            
-            div.innerHTML = icon;
-            div.appendChild(nameSpan);
+            div.innerHTML = `${icon} <span>${isFolder ? k : k.split('/').pop()}</span>`;
             
             div.onclick = (e) => {
-                if (div.querySelector('input')) return;
                 autoSave();
                 activeFile = k;
                 if (!isFolder) {
@@ -365,88 +354,9 @@
                 }
                 renderFiles();
             };
-
-            div.oncontextmenu = (e) => {
-                ctxTarget = { path: k, el: nameSpan, isFolder: isFolder };
-                handleCtx(e);
-            };
-
             list.appendChild(div);
         });
         updateAiCtxOptions();
-    }
-
-    function startRenameFromCtx() {
-        if (!ctxTarget) return;
-        document.getElementById('ctx').style.display = 'none';
-        
-        const { el, path, isFolder } = ctxTarget;
-        const currentName = el.innerText;
-        
-        const input = document.createElement('input');
-        input.className = 'file-rename-input';
-        input.value = currentName;
-        
-        const parent = el.parentNode;
-        parent.replaceChild(input, el);
-        input.focus();
-        
-        const dotIdx = currentName.lastIndexOf('.');
-        input.setSelectionRange(0, (isFolder || dotIdx <= 0) ? currentName.length : dotIdx);
-
-        const finish = () => {
-            const newName = input.value.trim();
-            if (newName && newName !== currentName) {
-                applyRename(path, newName, isFolder);
-            } else {
-                renderFiles();
-            }
-        };
-
-        input.onblur = finish;
-        input.onkeydown = (e) => {
-            if (e.key === 'Enter') input.blur();
-            if (e.key === 'Escape') { input.value = currentName; input.blur(); }
-        };
-    }
-
-    function applyRename(oldPath, newName, isFolder) {
-        let newPath;
-        if (isFolder) {
-            const parts = oldPath.split('/');
-            parts[parts.length - 2] = newName.replace(/\//g, '');
-            newPath = parts.join('/');
-            if (!newPath.endsWith('/')) newPath += '/';
-        } else {
-            const parts = oldPath.split('/');
-            parts[parts.length - 1] = newName;
-            newPath = parts.join('/');
-        }
-
-        if (storage[newPath]) {
-            renderFiles();
-            return;
-        }
-
-        if (isFolder) {
-            Object.keys(storage).forEach(key => {
-                if (key.startsWith(oldPath)) {
-                    const content = storage[key];
-                    const updatedKey = newPath + key.substring(oldPath.length);
-                    storage[updatedKey] = content;
-                    delete storage[key];
-                }
-            });
-        } else {
-            storage[newPath] = storage[oldPath];
-            delete storage[oldPath];
-        }
-
-        if (activeFile === oldPath) activeFile = newPath;
-        
-        autoSave();
-        renderFiles();
-        document.getElementById('cur-filename').innerText = activeFile;
     }
 
     function toggleAiSelect() {
@@ -531,6 +441,8 @@
         switch(cmd) {
             case 'ls': log(Object.keys(storage).join('    ')); break;
             case 'clear': output.innerHTML = ''; break;
+            
+            // NODE WASM 模拟
             case 'node':
                 if (!fileName) { log('ERR: NO_SCRIPT', 'var(--term-red)'); break; }
                 if (!storage[fileName]) { log(`ERR: ${fileName} NOT_FOUND`, 'var(--term-red)'); break; }
@@ -539,6 +451,7 @@
                     const originalConsole = console.log;
                     console.log = (...m) => log(m.join(' '));
                     const code = storage[fileName];
+                    // 模拟简单的 Node 环境
                     const context = { require: (m) => log(`ERR: MODULE_${m}_NOT_FOUND`), process: { env: {} } };
                     new Function('console', 'require', 'process', code)(console, context.require, context.process);
                     console.log = originalConsole;
@@ -546,6 +459,8 @@
                     log(`RUNTIME_ERR: ${e.message}`, 'var(--term-red)');
                 }
                 break;
+
+            // PYTHON WASM
             case 'python':
             case 'python3':
                 if (!fileName) { log('ERR: NO_SOURCE', 'var(--term-red)'); break; }
@@ -554,6 +469,7 @@
                 try {
                     const py = await initPython();
                     log('EXECUTING...');
+                    // 重定向 Python stdout
                     py.setStdout({ batched: (str) => log(str, 'var(--term-green)') });
                     py.setStderr({ batched: (str) => log(str, 'var(--term-red)') });
                     await py.runPythonAsync(storage[fileName]);
@@ -561,15 +477,18 @@
                     log(`PY_ERR: ${e.message}`, 'var(--term-red)');
                 }
                 break;
+
             case 'help':
                 log('CMDS: ls, clear, node [file], python [file], mkdir [dir], touch [file]');
                 break;
+
             default: 
                 log(`ERR: UNKNOWN_CMD_${cmd.toUpperCase()}`, 'var(--term-red)');
         }
         input.value = '';
     }
 
+    // --- 其他 UI 逻辑保持原样 ---
     function openModal() {
         document.getElementById('ctx').style.display = 'none';
         const isFolder = activeFile.endsWith('/');
@@ -681,16 +600,6 @@
     function handleCtx(e, x, y) {
         e.preventDefault();
         const ctxMenu = document.getElementById('ctx');
-        const renameBtn = document.getElementById('ctx-rename');
-        
-        // 逻辑：如果没有点击在文件项上，禁用重命名按钮
-        if (!e.target.closest('.file-item')) {
-            ctxTarget = null;
-            renameBtn.classList.add('disabled');
-        } else {
-            renameBtn.classList.remove('disabled');
-        }
-
         ctxMenu.style.display = 'block';
         ctxMenu.style.left = (x || e.pageX) + 'px';
         ctxMenu.style.top = (y || e.pageY) + 'px';

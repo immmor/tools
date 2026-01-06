@@ -76,21 +76,13 @@
         .file-item:hover { background: rgba(255, 176, 0, 0.05); opacity: 0.9; }
         .file-item.active { background: var(--amber); color: var(--bg); font-weight: bold; opacity: 1; }
         .file-item.folder { color: #fff; font-weight: bold; opacity: 1; border-left: 2px solid var(--amber-dim); }
+        .file-item.folder.collapsed .file-icon::after { content: ' +'; font-size: 10px; opacity: 0.5; }
         .file-item.folder.active { border-left-color: var(--bg); }
         .file-icon { font-size: 14px; width: 16px; text-align: center; display: inline-block; }
 
-        /* 重命名输入框样式 */
         .file-rename-input {
-            background: var(--amber);
-            color: var(--bg);
-            border: none;
-            outline: none;
-            font-family: inherit;
-            font-size: 13px;
-            width: 100%;
-            padding: 0;
-            margin: 0;
-            font-weight: bold;
+            background: var(--amber); color: var(--bg); border: none; outline: none;
+            font-family: inherit; font-size: 13px; width: 100%; padding: 0; margin: 0; font-weight: bold;
         }
 
         #main-stack { flex: 1; display: flex; flex-direction: column; min-width: 0; }
@@ -246,6 +238,7 @@
 <div id="ctx">
     <div class="opt" id="ctx-new-node" onclick="openModal()">[+] NEW_DATA_NODE</div>
     <div class="opt" id="ctx-rename" onclick="startRenameFromCtx()">[R] RENAME_NODE</div>
+    <div class="opt" id="ctx-copy-path" onclick="copyPathFromCtx()">[C] COPY_ABS_PATH</div>
     <div style="border-top:1px solid var(--amber-dim); margin:4px 0;"></div>
     <div class="opt" onclick="saveActive()">DOWNLOAD_ACTIVE_NODE</div>
     <div class="opt" onclick="saveZip()">ARCHIVE_ALL_NODES</div>
@@ -263,9 +256,11 @@
     let storage = JSON.parse(localStorage.getItem('ind_console_storage')) || {
         'PROTOCOL.txt': 'SYSTEM OVERRIDE: ACTIVE\nENCRYPTION: ENABLED',
         'SYSTEM/SENSORS.log': 'TEMP: 42C\nSTATUS: NOMINAL',
-        'script.js': 'console.log("Node WASM active");\nconsole.log("Current Date: " + new Date());',
-        'main.py': 'import sys\nprint("Python WASM initialized")\nprint(f"Python version: {sys.version}")'
+        'SYSTEM/NETWORK/CORE.cfg': 'SSID: IMMMOR_NET',
+        'script.js': 'console.log("Node WASM active");',
+        'main.py': 'print("Python WASM active")'
     };
+    let collapsedPaths = JSON.parse(localStorage.getItem('ind_console_collapsed')) || [];
     let config = JSON.parse(localStorage.getItem('ind_console_config')) || {
         apiKey: '',
         apiBaseUrl: 'https://mrok.dpdns.org/v1'
@@ -275,22 +270,18 @@
     let activeTermId = null;
     let selectedAiCtx = 'none';
     let pyodideInstance = null;
-    let ctxTarget = null; // 用于右键重命名的临时存储
+    let ctxTarget = null;
 
-    // 初始化 Python WASM
     async function initPython() {
-        if (!pyodideInstance) {
-            pyodideInstance = await loadPyodide();
-        }
+        if (!pyodideInstance) pyodideInstance = await loadPyodide();
         return pyodideInstance;
     }
 
     function autoSave() {
-        if (!activeFile.endsWith('/')) {
-            storage[activeFile] = document.getElementById('editor').value;
-        }
+        if (!activeFile.endsWith('/')) storage[activeFile] = document.getElementById('editor').value;
         localStorage.setItem('ind_console_storage', JSON.stringify(storage));
         localStorage.setItem('ind_console_active', activeFile);
+        localStorage.setItem('ind_console_collapsed', JSON.stringify(collapsedPaths));
     }
 
     function initResizer(bar, target, isH, isRight = false) {
@@ -302,21 +293,12 @@
             const x = e.touches ? e.touches[0].clientX : e.clientX;
             const y = e.touches ? e.touches[0].clientY : e.clientY;
             if (isH) {
-                if (isRight) {
-                    let p = 100 - (x / window.innerWidth) * 100;
-                    if (p < 2) p = 0; if (p > 95) p = 100;
-                    target.style.width = p + '%';
-                } else {
-                    let p = (x / window.innerWidth) * 100;
-                    if (p < 2) p = 0; if (p > 95) p = 100;
-                    target.style.width = p + '%';
-                }
+                let p = isRight ? 100 - (x / window.innerWidth) * 100 : (x / window.innerWidth) * 100;
+                target.style.width = Math.min(Math.max(p, 0), 100) + '%';
             } else {
                 let rect = document.getElementById('main-stack').getBoundingClientRect();
-                let relY = y - rect.top;
-                let p = 100 - (relY / rect.height * 100);
-                if (p < 5) p = 0; if (p > 95) p = 100;
-                target.style.height = p + '%';
+                let p = 100 - ((y - rect.top) / rect.height * 100);
+                target.style.height = Math.min(Math.max(p, 0), 100) + '%';
             }
         };
         bar.addEventListener('mousedown', start);
@@ -335,245 +317,200 @@
     function renderFiles() {
         const list = document.getElementById('file-list');
         list.innerHTML = '';
-        const sortedKeys = Object.keys(storage).sort((a,b) => {
-            const aDir = a.includes('/') ? 0 : 1;
-            const bDir = b.includes('/') ? 0 : 1;
-            return aDir - bDir || a.localeCompare(b);
+        const keys = Object.keys(storage).sort();
+        
+        // 生成虚拟文件夹节点（处理嵌套但存储中没写文件夹路径的情况）
+        const allNodes = new Set();
+        keys.forEach(k => {
+            const parts = k.split('/');
+            let current = '';
+            parts.forEach((p, i) => {
+                if (i < parts.length - 1 || k.endsWith('/')) {
+                    current += p + '/';
+                    allNodes.add(current);
+                } else {
+                    allNodes.add(k);
+                }
+            });
         });
 
-        sortedKeys.forEach(k => {
+        Array.from(allNodes).sort().forEach(k => {
             const isFolder = k.endsWith('/');
+            const parts = k.split('/').filter(Boolean);
+            const name = parts[parts.length - 1] + (isFolder ? '/' : '');
+            const depth = parts.length - 1;
+            const parentPath = isFolder ? parts.slice(0, -1).join('/') + '/' : parts.slice(0, -1).join('/') + (parts.length > 1 ? '/' : '');
+
+            // 检查父级是否折叠
+            let isHidden = false;
+            collapsedPaths.forEach(cp => {
+                if (k.startsWith(cp) && k !== cp) isHidden = true;
+            });
+            if (isHidden) return;
+
             const div = document.createElement('div');
-            div.className = `file-item ${k === activeFile ? 'active' : ''} ${isFolder ? 'folder' : ''}`;
-            const depth = k.split('/').length - (isFolder ? 2 : 1);
+            const isCollapsed = collapsedPaths.includes(k);
+            div.className = `file-item ${k === activeFile ? 'active' : ''} ${isFolder ? 'folder' : ''} ${isCollapsed ? 'collapsed' : ''}`;
             div.style.paddingLeft = (15 + depth * 15) + 'px';
             
-            const icon = isFolder ? '<span class="file-icon">⊞</span>' : '';
-            const nameSpan = document.createElement('span');
-            nameSpan.innerText = isFolder ? k : k.split('/').pop();
+            const iconSpan = document.createElement('span');
+            iconSpan.className = 'file-icon';
+            iconSpan.innerText = isFolder ? (isCollapsed ? '⊞' : '⊟') : '';
             
-            div.innerHTML = icon;
+            const nameSpan = document.createElement('span');
+            nameSpan.innerText = name;
+            
+            div.appendChild(iconSpan);
             div.appendChild(nameSpan);
             
             div.onclick = (e) => {
                 if (div.querySelector('input')) return;
-                autoSave();
-                activeFile = k;
-                if (!isFolder) {
-                    document.getElementById('editor').value = storage[k];
+                if (isFolder) {
+                    if (collapsedPaths.includes(k)) collapsedPaths = collapsedPaths.filter(p => p !== k);
+                    else collapsedPaths.push(k);
+                    autoSave(); renderFiles();
+                } else {
+                    autoSave(); activeFile = k;
+                    document.getElementById('editor').value = storage[k] || '';
                     document.getElementById('cur-filename').innerText = k;
+                    renderFiles();
                 }
-                renderFiles();
             };
 
             div.oncontextmenu = (e) => {
                 ctxTarget = { path: k, el: nameSpan, isFolder: isFolder };
                 handleCtx(e);
             };
-
             list.appendChild(div);
         });
         updateAiCtxOptions();
     }
 
+    function copyPathFromCtx() {
+        if (!ctxTarget) return;
+        navigator.clipboard.writeText(ctxTarget.path).then(() => {
+            const original = ctxTarget.el.innerText;
+            ctxTarget.el.innerText = "PATH_COPIED_TO_CLIPBOARD";
+            setTimeout(() => { if(ctxTarget) renderFiles(); }, 1000);
+        });
+        document.getElementById('ctx').style.display = 'none';
+    }
+
     function startRenameFromCtx() {
         if (!ctxTarget) return;
         document.getElementById('ctx').style.display = 'none';
-        
         const { el, path, isFolder } = ctxTarget;
-        const currentName = el.innerText;
-        
+        const currentName = el.innerText.replace(/\/$/, '');
         const input = document.createElement('input');
         input.className = 'file-rename-input';
         input.value = currentName;
-        
         const parent = el.parentNode;
         parent.replaceChild(input, el);
         input.focus();
         
-        const dotIdx = currentName.lastIndexOf('.');
-        input.setSelectionRange(0, (isFolder || dotIdx <= 0) ? currentName.length : dotIdx);
-
         const finish = () => {
             const newName = input.value.trim();
-            if (newName && newName !== currentName) {
-                applyRename(path, newName, isFolder);
-            } else {
-                renderFiles();
-            }
+            if (newName && newName !== currentName) applyRename(path, newName, isFolder);
+            else renderFiles();
         };
-
         input.onblur = finish;
-        input.onkeydown = (e) => {
-            if (e.key === 'Enter') input.blur();
-            if (e.key === 'Escape') { input.value = currentName; input.blur(); }
-        };
+        input.onkeydown = (e) => { if(e.key === 'Enter') input.blur(); if(e.key === 'Escape') { input.value = currentName; input.blur(); }};
     }
 
     function applyRename(oldPath, newName, isFolder) {
         let newPath;
-        if (isFolder) {
-            const parts = oldPath.split('/');
-            parts[parts.length - 2] = newName.replace(/\//g, '');
-            newPath = parts.join('/');
-            if (!newPath.endsWith('/')) newPath += '/';
-        } else {
-            const parts = oldPath.split('/');
-            parts[parts.length - 1] = newName;
-            newPath = parts.join('/');
-        }
+        const parts = oldPath.split('/').filter(Boolean);
+        parts[parts.length - 1] = newName.replace(/\//g, '');
+        newPath = parts.join('/') + (isFolder ? '/' : '');
 
-        if (storage[newPath]) {
-            renderFiles();
-            return;
-        }
+        if (storage[newPath]) return renderFiles();
 
-        if (isFolder) {
-            Object.keys(storage).forEach(key => {
-                if (key.startsWith(oldPath)) {
-                    const content = storage[key];
-                    const updatedKey = newPath + key.substring(oldPath.length);
-                    storage[updatedKey] = content;
-                    delete storage[key];
-                }
-            });
-        } else {
-            storage[newPath] = storage[oldPath];
-            delete storage[oldPath];
-        }
+        Object.keys(storage).forEach(key => {
+            if (key === oldPath || (isFolder && key.startsWith(oldPath))) {
+                const content = storage[key];
+                const updatedKey = newPath + key.substring(oldPath.length);
+                storage[updatedKey] = content;
+                delete storage[key];
+            }
+        });
 
         if (activeFile === oldPath) activeFile = newPath;
-        
-        autoSave();
-        renderFiles();
+        autoSave(); renderFiles();
         document.getElementById('cur-filename').innerText = activeFile;
-    }
-
-    function toggleAiSelect() {
-        const opt = document.getElementById('ai-ctx-options');
-        opt.style.display = opt.style.display === 'block' ? 'none' : 'block';
-    }
-
-    function updateAiCtxOptions() {
-        const container = document.getElementById('ai-ctx-options');
-        container.innerHTML = `<div onclick="selectAiCtx('none')">-- NO_CONTEXT --</div>`;
-        Object.keys(storage).forEach(k => {
-            if (k.endsWith('/')) return;
-            const div = document.createElement('div');
-            div.innerText = k;
-            div.onclick = () => selectAiCtx(k);
-            container.appendChild(div);
-        });
-    }
-
-    function selectAiCtx(val) {
-        selectedAiCtx = val;
-        document.getElementById('ai-ctx-val').innerText = val === 'none' ? '-- NO_CONTEXT --' : val;
-        document.getElementById('ai-ctx-options').style.display = 'none';
     }
 
     function addTerminal() {
         const id = 'term-' + (++termCount);
         const tab = document.createElement('div');
-        tab.className = 'term-tab';
-        tab.id = 'tab-' + id;
+        tab.className = 'term-tab'; tab.id = 'tab-' + id;
         tab.innerText = 'TERM_' + termCount;
         tab.onclick = () => switchTerminal(id);
         document.getElementById('term-tabs').appendChild(tab);
 
         const body = document.createElement('div');
-        body.className = 'term-body';
-        body.id = id;
+        body.className = 'term-body'; body.id = id;
         body.innerHTML = `
             <div class="term-out">Terminal ${termCount} Ready. WASM stack initialized.</div>
-            <div class="term-input-wrap">
-                <span>>></span>
-                <input type="text" class="cmd-in" autocomplete="off" spellcheck="false">
-                <button class="ai-btn" onclick="execFromBtn('${id}')">SEND</button>
-            </div>
+            <div class="term-input-wrap"><span>>></span><input type="text" class="cmd-in" autocomplete="off" spellcheck="false">
+            <button class="ai-btn" onclick="handleCommand('${id}')">SEND</button></div>
         `;
-        const input = body.querySelector('.cmd-in');
-        input.onkeydown = (e) => { if(e.key === 'Enter') handleCommand(id); };
+        body.querySelector('.cmd-in').onkeydown = (e) => { if(e.key === 'Enter') handleCommand(id); };
         document.getElementById('term-container').appendChild(body);
         switchTerminal(id);
     }
 
     function switchTerminal(id) {
         document.querySelectorAll('.term-tab, .term-body').forEach(el => el.classList.remove('active'));
-        if(document.getElementById('tab-' + id)) document.getElementById('tab-' + id).classList.add('active');
-        if(document.getElementById(id)) document.getElementById(id).classList.add('active');
+        document.getElementById('tab-' + id).classList.add('active');
+        document.getElementById(id).classList.add('active');
         activeTermId = id;
-        const input = document.getElementById(id)?.querySelector('.cmd-in');
-        if(input) input.focus();
+        document.getElementById(id).querySelector('.cmd-in').focus();
     }
-
-    function execFromBtn(id) { handleCommand(id); }
 
     async function handleCommand(id) {
         const body = document.getElementById(id);
         const input = body.querySelector('.cmd-in');
         const output = body.querySelector('.term-out');
-        const val = input.value.trim();
-        if(!val) return;
+        const val = input.value.trim(); if(!val) return;
 
         const log = (txt, color = 'rgba(255,176,0,0.8)') => {
-            const d = document.createElement('div');
-            d.style.color = color; d.innerText = txt;
-            output.appendChild(d);
-            output.scrollTop = output.scrollHeight;
+            const d = document.createElement('div'); d.style.color = color; d.innerText = txt;
+            output.appendChild(d); output.scrollTop = output.scrollHeight;
         };
 
         log(`>> ${val}`, '#fff');
-        const args = val.split(' ');
-        const cmd = args[0].toLowerCase();
-        const fileName = args[1];
+        const [cmd, fileName] = val.split(' ');
+        input.value = '';
 
-        switch(cmd) {
+        switch(cmd.toLowerCase()) {
             case 'ls': log(Object.keys(storage).join('    ')); break;
             case 'clear': output.innerHTML = ''; break;
             case 'node':
-                if (!fileName) { log('ERR: NO_SCRIPT', 'var(--term-red)'); break; }
                 if (!storage[fileName]) { log(`ERR: ${fileName} NOT_FOUND`, 'var(--term-red)'); break; }
-                log(`RUNNING NODE_WASM: ${fileName}...`);
                 try {
                     const originalConsole = console.log;
                     console.log = (...m) => log(m.join(' '));
-                    const code = storage[fileName];
-                    const context = { require: (m) => log(`ERR: MODULE_${m}_NOT_FOUND`), process: { env: {} } };
-                    new Function('console', 'require', 'process', code)(console, context.require, context.process);
+                    new Function('console', storage[fileName])(console);
                     console.log = originalConsole;
-                } catch (e) {
-                    log(`RUNTIME_ERR: ${e.message}`, 'var(--term-red)');
-                }
+                } catch (e) { log(`RUNTIME_ERR: ${e.message}`, 'var(--term-red)'); }
                 break;
             case 'python':
-            case 'python3':
-                if (!fileName) { log('ERR: NO_SOURCE', 'var(--term-red)'); break; }
                 if (!storage[fileName]) { log(`ERR: ${fileName} NOT_FOUND`, 'var(--term-red)'); break; }
                 log('LOADING_PYTHON_WASM...');
                 try {
                     const py = await initPython();
-                    log('EXECUTING...');
                     py.setStdout({ batched: (str) => log(str, 'var(--term-green)') });
-                    py.setStderr({ batched: (str) => log(str, 'var(--term-red)') });
                     await py.runPythonAsync(storage[fileName]);
-                } catch (e) {
-                    log(`PY_ERR: ${e.message}`, 'var(--term-red)');
-                }
+                } catch (e) { log(`PY_ERR: ${e.message}`, 'var(--term-red)'); }
                 break;
-            case 'help':
-                log('CMDS: ls, clear, node [file], python [file], mkdir [dir], touch [file]');
-                break;
-            default: 
-                log(`ERR: UNKNOWN_CMD_${cmd.toUpperCase()}`, 'var(--term-red)');
+            default: log(`ERR: UNKNOWN_CMD_${cmd.toUpperCase()}`, 'var(--term-red)');
         }
-        input.value = '';
     }
 
     function openModal() {
         document.getElementById('ctx').style.display = 'none';
         const isFolder = activeFile.endsWith('/');
-        const parentDir = isFolder ? activeFile : '';
+        const parentDir = isFolder ? activeFile : activeFile.split('/').slice(0,-1).join('/') + (activeFile.includes('/')?'/':'');
         document.getElementById('modal-title').innerText = "NEW_NODE_CREATION";
         document.getElementById('modal-content').innerHTML = `
             <div style="font-size:9px; color:var(--amber-dim); margin-bottom:10px;">TARGET_DIR: ${parentDir || 'ROOT/'}</div>
@@ -581,33 +518,23 @@
                 <label class="type-opt"><input type="radio" name="ntype" value="file" checked> FILE_NODE</label>
                 <label class="type-opt"><input type="radio" name="ntype" value="folder"> DIR_NODE</label>
             </div>
-            <div>ENTER IDENTIFIER:</div>
-            <input type="text" id="modal-input" class="modal-input" placeholder="NODE_NAME.txt">
+            <input type="text" id="modal-input" class="modal-input" placeholder="NODE_NAME">
             <div class="modal-btns">
                 <button class="ai-btn" onclick="closeModal()">CANCEL</button>
-                <button class="ai-btn" style="background:var(--amber); color:#000" onclick="confirmModal()">CONFIRM</button>
+                <button class="ai-btn" style="background:var(--amber); color:#000" onclick="confirmModal('${parentDir}')">CONFIRM</button>
             </div>
         `;
         document.getElementById('modal-overlay').style.display = 'flex';
-        const input = document.getElementById('modal-input');
-        input.value = "NODE_" + Date.now().toString().slice(-4) + ".txt";
-        input.focus();
+        document.getElementById('modal-input').focus();
     }
 
-    function confirmModal() {
+    function confirmModal(parent) {
         let name = document.getElementById('modal-input').value.trim();
         const type = document.querySelector('input[name="ntype"]:checked').value;
         if (name) {
-            let finalPath = activeFile.endsWith('/') ? activeFile + name : name;
-            if (type === 'folder') {
-                if (!finalPath.endsWith('/')) finalPath += '/';
-                storage[finalPath] = "DIR";
-            } else {
-                storage[finalPath] = "// NEW_NODE_INITIALIZED";
-                activeFile = finalPath;
-                document.getElementById('editor').value = storage[finalPath];
-                document.getElementById('cur-filename').innerText = finalPath;
-            }
+            let finalPath = parent + name + (type === 'folder' ? '/' : '');
+            if (type === 'folder') storage[finalPath] = "DIR";
+            else { storage[finalPath] = "// NEW_NODE"; activeFile = finalPath; document.getElementById('editor').value = storage[finalPath]; }
             renderFiles(); autoSave(); closeModal();
         }
     }
@@ -616,10 +543,8 @@
     function openSettings() {
         document.getElementById('modal-title').innerText = "NEURAL_LINK_CONFIG";
         document.getElementById('modal-content').innerHTML = `
-            <div>API_BASE_URL:</div>
-            <input type="text" id="cfg-base" class="modal-input" value="${config.apiBaseUrl}">
-            <div>API_KEY:</div>
-            <input type="password" id="cfg-key" class="modal-input" value="${config.apiKey}">
+            <div>API_BASE:</div><input type="text" id="cfg-base" class="modal-input" value="${config.apiBaseUrl}">
+            <div>API_KEY:</div><input type="password" id="cfg-key" class="modal-input" value="${config.apiKey}">
             <div class="modal-btns"><button class="ai-btn" onclick="closeModal()">CANCEL</button><button class="ai-btn" style="background:var(--amber); color:#000" onclick="saveSettings()">SAVE</button></div>
         `;
         document.getElementById('modal-overlay').style.display = 'flex';
@@ -632,21 +557,9 @@
         closeModal();
     }
 
-    async function callGeminiAPI(message) {
-        if (!config.apiKey) throw new Error('API_KEY_MISSING');
-        const response = await fetch(`${config.apiBaseUrl}/chat/completions`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.apiKey}` },
-            body: JSON.stringify({ model: 'gemini-flash-latest', messages: [{ role: 'system', content: 'You are an advanced AI assistant.' }, { role: 'user', content: message }] })
-        });
-        const data = await response.json();
-        return data.choices[0].message.content;
-    }
-
     async function sendAi() {
         const input = document.getElementById('ai-in');
-        const query = input.value.trim();
-        if (!query) return;
+        const query = input.value.trim(); if (!query || !config.apiKey) return;
         const chat = document.getElementById('ai-chat');
         const uMsg = document.createElement('div');
         uMsg.className = 'msg user'; uMsg.innerText = `[CTX:${selectedAiCtx}] > ${query}`;
@@ -655,42 +568,23 @@
         aiMsg.className = 'msg ai'; aiMsg.innerText = 'AI: connecting...';
         chat.appendChild(aiMsg); chat.scrollTop = chat.scrollHeight;
         try {
-            let fullPrompt = selectedAiCtx !== 'none' ? `Context file ${selectedAiCtx}:\n${storage[selectedAiCtx]}\n\nQuery: ${query}` : query;
-            let response = await callGeminiAPI(fullPrompt);
-            aiMsg.innerText = 'AI: ';
-            let i = 0;
-            const timer = setInterval(() => {
-                aiMsg.innerText += response[i++];
-                chat.scrollTop = chat.scrollHeight;
-                if (i >= response.length) {
-                    clearInterval(timer);
-                    if (response.includes('```')) {
-                        const btn = document.createElement('div');
-                        btn.className = 'inject-btn'; btn.innerText = '>> EXTRACT_CODE';
-                        btn.onclick = () => { 
-                            const code = response.split('```')[1].split('\n').slice(1).join('\n');
-                            document.getElementById('editor').value += "\n" + code; autoSave(); 
-                        };
-                        aiMsg.appendChild(document.createElement('br')); aiMsg.appendChild(btn);
-                    }
-                }
-            }, 5);
+            let fullPrompt = selectedAiCtx !== 'none' ? `File ${selectedAiCtx}:\n${storage[selectedAiCtx]}\n\nQuery: ${query}` : query;
+            const res = await fetch(`${config.apiBaseUrl}/chat/completions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.apiKey}` },
+                body: JSON.stringify({ model: 'gemini-1.5-flash', messages: [{ role: 'user', content: fullPrompt }] })
+            });
+            const data = await res.json();
+            aiMsg.innerText = 'AI: ' + data.choices[0].message.content;
         } catch (err) { aiMsg.innerText = `[OFFLINE] Error: ${err.message}`; }
     }
 
     function handleCtx(e, x, y) {
         e.preventDefault();
         const ctxMenu = document.getElementById('ctx');
-        const renameBtn = document.getElementById('ctx-rename');
-        
-        // 逻辑：如果没有点击在文件项上，禁用重命名按钮
-        if (!e.target.closest('.file-item')) {
-            ctxTarget = null;
-            renameBtn.classList.add('disabled');
-        } else {
-            renameBtn.classList.remove('disabled');
-        }
-
+        const isItem = e.target.closest('.file-item');
+        document.getElementById('ctx-rename').classList.toggle('disabled', !isItem);
+        document.getElementById('ctx-copy-path').classList.toggle('disabled', !isItem);
         ctxMenu.style.display = 'block';
         ctxMenu.style.left = (x || e.pageX) + 'px';
         ctxMenu.style.top = (y || e.pageY) + 'px';
@@ -698,7 +592,6 @@
     
     document.addEventListener('click', (e) => { 
         if (!document.getElementById('ctx').contains(e.target)) document.getElementById('ctx').style.display = 'none'; 
-        if (!document.getElementById('ai-ctx-trigger').contains(e.target)) document.getElementById('ai-ctx-options').style.display = 'none';
     });
 
     async function saveZip() {
@@ -712,6 +605,15 @@
         const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = activeFile.split('/').pop(); a.click();
     }
     function clearTerm() { if(activeTermId) document.getElementById(activeTermId).querySelector('.term-out').innerHTML = 'READY.'; }
+    function updateAiCtxOptions() {
+        const container = document.getElementById('ai-ctx-options');
+        container.innerHTML = `<div onclick="selectAiCtx('none')">-- NO_CONTEXT --</div>`;
+        Object.keys(storage).forEach(k => { if(!k.endsWith('/')) {
+            const div = document.createElement('div'); div.innerText = k; div.onclick = () => selectAiCtx(k); container.appendChild(div);
+        }});
+    }
+    function selectAiCtx(val) { selectedAiCtx = val; document.getElementById('ai-ctx-val').innerText = val; document.getElementById('ai-ctx-options').style.display = 'none'; }
+    function toggleAiSelect() { const o = document.getElementById('ai-ctx-options'); o.style.display = o.style.display === 'block' ? 'none' : 'block'; }
 
     renderFiles();
     addTerminal();
