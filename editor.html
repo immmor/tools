@@ -97,7 +97,8 @@
             border-bottom: 1px solid rgba(113, 78, 0, 0.05); 
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
             display: flex; align-items: center; 
-            color: var(--amber); opacity: 0.7;
+            -webkit-touch-callout: none; -webkit-user-select: none;
+            color: var(--amber); opacity: 0.7; 
         }
         .file-item:hover, .plugin-item:hover { background: rgba(255, 176, 0, 0.05); opacity: 0.9; }
         .file-item.active { background: var(--amber); color: var(--bg) !important; font-weight: bold; opacity: 1; }
@@ -153,7 +154,7 @@
         .custom-select-trigger { 
             background: #000; color: var(--amber); border: 1px solid var(--amber-dim); 
             font-size: 10px; width: 100%; padding: 6px; cursor: pointer !important;
-            display: flex; justify-content: space-between; align-items: center;
+            display: flex; justify-content: space-between; align-items: center; white-space: nowrap;
         }
         .custom-select-options {
             position: absolute; bottom: 100%; left: 10px; right: 10px; background: var(--panel-bg);
@@ -173,8 +174,7 @@
         }
 
         .search-res-item {
-            padding: 5px 10px;
-            font-size: 11px;
+            padding: 5px 10px; font-size: 11px;
             border-bottom: 1px solid rgba(113, 78, 0, 0.1);
             cursor: pointer !important;
         }
@@ -209,13 +209,10 @@
         .type-opt input { cursor: pointer !important; accent-color: var(--amber); }
 
         .editor-tools {
-            display: flex;
-            gap: 2px;
-            padding: 5px;
+            display: flex; gap: 2px; padding: 5px;
             background: rgba(28, 25, 18, 0.8);
             border-bottom: 1px solid var(--amber-dim);
-            overflow-x: auto;
-            white-space: nowrap;
+            overflow-x: auto; white-space: nowrap;
             scrollbar-width: none;
         }
         .editor-tools::-webkit-scrollbar { display: none; }
@@ -340,7 +337,7 @@
 
     <aside class="panel" id="ai-panel">
     <div class="p-head">
-        <span>AI_AGENT</span>
+        <span>AI</span>
         <div class="ctrl-group">
             <span class="ctrl" onclick="addAiTab()" title="NEW CHAT">+</span>
             <span class="ctrl" onclick="openSettings()" title="CONFIG">⚙</span>
@@ -353,16 +350,25 @@
         </div>
 
     <div class="ai-tools">
-        <label style="display:block; margin-bottom:5px">CONTEXT_NODE:</label>
-        <div class="custom-select-trigger" id="ai-ctx-trigger" onclick="toggleAiSelect()">
-            <span id="ai-ctx-val">-- NO_CONTEXT --</span>
+    <div style="margin-bottom: 10px;">
+        <label style="display:block; margin-bottom:5px">AI_PROVIDER:</label>
+        <div class="custom-select-trigger" id="ai-provider-trigger" onclick="toggleProviderSelect()">
+            <span id="active-provider-name">---</span>
             <span>▼</span>
         </div>
-        <div class="custom-select-options" id="ai-ctx-options"></div>
+        <div class="custom-select-options" id="ai-provider-options"></div>
     </div>
+
+    <label style="display:block; margin-bottom:5px">CONTEXT_NODE:</label>
+    <div class="custom-select-trigger" id="ai-ctx-trigger" onclick="toggleAiSelect()">
+        <span id="ai-ctx-val">-- NO_CONTEXT --</span>
+        <span>▼</span>
+    </div>
+    <div class="custom-select-options" id="ai-ctx-options"></div>
+</div>
     <div class="ai-input-area">
         <input type="text" id="ai-in" placeholder="Query..." autocomplete="off">
-        <button class="ai-btn" onclick="sendAi()">SEND</button>
+        <button class="ai-btn" id="ai-send-btn" onclick="handleAiSend()">SEND</button>
     </div>
 </aside>
 </div>
@@ -404,10 +410,17 @@
         }
     ];
     let config = JSON.parse(localStorage.getItem('ind_console_config')) || {
-        apiKey: '',
-        apiBaseUrl: 'https://mrok.dpdns.org/v1',
-        model: 'gemini-flash-latest'
+        activeProviderIndex: 0,
+        providers: [
+            {
+                name: 'Gemini Default',
+                apiBaseUrl: 'https://mrok.dpdns.org/v1',
+                apiKey: '',
+                model: 'gemini-flash-latest'
+            }
+        ]
     };
+    let selectedProviderIndices = [config.activeProviderIndex];
     let activeFile = localStorage.getItem('ind_console_active') || 'PROTOCOL.txt';
     let expandedDirs = JSON.parse(localStorage.getItem('ind_console_expanded')) || ['SYSTEM/'];
     let termCount = 0;
@@ -1209,28 +1222,135 @@ document.getElementById('editor').addEventListener('keydown', function(e) {
     function toggleAiSelect() { const opt = document.getElementById('ai-ctx-options'); opt.style.display = opt.style.display === 'block' ? 'none' : 'block'; }
     
     function openSettings() {
-        document.getElementById('modal-title').innerText = "NEURAL_LINK_CONFIG";
-        document.getElementById('modal-content').innerHTML = `
-            <div>URL:</div>
-            <input type="text" id="cfg-base" class="modal-input" value="${config.apiBaseUrl}">
-            <div>MODEL:</div>
-            <input type="text" id="cfg-model" class="modal-input" value="${config.model || 'gemini-flash-latest'}">
-            <div>KEY:</div>
-            <input type="password" id="cfg-key" class="modal-input" value="${config.apiKey}">
-            <div class="modal-btns">
-                <button class="ai-btn" onclick="closeModal()">CANCEL</button>
-                <button class="ai-btn" style="background:var(--amber); color:#000" onclick="saveSettings()">SAVE</button>
-            </div>`;
-        document.getElementById('modal-overlay').style.display = 'flex';
-    }
+    document.getElementById('modal-title').innerText = "AI_PROVIDERS_CONFIG";
+    
+    let providersHtml = config.providers.map((p, i) => `
+        <div style="border: 1px solid var(--amber-dim); padding: 10px; margin-bottom: 10px; position: relative;">
+            <div style="font-size: 10px; margin-bottom: 5px; color: ${config.activeProviderIndex === i ? 'var(--term-green)' : 'var(--amber)'}">
+                ${config.activeProviderIndex === i ? '[ACTIVE_NODE]' : 'NODE_' + i}
+            </div>
+            <input type="text" placeholder="NAME" class="modal-input" style="margin:2px 0" value="${p.name}" onchange="updateProvider(${i}, 'name', this.value)">
+            <input type="text" placeholder="BASE_URL" class="modal-input" style="margin:2px 0" value="${p.apiBaseUrl}" onchange="updateProvider(${i}, 'apiBaseUrl', this.value)">
+            <input type="text" placeholder="MODEL" class="modal-input" style="margin:2px 0" value="${p.model}" onchange="updateProvider(${i}, 'model', this.value)">
+            <input type="password" placeholder="API_KEY" class="modal-input" style="margin:2px 0" value="${p.apiKey}" onchange="updateProvider(${i}, 'apiKey', this.value)">
+            
+            <div style="display:flex; gap: 10px; margin-top: 5px;">
+                <button class="ai-btn" onclick="config.activeProviderIndex = ${i}; openSettings();">ACTIVATE</button>
+                <button class="ai-btn" style="color:var(--term-red)" onclick="deleteProvider(${i})">DELETE</button>
+            </div>
+        </div>
+    `).join('');
 
-    function saveSettings() {
-        config.apiBaseUrl = document.getElementById('cfg-base').value.trim(); 
-        config.model = document.getElementById('cfg-model').value.trim(); // 获取模型名
-        config.apiKey = document.getElementById('cfg-key').value.trim();
-        localStorage.setItem('ind_console_config', JSON.stringify(config)); 
-        closeModal();
+    document.getElementById('modal-content').innerHTML = `
+        <div style="max-height: 400px; overflow-y: auto;">
+            ${providersHtml}
+            <button class="ai-btn" style="width:100%; border: 1px dashed var(--amber); margin-top:10px;" onclick="addProvider()">+ ADD_NEW_PROVIDER</button>
+        </div>
+        <div class="modal-btns">
+            <button class="ai-btn" onclick="closeModal()">CLOSE</button>
+            <button class="ai-btn" style="background:var(--amber); color:#000" onclick="saveSettings()">SAVE_TO_DISK</button>
+        </div>`;
+    document.getElementById('modal-overlay').style.display = 'flex';
+}
+
+// 辅助管理函数
+function updateProvider(index, field, value) {
+    config.providers[index][field] = value;
+}
+
+function addProvider() {
+    config.providers.push({ name: 'New Provider', apiBaseUrl: '', apiKey: '', model: '' });
+    openSettings();
+}
+
+function deleteProvider(index) {
+    if (config.providers.length <= 1) return alert("MINIMUM_ONE_PROVIDER_REQUIRED");
+    config.providers.splice(index, 1);
+    if (config.activeProviderIndex >= config.providers.length) config.activeProviderIndex = 0;
+    openSettings();
+}
+
+function saveSettings() {
+    localStorage.setItem('ind_console_config', JSON.stringify(config)); 
+    closeModal();
+}
+
+function renderProviderOptions() {
+    const container = document.getElementById('ai-provider-options');
+    container.innerHTML = '';
+    
+    config.providers.forEach((p, i) => {
+        const div = document.createElement('div');
+        div.style.display = 'flex';
+        div.style.justifyContent = 'space-between';
+        
+        const isChecked = selectedProviderIndices.includes(i);
+        
+        div.innerHTML = `
+            <span>${isChecked ? '[X]' : '[ ]'} ${p.name}</span>
+            <span style="font-size:8px; opacity:0.5">${p.model}</span>
+        `;
+        
+        if (i === config.activeProviderIndex) div.style.color = 'var(--term-green)';
+
+        div.onclick = (e) => {
+            e.stopPropagation(); // 防止触发全局点击关闭
+            toggleProviderSelection(i);
+        };
+        container.appendChild(div);
+    });
+}
+
+function toggleProviderSelection(index) {
+    const pos = selectedProviderIndices.indexOf(index);
+    if (pos > -1) {
+        // 如果已经选中了，且选中的不止一个，则取消选中
+        if (selectedProviderIndices.length > 1) {
+            selectedProviderIndices.splice(pos, 1);
+        }
+    } else {
+        selectedProviderIndices.push(index);
     }
+    
+    // 如果当前活跃的 Provider 被取消了，自动把第一个选中的设为活跃
+    if (!selectedProviderIndices.includes(config.activeProviderIndex)) {
+        config.activeProviderIndex = selectedProviderIndices[0];
+    }
+    
+    renderProviderOptions();
+    updateProviderDisplay();
+}
+
+// 修改显示文字，提示选中了几个
+function updateProviderDisplay() {
+    const el = document.getElementById('active-provider-name');
+    if (!el) return;
+    
+    if (selectedProviderIndices.length > 1) {
+        el.innerText = `MULTIPLE (${selectedProviderIndices.length})`;
+        el.style.color = 'var(--amber)';
+    } else {
+        const p = config.providers[config.activeProviderIndex];
+        el.innerText = p ? p.name : 'NONE';
+        el.style.color = 'var(--term-green)';
+    }
+}
+
+function toggleProviderSelect() {
+    const opt = document.getElementById('ai-provider-options');
+    // 关闭另一个下拉框防止重叠
+    document.getElementById('ai-ctx-options').style.display = 'none';
+    opt.style.display = opt.style.display === 'block' ? 'none' : 'block';
+    if (opt.style.display === 'block') renderProviderOptions();
+}
+
+function selectProvider(index) {
+    config.activeProviderIndex = index;
+    localStorage.setItem('ind_console_config', JSON.stringify(config));
+    updateProviderDisplay();
+    document.getElementById('ai-provider-options').style.display = 'none';
+    addLog(`[SYSTEM]: SWITCHED_TO_PROVIDER >> ${config.providers[index].name}`, 'var(--term-green)');
+}
 
     function newAiChat() {
         // 弹出确认框，防止误点清空
@@ -1260,6 +1380,8 @@ function addAiTab() {
     const tab = document.createElement('div');
     tab.className = 'term-tab'; 
     tab.id = 'tab-' + id;
+    const currentP = config.providers[config.activeProviderIndex];
+    const label = currentP ? currentP.name.substring(0, 8) : aiCount;
     tab.innerHTML = `<span>CHAT_${aiCount}</span><span class="term-close" onclick="removeAiTab(event, '${id}')">×</span>`;
     tab.onclick = () => switchAiTab(id);
     document.getElementById('ai-tabs').appendChild(tab);
@@ -1275,8 +1397,9 @@ function addAiTab() {
     
     document.getElementById('ai-container').appendChild(body);
     
-    // 3. 切换到新标签
+    activeAiId = id; 
     switchAiTab(id);
+    return id;
 }
 
 function switchAiTab(id) {
@@ -1311,13 +1434,49 @@ function removeAiTab(e, id) {
     }
 }
 
-// 修改原有的 sendAi 函数，使其在 activeAiId 指向的窗口中输出
-async function sendAi() {
+async function handleAiSend() {
     const input = document.getElementById('ai-in');
     const query = input.value.trim();
-    if (!query || !config.apiKey || !activeAiId) return;
+    if (!query) return;
 
-    const chat = document.getElementById(activeAiId); // 修改点：获取当前活动的标签内容区
+    const targets = selectedProviderIndices.length > 0 ? selectedProviderIndices : [config.activeProviderIndex];
+
+    if (targets.length <= 1) {
+        // 单模型发送：直接使用当前活跃 ID
+        sendAi(null, activeAiId); 
+    } else {
+        const originalIndex = config.activeProviderIndex;
+        input.value = ''; 
+
+        for (const idx of targets) {
+            config.activeProviderIndex = idx;
+            // 获取新创建的标签 ID
+            const newId = addAiTab(); 
+            
+            await new Promise(r => setTimeout(r, 50)); // 给 DOM 渲染留一点时间
+
+            // 关键：把 query 和 明确的窗口 ID 传进去
+            sendAi(query, newId); 
+        }
+
+        config.activeProviderIndex = originalIndex;
+        updateProviderDisplay();
+    }
+}
+
+async function sendAi(overrideQuery = null, targetTabId = null) {
+    const input = document.getElementById('ai-in');
+    const query = (overrideQuery !== null) ? overrideQuery : input.value.trim();
+    
+    // 确定使用哪个 ID：传了用传的，没传用全局活跃的
+    const currentChatId = targetTabId || activeAiId;
+    
+    const provider = config.providers[config.activeProviderIndex];
+    if (!query || !provider || !provider.apiKey || !currentChatId) return;
+
+    if (overrideQuery === null) input.value = '';
+
+    const chat = document.getElementById(currentChatId);
     const uMsg = document.createElement('div');
     uMsg.className = 'msg user'; 
     uMsg.innerText = `[CTX:${selectedAiCtx}] > ${query}`;
@@ -1333,11 +1492,14 @@ async function sendAi() {
     scrollChat();
 
     try {
-        const response = await fetch(`${config.apiBaseUrl}/chat/completions`, {
+        const response = await fetch(`${provider.apiBaseUrl}/chat/completions`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${config.apiKey}` },
+            headers: { 
+                'Content-Type': 'application/json', 
+                'Authorization': `Bearer ${provider.apiKey}` 
+            },
             body: JSON.stringify({ 
-                model: config.model || 'gemini-flash-latest', 
+                model: provider.model, 
                 messages: [{ 
                     role: 'user', 
                     content: selectedAiCtx !== 'none' ? `Context: ${storage[selectedAiCtx]}\n\nQuery: ${query}` : query 
@@ -1427,14 +1589,21 @@ function handleExtractButton(container) {
     // 终端面板：反向 (往上拖变大)
     initResizer(document.getElementById('v-drag'), document.getElementById('terminal'), false, true);
     
-    document.addEventListener('click', (e) => { 
-        if (!document.getElementById('ctx').contains(e.target)) document.getElementById('ctx').style.display = 'none'; 
-        if (!document.getElementById('plugin-ctx').contains(e.target)) document.getElementById('plugin-ctx').style.display = 'none'; 
-        if (!document.getElementById('ai-ctx-trigger').contains(e.target)) document.getElementById('ai-ctx-options').style.display = 'none';
-    });
+    document.addEventListener('click', (e) => {
+    if (!document.getElementById('ctx').contains(e.target)) document.getElementById('ctx').style.display = 'none';
+    if (!document.getElementById('plugin-ctx').contains(e.target)) document.getElementById('plugin-ctx').style.display = 'none';
+    
+    // 自动关闭 AI 相关的下拉菜单
+    if (!document.getElementById('ai-ctx-trigger').contains(e.target)) {
+        document.getElementById('ai-ctx-options').style.display = 'none';
+    }
+    if (!document.getElementById('ai-provider-trigger').contains(e.target)) {
+        document.getElementById('ai-provider-options').style.display = 'none';
+    }
+});
     document.getElementById('ai-in').onkeydown = (e) => { if(e.key === 'Enter') sendAi(); };
 
-    renderFiles(); renderPlugins(); addTerminal(); addAiTab();
+    renderFiles(); renderPlugins(); addTerminal(); addAiTab(); updateProviderDisplay();
     document.getElementById('editor').value = storage[activeFile] || "";
     document.getElementById('cur-filename').innerText = activeFile;
 </script>
