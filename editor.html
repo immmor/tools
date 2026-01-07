@@ -127,6 +127,10 @@
             cursor: pointer !important; opacity: 0.6; display: flex; align-items: center; gap: 8px; 
             white-space: nowrap;
         }
+        #term-tabs .term-tab:only-child .term-close,
+        #ai-tabs .term-tab:only-child .term-close {
+            display: none !important;
+        }
         .term-tab.active { background: var(--amber-dim); color: #fff; opacity: 1; }
         .term-close { font-size: 12px; font-weight: bold; cursor: pointer !important; color: var(--term-red); }
         .term-close:hover { color: #fff; }
@@ -288,19 +292,17 @@
             </div>
             <div class="editor-tools">
                 <div class="key-btn" onclick="insertAtCursor('\t')">TAB</div>
-                <div class="key-btn" onclick="insertAtCursor('\n', 0, true)">RET</div>
-                <div class="key-btn" onclick="execEditorCmd('undo')" style="color:#aaa">UNDO</div>
+                <div class="key-btn" onclick="execEditorCmd('undo')">UNDO</div>
                 
-                <div class="key-btn" onclick="moveCursor('Left')">←</div>
-                <div class="key-btn" onclick="moveCursor('Up')">↑</div>
-                <div class="key-btn" onclick="moveCursor('Down')">↓</div>
-                <div class="key-btn" onclick="moveCursor('Right')">→</div>
+                <div class="key-btn" onclick="editorAction('selectAll')"">ALL</div>
+                <div class="key-btn" onclick="editorAction('cut')">CUT</div>
+                <div class="key-btn" onclick="editorAction('copy')">COPY</div>
+                <div class="key-btn" onclick="editorAction('paste')">PASTE</div>
 
                 <div class="key-btn" onclick="insertAtCursor('{}', 1)">{ }</div>
                 <div class="key-btn" onclick="insertAtCursor('()', 1)">( )</div>
                 <div class="key-btn" onclick="insertAtCursor('[]', 1)">[ ]</div>
                 <div class="key-btn" onclick="insertAtCursor('\'\'', 1)">' '</div>
-                <!-- <div class="key-btn" onclick="insertAtCursor('\"\"', 1)">" "</div> -->
             </div>
             <textarea id="editor" spellcheck="false" oninput="autoSave()"></textarea>
         </main>
@@ -317,13 +319,12 @@
     </div>
     <div class="editor-tools">
         <div class="key-btn" onclick="insertAtTerm('\t')">TAB</div>
-        <div class="key-btn" onclick="handleCommand(activeTermId)" style="color:var(--term-green)">RET</div>
-        <div class="key-btn" onclick="execTermUndo()" style="color:#aaa">UNDO</div>
+        <div class="key-btn" onclick="execTermUndo()">UNDO</div>
         
-        <div class="key-btn" onclick="moveTermCursor('Left')">←</div>
-        <div class="key-btn" onclick="moveTermCursor('Up')">↑</div>
-        <div class="key-btn" onclick="moveTermCursor('Down')">↓</div>
-        <div class="key-btn" onclick="moveTermCursor('Right')">→</div>
+        <div class="key-btn" onclick="termAction('selectAll')">ALL</div>
+        <div class="key-btn" onclick="termAction('cut')">CUT</div>
+        <div class="key-btn" onclick="termAction('copy')">COPY</div>
+        <div class="key-btn" onclick="termAction('paste')">PASTE</div>
 
         <div class="key-btn" onclick="insertAtTerm('{}', 1)">{ }</div>
         <div class="key-btn" onclick="insertAtTerm('()', 1)">( )</div>
@@ -513,18 +514,53 @@ function insertAtTerm(text, offset = 0) {
     input.setSelectionRange(newPos, newPos);
 }
 
-// 终端光标移动
-function moveTermCursor(direction) {
+// 编辑器全选、剪切、复制、粘贴逻辑
+async function editorAction(action) {
+    const el = document.getElementById('editor');
+    el.focus();
+    if (action === 'selectAll') {
+        el.select();
+    } else if (action === 'copy') {
+        const selectedText = el.value.substring(el.selectionStart, el.selectionEnd);
+        await navigator.clipboard.writeText(selectedText);
+    } else if (action === 'cut') {
+        const selectedText = el.value.substring(el.selectionStart, el.selectionEnd);
+        await navigator.clipboard.writeText(selectedText);
+        document.execCommand('delete');
+    } else if (action === 'paste') {
+        try {
+            const text = await navigator.clipboard.readText();
+            insertAtCursor(text);
+        } catch (err) {
+            addLog("PASTE_ERROR: Permission denied", "var(--term-red)");
+        }
+    }
+}
+
+// 终端输入框全选、剪切、复制、粘贴逻辑
+async function termAction(action) {
     if (!activeTermId) return;
     const input = document.getElementById(activeTermId).querySelector('.cmd-in');
     if (!input) return;
-
-    let pos = input.selectionStart;
-    if (direction === 'Left') pos = Math.max(0, pos - 1);
-    else if (direction === 'Right') pos = Math.min(input.value.length, pos + 1);
-
     input.focus();
-    input.setSelectionRange(pos, pos);
+
+    if (action === 'selectAll') {
+        input.select();
+    } else if (action === 'copy') {
+        const selectedText = input.value.substring(input.selectionStart, input.selectionEnd);
+        await navigator.clipboard.writeText(selectedText);
+    } else if (action === 'cut') {
+        const selectedText = input.value.substring(input.selectionStart, input.selectionEnd);
+        await navigator.clipboard.writeText(selectedText);
+        input.value = input.value.substring(0, input.selectionStart) + input.value.substring(input.selectionEnd);
+    } else if (action === 'paste') {
+        try {
+            const text = await navigator.clipboard.readText();
+            insertAtTerm(text);
+        } catch (err) {
+            console.error("Paste failed");
+        }
+    }
 }
 
 // 终端撤销操作
@@ -563,37 +599,6 @@ function insertAtCursor(text, offset = 0, isReturn = false) {
     autoSave();
 }
 
-// 新增：光标移动控制
-function moveCursor(direction) {
-    const el = document.getElementById('editor');
-    const start = el.selectionStart;
-    const val = el.value;
-    let newPos = start;
-
-    switch(direction) {
-        case 'Left': newPos = Math.max(0, start - 1); break;
-        case 'Right': newPos = Math.min(val.length, start + 1); break;
-        case 'Up': 
-            const linesUp = val.substring(0, start).split('\n');
-            if (linesUp.length > 1) {
-                const currentLinePos = linesUp[linesUp.length - 1].length;
-                const prevLineLen = linesUp[linesUp.length - 2].length;
-                newPos = start - currentLinePos - 1 - Math.max(0, prevLineLen - currentLinePos);
-                // 简化处理：直接移动到上一行相同位置或行尾
-                newPos = start - linesUp[linesUp.length-1].length - 1;
-            }
-            break;
-        case 'Down':
-            const linesDown = val.substring(start).split('\n');
-            if (linesDown.length > 1) {
-                newPos = start + linesDown[0].length + 1;
-            }
-            break;
-    }
-    
-    el.focus();
-    el.setSelectionRange(newPos, newPos);
-}
 
 // 模拟 Ctrl/Shift 的复合功能（由于网页端限制，通常用于快速选择或快捷键）
 function handleModifier(type) {
@@ -1045,9 +1050,7 @@ document.getElementById('editor').addEventListener('keydown', function(e) {
 
     function removeTerminal(e, id) {
         e.stopPropagation();
-        const tabs = document.querySelectorAll('.term-tab');
-        if (tabs.length <= 1) return;
-        
+        const tabs = document.querySelectorAll('#term-tabs .term-tab'); 
         const tab = document.getElementById('tab-' + id);
         const body = document.getElementById(id);
         const wasActive = tab.classList.contains('active');
@@ -1056,7 +1059,7 @@ document.getElementById('editor').addEventListener('keydown', function(e) {
         body.remove();
         
         if (wasActive) {
-            const nextTab = document.querySelector('.term-tab');
+            const nextTab = document.querySelector('#term-tabs .term-tab');
             if (nextTab) switchTerminal(nextTab.id.replace('tab-', ''));
         }
     }
