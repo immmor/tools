@@ -97,7 +97,6 @@
             border-bottom: 1px solid rgba(113, 78, 0, 0.05); 
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
             display: flex; align-items: center; 
-            -webkit-touch-callout: none; -webkit-user-select: none;
             color: var(--amber); opacity: 0.7; 
         }
         .file-item:hover, .plugin-item:hover { background: rgba(255, 176, 0, 0.05); opacity: 0.9; }
@@ -155,6 +154,9 @@
             background: #000; color: var(--amber); border: 1px solid var(--amber-dim); 
             font-size: 10px; width: 100%; padding: 6px; cursor: pointer !important;
             display: flex; justify-content: space-between; align-items: center; white-space: nowrap;
+        }
+        .custom-select-trigger.active span:last-child {
+            transform: rotate(180deg);
         }
         .custom-select-options {
             position: absolute; bottom: 100%; left: 10px; right: 10px; background: var(--panel-bg);
@@ -252,7 +254,7 @@
                 <div class="ctrl-group">
                     <span class="ctrl" onclick="toggleSearch()" title="SEARCH_ALL">⌕</span>
                     <span class="ctrl" onclick="openModal()" title="NEW NODE">+</span>
-                    <span class="ctrl" onclick="toggleMax('file-section')">◰</span>
+                    <span class="ctrl" onclick="toggleExplorerMax('file-section')">◰</span>
                 </div>
             </div>
             <div id="search-container" style="display:none; padding: 10px; border-bottom: 1px solid var(--amber-dim);">
@@ -269,7 +271,7 @@
                 <span>PLUGINS</span>
                 <div class="ctrl-group">
                     <span class="ctrl" onclick="openPluginModal()" title="ADD PLUGIN">+</span>
-                    <span class="ctrl" onclick="toggleMax('plugin-section')">◰</span>
+                    <span class="ctrl" onclick="toggleExplorerMax('plugin-section')">◰</span>
                 </div>
             </div>
             <div id="plugin-list"></div>
@@ -420,7 +422,7 @@
             }
         ]
     };
-    let selectedProviderIndices = [config.activeProviderIndex];
+    let selectedProviderIndices = [config.activeProviderIndex]; // 只支持单个供应商
     let activeFile = localStorage.getItem('ind_console_active') || 'PROTOCOL.txt';
     let expandedDirs = JSON.parse(localStorage.getItem('ind_console_expanded')) || ['SYSTEM/'];
     let termCount = 0;
@@ -850,20 +852,15 @@ document.getElementById('editor').addEventListener('keydown', function(e) {
                 } else {
                     p = ((clientY - parentRect.top) / parentRect.height) * 100;
                 }
-                
-                // 限制 p 在 0 到 98 之间，确保给横杆和另一个面板留出极小的可见区域 (2%)
-                // 这样横杆就不会被顶出父容器边界
                 p = Math.max(0, Math.min(99, p)); 
                 
                 target.style.height = p.toFixed(2) + '%';
                 target.style.flex = "none"; 
-
-                // 核心修复：如果是拖动文件面板，确保下方的插件面板不要反向挤压
                 const nextEl = target.nextElementSibling?.classList.contains('divider-v') 
                                ? target.nextElementSibling.nextElementSibling 
                                : null;
                 if (nextEl) {
-                    nextEl.style.flex = "1"; // 让下方自动填充剩余的 2%
+                    nextEl.style.flex = "1";
                     nextEl.style.minHeight = "0px";
                 }
             }
@@ -903,6 +900,64 @@ document.getElementById('editor').addEventListener('keydown', function(e) {
         console.log(`Node ${id} 已恢复至侧边栏`);
     }
 }
+
+    function toggleExplorerMax(sectionId) {
+        const explorer = document.getElementById('explorer');
+        const fileSection = document.getElementById('file-section');
+        const pluginSection = document.getElementById('plugin-section');
+        const divider = document.getElementById('v-drag-explorer');
+        
+        // 检查是否已经最大化
+        const isMax = explorer.classList.contains('maximized');
+        
+        if (isMax) {
+            // 退出最大化：还原所有样式
+            explorer.classList.remove('maximized');
+            explorer.style.width = explorer.dataset.origWidth || '';
+            explorer.style.flex = explorer.dataset.origFlex || '';
+            
+            // 还原文件系统和插件系统的显示
+            fileSection.style.display = 'flex';
+            pluginSection.style.display = 'flex';
+            divider.style.display = 'block';
+            
+            // 显示其他面板和分割线
+            document.getElementById('main-stack').style.display = 'flex';
+            document.getElementById('h-drag-left').style.display = 'block';
+            document.getElementById('h-drag-right').style.display = 'block';
+            document.getElementById('ai-panel').style.display = 'flex';
+            
+            console.log(`Explorer 已恢复`);
+        } else {
+            // 进入最大化：备份原始样式
+            explorer.dataset.origWidth = explorer.style.width;
+            explorer.dataset.origFlex = explorer.style.flex;
+            
+            // 强制全屏显示
+            explorer.classList.add('maximized');
+            explorer.style.setProperty('width', '100vw', 'important');
+            explorer.style.setProperty('flex', 'none', 'important');
+            
+            // 根据点击的section隐藏另一个section
+            if (sectionId === 'file-section') {
+                fileSection.style.display = 'flex';
+                pluginSection.style.display = 'none';
+                divider.style.display = 'none';
+            } else if (sectionId === 'plugin-section') {
+                fileSection.style.display = 'none';
+                pluginSection.style.display = 'flex';
+                divider.style.display = 'none';
+            }
+            
+            // 隐藏其他面板和分割线
+            document.getElementById('main-stack').style.display = 'none';
+            document.getElementById('h-drag-left').style.display = 'none';
+            document.getElementById('h-drag-right').style.display = 'none';
+            document.getElementById('ai-panel').style.display = 'none';
+            
+            console.log(`${sectionId} 已进入全屏模式`);
+        }
+    }
     
     function renderFiles() {
         const list = document.getElementById('file-list');
@@ -1219,7 +1274,18 @@ document.getElementById('editor').addEventListener('keydown', function(e) {
     }
 
     function closeModal() { document.getElementById('modal-overlay').style.display = 'none'; }
-    function toggleAiSelect() { const opt = document.getElementById('ai-ctx-options'); opt.style.display = opt.style.display === 'block' ? 'none' : 'block'; }
+    function toggleAiSelect() { 
+    const opt = document.getElementById('ai-ctx-options');
+    const trigger = document.getElementById('ai-ctx-trigger');
+    
+    // 关闭另一个下拉框防止重叠
+    document.getElementById('ai-provider-options').style.display = 'none';
+    document.getElementById('ai-provider-trigger').classList.remove('active');
+    
+    const isOpening = opt.style.display !== 'block';
+    opt.style.display = isOpening ? 'block' : 'none';
+    trigger.classList.toggle('active', isOpening);
+}
     
     function openSettings() {
     document.getElementById('modal-title').innerText = "AI_PROVIDERS_CONFIG";
@@ -1302,21 +1368,9 @@ function renderProviderOptions() {
 }
 
 function toggleProviderSelection(index) {
-    const pos = selectedProviderIndices.indexOf(index);
-    if (pos > -1) {
-        // 如果已经选中了，且选中的不止一个，则取消选中
-        if (selectedProviderIndices.length > 1) {
-            selectedProviderIndices.splice(pos, 1);
-        }
-    } else {
-        selectedProviderIndices.push(index);
-    }
-    
-    // 如果当前活跃的 Provider 被取消了，自动把第一个选中的设为活跃
-    if (!selectedProviderIndices.includes(config.activeProviderIndex)) {
-        config.activeProviderIndex = selectedProviderIndices[0];
-    }
-    
+    // 只支持单个供应商，直接切换
+    config.activeProviderIndex = index;
+    selectedProviderIndices = [index];
     renderProviderOptions();
     updateProviderDisplay();
 }
@@ -1326,22 +1380,24 @@ function updateProviderDisplay() {
     const el = document.getElementById('active-provider-name');
     if (!el) return;
     
-    if (selectedProviderIndices.length > 1) {
-        el.innerText = `MULTIPLE (${selectedProviderIndices.length})`;
-        el.style.color = 'var(--amber)';
-    } else {
-        const p = config.providers[config.activeProviderIndex];
-        el.innerText = p ? p.name : 'NONE';
-        el.style.color = 'var(--term-green)';
-    }
+    const p = config.providers[config.activeProviderIndex];
+    el.innerText = p ? p.name : 'NONE';
+    el.style.color = 'var(--term-green)';
 }
 
 function toggleProviderSelect() {
     const opt = document.getElementById('ai-provider-options');
+    const trigger = document.getElementById('ai-provider-trigger');
+    
     // 关闭另一个下拉框防止重叠
     document.getElementById('ai-ctx-options').style.display = 'none';
-    opt.style.display = opt.style.display === 'block' ? 'none' : 'block';
-    if (opt.style.display === 'block') renderProviderOptions();
+    document.getElementById('ai-ctx-trigger').classList.remove('active');
+    
+    const isOpening = opt.style.display !== 'block';
+    opt.style.display = isOpening ? 'block' : 'none';
+    trigger.classList.toggle('active', isOpening);
+    
+    if (isOpening) renderProviderOptions();
 }
 
 function selectProvider(index) {
@@ -1349,6 +1405,7 @@ function selectProvider(index) {
     localStorage.setItem('ind_console_config', JSON.stringify(config));
     updateProviderDisplay();
     document.getElementById('ai-provider-options').style.display = 'none';
+    document.getElementById('ai-provider-trigger').classList.remove('active');
     addLog(`[SYSTEM]: SWITCHED_TO_PROVIDER >> ${config.providers[index].name}`, 'var(--term-green)');
 }
 
@@ -1439,29 +1496,8 @@ async function handleAiSend() {
     const query = input.value.trim();
     if (!query) return;
 
-    const targets = selectedProviderIndices.length > 0 ? selectedProviderIndices : [config.activeProviderIndex];
-
-    if (targets.length <= 1) {
-        // 单模型发送：直接使用当前活跃 ID
-        sendAi(null, activeAiId); 
-    } else {
-        const originalIndex = config.activeProviderIndex;
-        input.value = ''; 
-
-        for (const idx of targets) {
-            config.activeProviderIndex = idx;
-            // 获取新创建的标签 ID
-            const newId = addAiTab(); 
-            
-            await new Promise(r => setTimeout(r, 50)); // 给 DOM 渲染留一点时间
-
-            // 关键：把 query 和 明确的窗口 ID 传进去
-            sendAi(query, newId); 
-        }
-
-        config.activeProviderIndex = originalIndex;
-        updateProviderDisplay();
-    }
+    // 只支持单个供应商，直接发送
+    sendAi(null, activeAiId);
 }
 
 async function sendAi(overrideQuery = null, targetTabId = null) {
@@ -1474,14 +1510,16 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
     const provider = config.providers[config.activeProviderIndex];
     if (!query || !provider || !provider.apiKey || !currentChatId) return;
 
-    if (overrideQuery === null) input.value = '';
+    // 只在单模型模式下清空输入框
+    if (overrideQuery === null) {
+        input.value = '';
+    }
 
     const chat = document.getElementById(currentChatId);
     const uMsg = document.createElement('div');
     uMsg.className = 'msg user'; 
     uMsg.innerText = `[CTX:${selectedAiCtx}] > ${query}`;
-    chat.appendChild(uMsg); 
-    input.value = '';
+    chat.appendChild(uMsg);
 
     const aiMsg = document.createElement('div');
     aiMsg.className = 'msg ai'; 
