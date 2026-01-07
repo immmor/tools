@@ -168,7 +168,15 @@
             margin-bottom: 10px;
         }
 
-       
+        .search-res-item {
+            padding: 5px 10px;
+            font-size: 11px;
+            border-bottom: 1px solid rgba(113, 78, 0, 0.1);
+            cursor: pointer !important;
+        }
+        .search-res-item:hover { background: rgba(255, 176, 0, 0.1); }
+        .search-match { color: #fff; background: var(--amber-dim); padding: 0 2px; }
+        .search-path { font-size: 9px; opacity: 0.5; display: block; margin-bottom: 2px; }
 
         .inject-btn { display: inline-block; margin-top: 8px; font-size: 9px; padding: 2px 6px; border: 1px solid var(--amber); cursor: pointer !important; color: var(--amber); }
         .inject-btn:hover { background: var(--amber); color: #000; }
@@ -195,6 +203,31 @@
         .type-selector { display: flex; gap: 15px; margin-bottom: 10px; font-size: 11px; }
         .type-opt { cursor: pointer !important; display: flex; align-items: center; gap: 5px; }
         .type-opt input { cursor: pointer !important; accent-color: var(--amber); }
+
+        .editor-tools {
+            display: flex;
+            gap: 2px;
+            padding: 5px;
+            background: rgba(28, 25, 18, 0.8);
+            border-bottom: 1px solid var(--amber-dim);
+            overflow-x: auto;
+            white-space: nowrap;
+            scrollbar-width: none;
+        }
+        .editor-tools::-webkit-scrollbar { display: none; }
+        .key-btn {
+            padding: 4px 12px;
+            background: var(--bg);
+            border: 1px solid var(--amber-dim);
+            color: var(--amber);
+            font-size: 11px;
+            cursor: pointer !important;
+            text-transform: uppercase;
+        }
+        .key-btn:active {
+            background: var(--amber);
+            color: var(--bg);
+        }
     </style>
 </head>
 <body>
@@ -216,11 +249,16 @@
             <div class="p-head">
                 <span>FILESYSTEM</span>
                 <div class="ctrl-group">
+                    <span class="ctrl" onclick="toggleSearch()" title="SEARCH_ALL">⌕</span>
                     <span class="ctrl" onclick="openModal()" title="NEW NODE">+</span>
                     <span class="ctrl" onclick="toggleMax('file-section')">◰</span>
                 </div>
             </div>
+            <div id="search-container" style="display:none; padding: 10px; border-bottom: 1px solid var(--amber-dim);">
+                <input type="text" id="global-search-in" class="modal-input" placeholder="Search files/code..." style="margin:0; font-size:11px;" oninput="executeGlobalSearch()">
+            </div>
             <div id="file-list"></div>
+            <div id="search-results" style="display:none; overflow-y:auto; flex:1;"></div>
         </div>
 
         <div class="divider-v" id="v-drag-explorer"></div>
@@ -243,7 +281,26 @@
         <main class="panel" id="editor-p" style="flex:1">
             <div class="p-head">
                 <span id="cur-filename">DATA_NODE.01</span>
-                <span class="ctrl" onclick="toggleMax('editor-p')">◰</span>
+                <div class="ctrl-group">
+                    <span class="ctrl" onclick="runCurrentFile()" title="RUN_NODE" style="color:var(--amber)">▶</span>
+                    <span class="ctrl" onclick="toggleMax('editor-p')">◰</span>
+                </div>
+            </div>
+            <div class="editor-tools">
+                <div class="key-btn" onclick="insertAtCursor('\t')">TAB</div>
+                <div class="key-btn" onclick="insertAtCursor('\n', 0, true)">RET</div>
+                <div class="key-btn" onclick="execEditorCmd('undo')" style="color:#aaa">UNDO</div>
+                
+                <div class="key-btn" onclick="moveCursor('Left')">←</div>
+                <div class="key-btn" onclick="moveCursor('Up')">↑</div>
+                <div class="key-btn" onclick="moveCursor('Down')">↓</div>
+                <div class="key-btn" onclick="moveCursor('Right')">→</div>
+
+                <div class="key-btn" onclick="insertAtCursor('{}', 1)">{ }</div>
+                <div class="key-btn" onclick="insertAtCursor('()', 1)">( )</div>
+                <div class="key-btn" onclick="insertAtCursor('[]', 1)">[ ]</div>
+                <div class="key-btn" onclick="insertAtCursor('\'\'', 1)">' '</div>
+                <!-- <div class="key-btn" onclick="insertAtCursor('\"\"', 1)">" "</div> -->
             </div>
             <textarea id="editor" spellcheck="false" oninput="autoSave()"></textarea>
         </main>
@@ -251,16 +308,31 @@
         <div class="divider-v" id="v-drag"></div>
 
         <footer class="panel" id="terminal">
-            <div class="p-head">
-                <span>COMMAND</span>
-                <div class="ctrl-group">
-                    <span class="ctrl" onclick="addTerminal()">+</span>
-                    <span class="ctrl" onclick="toggleMax('terminal')">◰</span>
-                </div>
-            </div>
-            <div class="term-tabs" id="term-tabs"></div>
-            <div id="term-container" style="flex:1; display:flex; flex-direction:column; overflow:hidden;"></div>
-        </footer>
+    <div class="p-head">
+        <span>COMMAND</span>
+        <div class="ctrl-group">
+            <span class="ctrl" onclick="addTerminal()">+</span>
+            <span class="ctrl" onclick="toggleMax('terminal')">◰</span>
+        </div>
+    </div>
+    <div class="editor-tools">
+        <div class="key-btn" onclick="insertAtTerm('\t')">TAB</div>
+        <div class="key-btn" onclick="handleCommand(activeTermId)" style="color:var(--term-green)">RET</div>
+        <div class="key-btn" onclick="execTermUndo()" style="color:#aaa">UNDO</div>
+        
+        <div class="key-btn" onclick="moveTermCursor('Left')">←</div>
+        <div class="key-btn" onclick="moveTermCursor('Up')">↑</div>
+        <div class="key-btn" onclick="moveTermCursor('Down')">↓</div>
+        <div class="key-btn" onclick="moveTermCursor('Right')">→</div>
+
+        <div class="key-btn" onclick="insertAtTerm('{}', 1)">{ }</div>
+        <div class="key-btn" onclick="insertAtTerm('()', 1)">( )</div>
+        <div class="key-btn" onclick="insertAtTerm('[]', 1)">[ ]</div>
+        <div class="key-btn" onclick="insertAtTerm('\'\'', 1)">' '</div>
+    </div>
+    <div class="term-tabs" id="term-tabs"></div>
+    <div id="term-container" style="flex:1; display:flex; flex-direction:column; overflow:hidden;"></div>
+</footer>
     </div>
 
     <div class="divider-h" id="h-drag-right"></div>
@@ -344,6 +416,206 @@
     let ctxTarget = null;
     let pluginCtxTarget = null;
 
+    let isSearching = false;
+    function toggleSearch() {
+        const searchCont = document.getElementById('search-container');
+        const fileList = document.getElementById('file-list');
+        const searchRes = document.getElementById('search-results');
+        const searchInput = document.getElementById('global-search-in');
+
+        isSearching = !isSearching;
+
+        if (isSearching) {
+            searchCont.style.display = 'block';
+            searchRes.style.display = 'block';
+            fileList.style.display = 'none';
+            searchInput.focus();
+        } else {
+            searchCont.style.display = 'none';
+            searchRes.style.display = 'none';
+            fileList.style.display = 'block';
+            searchInput.value = '';
+        }
+    }
+
+    function executeGlobalSearch() {
+        const query = document.getElementById('global-search-in').value.toLowerCase();
+        const resultsCont = document.getElementById('search-results');
+        resultsCont.innerHTML = '';
+
+        if (!query) return;
+
+        Object.keys(storage).forEach(path => {
+            const isFolder = path.endsWith('/');
+            const content = storage[path];
+            
+            // 1. 搜索文件名
+            const fileNameMatch = path.toLowerCase().includes(query);
+            
+            // 2. 搜索文件内容 (如果是文件)
+            let contentMatch = null;
+            if (!isFolder && typeof content === 'string') {
+                const index = content.toLowerCase().indexOf(query);
+                if (index !== -1) {
+                    // 截取匹配项前后的上下文
+                    const start = Math.max(0, index - 20);
+                    const end = Math.min(content.length, index + query.length + 20);
+                    contentMatch = content.substring(start, end).replace(/\n/g, ' ');
+                }
+            }
+
+            if (fileNameMatch || contentMatch) {
+                const div = document.createElement('div');
+                div.className = 'search-res-item';
+                
+                // 渲染结果项
+                let innerHTML = `<span class="search-path">${path}</span>`;
+                if (contentMatch) {
+                    // 高亮显示匹配的内容片段
+                    const highlighted = contentMatch.replace(new RegExp(query, 'gi'), (m) => `<span class="search-match">${m}</span>`);
+                    innerHTML += `<span style="opacity:0.8">...${highlighted}...</span>`;
+                } else {
+                    innerHTML += `<span style="color:var(--amber)">[MATCH_IN_FILENAME]</span>`;
+                }
+
+                div.innerHTML = innerHTML;
+                div.onclick = () => {
+                    // 自动打开对应文件
+                    activeFile = path;
+                    if (!isFolder) {
+                        document.getElementById('editor').value = storage[path];
+                        document.getElementById('cur-filename').innerText = path;
+                    }
+                    toggleSearch(); // 搜索完成后切换回文件列表
+                    renderFiles();
+                };
+                resultsCont.appendChild(div);
+            }
+        });
+
+        if (resultsCont.innerHTML === '') {
+            resultsCont.innerHTML = '<div style="padding:10px; font-size:10px; opacity:0.5;">NO_MATCHES_FOUND</div>';
+        }
+    }
+
+// 终端字符插入函数 (支持括号偏移)
+function insertAtTerm(text, offset = 0) {
+    if (!activeTermId) return;
+    const input = document.getElementById(activeTermId).querySelector('.cmd-in');
+    if (!input) return;
+
+    const start = input.selectionStart;
+    const end = input.selectionEnd;
+    input.value = input.value.substring(0, start) + text + input.value.substring(end);
+
+    const newPos = start + text.length - offset;
+    input.focus();
+    input.setSelectionRange(newPos, newPos);
+}
+
+// 终端光标移动
+function moveTermCursor(direction) {
+    if (!activeTermId) return;
+    const input = document.getElementById(activeTermId).querySelector('.cmd-in');
+    if (!input) return;
+
+    let pos = input.selectionStart;
+    if (direction === 'Left') pos = Math.max(0, pos - 1);
+    else if (direction === 'Right') pos = Math.min(input.value.length, pos + 1);
+
+    input.focus();
+    input.setSelectionRange(pos, pos);
+}
+
+// 终端撤销操作
+function execTermUndo() {
+    if (!activeTermId) return;
+    const input = document.getElementById(activeTermId).querySelector('.cmd-in');
+    if (input) {
+        input.focus();
+        document.execCommand('undo', false, null);
+    }
+}
+    // 在光标处插入文本
+// 增强：插入文本并在必要时处理回车缩进
+function insertAtCursor(text, offset = 0, isReturn = false) {
+    const el = document.getElementById('editor');
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const val = el.value;
+
+    let contentToInsert = text;
+    
+    // 如果是回车键，尝试模拟简单自动缩进
+    if (isReturn) {
+        const line = val.substring(0, start).split('\n').pop();
+        const trimStart = line.search(/\S/);
+        const indent = trimStart > 0 ? line.substring(0, trimStart) : "";
+        contentToInsert = '\n' + indent;
+    }
+
+    el.value = val.substring(0, start) + contentToInsert + val.substring(end);
+    
+    const newPos = start + contentToInsert.length - offset;
+    el.focus();
+    el.setSelectionRange(newPos, newPos);
+    
+    autoSave();
+}
+
+// 新增：光标移动控制
+function moveCursor(direction) {
+    const el = document.getElementById('editor');
+    const start = el.selectionStart;
+    const val = el.value;
+    let newPos = start;
+
+    switch(direction) {
+        case 'Left': newPos = Math.max(0, start - 1); break;
+        case 'Right': newPos = Math.min(val.length, start + 1); break;
+        case 'Up': 
+            const linesUp = val.substring(0, start).split('\n');
+            if (linesUp.length > 1) {
+                const currentLinePos = linesUp[linesUp.length - 1].length;
+                const prevLineLen = linesUp[linesUp.length - 2].length;
+                newPos = start - currentLinePos - 1 - Math.max(0, prevLineLen - currentLinePos);
+                // 简化处理：直接移动到上一行相同位置或行尾
+                newPos = start - linesUp[linesUp.length-1].length - 1;
+            }
+            break;
+        case 'Down':
+            const linesDown = val.substring(start).split('\n');
+            if (linesDown.length > 1) {
+                newPos = start + linesDown[0].length + 1;
+            }
+            break;
+    }
+    
+    el.focus();
+    el.setSelectionRange(newPos, newPos);
+}
+
+// 模拟 Ctrl/Shift 的复合功能（由于网页端限制，通常用于快速选择或快捷键）
+function handleModifier(type) {
+    const el = document.getElementById('editor');
+    addLog(`[SYSTEM]: MODIFIER_${type}_ACTIVE`, 'var(--amber-dim)');
+    el.focus();
+    // 这里可以根据需求扩展，例如点击 Shift 后下次点击方向键变为选中模式
+}
+// 执行基础编辑命令 (Undo/Redo)
+function execEditorCmd(cmd) {
+    document.execCommand(cmd, false, null);
+    autoSave();
+}
+
+// 拦截物理 Tab 键 (如果是外接键盘)
+document.getElementById('editor').addEventListener('keydown', function(e) {
+    if (e.key === 'Tab') {
+        e.preventDefault();
+        insertAtCursor('    ');
+    }
+});
+
     // --- Plugins Logic ---
     function renderPlugins() {
         const list = document.getElementById('plugin-list');
@@ -398,6 +670,51 @@
             savePlugins(); closeModal();
         }
     }
+
+    async function runCurrentFile() {
+    if (!activeFile || activeFile.endsWith('/')) return;
+
+    // 自动保存当前编辑器内容到 storage
+    autoSave();
+
+    const fileName = activeFile.toLowerCase();
+    
+    // 确保有活跃的终端，如果没有则创建一个
+    if (!activeTermId) {
+        addTerminal();
+    }
+
+    // 切换到终端面板视图（可选，为了让用户看到输出）
+    // document.getElementById('terminal').scrollIntoView();
+
+    addLog(`[SYSTEM]: EXEC_START >> ${activeFile}`, 'var(--amber)');
+
+    if (fileName.endsWith('.js')) {
+        // 执行 JavaScript
+        try {
+            const code = storage[activeFile];
+            // 使用 Function 构造函数执行，并注入一个简单的 log 代理
+            new Function('console', code)({
+                log: (m) => addLog(m, 'var(--term-green)'),
+                error: (m) => addLog(`ERR: ${m}`, 'var(--term-red)')
+            });
+        } catch (e) {
+            addLog(`RUNTIME_ERR: ${e.message}`, 'var(--term-red)');
+        }
+    } else if (fileName.endsWith('.py')) {
+        // 执行 Python (使用你已有的 Pyodide 逻辑)
+        try {
+            addLog("INITIALIZING_PYTHON_WASM...", "var(--amber-dim)");
+            const py = await initPython();
+            py.setStdout({ batched: (str) => addLog(str, 'var(--term-green)') });
+            await py.runPythonAsync(storage[activeFile]);
+        } catch (e) {
+            addLog(`PYTHON_ERR: ${e.message}`, 'var(--term-red)');
+        }
+    } else {
+        addLog(`ERR: NO_EXECUTOR_FOR_EXTENSION (${activeFile.split('.').pop()})`, 'var(--term-red)');
+    }
+}
 
     function confirmDeletePlugin() {
         if (pluginCtxTarget === null) return;
