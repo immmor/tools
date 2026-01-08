@@ -696,7 +696,12 @@ function initEditorTabEvents() {
             switchEditorTab(pluginTabName);
         } else {
             createEditorTab(pluginTabName);
-            editorTabs[pluginTabName].editor.value = p.code;
+            // 确保插件代码包含插件名称注释
+            let pluginCode = p.code;
+            if (!pluginCode.includes("// 插件名称:")) {
+                pluginCode = `// 插件名称: ${p.name}\n${pluginCode}`;
+            }
+            editorTabs[pluginTabName].editor.value = pluginCode;
         }
     }
 
@@ -784,7 +789,7 @@ function initEditorTabEvents() {
             switchEditorTab(newPluginTabName);
         } else {
             createEditorTab(newPluginTabName);
-            editorTabs[newPluginTabName].editor.value = "// 新插件代码\n// 编辑完成后按 Ctrl+S 或点击💾按钮保存";
+            editorTabs[newPluginTabName].editor.value = "// 插件名称: 新插件\n";
         }
     }
 
@@ -805,20 +810,42 @@ function initEditorTabEvents() {
             const content = editor.value;
             
             // 判断是普通文件还是插件
-            if (plugins.find(p => p.name === activeEditorTab)) {
-                // 保存现有插件
-                const pluginIndex = plugins.findIndex(p => p.name === activeEditorTab);
-                if (pluginIndex !== -1) {
-                    plugins[pluginIndex].code = content;
-                    savePlugins();
-                    renderPlugins();
+            if (plugins.find(p => p.name === activeEditorTab) || activeEditorTab === "New_Plugin") {
+                // 解析插件名（从代码中提取）
+                let pluginName = activeEditorTab;
+                
+                // 尝试从代码中提取插件名
+                const nameMatch = content.match(/\/\/\s*插件名[称]?[:：]\s*(.+)/i) || 
+                                 content.match(/\/\/\s*Plugin[\s\w]*[:：]\s*(.+)/i);
+                if (nameMatch && nameMatch[1]) {
+                    pluginName = nameMatch[1].trim();
                 }
-            } else if (activeEditorTab === "New_Plugin") {
-                // 创建新插件
-                if (content.trim()) {
-                    plugins.push({ name: "New_Plugin", code: content, active: false });
+                
+                // 查找是否已存在同名插件
+                const existingIndex = plugins.findIndex(p => p.name === pluginName);
+                
+                if (existingIndex !== -1) {
+                    // 更新现有插件
+                    plugins[existingIndex].code = content;
                     savePlugins();
                     renderPlugins();
+                    
+                    // 如果插件名改变，更新标签
+                    if (pluginName !== activeEditorTab) {
+                        updateEditorTabName(activeEditorTab, pluginName);
+                    }
+                } else {
+                    // 创建新插件
+                    if (content.trim()) {
+                        plugins.push({ name: pluginName, code: content, active: false });
+                        savePlugins();
+                        renderPlugins();
+                        
+                        // 如果插件名改变，更新标签
+                        if (pluginName !== activeEditorTab) {
+                            updateEditorTabName(activeEditorTab, pluginName);
+                        }
+                    }
                 }
             } else {
                 // 保存普通文件
@@ -832,6 +859,25 @@ function initEditorTabEvents() {
             
             // 显示保存成功的提示
             console.log(`文件 ${activeEditorTab} 已保存`);
+        }
+    }
+    
+    function updateEditorTabName(oldName, newName) {
+        if (editorTabs[oldName]) {
+            // 更新标签对象
+            editorTabs[newName] = editorTabs[oldName];
+            delete editorTabs[oldName];
+            
+            // 更新标签DOM元素
+            const tab = editorTabs[newName].tab;
+            tab.id = 'editor-tab-' + newName;
+            tab.innerHTML = `<span>${newName}</span><span class="term-close" onclick="closeEditorTab('${newName}')">×</span>`;
+            tab.onclick = () => switchEditorTab(newName);
+            
+            // 更新活动标签
+            if (activeEditorTab === oldName) {
+                activeEditorTab = newName;
+            }
         }
     }
     
@@ -1715,6 +1761,14 @@ function restoreAiTabs() {
             tab.id = 'tab-' + chatId;
             tab.innerHTML = `<span>CHAT_${idNum}</span><span class="term-close" onclick="removeAiTab(event, '${chatId}')">×</span>`;
             tab.onclick = () => switchAiTab(chatId);
+            
+            // 添加拖拽功能
+            tab.setAttribute('draggable', 'true');
+            tab.addEventListener('dragstart', handleTabDragStart);
+            tab.addEventListener('dragover', handleTabDragOver);
+            tab.addEventListener('drop', handleTabDrop);
+            tab.addEventListener('dragend', handleTabDragEnd);
+            
             document.getElementById('ai-tabs').appendChild(tab);
 
             // 2. 创建聊天内容区
