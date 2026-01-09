@@ -675,6 +675,16 @@ function initEditorTabEvents() {
             };
             list.appendChild(div);
         });
+        
+        // 自动激活标记为激活的插件
+        plugins.forEach((p, index) => {
+            if (p.active && !p._cleanup) {
+                try { 
+                    const pluginReturn = new Function(p.code)(); 
+                    plugins[index]._cleanup = typeof pluginReturn === 'function' ? pluginReturn : null;
+                } catch(e) { console.error("PLUGIN_BOOT_ERR:", e); }
+            }
+        });
     }
 
     function showPluginCtx(e) {
@@ -1789,21 +1799,15 @@ function restoreAiTabs() {
             document.getElementById('ai-container').appendChild(body);
         });
         
-        // 激活第一个标签
         activeAiId = savedChats[0];
         switchAiTab(activeAiId);
     } else {
-        // 没有历史记录时创建默认标签
         addAiTab(false);
     }
 }
 
-// --- AI 多标签逻辑 ---
-
 function addAiTab(forceNew = true) {
     const id = 'ai-chat-' + (++aiCount);
-    
-    // 1. 创建标签 (复用终端标签样式)
     const tab = document.createElement('div');
     tab.className = 'term-tab'; 
     tab.id = 'tab-' + id;
