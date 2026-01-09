@@ -390,6 +390,7 @@
 </div>
 
 <div id="plugin-ctx">
+    <div class="opt" onclick="renamePlugin()">[R] RENAME_PLUGIN</div>
     <div class="opt" onclick="startEditPlugin()">[E] EDIT_PLUGIN</div>
     <div class="opt" onclick="confirmDeletePlugin()" style="color:var(--term-red)">[X] UNINSTALL_PLUGIN</div>
 </div>
@@ -760,6 +761,25 @@ function initEditorTabEvents() {
     }
 }
 
+    function renamePlugin() {
+        if (pluginCtxTarget === null) return;
+        const p = plugins[pluginCtxTarget];
+        document.getElementById('plugin-ctx').style.display = 'none';
+        
+        const newName = prompt('输入新插件名：', p.name);
+        if (newName && newName.trim() && newName !== p.name) {
+            // 直接修改插件名，不是创建新插件
+            p.name = newName.trim();
+            savePlugins();
+            
+            // 如果插件正在编辑中，更新标签名
+            if (editorTabs[p.name]) {
+                const tab = editorTabs[p.name].tab;
+                tab.innerHTML = `<span>${p.name}</span><span class="term-close" onclick="closeEditorTab('${p.name}')">×</span>`;
+            }
+        }
+    }
+    
     function confirmDeletePlugin() {
         if (pluginCtxTarget === null) return;
         if(confirm(`UNINSTALL ${plugins[pluginCtxTarget].name}?`)) {
@@ -1368,7 +1388,25 @@ function reorderTermTabs() {
             delete storage[oldPath];
         }
         if (activeFile === oldPath) activeFile = newPath;
-        autoSave(); renderFiles();
+        
+        // 更新多标签编辑器系统
+        if (editorTabs[oldPath]) {
+            // 更新标签名
+            editorTabs[newPath] = editorTabs[oldPath];
+            delete editorTabs[oldPath];
+            const tab = editorTabs[newPath].tab;
+            tab.innerHTML = `<span>${newName}</span><span class="term-close" onclick="closeEditorTab('${newPath}')">×</span>`;
+            if (activeEditorTab === oldPath) {
+                activeEditorTab = newPath;
+            }
+        }
+        
+        // 保存到localStorage
+        localStorage.setItem('ind_console_storage', JSON.stringify(storage));
+        localStorage.setItem('ind_console_active', activeFile);
+        localStorage.setItem('ind_console_expanded', JSON.stringify(expandedDirs));
+        
+        renderFiles();
     }
 
     function deleteNodeFromCtx() {
@@ -1382,12 +1420,15 @@ function reorderTermTabs() {
             } else {
                 delete storage[path];
             }
-            if (activeFile.startsWith(path)) {
-                activeFile = Object.keys(storage).find(k => !k.endsWith('/')) || '';
-                document.getElementById('editor').value = storage[activeFile] || "";
-                document.getElementById('cur-filename').innerText = activeFile || "NO_NODE";
+            
+            // 更新多标签编辑器系统
+            if (editorTabs[path]) {
+                closeEditorTab(path);
             }
-            autoSave(); renderFiles();
+            
+            // 保存到localStorage
+            localStorage.setItem('ind_console_storage', JSON.stringify(storage));
+            renderFiles();
         }
         document.getElementById('ctx').style.display = 'none';
     }
@@ -1592,11 +1633,14 @@ function reorderTermTabs() {
             } else { 
                 storage[finalPath] = ""; 
                 activeFile = finalPath;
-                document.getElementById('editor').value = ""; 
-                document.getElementById('cur-filename').innerText = finalPath;
+                createEditorTab(finalPath);
             }
+            
+            // 保存到localStorage
+            localStorage.setItem('ind_console_storage', JSON.stringify(storage));
+            localStorage.setItem('ind_console_active', activeFile);
+            
             renderFiles(); 
-            autoSave(); 
             closeModal();
         }
     }
