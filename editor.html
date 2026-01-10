@@ -58,6 +58,41 @@
             margin: 0 !important;
             padding: 0 !important;
         }
+        
+        .panel-switch-bar {
+            position: fixed;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 10px;
+            z-index: 1000000;
+            background: rgba(0,0,0,0.8);
+            padding: 8px 16px;
+            border-radius: 20px;
+            border: 1px solid var(--amber-dim);
+        }
+        
+        .panel-switch-btn {
+            padding: 6px 12px;
+            background: transparent;
+            border: 1px solid var(--amber-dim);
+            color: var(--amber);
+            border-radius: 15px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+        
+        .panel-switch-btn:hover {
+            background: var(--amber-dim);
+            color: var(--amber-bright);
+        }
+        
+        .panel-switch-btn.active {
+            background: var(--amber);
+            color: #000;
+        }
 
         .divider-h { width: 6px; background: var(--amber-dim); cursor: col-resize !important; flex-shrink: 0; }
         .divider-h:hover, .divider-h.active { background: var(--amber); box-shadow: 0 0 10px var(--amber); }
@@ -1229,13 +1264,74 @@ function reorderTermTabs() {
         el.style.setProperty('height', '100vh', 'important');
         el.style.setProperty('flex', 'none', 'important');
         
+        // 创建面板切换按钮栏
+        createPanelSwitchBar(id);
+        
         console.log(`Node ${id} 已进入真正的全屏模式`);
     } else {
         // 退出最大化：还原原始行内样式
         el.style.height = el.dataset.origHeight || '';
         el.style.flex = el.dataset.origFlex || '';
         
+        // 移除面板切换按钮栏
+        removePanelSwitchBar();
+        
         console.log(`Node ${id} 已恢复至侧边栏`);
+    }
+}
+
+// 创建面板切换按钮栏
+function createPanelSwitchBar(currentPanelId) {
+    // 移除已存在的切换栏
+    removePanelSwitchBar();
+    
+    const switchBar = document.createElement('div');
+    switchBar.className = 'panel-switch-bar';
+    switchBar.id = 'panel-switch-bar';
+    
+    // 定义所有面板
+    const panels = [
+        { id: 'explorer', name: 'EXPLORER' },
+        { id: 'editor-p', name: 'EDITOR' },
+        { id: 'ai-panel', name: 'AI' },
+        { id: 'terminal', name: 'TERMINAL' }
+    ];
+    
+    panels.forEach(panel => {
+        const btn = document.createElement('button');
+        btn.className = 'panel-switch-btn';
+        if (panel.id === currentPanelId) {
+            btn.classList.add('active');
+        }
+        btn.textContent = panel.name;
+        btn.onclick = () => {
+            // 如果点击的是当前面板，则退出全屏
+            if (panel.id === currentPanelId) {
+                toggleMax(panel.id);
+            } else {
+                // 切换到其他面板
+                const currentPanel = document.getElementById(currentPanelId);
+                if (currentPanel) {
+                    currentPanel.classList.remove('maximized');
+                    currentPanel.style.height = currentPanel.dataset.origHeight || '';
+                    currentPanel.style.flex = currentPanel.dataset.origFlex || '';
+                }
+                
+                // 最大化新面板
+                toggleMax(panel.id);
+            }
+        };
+        switchBar.appendChild(btn);
+    });
+    
+    document.body.appendChild(switchBar);
+}
+
+// 移除面板切换按钮栏
+function removePanelSwitchBar() {
+    const existingBar = document.getElementById('panel-switch-bar');
+    if (existingBar) {
+        existingBar.remove();
     }
 }
 
