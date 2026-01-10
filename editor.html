@@ -1389,9 +1389,7 @@ function reorderTermTabs() {
         }
         if (activeFile === oldPath) activeFile = newPath;
         
-        // 更新多标签编辑器系统
         if (editorTabs[oldPath]) {
-            // 更新标签名
             editorTabs[newPath] = editorTabs[oldPath];
             delete editorTabs[oldPath];
             const tab = editorTabs[newPath].tab;
@@ -1401,7 +1399,6 @@ function reorderTermTabs() {
             }
         }
         
-        // 保存到localStorage
         localStorage.setItem('ind_console_storage', JSON.stringify(storage));
         localStorage.setItem('ind_console_active', activeFile);
         localStorage.setItem('ind_console_expanded', JSON.stringify(expandedDirs));
@@ -1524,7 +1521,8 @@ function reorderTermTabs() {
         const args = val.split(' '), cmd = args[0].toLowerCase(), fileName = args[1];
         switch(cmd) {
             case 'help':
-                log('AVAILABLE_COMMANDS: ls, cat, rm, touch, mkdir, pwd, echo, date, whoami, info, clear, node, python', 'var(--amber)');
+                log('AVAILABLE_COMMANDS: ls, cat, rm, touch, mkdir, pwd, echo, date, whoami, info, clear, node, python, ssh', 'var(--amber)');
+                log('SSH Usage: ssh user@host[:port] [password]', 'var(--amber)');
                 break;
 
             case 'cat': // 查看文件内容
@@ -1596,9 +1594,150 @@ function reorderTermTabs() {
                 py.setStdout({ batched: (str) => log(str, 'var(--term-green)') });
                 await py.runPythonAsync(storage[fileName]);
                 break;
+            case 'ssh':
+                // SSH连接命令格式: ssh user@host[:port] [password]
+                if (args.length < 2) {
+                    log('Usage: ssh user@host[:port] [password]', 'var(--term-red)');
+                    break;
+                }
+                
+                const sshTarget = args[1];
+                const sshPassword = args[2] || null;
+                
+                // 解析SSH连接信息
+                const match = sshTarget.match(/^(\w+)@([\w.-]+)(?::(\d+))?$/);
+                if (!match) {
+                    log('ERR: Invalid SSH format. Use: user@host[:port]', 'var(--term-red)');
+                    break;
+                }
+                
+                const [, user, host, port = '22'] = match;
+                
+                log(`Connecting to ${user}@${host}:${port}...`, 'var(--amber)');
+                
+                // 尝试使用WebSocket进行真正的SSH连接
+                try {
+                    await connectSSH(user, host, parseInt(port), sshPassword, id);
+                } catch (err) {
+                    log(`SSH Connection failed: ${err.message}`, 'var(--term-red)');
+                    log('Falling back to simulated SSH...', 'var(--amber)');
+                    
+                    // 如果WebSocket连接失败，使用模拟SSH
+                    simulateSSHConnection(user, host, port, id);
+                }
+                break;
+                
             default: log(`ERR: UNKNOWN_CMD`, 'var(--term-red)');
         }
         input.value = '';
+    }
+    
+    // WebSocket SSH连接函数
+    async function connectSSH(user, host, port, password, termId) {
+        const body = document.getElementById(termId);
+        const output = body.querySelector('.term-out');
+        const input = body.querySelector('.cmd-in');
+        const log = (txt, color = 'rgba(255,176,0,0.8)') => {
+            const d = document.createElement('div'); d.style.color = color; d.innerText = txt;
+            output.appendChild(d); output.scrollTop = output.scrollHeight;
+        };
+        
+        // 创建WebSocket连接
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${wsProtocol}//${window.location.host}/ssh-proxy`;
+        
+        const ws = new WebSocket(wsUrl);
+        
+        ws.onopen = () => {
+            log('WebSocket connected. Establishing SSH tunnel...', 'var(--term-green)');
+            // 发送SSH连接参数
+            ws.send(JSON.stringify({
+                type: 'ssh_connect',
+                user, host, port, password
+            }));
+        };
+        
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.type === 'ssh_output') {
+                log(data.output, 'var(--term-green)');
+            } else if (data.type === 'ssh_error') {
+                log(`SSH Error: ${data.error}`, 'var(--term-red)');
+            }
+        };
+        
+        ws.onerror = (error) => {
+            log(`WebSocket error: ${error.message}`, 'var(--term-red)');
+            throw new Error('WebSocket connection failed');
+        };
+        
+        // 设置SSH命令输入
+        const originalOnKeyDown = input.onkeydown;
+        input.onkeydown = (e) => {
+            if (e.key === 'Enter') {
+                const command = input.value.trim();
+                if (command === 'exit') {
+                    ws.send(JSON.stringify({ type: 'ssh_disconnect' }));
+                    ws.close();
+                    input.onkeydown = originalOnKeyDown;
+                    log('SSH connection closed.', 'var(--amber)');
+                } else {
+                    ws.send(JSON.stringify({ type: 'ssh_command', command }));
+                }
+                input.value = '';
+            }
+        };
+    }
+    
+    // 模拟SSH连接（当WebSocket不可用时）
+    function simulateSSHConnection(user, host, port, termId) {
+        const body = document.getElementById(termId);
+        const output = body.querySelector('.term-out');
+        const input = body.querySelector('.cmd-in');
+        const log = (txt, color = 'rgba(255,176,0,0.8)') => {
+            const d = document.createElement('div'); d.style.color = color; d.innerText = txt;
+            output.appendChild(d); output.scrollTop = output.scrollHeight;
+        };
+        
+        log(`Connected to ${host} as ${user}`, 'var(--term-green)');
+        log('Welcome to Simulated SSH Terminal', 'var(--amber)');
+        log('Type \'exit\' to disconnect', 'var(--amber)');
+        log(`${user}@${host}:~$ `, '#fff');
+        
+        // 保存原始事件处理
+        const originalOnKeyDown = input.onkeydown;
+        
+        // 模拟SSH命令处理
+        input.onkeydown = (e) => {
+            if (e.key === 'Enter') {
+                const command = input.value.trim();
+                
+                if (command === 'exit') {
+                    input.onkeydown = originalOnKeyDown;
+                    log('Connection to host closed.', 'var(--amber)');
+                    log('>> ', '#fff');
+                } else if (command === 'ls') {
+                    log('bin  etc  home  lib  tmp  usr  var');
+                } else if (command === 'pwd') {
+                    log('/home/' + user);
+                } else if (command === 'whoami') {
+                    log(user);
+                } else if (command.startsWith('echo ')) {
+                    log(command.substring(5));
+                } else if (command === 'date') {
+                    log(new Date().toString());
+                } else if (command === 'uname -a') {
+                    log('Linux simulated-server 5.15.0-generic #1 SMP Mon Oct 3 14:28:35 UTC 2022 x86_64 GNU/Linux');
+                } else {
+                    log(`bash: ${command}: command not found`, 'var(--term-red)');
+                }
+                
+                if (command !== 'exit') {
+                    log(`${user}@${host}:~$ `, '#fff');
+                }
+                input.value = '';
+            }
+        };
     }
 
     function openModal() {
@@ -1897,11 +2036,8 @@ function addAiTab(forceNew = true) {
 }
 
 function switchAiTab(id) {
-    // 移除所有 AI 相关的 active 类
     document.querySelectorAll('#ai-tabs .term-tab').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('#ai-container .term-body').forEach(el => el.classList.remove('active'));
-    
-    // 激活当前
     document.getElementById('tab-' + id).classList.add('active');
     const body = document.getElementById(id);
     body.classList.add('active');
@@ -1918,8 +2054,6 @@ function removeAiTab(e, id) {
     const tab = document.getElementById('tab-' + id);
     const body = document.getElementById(id);
     const wasActive = tab.classList.contains('active');
-    
-    // 删除对应的历史记录
     delete aiChatHistory[id];
     localStorage.setItem('ind_console_ai_history', JSON.stringify(aiChatHistory));
     
@@ -2211,8 +2345,9 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
                     btn.innerText = '>> EXTRACT_CODE';
                     btn.onclick = () => {
                         const code = fullContent.split('```')[1].split('\n').slice(1).join('\n');
-                        document.getElementById('editor').value += "\n" + code;
-                        autoSave();
+                        if (activeEditorTab && editorTabs[activeEditorTab]) {
+                            editorTabs[activeEditorTab].editor.value += "\n" + code;
+                        }
                     };
                     aiMsg.appendChild(document.createElement('br'));
                     aiMsg.appendChild(btn);
@@ -2234,8 +2369,9 @@ function handleExtractButton(container) {
         btn.innerText = '>> EXTRACT_CODE';
         btn.onclick = () => { 
             const code = text.split('```')[1].split('\n').slice(1).join('\n');
-            document.getElementById('editor').value += "\n" + code; 
-            autoSave(); 
+            if (activeEditorTab && editorTabs[activeEditorTab]) {
+                editorTabs[activeEditorTab].editor.value += "\n" + code;
+            }
         };
         container.appendChild(document.createElement('br')); 
         container.appendChild(btn);
@@ -2267,29 +2403,23 @@ function handleExtractButton(container) {
 
     // --- Init ---
     initResizer(document.getElementById('h-drag-left'), document.getElementById('explorer'), true, false);
-    // 文件列表：正常方向 (往下拖变大)
     initResizer(document.getElementById('v-drag-explorer'), document.getElementById('file-section'), false, false);
-    // AI 面板：反向 (往左拖变大)
     initResizer(document.getElementById('h-drag-right'), document.getElementById('ai-panel'), true, true);
-    // 终端面板：反向 (往上拖变大)
     initResizer(document.getElementById('v-drag'), document.getElementById('terminal'), false, true);
     
     document.addEventListener('click', (e) => {
-    if (!document.getElementById('ctx').contains(e.target)) document.getElementById('ctx').style.display = 'none';
-    if (!document.getElementById('plugin-ctx').contains(e.target)) document.getElementById('plugin-ctx').style.display = 'none';
-    
-    // 自动关闭 AI 相关的下拉菜单
-    if (!document.getElementById('ai-ctx-trigger').contains(e.target)) {
-        document.getElementById('ai-ctx-options').style.display = 'none';
-    }
-    if (!document.getElementById('ai-provider-trigger').contains(e.target)) {
-        document.getElementById('ai-provider-options').style.display = 'none';
-    }
-});
+        if (!document.getElementById('ctx').contains(e.target)) document.getElementById('ctx').style.display = 'none';
+        if (!document.getElementById('plugin-ctx').contains(e.target)) document.getElementById('plugin-ctx').style.display = 'none';
+        if (!document.getElementById('ai-ctx-trigger').contains(e.target)) {
+            document.getElementById('ai-ctx-options').style.display = 'none';
+        }
+        if (!document.getElementById('ai-provider-trigger').contains(e.target)) {
+            document.getElementById('ai-provider-options').style.display = 'none';
+        }
+    });
     document.getElementById('ai-in').onkeydown = (e) => { if(e.key === 'Enter') sendAi(); };
 
     renderFiles(); renderPlugins(); addTerminal(); restoreAiTabs(); updateProviderDisplay();
-    // 初始化编辑器标签
     createEditorTab(activeFile);
 </script>
 </body>
