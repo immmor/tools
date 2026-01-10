@@ -51,7 +51,7 @@
             left: 0 !important;   /* 必须设为0，确保从屏幕最左边开始 */
             width: 100vw !important; /* 占据整个屏幕宽度 */
             height: 100vh !important; /* 占据整个屏幕高度 */
-            z-index: 999999 !important; /* 确保层级高于一切 */
+            z-index: 999 !important; /* 确保层级高于一切 */
             background: var(--bg) !important; /* 背景不透明，遮住底下的编辑器 */
             display: flex !important;
             flex-direction: column !important;
@@ -59,37 +59,40 @@
             padding: 0 !important;
         }
         
-        .panel-switch-bar {
-            position: fixed;
-            top: 10px;
-            left: 50%;
-            transform: translateX(-50%);
+        .panel.maximized .p-head {
+            position: relative;
+        }
+        
+        .panel-tabs {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: var(--panel-bg);
+            border: 1px solid var(--amber-dim);
+            border-top: none;
             display: flex;
-            gap: 10px;
-            z-index: 1000000;
-            background: rgba(0,0,0,0.8);
-            padding: 8px 16px;
-            border-radius: 20px;
-            border: 1px solid var(--amber-dim);
+            z-index: 1001;
         }
         
-        .panel-switch-btn {
-            padding: 6px 12px;
-            background: transparent;
-            border: 1px solid var(--amber-dim);
-            color: var(--amber);
-            border-radius: 15px;
+        .panel-tab {
+            flex: 1;
+            padding: 8px 12px;
+            text-align: center;
             cursor: pointer;
-            font-size: 12px;
-            transition: all 0.2s;
+            border-right: 1px solid var(--amber-dim);
+            transition: background 0.2s;
         }
         
-        .panel-switch-btn:hover {
+        .panel-tab:last-child {
+            border-right: none;
+        }
+        
+        .panel-tab:hover {
             background: var(--amber-dim);
-            color: var(--amber-bright);
         }
         
-        .panel-switch-btn.active {
+        .panel-tab.active {
             background: var(--amber);
             color: #000;
         }
@@ -575,21 +578,39 @@ function insertAtTerm(text, offset = 0) {
 
 // 编辑器全选、剪切、复制、粘贴逻辑
 async function editorAction(action) {
-    const el = document.getElementById('editor');
-    el.focus();
+    if (!activeEditorTab || !editorTabs[activeEditorTab]) return;
+    
+    const editor = editorTabs[activeEditorTab].editor;
+    editor.focus();
+    
     if (action === 'selectAll') {
-        el.select();
+        editor.select();
     } else if (action === 'copy') {
-        const selectedText = el.value.substring(el.selectionStart, el.selectionEnd);
+        const selectedText = editor.value.substring(editor.selectionStart, editor.selectionEnd);
         await navigator.clipboard.writeText(selectedText);
     } else if (action === 'cut') {
-        const selectedText = el.value.substring(el.selectionStart, el.selectionEnd);
+        const selectedText = editor.value.substring(editor.selectionStart, editor.selectionEnd);
         await navigator.clipboard.writeText(selectedText);
-        document.execCommand('delete');
+        
+        // 删除选中的文本
+        const before = editor.value.substring(0, editor.selectionStart);
+        const after = editor.value.substring(editor.selectionEnd);
+        editor.value = before + after;
+        
+        // 更新光标位置
+        editor.selectionStart = editor.selectionEnd = before.length;
     } else if (action === 'paste') {
         try {
             const text = await navigator.clipboard.readText();
-            insertAtCursor(text);
+            
+            // 在光标位置插入文本
+            const before = editor.value.substring(0, editor.selectionStart);
+            const after = editor.value.substring(editor.selectionEnd);
+            editor.value = before + text + after;
+            
+            // 更新光标位置
+            const newPos = before.length + text.length;
+            editor.selectionStart = editor.selectionEnd = newPos;
         } catch (err) {
             addLog("PASTE_ERROR: Permission denied", "var(--term-red)");
         }
@@ -1264,8 +1285,8 @@ function reorderTermTabs() {
         el.style.setProperty('height', '100vh', 'important');
         el.style.setProperty('flex', 'none', 'important');
         
-        // 创建面板切换按钮栏
-        createPanelSwitchBar(id);
+        // 创建面板选择tab栏
+        createPanelTabs(id);
         
         console.log(`Node ${id} 已进入真正的全屏模式`);
     } else {
@@ -1273,21 +1294,24 @@ function reorderTermTabs() {
         el.style.height = el.dataset.origHeight || '';
         el.style.flex = el.dataset.origFlex || '';
         
-        // 移除面板切换按钮栏
-        removePanelSwitchBar();
+        // 移除面板选择tab栏
+        removePanelTabs();
         
         console.log(`Node ${id} 已恢复至侧边栏`);
     }
 }
 
-// 创建面板切换按钮栏
-function createPanelSwitchBar(currentPanelId) {
-    // 移除已存在的切换栏
-    removePanelSwitchBar();
+// 创建面板选择tab栏
+function createPanelTabs(currentPanelId) {
+    // 移除已存在的tab栏
+    removePanelTabs();
     
-    const switchBar = document.createElement('div');
-    switchBar.className = 'panel-switch-bar';
-    switchBar.id = 'panel-switch-bar';
+    const header = document.querySelector('.panel.maximized .p-head');
+    if (!header) return;
+    
+    const tabs = document.createElement('div');
+    tabs.className = 'panel-tabs';
+    tabs.id = 'panel-tabs';
     
     // 定义所有面板
     const panels = [
@@ -1298,41 +1322,43 @@ function createPanelSwitchBar(currentPanelId) {
     ];
     
     panels.forEach(panel => {
-        const btn = document.createElement('button');
-        btn.className = 'panel-switch-btn';
+        const tab = document.createElement('div');
+        tab.className = 'panel-tab';
         if (panel.id === currentPanelId) {
-            btn.classList.add('active');
+            tab.classList.add('active');
         }
-        btn.textContent = panel.name;
-        btn.onclick = () => {
-            // 如果点击的是当前面板，则退出全屏
-            if (panel.id === currentPanelId) {
-                toggleMax(panel.id);
-            } else {
-                // 切换到其他面板
-                const currentPanel = document.getElementById(currentPanelId);
-                if (currentPanel) {
-                    currentPanel.classList.remove('maximized');
-                    currentPanel.style.height = currentPanel.dataset.origHeight || '';
-                    currentPanel.style.flex = currentPanel.dataset.origFlex || '';
-                }
-                
-                // 最大化新面板
-                toggleMax(panel.id);
+        tab.textContent = panel.name;
+        tab.onclick = () => {
+            if (panel.id !== currentPanelId) {
+                switchToPanel(currentPanelId, panel.id);
             }
         };
-        switchBar.appendChild(btn);
+        tabs.appendChild(tab);
     });
     
-    document.body.appendChild(switchBar);
+    header.appendChild(tabs);
 }
 
-// 移除面板切换按钮栏
-function removePanelSwitchBar() {
-    const existingBar = document.getElementById('panel-switch-bar');
-    if (existingBar) {
-        existingBar.remove();
+// 移除面板选择tab栏
+function removePanelTabs() {
+    const existingTabs = document.getElementById('panel-tabs');
+    if (existingTabs) {
+        existingTabs.remove();
     }
+}
+
+// 切换到指定面板
+function switchToPanel(fromPanelId, toPanelId) {
+    // 退出当前面板全屏
+    const currentPanel = document.getElementById(fromPanelId);
+    if (currentPanel) {
+        currentPanel.classList.remove('maximized');
+        currentPanel.style.height = currentPanel.dataset.origHeight || '';
+        currentPanel.style.flex = currentPanel.dataset.origFlex || '';
+    }
+    
+    // 最大化目标面板
+    toggleMax(toPanelId);
 }
 
     function toggleExplorerMax(sectionId) {
