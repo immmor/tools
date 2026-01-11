@@ -306,16 +306,40 @@
             right: 10px;
             background: var(--amber);
             color: #000;
-            padding: 2px 6px;
+            padding: 2px 8px;
             border-radius: 3px;
-            font-size: 9px;
+            font-size: 10px;
             font-weight: bold;
             border: none;
             cursor: pointer;
             margin: 0;
+            height: 18px;
+            line-height: 14px;
+            box-sizing: border-box;
         }
         .code-block .inject-btn:hover {
             background: #fff;
+            color: #000;
+        }
+        .code-block .copy-btn {
+            position: absolute;
+            top: -10px;
+            right: 60px;
+            background: var(--amber-dim);
+            color: var(--amber);
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: bold;
+            border: none;
+            cursor: pointer;
+            margin: 0;
+            height: 18px;
+            line-height: 14px;
+            box-sizing: border-box;
+        }
+        .code-block .copy-btn:hover {
+            background: var(--amber);
             color: #000;
         }
         .code-block pre {
@@ -2200,6 +2224,37 @@ function selectProvider(index) {
     let aiCount = 0;
 let activeAiId = null;
 
+// 通用的AI消息按钮绑定函数
+function bindAiMessageButtons(container) {
+    container.addEventListener('click', (e) => {
+        const btn = e.target.closest('.inject-btn, .copy-btn');
+        if (!btn) return;
+        
+        const blockId = btn.getAttribute('data-code');
+        if (!blockId?.startsWith('code-block-')) return;
+        
+        // 找到最近的包含代码块数据的消息元素
+        const msgElement = btn.closest('.msg.ai');
+        if (!msgElement) return;
+        
+        const blockIndex = parseInt(blockId.replace('code-block-', ''));
+        const code = JSON.parse(msgElement.dataset.codeBlocks || '[]')[blockIndex];
+        if (!code) return;
+        
+        if (btn.classList.contains('inject-btn')) {
+            if (activeEditorTab && editorTabs[activeEditorTab]) {
+                editorTabs[activeEditorTab].editor.value += "\n" + code;
+            }
+        } else if (btn.classList.contains('copy-btn')) {
+            navigator.clipboard.writeText(code).then(() => {
+                const originalText = btn.textContent;
+                btn.textContent = 'Copied!';
+                setTimeout(() => btn.textContent = originalText, 2000);
+            }).catch(err => console.error('Failed to copy:', err));
+        }
+    });
+}
+
 // 页面加载时恢复聊天窗口
 function restoreAiTabs() {
     // 获取所有保存的聊天历史记录
@@ -2241,15 +2296,8 @@ function restoreAiTabs() {
             // 加载历史记录
             if (aiChatHistory[chatId] && aiChatHistory[chatId].length > 0) {
                 body.innerHTML = aiChatHistory[chatId].join('');
-                // 重新绑定apply按钮的点击事件
-                body.querySelectorAll('.inject-btn').forEach(btn => {
-                    btn.onclick = () => {
-                        const code = btn.getAttribute('data-code');
-                        if (activeEditorTab && editorTabs[activeEditorTab] && code) {
-                            editorTabs[activeEditorTab].editor.value += "\n" + code;
-                        }
-                    };
-                });
+                // 重新绑定所有按钮的点击事件
+                bindAiMessageButtons(body);
             } else {
                 body.innerHTML = `<div class="msg ai">SYSTEM: Session ${idNum} restored.</div>`;
             }
@@ -2483,15 +2531,8 @@ function restoreChat(chatId) {
         // 加载历史记录
         if (aiChatHistory[chatId] && aiChatHistory[chatId].length > 0) {
             body.innerHTML = aiChatHistory[chatId].join('');
-            // 重新绑定apply按钮的点击事件
-            body.querySelectorAll('.inject-btn').forEach(btn => {
-                btn.onclick = () => {
-                    const code = btn.getAttribute('data-code');
-                    if (activeEditorTab && editorTabs[activeEditorTab] && code) {
-                        editorTabs[activeEditorTab].editor.value += "\n" + code;
-                    }
-                };
-            });
+            // 重新绑定所有按钮的点击事件
+            bindAiMessageButtons(body);
         }
         
         document.getElementById('ai-container').appendChild(body);
@@ -2627,7 +2668,7 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
                 
                 const displayCode = cleanCode.replace(/\n/g, '<br>');
                 const applyBtn = cleanCode ? 
-                    `<div class="inject-btn" data-code="${blockId}">Apply</div>` : '';
+                    `<div class="copy-btn" data-code="${blockId}">Copy</div><div class="inject-btn" data-code="${blockId}">Apply</div>` : '';
                 
                 return `<div class="code-block"><span class="code-lang">${lang || 'code'}</span><pre><code>${displayCode}</code></pre>${applyBtn}</div>`;
             });
@@ -2653,21 +2694,8 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
         const renderedContent = renderMarkdown(fullContent);
         aiMsg.innerHTML = 'AI: ' + renderedContent;
         
-        // 为所有按钮添加点击事件
-        aiMsg.querySelectorAll('.inject-btn').forEach(btn => {
-            btn.onclick = () => {
-                const blockId = btn.getAttribute('data-code');
-                if (blockId && blockId.startsWith('code-block-')) {
-                    const blockIndex = parseInt(blockId.replace('code-block-', ''));
-                    const codeBlocks = JSON.parse(aiMsg.dataset.codeBlocks || '[]');
-                    const code = codeBlocks[blockIndex];
-                    
-                    if (activeEditorTab && editorTabs[activeEditorTab] && code) {
-                        editorTabs[activeEditorTab].editor.value += "\n" + code;
-                    }
-                }
-            };
-        });
+        // 使用通用函数绑定按钮事件
+        bindAiMessageButtons(aiMsg);
         
         scrollChat();
         
