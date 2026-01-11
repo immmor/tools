@@ -268,6 +268,17 @@
 
         .inject-btn { display: inline-block; margin-top: 8px; font-size: 9px; padding: 2px 6px; border: 1px solid var(--amber); cursor: pointer !important; color: var(--amber); }
         .inject-btn:hover { background: var(--amber); color: #000; }
+        
+        .ai-typing { animation: pulse 1.5s ease-in-out infinite; }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
 
         #ctx, #plugin-ctx, .custom-modal {
             position: fixed; display: none; background: var(--panel-bg);
@@ -2221,10 +2232,8 @@ function addAiTab(forceNew = true) {
     body.style.overflowY = 'auto';
     body.style.flex = '1';
     
-    // 检查是否有历史记录，如果有则加载，否则显示初始化消息
     if (!forceNew && aiChatHistory[id] && aiChatHistory[id].length > 0) {
         body.innerHTML = aiChatHistory[id].join('');
-        // 重新绑定apply按钮的点击事件
         body.querySelectorAll('.inject-btn').forEach(btn => {
             btn.onclick = () => {
                 const code = btn.getAttribute('data-code');
@@ -2235,7 +2244,6 @@ function addAiTab(forceNew = true) {
         });
     } else {
         body.innerHTML = `<div class="msg ai">SYSTEM: Session ${aiCount} initialized.</div>`;
-        // 如果是强制新建，清空历史记录
         if (forceNew) {
             aiChatHistory[id] = [];
             localStorage.setItem('ind_console_ai_history', JSON.stringify(aiChatHistory));
@@ -2429,22 +2437,18 @@ function restoreChat(chatId) {
         
         document.getElementById('ai-container').appendChild(body);
         
-        // 激活该标签
         activeAiId = chatId;
         switchAiTab(chatId);
     }
     
-    // 关闭管理窗口
     document.getElementById('modal-overlay').style.display = 'none';
 }
 
 function deleteChat(chatId) {
     if (confirm(`Permanently delete CHAT_${parseInt(chatId.replace('ai-chat-', ''))}? This action cannot be undone.`)) {
-        // 删除历史记录
         delete aiChatHistory[chatId];
         localStorage.setItem('ind_console_ai_history', JSON.stringify(aiChatHistory));
         
-        // 如果该聊天窗口正在显示，关闭它
         const existingTab = document.getElementById('tab-' + chatId);
         if (existingTab) {
             const tabs = document.querySelectorAll('#ai-tabs .term-tab');
@@ -2453,13 +2457,11 @@ function deleteChat(chatId) {
                 const chatBody = document.getElementById(chatId);
                 if (chatBody) chatBody.remove();
                 
-                // 切换到其他标签
                 const nextTab = document.querySelector('#ai-tabs .term-tab');
                 if (nextTab) switchAiTab(nextTab.id.replace('tab-', ''));
             }
         }
         
-        // 刷新管理界面
         openHistoryManager();
         addLog(`[SYSTEM]: Chat ${chatId} permanently deleted`, "var(--term-green)");
     }
@@ -2525,7 +2527,7 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
 
     const aiMsg = document.createElement('div');
     aiMsg.className = 'msg ai'; 
-    aiMsg.innerHTML = 'AI: connecting...';
+    aiMsg.innerHTML = 'AI: <span class="ai-typing">Thinking</span>';
     chat.appendChild(aiMsg); 
     
     const scrollChat = () => chat.scrollTo({ top: chat.scrollHeight, behavior: 'smooth' });
