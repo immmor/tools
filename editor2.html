@@ -2,217 +2,266 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>IMMMOR CODE // AI EVOLVED</title>
+    <title>IMMMOR // NEURAL_ORB_v10</title>
+    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
 
     <style>
         :root {
-            --amber: #ffb000;
-            --amber-dim: #714e00;
-            --bg: #0d0c08;
-            --panel-bg: #161410;
-            --term-green: #00ff41;
-            --term-red: #ff3e3e;
-            --border-w: 2px;
+            --orb-color: #ffb000;
+            --orb-glow: rgba(255, 176, 0, 0.4);
+            --bg: #0a0a0a;
+            --glass: rgba(20, 18, 12, 0.85);
+            --neon-green: #00ff41;
+            --neon-red: #ff3e3e;
         }
 
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         body, html {
             margin: 0; padding: 0; height: 100vh; width: 100vw;
-            background: var(--bg); color: var(--amber);
-            font-family: 'Courier New', monospace; overflow: hidden;
+            background: var(--bg); color: var(--orb-color);
+            font-family: 'Fira Code', 'Courier New', monospace; overflow: hidden;
         }
 
-        .layout { display: flex; height: 100vh; flex-direction: column; }
-        .workspace { display: flex; flex: 1; overflow: hidden; }
-
-        /* 编辑器主区域 */
-        .editor-container { flex: 1; display: flex; flex-direction: column; position: relative; border-right: 1px solid var(--amber-dim); }
-        #main-editor {
-            flex: 1; background: transparent; color: var(--amber); border: none;
-            padding: 20px; font-size: 15px; outline: none; resize: none; font-family: inherit; line-height: 1.6;
+        /* 背景流体动画 */
+        .bg-gradient {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle at 90% 90%, #1a1500 0%, transparent 40%);
+            z-index: -1;
         }
 
-        /* --- 新增：Diff 样式 --- */
-        #diff-overlay {
-            display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: var(--bg); z-index: 100; overflow-y: auto; padding: 20px;
-        }
-        .diff-line { display: block; padding: 0 5px; white-space: pre-wrap; }
-        .diff-add { background: rgba(0, 255, 65, 0.15); border-left: 3px solid var(--term-green); color: #fff; }
-        .diff-rem { background: rgba(255, 62, 62, 0.15); border-left: 3px solid var(--term-red); color: #ccc; text-decoration: line-through; }
-        
-        /* Diff 确认底栏 */
-        .diff-actions {
-            position: sticky; bottom: 0; left: 0; width: 100%; background: var(--panel-bg);
-            padding: 10px; border-top: 2px solid var(--amber); display: flex; gap: 10px; justify-content: center;
-        }
-        .btn-merge { background: var(--term-green); color: #000; border: none; padding: 8px 20px; font-weight: bold; cursor: pointer; }
-        .btn-cancel { background: transparent; color: var(--term-red); border: 1px solid var(--term-red); padding: 8px 20px; cursor: pointer; }
+        /* 布局 */
+        .workspace { display: flex; height: 100vh; padding: 10px; gap: 10px; }
 
-        /* --- 新增：AI 面板代码块样式 --- */
-        .ai-panel { width: 380px; display: flex; flex-direction: column; background: var(--panel-bg); }
-        #ai-messages { flex: 1; overflow-y: auto; padding: 15px; }
-        
-        .bubble { margin-bottom: 20px; border-left: 3px solid var(--amber-dim); padding: 10px; font-size: 13px; }
-        .bubble.ai { border-color: var(--term-green); background: rgba(0, 255, 65, 0.02); }
+        /* 左侧极致精简 */
+        .side-nav { width: 50px; display: flex; flex-direction: column; align-items: center; gap: 20px; padding-top: 20px; background: rgba(0,0,0,0.3); border-radius: 25px; }
+        .nav-icon { width: 30px; height: 30px; cursor: pointer; opacity: 0.5; transition: 0.3s; }
+        .nav-icon:hover { opacity: 1; transform: scale(1.2); }
 
-        /* AI 代码块容器 */
-        .code-block-wrapper { margin: 15px 0; border: 1px solid var(--amber-dim); background: #000; }
-        .code-header {
-            background: #222; padding: 5px 10px; display: flex; justify-content: space-between;
-            align-items: center; border-bottom: 1px solid var(--amber-dim);
+        /* 编辑器主区 - 悬浮卡片感 */
+        .editor-container { 
+            flex: 1; background: var(--glass); border-radius: 20px; 
+            border: 1px solid rgba(255,176,0,0.1); display: flex; flex-direction: column;
+            overflow: hidden; position: relative;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
-        .code-lang { font-size: 10px; color: var(--amber-dim); font-weight: bold; }
-        .code-btns { display: flex; gap: 8px; }
-        .btn-mini {
-            font-size: 9px; padding: 2px 6px; cursor: pointer; border: 1px solid var(--amber-dim);
-            background: transparent; color: var(--amber); transition: 0.2s;
+        #editor {
+            flex: 1; background: transparent; color: #fff; border: none;
+            padding: 30px; font-size: 16px; outline: none; resize: none; line-height: 1.6;
         }
-        .btn-mini:hover { background: var(--amber); color: #000; }
-        .btn-mini.primary { border-color: var(--term-green); color: var(--term-green); }
-        .btn-mini.primary:hover { background: var(--term-green); color: #000; }
 
-        pre { margin: 0 !important; padding: 10px !important; background: transparent !important; }
+        /* --- AI 神经元核心 (重点) --- */
+        .ai-core-wrapper {
+            position: fixed; bottom: 40px; right: 40px; z-index: 1000;
+        }
 
-        /* 输入区 */
-        .ai-input-box { padding: 15px; border-top: 1px solid var(--amber-dim); background: #000; }
-        #ai-text { width: 100%; background: transparent; border: 1px solid var(--amber-dim); color: var(--amber); padding: 10px; outline: none; resize: none; font-family: inherit; }
+        /* 核心球体 */
+        .orb {
+            width: 60px; height: 60px; background: var(--orb-color);
+            border-radius: 50%; cursor: pointer;
+            box-shadow: 0 0 20px var(--orb-glow), inset 0 0 15px rgba(255,255,255,0.5);
+            animation: orb-pulse 2s infinite ease-in-out;
+            display: flex; align-items: center; justify-content: center;
+            font-weight: bold; color: #000; font-size: 10px;
+        }
+        @keyframes orb-pulse {
+            0% { transform: scale(1); box-shadow: 0 0 20px var(--orb-glow); }
+            50% { transform: scale(1.1); box-shadow: 0 0 40px var(--orb-glow); }
+            100% { transform: scale(1); box-shadow: 0 0 20px var(--orb-glow); }
+        }
+
+        /* 环形菜单 */
+        .orb-menu {
+            position: absolute; bottom: 0; right: 0; width: 200px; height: 200px;
+            pointer-events: none; opacity: 0; transition: 0.4s; transform: scale(0.5) rotate(-90deg);
+        }
+        .ai-core-wrapper:hover .orb-menu {
+            opacity: 1; pointer-events: auto; transform: scale(1.1) rotate(0deg);
+        }
+
+        .menu-item {
+            position: absolute; width: 45px; height: 45px; background: var(--glass);
+            border: 1px solid var(--orb-color); border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 10px; cursor: pointer; transition: 0.2s;
+        }
+        .menu-item:hover { background: var(--orb-color); color: #000; }
+        .m-1 { top: 0; left: 75px; }     /* 顶部：解释 */
+        .m-2 { top: 40px; left: 15px; }  /* 左：DEBUG */
+        .m-3 { top: 110px; left: 15px; } /* 左下：重构 */
+
+        /* 弹出式对话面板 - 像从 Orb 喷射出来的气泡 */
+        #ai-dialog {
+            position: absolute; bottom: 80px; right: 0; width: 350px; max-height: 500px;
+            background: var(--glass); border: 1px solid var(--orb-color);
+            border-radius: 20px 20px 0 20px; display: none; flex-direction: column;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.8); backdrop-filter: blur(10px);
+        }
+
+        .dialog-chat { flex: 1; overflow-y: auto; padding: 15px; font-size: 13px; }
+        .bubble { 
+            margin-bottom: 12px; padding: 10px; border-radius: 12px; 
+            background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+        }
+        .bubble.ai { border-left: 3px solid var(--neon-green); }
+        .bubble pre { background: #000 !important; padding: 10px; border-radius: 8px; margin-top: 8px; font-size: 12px; }
+
+        .dialog-input {
+            padding: 10px; border-top: 1px solid rgba(255,255,255,0.1); display: flex;
+        }
+        #ai-text {
+            flex: 1; background: transparent; border: none; color: #fff; outline: none; padding: 5px;
+        }
+
+        /* 终端面板 */
+        .terminal-panel {
+            height: 150px; background: rgba(0,0,0,0.6); margin-top: 10px;
+            border-radius: 20px; padding: 15px; font-size: 12px; color: var(--neon-green);
+            overflow-y: auto; border: 1px solid rgba(0,255,65,0.1);
+        }
+
+        /* Diff 动画样式 */
+        .line-diff-add { color: var(--neon-green); background: rgba(0,255,65,0.1); animation: highlight 1s forwards; }
+        @keyframes highlight { from { background: rgba(0,255,65,0.4); } to { background: rgba(0,255,65,0.1); } }
     </style>
 </head>
 <body>
 
-<div class="layout">
-    <div class="workspace">
-        <div class="editor-container">
-            <div style="padding: 5px 15px; font-size: 11px; background: #000; border-bottom: 1px solid var(--amber-dim);">EDITOR // main.js</div>
-            <textarea id="main-editor" spellcheck="false">function updateCore() {
-    const power = 100;
-    console.log("Core Power:", power);
-}</textarea>
+<div class="bg-gradient"></div>
 
-            <div id="diff-overlay">
-                <div id="diff-content"></div>
-                <div class="diff-actions">
-                    <button class="btn-merge" onclick="confirmMerge()">ACCEPT & MERGE</button>
-                    <button class="btn-cancel" onclick="closeDiff()">DISCARD</button>
-                </div>
+<div class="workspace">
+    <nav class="side-nav">
+        <div class="nav-icon" title="Files">📂</div>
+        <div class="nav-icon" title="Python">🐍</div>
+        <div class="nav-icon" title="Plugins">🧩</div>
+    </nav>
+
+    <div style="flex: 1; display: flex; flex-direction: column;">
+        <div class="editor-container">
+            <div style="padding: 10px 20px; font-size: 10px; background: rgba(0,0,0,0.2); display: flex; justify-content: space-between;">
+                <span>FILE: main.js</span>
+                <span id="ai-status">CORE_STABLE</span>
             </div>
+            <textarea id="editor" spellcheck="false" onkeydown="handleKeys(event)">
+function neural_process() {
+    console.log("Waiting for AI commands...");
+    // 选中这段代码，看右下角 Orb
+}
+            </textarea>
         </div>
 
-        <div class="ai-panel">
-            <div style="padding: 10px; font-size: 11px; font-weight: bold; border-bottom: 1px solid var(--amber-dim);">AI_CO-PROCESSOR</div>
-            <div id="ai-messages">
-                <div class="bubble ai">Ready for synchronization. How should we evolve the code?</div>
-            </div>
-            <div class="ai-input-box">
-                <textarea id="ai-text" rows="2" placeholder="Input command... (Ctrl+Enter)"></textarea>
-            </div>
+        <div class="terminal-panel" id="term-out">
+            > Neural Engine v10.0 Online.<br>
+            > Waiting for connection pulse...
         </div>
     </div>
 </div>
 
-<script>
-    const editor = document.getElementById('main-editor');
-    const aiMessages = document.getElementById('ai-messages');
-    const aiInput = document.getElementById('ai-text');
-    let pendingCode = "";
+<div class="ai-core-wrapper">
+    <div class="orb-menu">
+        <div class="menu-item m-1" onclick="quickAction('Explain')">EXPLAIN</div>
+        <div class="menu-item m-2" onclick="quickAction('Debug')">DEBUG</div>
+        <div class="menu-item m-3" onclick="quickAction('Refactor')">CLEAN</div>
+    </div>
 
-    // 1. 初始化 Markdown 配置
+    <div id="ai-dialog">
+        <div class="dialog-chat" id="chat-flow">
+            <div class="bubble ai">Neural Link established. Command me.</div>
+        </div>
+        <div class="dialog-input">
+            <input type="text" id="ai-text" placeholder="Pulse input..." autocomplete="off">
+            <button onclick="sendAi()" style="background:var(--orb-color); border:none; border-radius:5px; cursor:pointer">SYNC</button>
+        </div>
+    </div>
+
+    <div class="orb" onclick="toggleDialog()">CORE</div>
+</div>
+
+<script>
+    const editor = document.getElementById('editor');
+    const chatFlow = document.getElementById('chat-flow');
+    const aiText = document.getElementById('ai-text');
+    const aiDialog = document.getElementById('ai-dialog');
+
     marked.setOptions({
-        highlight: (code, lang) => Prism.highlight(code, Prism.languages.javascript || Prism.languages.clike, lang)
+        highlight: (code) => Prism.highlight(code, Prism.languages.javascript, 'javascript')
     });
 
-    // 2. 发送逻辑
-    async function handleSend() {
-        const query = aiInput.value.trim();
-        if(!query) return;
+    // 1. 切换对话框显示
+    function toggleDialog() {
+        const isNone = aiDialog.style.display === 'none' || aiDialog.style.display === '';
+        aiDialog.style.display = isNone ? 'flex' : 'none';
+        if(isNone) aiText.focus();
+    }
 
-        addBubble('user', query);
-        aiInput.value = '';
-        const aiBubble = addBubble('ai', 'Thinking...');
+    // 2. AI 核心动作
+    async function sendAi() {
+        const val = aiText.value;
+        if(!val) return;
+        addBubble('user', val);
+        aiText.value = '';
 
-        // 模拟 AI 返回 (实际连接你的接口)
+        // 修改 Orb 状态为“思考” (红色脉冲)
+        document.querySelector('.orb').style.backgroundColor = 'var(--neon-green)';
+        
         setTimeout(() => {
-            const mockCode = `function updateCore() {\n    const power = 9000;\n    const status = "OVERLOAD";\n    console.log(\`Core Power: \${power} - Status: \${status}\`);\n}`;
-            const markdown = `已优化核心函数，提升了能量输出并增加了状态检测：\n\n\`\`\`javascript\n${mockCode}\n\`\`\``;
+            const mockCode = `function neural_process() {\n    const flow = "SYNCED";\n    console.info(\`System Flow: \${flow}\`);\n}`;
+            const res = `解析完成。我已同步了神经元逻辑：\n\n\`\`\`javascript\n${mockCode}\n\`\`\``;
+            const bubble = addBubble('ai', marked.parse(res));
             
-            // 渲染 Markdown
-            aiBubble.innerHTML = marked.parse(markdown);
-            
-            // 3. 处理代码块：替换为带样式的 Wrapper
-            aiBubble.querySelectorAll('pre').forEach(pre => {
-                const code = pre.querySelector('code').innerText;
-                const wrapper = document.createElement('div');
-                wrapper.className = 'code-block-wrapper';
-                wrapper.innerHTML = `
-                    <div class="code-header">
-                        <span class="code-lang">JAVASCRIPT</span>
-                        <div class="code-btns">
-                            <button class="btn-mini" onclick="showDiff(\`${code}\`)">VIEW DIFF</button>
-                            <button class="btn-mini primary" onclick="applyDirectly(\`${code}\`)">APPLY</button>
-                        </div>
-                    </div>
-                `;
-                pre.parentNode.insertBefore(wrapper, pre);
-                wrapper.appendChild(pre);
+            // 代码注入按钮
+            bubble.querySelectorAll('pre').forEach(pre => {
+                pre.style.cursor = 'pointer';
+                pre.title = 'Click to Inject Code';
+                pre.onclick = () => {
+                    editor.value = pre.innerText;
+                    log("Code synced from AI memory.");
+                    toggleDialog();
+                };
             });
             
+            document.querySelector('.orb').style.backgroundColor = 'var(--orb-color)';
             Prism.highlightAll();
-        }, 800);
+        }, 1000);
     }
 
-    // 4. Diff 视图逻辑
-    function showDiff(newCode) {
-        pendingCode = newCode;
-        const oldCode = editor.value;
-        const diffContent = document.getElementById('diff-content');
-        
-        // 极简 Diff 算法演示
-        const oldLines = oldCode.split('\n');
-        const newLines = newCode.split('\n');
-        let html = "";
-        
-        // 简单逻辑：显示旧的（删掉）和新的（增加）
-        oldLines.forEach(line => html += `<div class="diff-line diff-rem">- ${line}</div>`);
-        newLines.forEach(line => html += `<div class="diff-line diff-add">+ ${line}</div>`);
-
-        diffContent.innerHTML = html;
-        document.getElementById('diff-overlay').style.display = 'block';
+    function quickAction(type) {
+        aiText.value = `${type} this code.`;
+        sendAi();
     }
 
-    function confirmMerge() {
-        editor.value = pendingCode;
-        closeDiff();
-        addBubble('ai', '✓ Code merged into editor.');
-    }
-
-    function applyDirectly(code) {
-        editor.value = code;
-        addBubble('ai', '✓ Code applied directly.');
-    }
-
-    function closeDiff() { document.getElementById('diff-overlay').style.display = 'none'; }
-
-    // 辅助 UI 函数
-    function addBubble(role, text) {
+    // 3. 辅助功能
+    function addBubble(role, content) {
         const div = document.createElement('div');
         div.className = `bubble ${role}`;
-        div.innerHTML = text;
-        aiMessages.appendChild(div);
-        aiMessages.scrollTop = aiMessages.scrollHeight;
+        div.innerHTML = `<b>${role.toUpperCase()}:</b><br>${content}`;
+        chatFlow.appendChild(div);
+        chatFlow.scrollTop = chatFlow.scrollHeight;
         return div;
     }
 
-    // 热键发送
-    aiInput.onkeydown = (e) => {
-        if(e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleSend();
-    };
-</script>
+    function log(msg) {
+        const line = document.createElement('div');
+        line.innerHTML = `> [${new Date().toLocaleTimeString()}] ${msg}`;
+        document.getElementById('term-out').appendChild(line);
+        document.getElementById('term-out').scrollTop = 10000;
+    }
 
+    function handleKeys(e) {
+        if(e.ctrlKey && e.key === 'i') { e.preventDefault(); toggleDialog(); }
+        if(e.key === 'Enter' && aiDialog.style.display === 'flex') { sendAi(); }
+    }
+
+    // 集成原有插件/Python 逻辑接口
+    function initOldModules() {
+        log("Checking legacy plugin compatibility...");
+        log("Python 3.10 Runtime Ready (WASM)");
+    }
+    initOldModules();
+
+</script>
 </body>
 </html>

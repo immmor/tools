@@ -2171,6 +2171,15 @@ function restoreAiTabs() {
             // 加载历史记录
             if (aiChatHistory[chatId] && aiChatHistory[chatId].length > 0) {
                 body.innerHTML = aiChatHistory[chatId].join('');
+                // 重新绑定apply按钮的点击事件
+                body.querySelectorAll('.inject-btn').forEach(btn => {
+                    btn.onclick = () => {
+                        const code = btn.getAttribute('data-code');
+                        if (activeEditorTab && editorTabs[activeEditorTab] && code) {
+                            editorTabs[activeEditorTab].editor.value += "\n" + code;
+                        }
+                    };
+                });
             } else {
                 body.innerHTML = `<div class="msg ai">SYSTEM: Session ${idNum} restored.</div>`;
             }
@@ -2215,6 +2224,15 @@ function addAiTab(forceNew = true) {
     // 检查是否有历史记录，如果有则加载，否则显示初始化消息
     if (!forceNew && aiChatHistory[id] && aiChatHistory[id].length > 0) {
         body.innerHTML = aiChatHistory[id].join('');
+        // 重新绑定apply按钮的点击事件
+        body.querySelectorAll('.inject-btn').forEach(btn => {
+            btn.onclick = () => {
+                const code = btn.getAttribute('data-code');
+                if (activeEditorTab && editorTabs[activeEditorTab] && code) {
+                    editorTabs[activeEditorTab].editor.value += "\n" + code;
+                }
+            };
+        });
     } else {
         body.innerHTML = `<div class="msg ai">SYSTEM: Session ${aiCount} initialized.</div>`;
         // 如果是强制新建，清空历史记录
@@ -2398,6 +2416,15 @@ function restoreChat(chatId) {
         // 加载历史记录
         if (aiChatHistory[chatId] && aiChatHistory[chatId].length > 0) {
             body.innerHTML = aiChatHistory[chatId].join('');
+            // 重新绑定apply按钮的点击事件
+            body.querySelectorAll('.inject-btn').forEach(btn => {
+                btn.onclick = () => {
+                    const code = btn.getAttribute('data-code');
+                    if (activeEditorTab && editorTabs[activeEditorTab] && code) {
+                        editorTabs[activeEditorTab].editor.value += "\n" + code;
+                    }
+                };
+            });
         }
         
         document.getElementById('ai-container').appendChild(body);
@@ -2484,7 +2511,10 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
     const chat = document.getElementById(currentChatId);
     const uMsg = document.createElement('div');
     uMsg.className = 'msg user'; 
-    uMsg.innerText = `[CTX:${selectedAiCtx}] > ${query}`;
+    const ctxText = selectedAiCtxs.length === 0 ? 'none' : 
+                   selectedAiCtxs.length === 1 ? selectedAiCtxs[0] : 
+                   `[${selectedAiCtxs.length} files]`;
+    uMsg.innerText = `[CTX:${ctxText}] > ${query}`;
     chat.appendChild(uMsg);
     
     // 缓存用户消息到历史记录
@@ -2495,7 +2525,7 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
 
     const aiMsg = document.createElement('div');
     aiMsg.className = 'msg ai'; 
-    aiMsg.innerText = 'AI: connecting...';
+    aiMsg.innerHTML = 'AI: connecting...';
     chat.appendChild(aiMsg); 
     
     const scrollChat = () => chat.scrollTo({ top: chat.scrollHeight, behavior: 'smooth' });
@@ -2512,7 +2542,9 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
                 model: provider.model, 
                 messages: [{ 
                     role: 'user', 
-                    content: selectedAiCtx !== 'none' ? `Context: ${storage[selectedAiCtx]}\n\nQuery: ${query}` : query 
+                    content: selectedAiCtxs.length > 0 ? 
+                        `Context:\n${selectedAiCtxs.map(f => `${f}:\n${storage[f]}`).join('\n\n')}\n\nQuery: ${query}` : 
+                        query 
                 }],
                 stream: false
             })
@@ -2522,35 +2554,34 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
         const data = await response.json();
         const fullContent = data.choices[0].message.content;
         
-        aiMsg.innerText = 'AI: ';
-        let charIndex = 0;
-        const typingTimer = setInterval(() => {
-            aiMsg.innerText += fullContent[charIndex];
-            charIndex++;
-            scrollChat();
-            if (charIndex >= fullContent.length) {
-                clearInterval(typingTimer);
-                
-                // 缓存AI回复到历史记录
-                aiChatHistory[currentChatId].push(aiMsg.outerHTML);
-                localStorage.setItem('ind_console_ai_history', JSON.stringify(aiChatHistory));
-                
-                if (fullContent.includes('```')) {
-                    const btn = document.createElement('div');
-                    btn.className = 'inject-btn'; 
-                    btn.innerText = '>> EXTRACT_CODE';
-                    btn.onclick = () => {
-                        const code = fullContent.split('```')[1].split('\n').slice(1).join('\n');
-                        if (activeEditorTab && editorTabs[activeEditorTab]) {
-                            editorTabs[activeEditorTab].editor.value += "\n" + code;
-                        }
-                    };
-                    aiMsg.appendChild(document.createElement('br'));
-                    aiMsg.appendChild(btn);
-                    scrollChat();
-                }
+        // 处理AI回复内容，在每个代码块后插入apply按钮
+        const processedContent = fullContent.replace(/```([\s\S]*?)```/g, (match, code) => {
+            const cleanCode = code.split('\n').slice(1).join('\n').trim();
+            if (cleanCode) {
+                return match + '<br><div class="inject-btn" data-code="' + 
+                       cleanCode.replace(/"/g, '&quot;') + '">>> APPLY</div>';
             }
-        }, 10);
+            return match;
+        });
+        
+        // 直接显示完整的处理后的内容（去掉打字效果）
+        aiMsg.innerHTML = 'AI: ' + processedContent;
+        
+        // 为所有按钮添加点击事件
+        aiMsg.querySelectorAll('.inject-btn').forEach(btn => {
+            btn.onclick = () => {
+                const code = btn.getAttribute('data-code');
+                if (activeEditorTab && editorTabs[activeEditorTab] && code) {
+                    editorTabs[activeEditorTab].editor.value += "\n" + code;
+                }
+            };
+        });
+        
+        scrollChat();
+        
+        // 缓存包含按钮的AI回复到历史记录
+        aiChatHistory[currentChatId].push(aiMsg.outerHTML);
+        localStorage.setItem('ind_console_ai_history', JSON.stringify(aiChatHistory));
     } catch (err) { 
         aiMsg.innerText = `AI: [ERR]: ${err.message}`; 
         scrollChat();
@@ -2560,11 +2591,12 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
 function handleExtractButton(container) {
     const text = container.innerText;
     if (text.includes('```')) {
+        const code = text.split('```')[1].split('\n').slice(1).join('\n');
         const btn = document.createElement('div');
         btn.className = 'inject-btn'; 
         btn.innerText = '>> EXTRACT_CODE';
+        btn.setAttribute('data-code', code);
         btn.onclick = () => { 
-            const code = text.split('```')[1].split('\n').slice(1).join('\n');
             if (activeEditorTab && editorTabs[activeEditorTab]) {
                 editorTabs[activeEditorTab].editor.value += "\n" + code;
             }
