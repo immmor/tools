@@ -133,6 +133,12 @@
             z-index: 1 !important;
             position: relative !important;
         }
+        
+        .panel.maximized #file-list,
+        .panel.maximized #plugin-list {
+            margin-top: 30px !important;
+            height: calc(100% - 70px) !important;
+        }
 
         .divider-h { width: 6px; background: var(--amber-dim); cursor: col-resize !important; flex-shrink: 0; }
         .divider-h:hover, .divider-h.active { background: var(--amber); box-shadow: 0 0 10px var(--amber); }
@@ -252,24 +258,23 @@
         .ai-btn { background: var(--amber-dim); color: #fff; border: none; padding: 5px 10px; cursor: pointer !important; font-size: 10px; }
         .ai-btn:hover { background: var(--amber); color: var(--bg); }
         
-        /* 模板选择器样式 */
+        /* 模板选择器样式 - 与CONTEXT_NODE保持一致 */
         .template-dropdown {
             position: absolute;
             bottom: 100%;
-            left: 0;
-            background: #000;
+            left: 10px;
+            right: 10px;
+            background: var(--panel-bg);
             border: 1px solid var(--amber);
-            border-bottom: none;
-            min-width: 250px;
-            max-height: 300px;
-            overflow-y: auto;
-            z-index: 1000;
             display: none;
+            z-index: 600;
+            max-height: 200px;
+            overflow-y: auto;
         }
         .template-option {
-            padding: 8px 10px;
+            padding: 8px;
             border-bottom: 1px solid var(--amber-dim);
-            cursor: pointer;
+            cursor: pointer !important;
             font-size: 11px;
             display: flex;
             justify-content: space-between;
@@ -296,7 +301,7 @@
             background: rgba(0,0,0,0.2);
         }
         .template-header {
-            padding: 8px 10px;
+            padding: 8px;
             background: var(--amber-dim);
             color: #fff;
             font-size: 10px;
@@ -304,6 +309,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            border-bottom: 1px solid var(--amber-dim);
         }
         .template-add-btn {
             background: var(--amber);
@@ -1592,6 +1598,9 @@ function smartSwitch(targetPanelId) {
             explorer.style.width = explorer.dataset.origWidth || '';
             explorer.style.flex = explorer.dataset.origFlex || '';
             
+            // 移除面板选择tab栏
+            removePanelTabs();
+            
             // 还原文件系统和插件系统的显示
             fileSection.style.display = 'flex';
             pluginSection.style.display = 'flex';
@@ -1777,6 +1786,9 @@ function smartSwitch(targetPanelId) {
     }
 
     let selectedAiCtxs = []; // 支持多选
+    
+    // 对话历史记忆
+    let chatHistory = {}; // 存储每个聊天窗口的对话历史
 
     function updateAiCtxOptions() {
         const container = document.getElementById('ai-ctx-options');
@@ -2316,7 +2328,6 @@ function bindAiMessageButtons(container) {
         const blockId = btn.getAttribute('data-code');
         if (!blockId?.startsWith('code-block-')) return;
         
-        // 找到最近的包含代码块数据的消息元素
         const msgElement = btn.closest('.msg.ai');
         if (!msgElement) return;
         
@@ -2792,6 +2803,23 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
     scrollChat();
 
     try {
+        // 初始化对话历史
+        if (!chatHistory[currentChatId]) {
+            chatHistory[currentChatId] = [];
+        }
+        
+        // 构建用户消息
+        const userMessage = {
+            role: 'user', 
+            content: selectedAiCtxs.length > 0 ? 
+                `Context:\n${selectedAiCtxs.map(f => `${f}:\n${storage[f]}`).join('\n\n')}\n\nQuery: ${query}` : 
+                query 
+        };
+        
+        // 添加到对话历史
+        chatHistory[currentChatId].push(userMessage);
+        
+        // 发送请求，包含完整对话历史
         const response = await fetch(`${provider.apiBaseUrl}/chat/completions`, {
             method: 'POST',
             headers: { 
@@ -2800,12 +2828,7 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
             },
             body: JSON.stringify({ 
                 model: provider.model, 
-                messages: [{ 
-                    role: 'user', 
-                    content: selectedAiCtxs.length > 0 ? 
-                        `Context:\n${selectedAiCtxs.map(f => `${f}:\n${storage[f]}`).join('\n\n')}\n\nQuery: ${query}` : 
-                        query 
-                }],
+                messages: chatHistory[currentChatId], // 发送完整对话历史
                 stream: false
             })
         });
@@ -2813,6 +2836,12 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
         const fullContent = data.choices[0].message.content;
+        
+        // 将AI回复添加到对话历史
+        chatHistory[currentChatId].push({
+            role: 'assistant',
+            content: fullContent
+        });
         
         // Markdown渲染函数
         const renderMarkdown = (text) => {
@@ -2851,7 +2880,15 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
         aiChatHistory[currentChatId].push(aiMsg.outerHTML);
         localStorage.setItem('ind_console_ai_history', JSON.stringify(aiChatHistory));
     } catch (err) { 
-        aiMsg.innerText = `AI: [ERR]: ${err.message}`; 
+        const errorMessage = `[ERR]: ${err.message}`;
+        aiMsg.innerText = `AI: ${errorMessage}`; 
+        
+        // 将错误信息添加到对话历史
+        chatHistory[currentChatId].push({
+            role: 'assistant',
+            content: errorMessage
+        });
+        
         scrollChat();
     }
 }
