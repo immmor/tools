@@ -251,6 +251,69 @@
         #ai-in { background: transparent; border: 1px solid var(--amber-dim); color: #fff; flex: 1; padding: 5px; outline: none; cursor: text !important; }
         .ai-btn { background: var(--amber-dim); color: #fff; border: none; padding: 5px 10px; cursor: pointer !important; font-size: 10px; }
         .ai-btn:hover { background: var(--amber); color: var(--bg); }
+        
+        /* 模板选择器样式 */
+        .template-dropdown {
+            position: absolute;
+            bottom: 100%;
+            left: 0;
+            background: #000;
+            border: 1px solid var(--amber);
+            border-bottom: none;
+            min-width: 250px;
+            max-height: 300px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+        }
+        .template-option {
+            padding: 8px 10px;
+            border-bottom: 1px solid var(--amber-dim);
+            cursor: pointer;
+            font-size: 11px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .template-option:hover {
+            background: var(--amber);
+            color: #000;
+        }
+        .template-actions {
+            display: flex;
+            gap: 5px;
+        }
+        .template-action {
+            background: transparent;
+            border: 1px solid currentColor;
+            color: inherit;
+            padding: 1px 4px;
+            font-size: 9px;
+            cursor: pointer;
+            border-radius: 2px;
+        }
+        .template-action:hover {
+            background: rgba(0,0,0,0.2);
+        }
+        .template-header {
+            padding: 8px 10px;
+            background: var(--amber-dim);
+            color: #fff;
+            font-size: 10px;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .template-add-btn {
+            background: var(--amber);
+            color: #000;
+            border: none;
+            padding: 2px 6px;
+            font-size: 9px;
+            cursor: pointer;
+            border-radius: 2px;
+        }
 
         #ai-container .msg {
             font-size: 12px; /* 原本可能是 16px 或 13px，这里调小 */
@@ -547,7 +610,15 @@
     </div>
     <div class="custom-select-options" id="ai-ctx-options"></div>
 </div>
-    <div class="ai-input-area">
+    <div class="ai-input-area" style="position:relative;">
+        <button class="ai-btn" id="template-btn" onclick="toggleTemplateDropdown()">TEMP</button>
+        <div class="template-dropdown" id="template-dropdown">
+            <div class="template-header">
+                <span>提示词模板</span>
+                <button class="template-add-btn" onclick="addTemplate()">+ 添加</button>
+            </div>
+            <div id="template-options"></div>
+        </div>
         <input type="text" id="ai-in" placeholder="Query..." autocomplete="off">
         <button class="ai-btn" id="ai-send-btn" onclick="handleAiSend()">SEND</button>
     </div>
@@ -555,13 +626,13 @@
 </div>
 
 <div id="ctx">
-    <div class="opt" id="ctx-new-node" onclick="openModal()">[+] NEW_DATA_NODE</div>
-    <div class="opt" id="ctx-rename" onclick="startRenameFromCtx()">[R] RENAME_NODE</div>
+    <div class="opt" id="ctx-new-node" onclick="openModal()">[+] NEW_FILE</div>
+    <div class="opt" id="ctx-rename" onclick="startRenameFromCtx()">[R] RENAME_FILE</div>
     <div class="opt" id="ctx-delete" onclick="deleteNodeFromCtx()" style="color:var(--term-red)">[X] DELETE_NODE</div>
     <div class="opt" id="ctx-copy-path" onclick="copyPathFromCtx()">[C] COPY_PATH</div>
     <div style="border-top:1px solid var(--amber-dim); margin:4px 0;"></div>
-    <div class="opt" onclick="saveActive()">DOWNLOAD_ACTIVE_NODE</div>
-    <div class="opt" onclick="saveZip()">ARCHIVE_ALL_NODES</div>
+    <div class="opt" onclick="saveFile()">DOWNLOAD_FILE</div>
+    <div class="opt" onclick="saveZip()">DOWNLOAD_DIR</div>
     <div class="opt" onclick="clearTerm()">RESET_CONSOLE</div>
 </div>
 
@@ -606,6 +677,17 @@
     let aiChatHistory = JSON.parse(localStorage.getItem('ind_console_ai_history')) || {};
     let activeFile = localStorage.getItem('ind_console_active') || 'PROTOCOL.txt';
     let expandedDirs = JSON.parse(localStorage.getItem('ind_console_expanded')) || ['SYSTEM/'];
+    
+    // 提示词模板数据（支持本地存储）
+    let aiTemplates = JSON.parse(localStorage.getItem('ind_console_templates')) || {
+        '代码优化': '请帮我优化以下代码，提高性能和可读性：\n\n[代码]',
+        '代码解释': '请详细解释以下代码的功能和工作原理：\n\n[代码]'
+    };
+    
+    // 保存模板到本地存储
+    function saveTemplates() {
+        localStorage.setItem('ind_console_templates', JSON.stringify(aiTemplates));
+    }
     let termCount = 0;
     let activeTermId = null;
     let selectedAiCtx = 'none';
@@ -1844,6 +1926,7 @@ function smartSwitch(targetPanelId) {
             case 'rm': // 删除文件/目录
                 if (storage[fileName]) {
                     delete storage[fileName];
+                    localStorage.setItem('ind_console_storage', JSON.stringify(storage));
                     renderFiles();
                     log(`SUCCESS: NODE_PURGED: ${fileName}`, 'var(--term-red)');
                 } else {
@@ -2502,6 +2585,81 @@ function openHistoryManager() {
     modalContent.appendChild(closeContainer);
 }
 
+function toggleTemplateDropdown() {
+    const dropdown = document.getElementById('template-dropdown');
+    if (dropdown.style.display === 'block') {
+        dropdown.style.display = 'none';
+    } else {
+        renderTemplateOptions();
+        dropdown.style.display = 'block';
+    }
+}
+
+// 渲染模板选项
+function renderTemplateOptions() {
+    const optionsContainer = document.getElementById('template-options');
+    optionsContainer.innerHTML = '';
+    
+    Object.entries(aiTemplates).forEach(([name, template]) => {
+        const option = document.createElement('div');
+        option.className = 'template-option';
+        option.innerHTML = `
+            <div>
+                <strong>${name}</strong><br>
+                <span style="opacity:0.7; font-size:9px">${template.substring(0, 40)}...</span>
+            </div>
+            <div class="template-actions">
+                <button class="template-action" onclick="editTemplate('${name}')">编辑</button>
+                <button class="template-action" onclick="deleteTemplate('${name}')">删除</button>
+            </div>
+        `;
+        option.onclick = (e) => {
+            if (!e.target.classList.contains('template-action')) {
+                document.getElementById('ai-in').value = template;
+                document.getElementById('template-dropdown').style.display = 'none';
+                document.getElementById('ai-in').focus();
+            }
+        };
+        optionsContainer.appendChild(option);
+    });
+}
+
+// 添加新模板
+function addTemplate() {
+    const name = prompt('请输入模板名称：');
+    if (!name) return;
+    
+    const template = prompt('请输入模板内容：');
+    if (!template) return;
+    
+    aiTemplates[name] = template;
+    saveTemplates();
+    renderTemplateOptions();
+}
+
+// 编辑模板
+function editTemplate(name) {
+    const newName = prompt('请输入新的模板名称：', name);
+    if (!newName) return;
+    
+    const template = prompt('请输入新的模板内容：', aiTemplates[name]);
+    if (!template) return;
+    
+    delete aiTemplates[name];
+    aiTemplates[newName] = template;
+    saveTemplates();
+    renderTemplateOptions();
+}
+
+// 删除模板
+function deleteTemplate(name) {
+    if (confirm(`确定要删除模板"${name}"吗？`)) {
+        delete aiTemplates[name];
+        saveTemplates();
+        renderTemplateOptions();
+    }
+}
+
 function restoreChat(chatId) {
     // 检查是否已经存在该聊天窗口
     const existingTab = document.getElementById('tab-' + chatId);
@@ -2673,33 +2831,23 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
                 return `<div class="code-block"><span class="code-lang">${lang || 'code'}</span><pre><code>${displayCode}</code></pre>${applyBtn}</div>`;
             });
             
-            // 处理其他Markdown元素
             processedText = processedText
-                // 行内代码
                 .replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>')
-                // 粗体
                 .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                // 斜体
                 .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                // 换行
                 .replace(/\n/g, '<br>');
             
-            // 保存代码块数据到消息元素
             aiMsg.dataset.codeBlocks = JSON.stringify(codeBlocks);
             
             return processedText;
         };
         
-        // 渲染Markdown并显示
         const renderedContent = renderMarkdown(fullContent);
         aiMsg.innerHTML = 'AI: ' + renderedContent;
         
-        // 使用通用函数绑定按钮事件
         bindAiMessageButtons(aiMsg);
-        
         scrollChat();
         
-        // 缓存包含按钮的AI回复到历史记录
         aiChatHistory[currentChatId].push(aiMsg.outerHTML);
         localStorage.setItem('ind_console_ai_history', JSON.stringify(aiChatHistory));
     } catch (err) { 
@@ -2742,14 +2890,22 @@ function handleExtractButton(container) {
         a.href = URL.createObjectURL(b); a.download = "archive.zip"; a.click();
     }
     
-    function saveActive() { 
-        const b = new Blob([document.getElementById('editor').value], {type:'text/plain'}), a = document.createElement('a');
-        a.href = URL.createObjectURL(b); a.download = activeFile.split('/').pop(); a.click(); 
+    function saveFile() { 
+        if (!activeFile || activeFile.endsWith('/')) {
+            alert('请先选择一个文件');
+            return;
+        }
+        
+        const content = storage[activeFile] || '';
+        const b = new Blob([content], {type:'text/plain'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(b);
+        a.download = activeFile.split('/').pop();
+        a.click();
     }
     
     function clearTerm() { if(activeTermId) document.getElementById(activeTermId).querySelector('.term-out').innerHTML = 'READY.'; }
 
-    // 初始化拖拽功能
     initResizer(document.getElementById('h-drag-left'), document.getElementById('explorer'), true, false);
     initResizer(document.getElementById('v-drag-explorer'), document.getElementById('file-section'), false, false);
     
