@@ -787,15 +787,14 @@ function initEditorTabEvents() {
         if (pluginCtxTarget === null) return;
         const p = plugins[pluginCtxTarget];
         document.getElementById('plugin-ctx').style.display = 'none';
+        smartSwitch('editor-p');
         
-        // 直接打开插件代码，标签名就是插件名
         const pluginTabName = p.name;
         
         if (editorTabs[pluginTabName]) {
             switchEditorTab(pluginTabName);
         } else {
             createEditorTab(pluginTabName);
-            // 确保插件代码包含插件名称注释
             let pluginCode = p.code;
             if (!pluginCode.includes("// 插件名称:")) {
                 pluginCode = `// 插件名称: ${p.name}\n${pluginCode}`;
@@ -805,49 +804,38 @@ function initEditorTabEvents() {
     }
 
     async function runCurrentFile() {
-    if (!activeFile || activeFile.endsWith('/')) return;
-
-    // 自动保存当前编辑器内容到 storage
-    autoSave();
-
-    const fileName = activeFile.toLowerCase();
-    
-    // 确保有活跃的终端，如果没有则创建一个
-    if (!activeTermId) {
-        addTerminal();
-    }
-
-    // 切换到终端面板视图（可选，为了让用户看到输出）
-    // document.getElementById('terminal').scrollIntoView();
-
-    addLog(`[SYSTEM]: EXEC_START >> ${activeFile}`, 'var(--amber)');
-
-    if (fileName.endsWith('.js')) {
-        // 执行 JavaScript
-        try {
-            const code = storage[activeFile];
-            // 使用 Function 构造函数执行，并注入一个简单的 log 代理
-            new Function('console', code)({
-                log: (m) => addLog(m, 'var(--term-green)'),
-                error: (m) => addLog(`ERR: ${m}`, 'var(--term-red)')
-            });
-        } catch (e) {
-            addLog(`RUNTIME_ERR: ${e.message}`, 'var(--term-red)');
+        if (!activeFile || activeFile.endsWith('/')) return;
+        smartSwitch('terminal');
+        autoSave();
+        const fileName = activeFile.toLowerCase();
+        if (!activeTermId) {
+            addTerminal();
         }
-    } else if (fileName.endsWith('.py')) {
-        // 执行 Python (使用你已有的 Pyodide 逻辑)
-        try {
-            addLog("INITIALIZING_PYTHON_WASM...", "var(--amber-dim)");
-            const py = await initPython();
-            py.setStdout({ batched: (str) => addLog(str, 'var(--term-green)') });
-            await py.runPythonAsync(storage[activeFile]);
-        } catch (e) {
-            addLog(`PYTHON_ERR: ${e.message}`, 'var(--term-red)');
+        addLog(`[SYSTEM]: EXEC_START >> ${activeFile}`, 'var(--amber)');
+
+        if (fileName.endsWith('.js')) {
+            try {
+                const code = storage[activeFile];
+                new Function('console', code)({
+                    log: (m) => addLog(m, 'var(--term-green)'),
+                    error: (m) => addLog(`ERR: ${m}`, 'var(--term-red)')
+                });
+            } catch (e) {
+                addLog(`RUNTIME_ERR: ${e.message}`, 'var(--term-red)');
+            }
+        } else if (fileName.endsWith('.py')) {
+            try {
+                addLog("INITIALIZING_PYTHON_WASM...", "var(--amber-dim)");
+                const py = await initPython();
+                py.setStdout({ batched: (str) => addLog(str, 'var(--term-green)') });
+                await py.runPythonAsync(storage[activeFile]);
+            } catch (e) {
+                addLog(`PYTHON_ERR: ${e.message}`, 'var(--term-red)');
+            }
+        } else {
+            addLog(`ERR: NO_EXECUTOR_FOR_EXTENSION (${activeFile.split('.').pop()})`, 'var(--term-red)');
         }
-    } else {
-        addLog(`ERR: NO_EXECUTOR_FOR_EXTENSION (${activeFile.split('.').pop()})`, 'var(--term-red)');
     }
-}
 
     function renamePlugin() {
         if (pluginCtxTarget === null) return;
@@ -1349,8 +1337,8 @@ function createPanelTabs(currentPanelId) {
     const panels = [
         { id: 'explorer', name: 'EXPLORER' },
         { id: 'editor-p', name: 'EDITOR' },
+        { id: 'terminal', name: 'TERMINAL' },
         { id: 'ai-panel', name: 'AI' },
-        { id: 'terminal', name: 'TERMINAL' }
     ];
     
     panels.forEach(panel => {
@@ -1391,6 +1379,14 @@ function switchToPanel(fromPanelId, toPanelId) {
     
     // 最大化目标面板
     toggleMax(toPanelId);
+}
+
+// 智能面板切换
+function smartSwitch(targetPanelId) {
+    const currentPanel = document.querySelector('.panel.maximized');
+    if (currentPanel && currentPanel.id !== targetPanelId) {
+        switchToPanel(currentPanel.id, targetPanelId);
+    }
 }
 
     function toggleExplorerMax(sectionId) {
@@ -1492,6 +1488,7 @@ function switchToPanel(fromPanelId, toPanelId) {
                     }
                 } else {
                     openFile(k);
+                    smartSwitch('editor-p'); // 智能切换到编辑器
                 }
                 renderFiles();
             };
