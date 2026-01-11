@@ -279,6 +279,65 @@
             0%, 100% { opacity: 1; }
             50% { opacity: 0; }
         }
+        
+        /* Markdown样式 */
+        .code-block {
+            background: rgba(255, 176, 0, 0.05);
+            border: 1px solid var(--amber-dim);
+            border-radius: 4px;
+            margin: 8px 0;
+            padding: 12px;
+            position: relative;
+        }
+        .code-lang {
+            position: absolute;
+            top: -10px;
+            left: 10px;
+            background: var(--amber);
+            color: #000;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: bold;
+        }
+        .code-block .inject-btn {
+            position: absolute;
+            top: -10px;
+            right: 10px;
+            background: var(--amber);
+            color: #000;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 9px;
+            font-weight: bold;
+            border: none;
+            cursor: pointer;
+            margin: 0;
+        }
+        .code-block .inject-btn:hover {
+            background: #fff;
+            color: #000;
+        }
+        .code-block pre {
+            margin: 0;
+            overflow-x: auto;
+        }
+        .code-block code {
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            color: var(--amber);
+            white-space: pre-wrap;
+        }
+        .inline-code {
+            background: rgba(255, 176, 0, 0.1);
+            padding: 1px 4px;
+            border-radius: 2px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: var(--amber);
+        }
+        strong { color: #fff; font-weight: bold; }
+        em { color: var(--amber); font-style: italic; }
 
         #ctx, #plugin-ctx, .custom-modal {
             position: fixed; display: none; background: var(--panel-bg);
@@ -326,7 +385,7 @@
         }
     </style>
 </head>
-<body>
+     <body>
 
 <div class="header">
     <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
@@ -405,7 +464,7 @@
 
         <footer class="panel" id="terminal">
     <div class="p-head">
-        <span>COMMAND</span>
+        <span>TERMINAL</span>
         <div class="ctrl-group">
             <span class="ctrl" onclick="addTerminal()">+</span>
             <span class="ctrl" onclick="toggleMax('terminal')">◰</span>
@@ -2556,25 +2615,56 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
         const data = await response.json();
         const fullContent = data.choices[0].message.content;
         
-        // 处理AI回复内容，在每个代码块后插入apply按钮
-        const processedContent = fullContent.replace(/```([\s\S]*?)```/g, (match, code) => {
-            const cleanCode = code.split('\n').slice(1).join('\n').trim();
-            if (cleanCode) {
-                return match + '<br><div class="inject-btn" data-code="' + 
-                       cleanCode.replace(/"/g, '&quot;') + '">>> APPLY</div>';
-            }
-            return match;
-        });
+        // Markdown渲染函数
+        const renderMarkdown = (text) => {
+            const codeBlocks = [];
+            
+            // 先提取代码块并保存原始内容
+            let processedText = text.replace(/```(\w+)?\n([\s\S]*?)```/g, (match, lang, code) => {
+                const cleanCode = code.trim();
+                const blockId = `code-block-${codeBlocks.length}`;
+                codeBlocks.push(cleanCode);
+                
+                const displayCode = cleanCode.replace(/\n/g, '<br>');
+                const applyBtn = cleanCode ? 
+                    `<div class="inject-btn" data-code="${blockId}">Apply</div>` : '';
+                
+                return `<div class="code-block"><span class="code-lang">${lang || 'code'}</span><pre><code>${displayCode}</code></pre>${applyBtn}</div>`;
+            });
+            
+            // 处理其他Markdown元素
+            processedText = processedText
+                // 行内代码
+                .replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>')
+                // 粗体
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                // 斜体
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                // 换行
+                .replace(/\n/g, '<br>');
+            
+            // 保存代码块数据到消息元素
+            aiMsg.dataset.codeBlocks = JSON.stringify(codeBlocks);
+            
+            return processedText;
+        };
         
-        // 直接显示完整的处理后的内容（去掉打字效果）
-        aiMsg.innerHTML = 'AI: ' + processedContent;
+        // 渲染Markdown并显示
+        const renderedContent = renderMarkdown(fullContent);
+        aiMsg.innerHTML = 'AI: ' + renderedContent;
         
         // 为所有按钮添加点击事件
         aiMsg.querySelectorAll('.inject-btn').forEach(btn => {
             btn.onclick = () => {
-                const code = btn.getAttribute('data-code');
-                if (activeEditorTab && editorTabs[activeEditorTab] && code) {
-                    editorTabs[activeEditorTab].editor.value += "\n" + code;
+                const blockId = btn.getAttribute('data-code');
+                if (blockId && blockId.startsWith('code-block-')) {
+                    const blockIndex = parseInt(blockId.replace('code-block-', ''));
+                    const codeBlocks = JSON.parse(aiMsg.dataset.codeBlocks || '[]');
+                    const code = codeBlocks[blockIndex];
+                    
+                    if (activeEditorTab && editorTabs[activeEditorTab] && code) {
+                        editorTabs[activeEditorTab].editor.value += "\n" + code;
+                    }
                 }
             };
         });
