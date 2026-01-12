@@ -368,10 +368,10 @@
             font-size: 10px;
             font-weight: bold;
         }
-        .code-block .inject-btn {
+        .code-block .inject-btn, .code-block .run-btn {
             position: absolute;
             top: -10px;
-            right: 10px;
+            right: 55px;
             background: var(--amber);
             color: #000;
             padding: 2px 8px;
@@ -385,14 +385,14 @@
             line-height: 14px;
             box-sizing: border-box;
         }
-        .code-block .inject-btn:hover {
+        .code-block .inject-btn:hover, .code-block .run-btn:hover {
             background: #fff;
             color: #000;
         }
         .code-block .copy-btn {
             position: absolute;
             top: -10px;
-            right: 60px;
+            right: 10px;
             background: var(--amber-dim);
             color: var(--amber);
             padding: 2px 8px;
@@ -2375,7 +2375,7 @@ function copyPrompt(element, query) {
 // 通用的AI消息按钮绑定函数
 function bindAiMessageButtons(container) {
     container.addEventListener('click', (e) => {
-        const btn = e.target.closest('.inject-btn, .copy-btn');
+        const btn = e.target.closest('.inject-btn, .copy-btn, .run-btn');
         if (!btn) return;
         
         const blockId = btn.getAttribute('data-code');
@@ -2389,9 +2389,26 @@ function bindAiMessageButtons(container) {
         if (!code) return;
         
         if (btn.classList.contains('inject-btn')) {
-            if (activeEditorTab && editorTabs[activeEditorTab]) {
-                editorTabs[activeEditorTab].editor.value += "\n" + code;
+            // 只在全屏模式下切换到编辑面板
+            const currentPanel = document.querySelector('.panel.maximized');
+            if (currentPanel) {
+                // 在全屏模式下，使用智能切换到编辑面板
+                smartSwitch('editor-p');
+                // 等待面板切换完成后再注入代码
+                setTimeout(() => {
+                    if (activeEditorTab && editorTabs[activeEditorTab]) {
+                        editorTabs[activeEditorTab].editor.value += "\n" + code;
+                    }
+                }, 100);
+            } else {
+                // 非全屏模式下直接注入代码
+                if (activeEditorTab && editorTabs[activeEditorTab]) {
+                    editorTabs[activeEditorTab].editor.value += "\n" + code;
+                }
             }
+        } else if (btn.classList.contains('run-btn')) {
+            // 执行bash命令
+            executeBashCommands(code);
         } else if (btn.classList.contains('copy-btn')) {
             navigator.clipboard.writeText(code).then(() => {
                 const originalText = btn.textContent;
@@ -2400,6 +2417,60 @@ function bindAiMessageButtons(container) {
             }).catch(err => console.error('Failed to copy:', err));
         }
     });
+}
+
+// 执行bash命令
+function executeBashCommands(code) {
+    // 只在全屏模式下切换到终端面板
+    const currentPanel = document.querySelector('.panel.maximized');
+    if (currentPanel) {
+        // 在全屏模式下，使用智能切换到终端面板
+        smartSwitch('terminal');
+        // 等待面板切换完成后再执行命令
+        setTimeout(() => {
+            executeCommands(code);
+        }, 100);
+    } else {
+        // 非全屏模式下直接执行命令
+        executeCommands(code);
+    }
+}
+
+// 执行命令的实际逻辑
+function executeCommands(code) {
+    // 将命令按行分割，过滤掉空行和注释
+    const commands = code.split('\n')
+        .filter(line => line.trim() && !line.trim().startsWith('#'))
+        .map(line => line.trim());
+    
+    if (commands.length === 0) return;
+    
+    // 依次执行每个命令
+    let currentIndex = 0;
+    
+    function executeNext() {
+        if (currentIndex >= commands.length) return;
+        
+        const command = commands[currentIndex];
+        
+        // 像用户手动输入一样执行命令
+        if (activeTermId) {
+            const input = document.getElementById(activeTermId).querySelector('.cmd-in');
+            if (input) {
+                // 设置输入框的值并触发命令执行
+                input.value = command;
+                handleCommand(activeTermId);
+                
+                // 等待命令执行完成后再执行下一个
+                setTimeout(() => {
+                    currentIndex++;
+                    executeNext();
+                }, 500);
+            }
+        }
+    }
+    
+    executeNext();
 }
 
 // 页面加载时恢复聊天窗口
@@ -2916,10 +2987,16 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
                 codeBlocks.push(cleanCode);
                 
                 const displayCode = cleanCode.replace(/\n/g, '<br>');
-                const applyBtn = cleanCode ? 
-                    `<div class="copy-btn" data-code="${blockId}">Copy</div><div class="inject-btn" data-code="${blockId}">Apply</div>` : '';
                 
-                return `<div class="code-block"><span class="code-lang">${lang || 'code'}</span><pre><code>${displayCode}</code></pre>${applyBtn}</div>`;
+                // 根据语言类型决定按钮文本
+                const isBash = lang && (lang.toLowerCase() === 'bash' || lang.toLowerCase() === 'sh' || lang.toLowerCase() === 'shell');
+                const actionBtnText = isBash ? 'Run' : 'Apply';
+                const actionBtnClass = isBash ? 'run-btn' : 'inject-btn';
+                
+                const actionBtn = cleanCode ? 
+                    `<div class="copy-btn" data-code="${blockId}">Copy</div><div class="${actionBtnClass}" data-code="${blockId}" data-lang="${lang || 'code'}">${actionBtnText}</div>` : '';
+                
+                return `<div class="code-block"><span class="code-lang">${lang || 'code'}</span><pre><code>${displayCode}</code></pre>${actionBtn}</div>`;
             });
             
             // 处理其他Markdown格式（保持简洁）
