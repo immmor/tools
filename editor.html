@@ -233,7 +233,14 @@
         
         .msg { margin-bottom: 15px; line-height: 1.4; border-left: 2px solid var(--amber-dim); padding-left: 10px; word-wrap: break-word; overflow-wrap: break-word; white-space: pre-wrap; }
         .msg.ai { border-left-color: var(--amber); }
-        .msg.user { color: #fff; opacity: 0.8; }
+        .msg.user { color: #fff; opacity: 0.8; position: relative; padding-left: 25px; }
+        .undo-btn { 
+            position: absolute; left: 5px; top: 0; 
+            color: var(--amber-dim); font-size: 10px; cursor: pointer;
+            opacity: 0.5; transition: opacity 0.2s;
+        }
+        .msg.user:hover .undo-btn { opacity: 1; }
+        .undo-btn:hover { color: var(--amber); }
         
         .ai-tools { padding: 8px 10px; background: rgba(113, 78, 0, 0.1); border-top: 1px solid var(--amber-dim); font-size: 10px; position: relative; }
         
@@ -699,6 +706,7 @@
     let pyodideInstance = null;
     let ctxTarget = null;
     let pluginCtxTarget = null;
+    let currentAiRequest = null; // 当前AI请求的控制器，用于取消请求
     
     // 编辑面板多标签管理
     let editorTabs = {};
@@ -2412,7 +2420,7 @@ function bindAiMessageButtons(container) {
         } else if (btn.classList.contains('copy-btn')) {
             navigator.clipboard.writeText(code).then(() => {
                 const originalText = btn.textContent;
-                btn.textContent = 'Copied!';
+                btn.textContent = 'Done';
                 setTimeout(() => btn.textContent = originalText, 2000);
             }).catch(err => console.error('Failed to copy:', err));
         }
@@ -2471,6 +2479,24 @@ function executeCommands(code) {
     }
     
     executeNext();
+}
+
+// 取消AI请求
+function cancelAiRequest() {
+    if (currentAiRequest) {
+        currentAiRequest.abort();
+        currentAiRequest = null;
+    }
+    resetSendButton();
+}
+
+// 重置发送按钮状态
+function resetSendButton() {
+    const sendBtn = document.getElementById('ai-send-btn');
+    if (sendBtn) {
+        sendBtn.textContent = 'SEND';
+        sendBtn.style.background = ''; // 恢复默认样式
+    }
 }
 
 // 页面加载时恢复聊天窗口
@@ -2882,8 +2908,18 @@ function removeAiTab(e, id) {
 async function handleAiSend() {
     const input = document.getElementById('ai-in');
     const query = input.value.trim();
+    
+    // 检查当前是否正在生成，如果是则取消
+    if (isGenerating()) {
+        cancelAiRequest();
+        return;
+    }
+    
     if (!query) return;
 
+    // 开始生成
+    startGenerating();
+    
     // 只支持单个供应商，直接发送
     sendAi(null, activeAiId);
 }
@@ -2912,18 +2948,17 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
                    selectedAiCtxs.length === 1 ? selectedAiCtxs[0] : 
                    `[${selectedAiCtxs.length} files]`;
     const promptText = `[CTX:${ctxText}] > ${query}`;
-    uMsg.innerText = promptText;
     
-    // 直接保存带点击事件的HTML
-    uMsg.setAttribute('onclick', `copyPrompt(this, '${query.replace(/'/g, "\\'")}')`);
+    uMsg.innerHTML = `<span class="undo-btn" title="回退到此对话" onclick="undoToPrompt(event, '${currentChatId}', ${chatHistory[currentChatId] ? chatHistory[currentChatId].length - 1 : 0}, '${query.replace(/'/g, "\\'")}')">↶</span><span class="prompt-content">${promptText}</span>`;
+    
+    uMsg.querySelector('.prompt-content').setAttribute('onclick', `copyPrompt(this, '${query.replace(/'/g, "\\'")}')`);
     
     chat.appendChild(uMsg);
     
-    // 缓存用户消息到历史记录（直接保存带onclick的HTML）
     if (!aiChatHistory[currentChatId]) {
         aiChatHistory[currentChatId] = [];
     }
-    aiChatHistory[currentChatId].push(`<div class="msg user" style="cursor: pointer;" title="点击复制prompt" onclick="copyPrompt(this, '${query.replace(/'/g, "\\'")}')">${promptText}</div>`);
+    aiChatHistory[currentChatId].push(`<div class="msg user" style="cursor: pointer; position: relative; padding-left: 25px;" title="点击复制prompt"><span class="undo-btn" title="回退到此对话" onclick="undoToPrompt(event, '${currentChatId}', ${chatHistory[currentChatId] ? chatHistory[currentChatId].length - 1 : 0}, '${query.replace(/'/g, "\\'")}')">↶</span><span class="prompt-content" onclick="copyPrompt(this, '${query.replace(/'/g, "\\'")}')">${promptText}</span></div>`);
 
     const aiMsg = document.createElement('div');
     aiMsg.className = 'msg ai'; 
@@ -2934,12 +2969,10 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
     scrollChat();
 
     try {
-        // 初始化对话历史
         if (!chatHistory[currentChatId]) {
             chatHistory[currentChatId] = [];
         }
         
-        // 构建用户消息
         const userMessage = {
             role: 'user', 
             content: selectedAiCtxs.length > 0 ? 
@@ -2947,11 +2980,12 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
                 query 
         };
         
-        // 添加到对话历史并保存
         chatHistory[currentChatId].push(userMessage);
         localStorage.setItem('ind_console_chat_history', JSON.stringify(chatHistory));
         
-        // 发送请求，包含完整对话历史
+        const controller = new AbortController();
+        currentAiRequest = controller;
+        
         const response = await fetch(`${provider.apiBaseUrl}/chat/completions`, {
             method: 'POST',
             headers: { 
@@ -2962,12 +2996,16 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
                 model: provider.model, 
                 messages: chatHistory[currentChatId], // 发送完整对话历史
                 stream: false
-            })
+            }),
+            signal: controller.signal
         });
 
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
         const fullContent = data.choices[0].message.content;
+        
+        // 请求完成，清除控制器
+        currentAiRequest = null;
         
         // 将AI回复添加到对话历史并保存
         chatHistory[currentChatId].push({
@@ -2975,6 +3013,9 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
             content: fullContent
         });
         localStorage.setItem('ind_console_chat_history', JSON.stringify(chatHistory));
+        
+        // 恢复按钮状态
+        resetSendButton();
         
         // Markdown渲染函数
         const renderMarkdown = (text) => {
@@ -3027,6 +3068,9 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
     } catch (err) { 
         const errorMessage = `[ERR]: ${err.message}`;
         aiMsg.innerText = `AI: ${errorMessage}`; 
+        
+        // 恢复按钮状态
+        resetSendButton();
         
         // 将错误信息添加到对话历史并保存
         chatHistory[currentChatId].push({
@@ -3088,6 +3132,63 @@ function handleExtractButton(container) {
     }
     
     function clearTerm() { if(activeTermId) document.getElementById(activeTermId).querySelector('.term-out').innerHTML = 'READY.'; }
+        function isGenerating() {
+        const sendBtn = document.getElementById('ai-send-btn');
+        return sendBtn && sendBtn.textContent === 'CANC';
+    }
+    
+    function startGenerating() {
+        const sendBtn = document.getElementById('ai-send-btn');
+        if (sendBtn) {
+            sendBtn.textContent = 'CANC';
+            sendBtn.style.background = 'var(--term-red)';
+        }
+    }
+    
+    function cancelAiRequest() {
+        if (currentAiRequest) {
+            currentAiRequest.abort();
+            currentAiRequest = null;
+        }
+        stopGenerating();
+    }
+    
+function stopGenerating() {
+    const sendBtn = document.getElementById('ai-send-btn');
+    if (sendBtn) {
+        sendBtn.textContent = 'SEND';
+        sendBtn.style.background = 'var(--amber-dim)';
+    }
+}
+
+function undoToPrompt(event, chatId, messageIndex, originalQuery) {
+    event.stopPropagation(); // 阻止冒泡
+    
+    if (confirm('确定要回退到此对话吗？此操作将删除此prompt之后的所有对话记录。')) {
+        if (chatHistory[chatId] && chatHistory[chatId].length > messageIndex + 1) {
+            chatHistory[chatId] = chatHistory[chatId].slice(0, messageIndex + 1);
+            localStorage.setItem('ind_console_chat_history', JSON.stringify(chatHistory));
+        }
+        
+        if (aiChatHistory[chatId] && aiChatHistory[chatId].length > messageIndex + 1) {
+            aiChatHistory[chatId] = aiChatHistory[chatId].slice(0, messageIndex + 1);
+            localStorage.setItem('ind_console_ai_history', JSON.stringify(aiChatHistory));
+        }
+        
+        const chat = document.getElementById(chatId);
+        if (chat) {
+            chat.innerHTML = aiChatHistory[chatId].join('');
+            chat.scrollTo({ top: chat.scrollHeight, behavior: 'smooth' });
+        }
+        
+        const input = document.getElementById('ai-in');
+        if (input) {
+            input.value = originalQuery;
+            input.focus();
+        }
+    }
+}
+   
 
     initResizer(document.getElementById('h-drag-left'), document.getElementById('explorer'), true, false);
     initResizer(document.getElementById('v-drag-explorer'), document.getElementById('file-section'), false, false);
@@ -3108,8 +3209,23 @@ function handleExtractButton(container) {
             document.getElementById('ai-provider-options').style.display = 'none';
         }
     });
-    document.getElementById('ai-in').onkeydown = (e) => { if(e.key === 'Enter') sendAi(); };
+    document.getElementById('ai-in').onkeydown = (e) => { 
+        if(e.key === 'Enter') {
+            if (isGenerating()) {
+                cancelAiRequest();
+                return;
+            }
+            
+            const query = e.target.value.trim();
+            if (!query) return;
+            
+            startGenerating();
+            
+            sendAi();
+        }
+    };
 
+ 
     renderFiles(); renderPlugins(); addTerminal(); restoreAiTabs(); updateProviderDisplay();
     createEditorTab(activeFile);
 </script>
