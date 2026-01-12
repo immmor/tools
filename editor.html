@@ -704,6 +704,7 @@
     // 编辑面板多标签管理
     let editorTabs = {};
     let activeEditorTab = null;
+    let fileModifiedState = {}; // 跟踪文件修改状态
 
     let isSearching = false;
     function toggleSearch() {
@@ -1109,6 +1110,9 @@ function initEditorTabEvents() {
             const editor = editorTabs[activeEditorTab].editor;
             const content = editor.value;
             
+            // 清除修改标记
+            clearFileModified(activeEditorTab);
+            
             // 判断是普通文件还是插件
             if (plugins.find(p => p.name === activeEditorTab) || activeEditorTab === "New_Plugin") {
                 // 解析插件名（从代码中提取）
@@ -1203,8 +1207,11 @@ function initEditorTabEvents() {
         const tab = document.createElement('div');
         tab.className = 'term-tab';
         tab.id = 'editor-tab-' + fileName;
-        tab.innerHTML = `<span>${fileName}</span><span class="term-close" onclick="closeEditorTab('${fileName}')">×</span>`;
+        tab.innerHTML = `<span><span class="modified-dot" style="display:none; margin-right: 3px;">•</span>${fileName}</span><span class="term-close" onclick="closeEditorTab('${fileName}')">×</span>`;
         tab.onclick = () => switchEditorTab(fileName);
+        
+        // 初始化文件状态
+        fileModifiedState[fileName] = false;
         
         // 添加拖拽功能
         tab.setAttribute('draggable', 'true');
@@ -1230,6 +1237,11 @@ function initEditorTabEvents() {
             // 普通文件
             editorArea.value = storage[fileName] || '';
         }
+        
+        // 监听编辑器变化
+        editorArea.addEventListener('input', () => {
+            markFileModified(fileName);
+        });
         
         editorArea.style.display = 'none';
         editorArea.style.flex = '1';
@@ -1272,6 +1284,15 @@ function initEditorTabEvents() {
         
         // 切换到新标签
         switchEditorTab(fileName);
+        
+        // 检查初始状态是否已修改
+        const originalContent = plugins.find(p => p.name === fileName) ? 
+            plugins.find(p => p.name === fileName).code : 
+            storage[fileName] || '';
+        if (editorArea.value !== originalContent) {
+            markFileModified(fileName);
+        }
+        
         initEditorTabEvents();
     }
     
@@ -1291,6 +1312,30 @@ function initEditorTabEvents() {
             activeEditorTab = fileName;
             activeFile = fileName;
             localStorage.setItem('ind_console_active', fileName);
+        }
+    }
+    
+    // 标记文件为已修改
+    function markFileModified(fileName) {
+        if (!fileModifiedState[fileName]) {
+            fileModifiedState[fileName] = true;
+            const tab = document.getElementById('editor-tab-' + fileName);
+            if (tab) {
+                const dot = tab.querySelector('.modified-dot');
+                if (dot) dot.style.display = 'inline';
+            }
+        }
+    }
+    
+    // 清除文件修改标记
+    function clearFileModified(fileName) {
+        if (fileModifiedState[fileName]) {
+            fileModifiedState[fileName] = false;
+            const tab = document.getElementById('editor-tab-' + fileName);
+            if (tab) {
+                const dot = tab.querySelector('.modified-dot');
+                if (dot) dot.style.display = 'none';
+            }
         }
     }
     
