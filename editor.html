@@ -1833,7 +1833,7 @@ function smartSwitch(targetPanelId) {
     let selectedAiCtxs = []; // 支持多选
     
     // 对话历史记忆
-    let chatHistory = {}; // 存储每个聊天窗口的对话历史
+    let chatHistory = JSON.parse(localStorage.getItem('ind_console_chat_history')) || {}; // 存储每个聊天窗口的对话历史
 
     function updateAiCtxOptions() {
         const container = document.getElementById('ai-ctx-options');
@@ -2364,6 +2364,15 @@ function selectProvider(index) {
     let aiCount = 0;
 let activeAiId = null;
 
+// 通用的prompt复制函数
+function copyPrompt(element, query) {
+    navigator.clipboard.writeText(query).then(() => {
+        const originalText = element.textContent;
+        element.textContent = '✓ 已复制';
+        setTimeout(() => element.textContent = originalText, 1000);
+    }).catch(err => console.error('Failed to copy:', err));
+}
+
 // 通用的AI消息按钮绑定函数
 function bindAiMessageButtons(container) {
     container.addEventListener('click', (e) => {
@@ -2827,17 +2836,24 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
     const chat = document.getElementById(currentChatId);
     const uMsg = document.createElement('div');
     uMsg.className = 'msg user'; 
+    uMsg.style.cursor = 'pointer';
+    
     const ctxText = selectedAiCtxs.length === 0 ? 'none' : 
                    selectedAiCtxs.length === 1 ? selectedAiCtxs[0] : 
                    `[${selectedAiCtxs.length} files]`;
-    uMsg.innerText = `[CTX:${ctxText}] > ${query}`;
+    const promptText = `[CTX:${ctxText}] > ${query}`;
+    uMsg.innerText = promptText;
+    
+    // 直接保存带点击事件的HTML
+    uMsg.setAttribute('onclick', `copyPrompt(this, '${query.replace(/'/g, "\\'")}')`);
+    
     chat.appendChild(uMsg);
     
-    // 缓存用户消息到历史记录
+    // 缓存用户消息到历史记录（直接保存带onclick的HTML）
     if (!aiChatHistory[currentChatId]) {
         aiChatHistory[currentChatId] = [];
     }
-    aiChatHistory[currentChatId].push(uMsg.outerHTML);
+    aiChatHistory[currentChatId].push(`<div class="msg user" style="cursor: pointer;" title="点击复制prompt" onclick="copyPrompt(this, '${query.replace(/'/g, "\\'")}')">${promptText}</div>`);
 
     const aiMsg = document.createElement('div');
     aiMsg.className = 'msg ai'; 
@@ -2861,8 +2877,9 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
                 query 
         };
         
-        // 添加到对话历史
+        // 添加到对话历史并保存
         chatHistory[currentChatId].push(userMessage);
+        localStorage.setItem('ind_console_chat_history', JSON.stringify(chatHistory));
         
         // 发送请求，包含完整对话历史
         const response = await fetch(`${provider.apiBaseUrl}/chat/completions`, {
@@ -2882,11 +2899,12 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
         const data = await response.json();
         const fullContent = data.choices[0].message.content;
         
-        // 将AI回复添加到对话历史
+        // 将AI回复添加到对话历史并保存
         chatHistory[currentChatId].push({
             role: 'assistant',
             content: fullContent
         });
+        localStorage.setItem('ind_console_chat_history', JSON.stringify(chatHistory));
         
         // Markdown渲染函数
         const renderMarkdown = (text) => {
@@ -2928,11 +2946,12 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
         const errorMessage = `[ERR]: ${err.message}`;
         aiMsg.innerText = `AI: ${errorMessage}`; 
         
-        // 将错误信息添加到对话历史
+        // 将错误信息添加到对话历史并保存
         chatHistory[currentChatId].push({
             role: 'assistant',
             content: errorMessage
         });
+        localStorage.setItem('ind_console_chat_history', JSON.stringify(chatHistory));
         
         scrollChat();
     }
