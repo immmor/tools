@@ -228,7 +228,7 @@
         .term-input-wrap { display: flex; padding: 8px 10px; background: #000; border-top: 1px solid var(--amber-dim); gap: 10px; align-items: center; }
         .cmd-in { background: transparent; border: none; outline: none; flex: 1; color: #fff; font-family: inherit; cursor: text !important; }
 
-        #ai-panel { width: 280px; border-left: 1px solid var(--amber-dim); }
+        #ai-panel { width: 600px; border-left: 1px solid var(--amber-dim); }
         #ai-chat { flex: 1; padding: 15px; overflow-y: auto; font-size: 13px; scroll-behavior: smooth; }
         
         .msg { margin-bottom: 15px; line-height: 1.4; border-left: 2px solid var(--amber-dim); padding-left: 10px; word-wrap: break-word; overflow-wrap: break-word; white-space: pre-wrap; }
@@ -1099,6 +1099,11 @@ function initEditorTabEvents() {
             createEditorTab(newPluginTabName);
             editorTabs[newPluginTabName].editor.value = "// 插件名称: 新插件\n";
         }
+        
+        // 全屏模式下切换到编辑面板
+        if (document.querySelector('.panel.maximized')) {
+            smartSwitch('editor-p');
+        }
     }
 
     function confirmPlugin() {
@@ -1202,11 +1207,15 @@ function initEditorTabEvents() {
         if (editorTabs[fileName]) {
             // 如果已经打开，直接切换到该标签
             switchEditorTab(fileName);
-            return;
+        } else {
+            // 创建新标签
+            createEditorTab(fileName);
         }
         
-        // 创建新标签
-        createEditorTab(fileName);
+        // 全屏模式下切换到编辑面板
+        if (document.querySelector('.panel.maximized')) {
+            smartSwitch('editor-p');
+        }
     }
     
     function createEditorTab(fileName) {
@@ -2210,9 +2219,12 @@ function smartSwitch(targetPanelId) {
                 storage[finalPath] = ""; 
                 activeFile = finalPath;
                 createEditorTab(finalPath);
+                
+                if (document.querySelector('.panel.maximized')) {
+                    smartSwitch('editor-p');
+                }
             }
             
-            // 保存到localStorage
             localStorage.setItem('ind_console_storage', JSON.stringify(storage));
             localStorage.setItem('ind_console_active', activeFile);
             
@@ -2226,7 +2238,6 @@ function smartSwitch(targetPanelId) {
     const opt = document.getElementById('ai-ctx-options');
     const trigger = document.getElementById('ai-ctx-trigger');
     
-    // 关闭另一个下拉框防止重叠
     document.getElementById('ai-provider-options').style.display = 'none';
     document.getElementById('ai-provider-trigger').classList.remove('active');
     
@@ -2267,7 +2278,6 @@ function smartSwitch(targetPanelId) {
     document.getElementById('modal-overlay').style.display = 'flex';
 }
 
-// 辅助管理函数
 function updateProvider(index, field, value) {
     config.providers[index][field] = value;
 }
@@ -2337,7 +2347,6 @@ function toggleProviderSelect() {
     const opt = document.getElementById('ai-provider-options');
     const trigger = document.getElementById('ai-provider-trigger');
     
-    // 关闭另一个下拉框防止重叠
     document.getElementById('ai-ctx-options').style.display = 'none';
     document.getElementById('ai-ctx-trigger').classList.remove('active');
     
@@ -2358,20 +2367,14 @@ function selectProvider(index) {
 }
 
     function newAiChat() {
-        // 弹出确认框，防止误点清空
         if (confirm("START NEW CONVERSATION? (Current view will be cleared)")) {
-            // 创建新的聊天标签，而不是清空当前标签
             addAiTab();
-            
-            // 自动聚焦到输入框
             document.getElementById('ai-in').focus();
         }
     }
-
     let aiCount = 0;
-let activeAiId = null;
+    let activeAiId = null;
 
-// 通用的prompt复制函数
 function copyPrompt(element, query) {
     navigator.clipboard.writeText(query).then(() => {
         const originalText = element.textContent;
@@ -2380,7 +2383,6 @@ function copyPrompt(element, query) {
     }).catch(err => console.error('Failed to copy:', err));
 }
 
-// 通用的AI消息按钮绑定函数
 function bindAiMessageButtons(container) {
     container.addEventListener('click', (e) => {
         const btn = e.target.closest('.inject-btn, .copy-btn, .run-btn');
@@ -2406,12 +2408,14 @@ function bindAiMessageButtons(container) {
                 setTimeout(() => {
                     if (activeEditorTab && editorTabs[activeEditorTab]) {
                         editorTabs[activeEditorTab].editor.value += "\n" + code;
+                        markFileModified(activeEditorTab);
                     }
                 }, 100);
             } else {
                 // 非全屏模式下直接注入代码
                 if (activeEditorTab && editorTabs[activeEditorTab]) {
                     editorTabs[activeEditorTab].editor.value += "\n" + code;
+                    markFileModified(activeEditorTab);
                 }
             }
         } else if (btn.classList.contains('run-btn')) {
@@ -2590,6 +2594,7 @@ function addAiTab(forceNew = true) {
                 const code = btn.getAttribute('data-code');
                 if (activeEditorTab && editorTabs[activeEditorTab] && code) {
                     editorTabs[activeEditorTab].editor.value += "\n" + code;
+                    markFileModified(activeEditorTab);
                 }
             };
         });
@@ -3094,6 +3099,7 @@ function handleExtractButton(container) {
         btn.onclick = () => { 
             if (activeEditorTab && editorTabs[activeEditorTab]) {
                 editorTabs[activeEditorTab].editor.value += "\n" + code;
+                markFileModified(activeEditorTab);
             }
         };
         container.appendChild(document.createElement('br')); 
