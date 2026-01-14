@@ -240,6 +240,12 @@
             background: rgba(0,0,0,0.8); padding: 2px 6px; border-radius: 3px;
         }
         
+        .copy-ai-btn { 
+            position: absolute; bottom: -12px; right: 0; 
+            color: var(--amber); font-size: 9px; cursor: pointer;
+            background: rgba(0,0,0,0.8); padding: 2px 6px; border-radius: 3px;
+        }
+        
         .ai-tools { padding: 8px 10px; background: rgba(113, 78, 0, 0.1); border-top: 1px solid var(--amber-dim); font-size: 10px; position: relative; }
         
         .custom-select-trigger { 
@@ -694,7 +700,6 @@
         '代码解释': '请详细解释以下代码的功能和工作原理：\n\n[代码]'
     };
     
-    // 保存模板到本地存储
     function saveTemplates() {
         localStorage.setItem('ind_console_templates', JSON.stringify(aiTemplates));
     }
@@ -704,12 +709,11 @@
     let pyodideInstance = null;
     let ctxTarget = null;
     let pluginCtxTarget = null;
-    let currentAiRequest = null; // 当前AI请求的控制器，用于取消请求
+    let currentAiRequest = null;
     
-    // 编辑面板多标签管理
     let editorTabs = {};
     let activeEditorTab = null;
-    let fileModifiedState = {}; // 跟踪文件修改状态
+    let fileModifiedState = {};
 
     let isSearching = false;
     function toggleSearch() {
@@ -744,15 +748,12 @@
             const isFolder = path.endsWith('/');
             const content = storage[path];
             
-            // 1. 搜索文件名
             const fileNameMatch = path.toLowerCase().includes(query);
             
-            // 2. 搜索文件内容 (如果是文件)
             let contentMatch = null;
             if (!isFolder && typeof content === 'string') {
                 const index = content.toLowerCase().indexOf(query);
                 if (index !== -1) {
-                    // 截取匹配项前后的上下文
                     const start = Math.max(0, index - 20);
                     const end = Math.min(content.length, index + query.length + 20);
                     contentMatch = content.substring(start, end).replace(/\n/g, ' ');
@@ -2372,7 +2373,7 @@ function selectProvider(index) {
 function copyPrompt(element, query) {
     navigator.clipboard.writeText(query).then(() => {
         const originalText = element.textContent;
-        element.textContent = '✓ 已复制';
+        element.textContent = '✓ Copied';
         setTimeout(() => element.textContent = originalText, 1000);
     }).catch(err => console.error('Failed to copy:', err));
 }
@@ -3052,7 +3053,7 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
         };
         
         const renderedContent = renderMarkdown(fullContent);
-        aiMsg.innerHTML = 'AI: ' + renderedContent;
+        aiMsg.innerHTML = `<div style="position: relative;">AI: ${renderedContent}<span class="copy-ai-btn" onclick="copyAiResponse(this, \`${fullContent.replace(/`/g, '\\\\`')}\`)">Copy</span></div>`;
         
         bindAiMessageButtons(aiMsg);
         scrollChat();
@@ -3154,6 +3155,37 @@ function stopGenerating() {
         sendBtn.textContent = 'SEND';
         sendBtn.style.background = 'var(--amber-dim)';
     }
+}
+
+function copyAiResponse(button, content) {
+    // 解码转义字符
+    const decodedContent = content.replace(/\\`/g, '`');
+    navigator.clipboard.writeText(decodedContent).then(() => {
+        const originalText = button.textContent;
+        button.textContent = 'Done';
+        button.style.color = '#ffa500';
+        setTimeout(() => {
+            button.textContent = originalText;
+            button.style.color = 'var(--amber)';
+        }, 1000);
+    }).catch(err => {
+        console.error('复制失败:', err);
+        // 备用复制方法
+        const textArea = document.createElement('textarea');
+        textArea.value = decodedContent;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        
+        const originalText = button.textContent;
+        button.textContent = 'Done';
+        button.style.color = 'var(--amber)';
+        setTimeout(() => {
+            button.textContent = originalText;
+            button.style.color = 'var(--amber-dim)';
+        }, 1000);
+    });
 }
 
 function undoToPrompt(event, chatId, messageIndex, originalQuery) {
