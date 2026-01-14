@@ -285,7 +285,6 @@
         .ai-btn { background: var(--amber-dim); color: #fff; border: none; padding: 5px 10px; cursor: pointer !important; font-size: 10px; }
         .ai-btn:hover { background: var(--amber); color: var(--bg); }
         
-        /* 模板选择器样式 - 与CONTEXT_NODE保持一致 */
         .template-dropdown {
             position: absolute;
             bottom: 100%;
@@ -349,7 +348,7 @@
         }
 
         #ai-container .msg {
-            font-size: 12px; /* 原本可能是 16px 或 13px，这里调小 */
+            font-size: 12px;
             margin-bottom: 10px;
         }
 
@@ -376,7 +375,6 @@
             50% { opacity: 0; }
         }
         
-        /* Markdown样式 */
         .code-block {
             background: rgba(255, 176, 0, 0.05);
             border: 1px solid var(--amber-dim);
@@ -760,7 +758,6 @@
 
         if (!query) return;
 
-        // 搜索文件系统
         Object.keys(storage).forEach(path => {
             const isFolder = path.endsWith('/');
             const content = storage[path];
@@ -781,10 +778,8 @@
                 const div = document.createElement('div');
                 div.className = 'search-res-item';
                 
-                // 渲染结果项
                 let innerHTML = `<span class="search-path">📁 ${path}</span>`;
                 if (contentMatch) {
-                    // 高亮显示匹配的内容片段
                     const highlighted = contentMatch.replace(new RegExp(query, 'gi'), (m) => `<span class="search-match">${m}</span>`);
                     innerHTML += `<span style="opacity:0.8">...${highlighted}...</span>`;
                 } else {
@@ -793,21 +788,18 @@
 
                 div.innerHTML = innerHTML;
                 div.onclick = () => {
-                    // 自动打开对应文件
                     activeFile = path;
                     if (!isFolder) {
-                        // 切换到编辑器面板并打开文件
                         smartSwitch('editor');
                         openFile(path);
                     }
-                    toggleSearch(); // 搜索完成后切换回文件列表
+                    toggleSearch();
                     renderFiles();
                 };
                 resultsCont.appendChild(div);
             }
         });
 
-        // 搜索插件系统
         plugins.forEach((plugin, index) => {
             const pluginNameMatch = plugin.name.toLowerCase().includes(query);
             const pluginCodeMatch = plugin.code.toLowerCase().includes(query);
@@ -830,7 +822,6 @@
 
                 div.innerHTML = innerHTML;
                 div.onclick = () => {
-                    // 打开插件编辑
                     pluginCtxTarget = index;
                     smartSwitch('editor-p');
                     startEditPlugin();
@@ -840,7 +831,6 @@
             }
         });
 
-        // 搜索终端历史
         const terminalLogs = document.getElementById('terminal-logs');
         if (terminalLogs) {
             const logs = terminalLogs.innerText.toLowerCase();
@@ -862,14 +852,12 @@
             }
         }
 
-        // 搜索AI对话历史
         Object.keys(aiChatHistory).forEach(chatId => {
             const chatContent = aiChatHistory[chatId].join('').toLowerCase();
             if (chatContent.includes(query)) {
                 const div = document.createElement('div');
                 div.className = 'search-res-item';
                 
-                // 提取匹配的片段
                 const index = chatContent.indexOf(query);
                 const start = Math.max(0, index - 20);
                 const end = Math.min(chatContent.length, index + query.length + 20);
@@ -879,20 +867,16 @@
                 const chatNum = chatId.replace('ai-chat-', '');
                 div.innerHTML = `<span class="search-path">🤖 CHAT_${chatNum}</span><span style="opacity:0.8">...${highlighted}...</span>`;
                 div.onclick = () => {
-                    // 切换到AI面板并跳转到具体对话
                     smartSwitch('ai-panel');
                     toggleSearch();
-                    // 切换到对应的对话tab
                     setTimeout(() => {
                         switchAiTab(chatId);
-                        // 滚动到包含搜索关键词的位置
                         const chatBody = document.getElementById(chatId);
                         if (chatBody) {
                             const content = chatBody.innerText.toLowerCase();
                             const matchIndex = content.indexOf(query);
                             if (matchIndex !== -1) {
-                                // 简单滚动：滚动到包含匹配内容的区域
-                                chatBody.scrollTop = matchIndex * 2; // 粗略估算滚动位置
+                                chatBody.scrollTop = matchIndex * 2;
                             }
                         }
                     }, 100);
@@ -906,7 +890,6 @@
         }
     }
 
-// 终端字符插入函数 (支持括号偏移)
 function insertAtTerm(text, offset = 0) {
     if (!activeTermId) return;
     const input = document.getElementById(activeTermId).querySelector('.cmd-in');
@@ -921,13 +904,10 @@ function insertAtTerm(text, offset = 0) {
     input.setSelectionRange(newPos, newPos);
 }
 
-// 编辑器全选、剪切、复制、粘贴逻辑
 async function editorAction(action) {
     if (!activeEditorTab || !editorTabs[activeEditorTab]) return;
-    
     const editor = editorTabs[activeEditorTab].editor;
     editor.focus();
-    
     if (action === 'selectAll') {
         editor.select();
     } else if (action === 'copy') {
@@ -936,24 +916,16 @@ async function editorAction(action) {
     } else if (action === 'cut') {
         const selectedText = editor.value.substring(editor.selectionStart, editor.selectionEnd);
         await navigator.clipboard.writeText(selectedText);
-        
-        // 删除选中的文本
         const before = editor.value.substring(0, editor.selectionStart);
         const after = editor.value.substring(editor.selectionEnd);
         editor.value = before + after;
-        
-        // 更新光标位置
         editor.selectionStart = editor.selectionEnd = before.length;
     } else if (action === 'paste') {
         try {
             const text = await navigator.clipboard.readText();
-            
-            // 在光标位置插入文本
             const before = editor.value.substring(0, editor.selectionStart);
             const after = editor.value.substring(editor.selectionEnd);
             editor.value = before + text + after;
-            
-            // 更新光标位置
             const newPos = before.length + text.length;
             editor.selectionStart = editor.selectionEnd = newPos;
         } catch (err) {
@@ -962,7 +934,6 @@ async function editorAction(action) {
     }
 }
 
-// 终端输入框全选、剪切、复制、粘贴逻辑
 async function termAction(action) {
     if (!activeTermId) return;
     const input = document.getElementById(activeTermId).querySelector('.cmd-in');
@@ -988,7 +959,6 @@ async function termAction(action) {
     }
 }
 
-// 终端撤销操作
 function execTermUndo() {
     if (!activeTermId) return;
     const input = document.getElementById(activeTermId).querySelector('.cmd-in');
@@ -997,8 +967,6 @@ function execTermUndo() {
         document.execCommand('undo', false, null);
     }
 }
-    // 在光标处插入文本
-// 增强：插入文本并在必要时处理回车缩进
 function insertAtCursor(text, offset = 0, isReturn = false) {
     if (activeEditorTab && editorTabs[activeEditorTab]) {
         const el = editorTabs[activeEditorTab].editor;
