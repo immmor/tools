@@ -138,6 +138,17 @@
             margin-top: 30px !important;
             height: calc(100% - 70px) !important;
         }
+        
+        .panel.maximized #search-container {
+            margin-top: 30px !important;
+            position: relative !important;
+            z-index: 2 !important;
+        }
+        
+        .panel.maximized #search-results {
+            margin-top: 30px !important;
+            height: calc(100% - 110px) !important;
+        }
 
         .divider-h { width: 6px; background: var(--amber-dim); cursor: col-resize !important; flex-shrink: 0; }
         .divider-h:hover, .divider-h.active { background: var(--amber); box-shadow: 0 0 10px var(--amber); }
@@ -350,6 +361,28 @@
         .search-res-item:hover { background: rgba(255, 176, 0, 0.1); }
         .search-match { color: #fff; background: var(--amber-dim); padding: 0 2px; }
         .search-path { font-size: 9px; opacity: 0.5; display: block; margin-bottom: 2px; }
+        
+        .search-category {
+            padding: 8px 0 4px 0;
+            border-bottom: 1px solid var(--amber-dim);
+            margin-bottom: 8px;
+            font-size: 12px;
+        }
+        
+        .search-item {
+            padding: 8px;
+            border: 1px solid transparent;
+            margin-bottom: 4px;
+            cursor: pointer;
+            border-radius: 3px;
+            background: rgba(255, 176, 0, 0.05);
+        }
+        
+        .search-item:hover {
+            background: var(--amber);
+            color: var(--bg);
+            border-color: var(--amber);
+        }
 
         .inject-btn { display: inline-block; margin-top: 8px; font-size: 9px; padding: 2px 6px; border: 1px solid var(--amber); cursor: pointer !important; color: var(--amber); }
         .inject-btn:hover { background: var(--amber); color: #000; }
@@ -451,7 +484,6 @@
         #ctx, #plugin-ctx, .custom-modal {
             position: fixed; display: none; background: var(--panel-bg);
             border: 2px solid var(--amber); z-index: 1000; min-width: 200px;
-            box-shadow: 8px 8px 0px #000;
         }
         .opt { padding: 12px 15px; font-size: 12px; font-weight: bold; cursor: pointer !important; }
         .opt:hover { background: var(--amber); color: var(--bg); }
@@ -462,7 +494,14 @@
             background: rgba(0,0,0,0.8); z-index: 2000; display: none;
             align-items: center; justify-content: center;
         }
-        .custom-modal { display: block; position: relative; width: 320px; }
+        .custom-modal { 
+            position: fixed !important; 
+            display: none; 
+            background: var(--panel-bg);
+            border: 2px solid var(--amber); 
+            z-index: 1000; 
+            min-width: 200px;
+        }
         .modal-body { padding: 20px; }
         .modal-input { width: 100%; background: #000; border: 1px solid var(--amber); color: #fff; padding: 8px; outline: none; font-family: inherit; margin-top: 10px; margin-bottom: 15px; }
         .modal-btns { display: flex; justify-content: flex-end; gap: 10px; margin-top: 5px; }
@@ -501,6 +540,7 @@
         <div style="display: flex; gap: 0px;">
             <div class="menu-btn" onclick="handleCtx(event, 10, 40)">FILE</div>
             <div class="menu-btn" onclick="saveZip()">ARCHIVE</div>
+            <div class="menu-btn" onclick="openGlobalSearch()">SEARCH</div>
             <div class="menu-btn" onclick="clearTerm()">RESET</div>
         </div>
         <div style="text-shadow: 0 0 10px var(--amber); padding-right:10px;">IMMMOR</div>
@@ -521,7 +561,7 @@
             <div id="search-container" style="display:none; padding: 10px; border-bottom: 1px solid var(--amber-dim);">
                 <input type="text" id="global-search-in" class="modal-input" placeholder="Search files/code..." style="margin:0; font-size:11px;" oninput="executeGlobalSearch()">
             </div>
-            <div id="file-list"></div>
+            <div id="file-list" oncontextmenu="handleCtx(event)"></div>
             <div id="search-results" style="display:none; overflow-y:auto; flex:1;"></div>
         </div>
 
@@ -656,6 +696,17 @@
     <div class="opt" onclick="saveFile()">DOWNLOAD_FILE</div>
     <div class="opt" onclick="saveZip()">DOWNLOAD_DIR</div>
     <div class="opt" onclick="clearTerm()">RESET_CONSOLE</div>
+</div>
+
+<!-- 全局搜索模态框 -->
+<div id="global-search-modal" class="custom-modal" style="display: none; width: 600px; max-height: 500px;">
+    <div style="padding: 15px; border-bottom: 1px solid var(--amber-dim); display: flex; align-items: center; justify-content: space-between;">
+        <input type="text" id="global-search-input" placeholder="搜索所有内容..." style="width: calc(100% - 60px); padding: 8px; background: #000; border: 1px solid var(--amber); color: #fff; font-size: 14px; outline: none;">
+        <button onclick="closeGlobalSearch()" style="background: var(--amber-dim); border: 1px solid var(--amber); color: #fff; padding: 8px 12px; cursor: pointer; font-size: 12px; margin-left: 10px;">关闭</button>
+    </div>
+    <div id="global-search-results" style="max-height: 400px; overflow-y: auto; padding: 10px;">
+        <div style="text-align: center; color: var(--amber-dim); padding: 20px;">输入关键词开始搜索</div>
+    </div>
 </div>
 
 <div id="plugin-ctx">
@@ -983,11 +1034,34 @@ function initEditorTabEvents() {
         });
     }
 
+    // 公共函数：防止菜单被窗口边界遮挡
+    function positionMenu(menu, x, y) {
+        const menuWidth = menu.offsetWidth;
+        const menuHeight = menu.offsetHeight;
+        const windowWidth = window.innerWidth;
+        const windowHeight = window.innerHeight;
+        
+        let left = x;
+        let top = y;
+        
+        // 水平方向：如果菜单会超出右边界，向左偏移
+        if (left + menuWidth > windowWidth) {
+            left = Math.max(0, windowWidth - menuWidth - 10);
+        }
+        
+        // 垂直方向：如果菜单会超出下边界，向上偏移
+        if (top + menuHeight > windowHeight) {
+            top = Math.max(0, windowHeight - menuHeight - 10);
+        }
+        
+        menu.style.left = left + 'px';
+        menu.style.top = top + 'px';
+    }
+    
     function showPluginCtx(e) {
         const pCtx = document.getElementById('plugin-ctx');
         pCtx.style.display = 'block';
-        pCtx.style.left = e.pageX + 'px';
-        pCtx.style.top = e.pageY + 'px';
+        positionMenu(pCtx, e.pageX, e.pageY);
     }
 
     function startEditPlugin() {
@@ -3102,14 +3176,239 @@ function handleExtractButton(container) {
         container.appendChild(btn);
     }
 }
+    // 全局搜索功能
+    function openGlobalSearch() {
+        const modal = document.getElementById('global-search-modal');
+        const input = document.getElementById('global-search-input');
+        
+        // 重置样式确保居中
+        modal.style.display = 'block';
+        modal.style.position = 'fixed';
+        modal.style.zIndex = '1000';
+        
+        // 居中显示模态框
+        const modalWidth = 600;
+        const modalHeight = 500;
+        const left = Math.max(0, (window.innerWidth - modalWidth) / 2);
+        const top = Math.max(0, (window.innerHeight - modalHeight) / 2);
+        
+        modal.style.left = left + 'px';
+        modal.style.top = top + 'px';
+        modal.style.transform = 'none';
+        
+        input.focus();
+        input.oninput = performGlobalSearch;
+        
+        // 添加ESC键关闭监听
+        const escHandler = function(e) {
+            if (e.key === 'Escape') {
+                closeGlobalSearch();
+                document.removeEventListener('keydown', escHandler);
+            }
+        };
+        document.addEventListener('keydown', escHandler);
+        
+        // 点击模态框外部关闭
+        modal.onclick = function(e) {
+            if (e.target === modal) {
+                closeGlobalSearch();
+            }
+        };
+    }
+    
+    function closeGlobalSearch() {
+        const modal = document.getElementById('global-search-modal');
+        const input = document.getElementById('global-search-input');
+        
+        modal.style.display = 'none';
+        input.value = '';
+        
+        // 清空搜索结果
+        const resultsContainer = document.getElementById('global-search-results');
+        resultsContainer.innerHTML = '<div style="text-align: center; color: var(--amber-dim); padding: 20px;">输入关键词开始搜索</div>';
+    }
+    
+    function performGlobalSearch() {
+        const query = document.getElementById('global-search-input').value.toLowerCase().trim();
+        const resultsContainer = document.getElementById('global-search-results');
+        
+        if (!query) {
+            resultsContainer.innerHTML = '<div style="text-align: center; color: var(--amber-dim); padding: 20px;">输入关键词开始搜索</div>';
+            return;
+        }
+        
+        const results = {
+            files: [],
+            plugins: [],
+            aiChats: [],
+            terminal: []
+        };
+        
+        // 搜索文件系统
+        Object.keys(storage).forEach(path => {
+            const isFolder = path.endsWith('/');
+            const content = storage[path];
+            
+            const fileNameMatch = path.toLowerCase().includes(query);
+            const contentMatch = !isFolder && content.toLowerCase().includes(query);
+            
+            if (fileNameMatch || contentMatch) {
+                results.files.push({
+                    path: path,
+                    isFolder: isFolder,
+                    content: contentMatch ? content : null,
+                    matchType: fileNameMatch ? '文件名' : '内容'
+                });
+            }
+        });
+        
+        // 搜索插件
+        plugins.forEach((plugin, index) => {
+            const nameMatch = plugin.name.toLowerCase().includes(query);
+            const codeMatch = plugin.code.toLowerCase().includes(query);
+            
+            if (nameMatch || codeMatch) {
+                results.plugins.push({
+                    name: plugin.name,
+                    active: plugin.active,
+                    matchType: nameMatch ? '插件名' : '代码'
+                });
+            }
+        });
+        
+        // 搜索AI对话历史
+        Object.keys(chatHistory).forEach(chatId => {
+            chatHistory[chatId].forEach((msg, msgIndex) => {
+                if (msg.content.toLowerCase().includes(query)) {
+                    results.aiChats.push({
+                        chatId: chatId,
+                        messageIndex: msgIndex,
+                        role: msg.role,
+                        content: msg.content,
+                        timestamp: new Date().toLocaleString()
+                    });
+                }
+            });
+        });
+        
+        // 搜索终端内容（模拟）
+        const terminalContent = document.getElementById('term-content')?.innerText || '';
+        if (terminalContent.toLowerCase().includes(query)) {
+            results.terminal.push({
+                content: terminalContent,
+                matchType: '终端输出'
+            });
+        }
+        
+        // 渲染搜索结果
+        renderGlobalSearchResults(results, query);
+    }
+    
+    function renderGlobalSearchResults(results, query) {
+        const container = document.getElementById('global-search-results');
+        let html = '';
+        
+        // 文件搜索结果
+        if (results.files.length > 0) {
+            html += '<div class="search-category"><strong>📁 文件系统 (' + results.files.length + ')</strong></div>';
+            results.files.forEach(file => {
+                html += '<div class="search-item" onclick="openFileFromSearch(\'' + file.path + '\')">';
+                html += '<div style="font-weight: bold;">' + file.path + '</div>';
+                html += '<div style="font-size: 11px; color: var(--amber-dim);">' + file.matchType + '</div>';
+                if (file.content) {
+                    const preview = file.content.substring(0, 100).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    html += '<div style="font-size: 10px; color: #888; margin-top: 2px;">' + preview + '...</div>';
+                }
+                html += '</div>';
+            });
+        }
+        
+        // 插件搜索结果
+        if (results.plugins.length > 0) {
+            html += '<div class="search-category"><strong>🔌 插件 (' + results.plugins.length + ')</strong></div>';
+            results.plugins.forEach(plugin => {
+                html += '<div class="search-item" onclick="openPluginFromSearch(\'' + plugin.name + '\')">';
+                html += '<div style="font-weight: bold;">' + plugin.name + (plugin.active ? ' ✅' : '') + '</div>';
+                html += '<div style="font-size: 11px; color: var(--amber-dim);">' + plugin.matchType + '</div>';
+                html += '</div>';
+            });
+        }
+        
+        // AI对话搜索结果
+        if (results.aiChats.length > 0) {
+            html += '<div class="search-category"><strong>🤖 AI对话 (' + results.aiChats.length + ')</strong></div>';
+            results.aiChats.forEach(chat => {
+                const roleText = chat.role === 'user' ? '👤 用户' : '🤖 AI';
+                const preview = chat.content.substring(0, 80).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                html += '<div class="search-item" onclick="openAiChatFromSearch(\'' + chat.chatId + '\', ' + chat.messageIndex + ')">';
+                html += '<div style="font-weight: bold;">' + roleText + '</div>';
+                html += '<div style="font-size: 10px; color: #888; margin-top: 2px;">' + preview + '...</div>';
+                html += '</div>';
+            });
+        }
+        
+        // 终端搜索结果
+        if (results.terminal.length > 0) {
+            html += '<div class="search-category"><strong>💻 终端 (' + results.terminal.length + ')</strong></div>';
+            results.terminal.forEach(term => {
+                const preview = term.content.substring(0, 80).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                html += '<div class="search-item" onclick="focusTerminal()">';
+                html += '<div style="font-weight: bold;">终端输出</div>';
+                html += '<div style="font-size: 10px; color: #888; margin-top: 2px;">' + preview + '...</div>';
+                html += '</div>';
+            });
+        }
+        
+        if (!html) {
+            html = '<div style="text-align: center; color: var(--amber-dim); padding: 20px;">未找到匹配的内容</div>';
+        }
+        
+        container.innerHTML = html;
+    }
+    
+    function openFileFromSearch(path) {
+        document.getElementById('global-search-modal').style.display = 'none';
+        openFile(path);
+        smartSwitch('editor-p');
+    }
+    
+    function openPluginFromSearch(name) {
+        document.getElementById('global-search-modal').style.display = 'none';
+        smartSwitch('editor-p');
+        // 切换到对应的插件标签
+        setTimeout(() => {
+            if (editorTabs[name]) {
+                switchEditorTab(name);
+            }
+        }, 100);
+    }
+    
+    function openAiChatFromSearch(chatId, messageIndex) {
+        document.getElementById('global-search-modal').style.display = 'none';
+        smartSwitch('ai-p');
+        // 这里可以添加跳转到具体对话的功能
+    }
+    
+    function focusTerminal() {
+        document.getElementById('global-search-modal').style.display = 'none';
+        smartSwitch('term-p');
+    }
+    
     function handleCtx(e, x, y) {
         e.preventDefault();
         const ctxMenu = document.getElementById('ctx');
         const isItem = e.target.closest('.file-item');
-        document.getElementById('ctx-rename').classList.toggle('disabled', !isItem);
-        document.getElementById('ctx-delete').classList.toggle('disabled', !isItem);
-        document.getElementById('ctx-copy-path').classList.toggle('disabled', !isItem);
-        ctxMenu.style.display = 'block'; ctxMenu.style.left = (x || e.pageX) + 'px'; ctxMenu.style.top = (y || e.pageY) + 'px';
+        
+        // 如果在空白处右键，禁用文件相关操作
+        const isFileList = e.target.id === 'file-list';
+        const shouldDisable = !isItem && !isFileList;
+        
+        document.getElementById('ctx-rename').classList.toggle('disabled', shouldDisable);
+        document.getElementById('ctx-delete').classList.toggle('disabled', shouldDisable);
+        document.getElementById('ctx-copy-path').classList.toggle('disabled', shouldDisable);
+        
+        ctxMenu.style.display = 'block';
+        positionMenu(ctxMenu, x || e.pageX, y || e.pageY);
     }
 
     async function saveZip() {
