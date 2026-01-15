@@ -636,7 +636,7 @@
         <div class="custom-select-options" id="ai-provider-options"></div>
     </div>
 
-    <label style="display:block; margin-bottom:5px">CONTEXT_NODE:</label>
+    <label style="display:block; margin-bottom:5px">CONTEXT_FILE:</label>
     <div class="custom-select-trigger" id="ai-ctx-trigger" onclick="toggleAiSelect()">
         <span id="ai-ctx-val">-- NO_CONTEXT --</span>
         <span>▼</span>
@@ -729,8 +729,9 @@
     let currentAiRequest = null;
     
     let editorTabs = {};
-    let activeEditorTab = null;
-    let fileModifiedState = {};
+        let activeEditorTab = null;
+        let fileModifiedState = {};
+        let openedTabs = JSON.parse(localStorage.getItem('ind_console_opened_tabs')) || []; // 记住打开的标签
 
     let isSearching = false;
     function toggleSearch() {
@@ -1361,6 +1362,12 @@ function getLanguageFromFileName(fileName) {
         
         document.getElementById('editor-tabs').appendChild(tab);
         
+        // 记住打开的标签
+        if (!openedTabs.includes(fileName)) {
+            openedTabs.push(fileName);
+            localStorage.setItem('ind_console_opened_tabs', JSON.stringify(openedTabs));
+        }
+        
         // 创建Monaco Editor容器
         const editorContainer = document.createElement('div');
         editorContainer.className = 'monaco-editor-container';
@@ -1451,6 +1458,17 @@ function getLanguageFromFileName(fileName) {
             activeEditorTab = fileName;
             activeFile = fileName;
             localStorage.setItem('ind_console_active', fileName);
+            
+            // 自动更新AI上下文
+            updateAiContextOnFileChange(fileName);
+        }
+    }
+    
+    // 当激活文件改变时自动更新AI上下文
+    function updateAiContextOnFileChange(fileName) {
+        if (fileName && !fileName.endsWith('/')) {
+            selectedAiCtxs = [fileName];
+            updateAiCtxDisplay();
         }
     }
     
@@ -1489,6 +1507,13 @@ function getLanguageFromFileName(fileName) {
     
     // 从标签管理中删除
     delete editorTabs[fileName];
+    
+    // 从记住的标签中删除
+    const index = openedTabs.indexOf(fileName);
+    if (index !== -1) {
+        openedTabs.splice(index, 1);
+        localStorage.setItem('ind_console_opened_tabs', JSON.stringify(openedTabs));
+    }
     
     // 如果关闭的是当前活动标签，切换到其他标签
     if (wasActive) {
@@ -1980,7 +2005,10 @@ function smartSwitch(targetPanelId) {
                 const div = document.createElement('div');
                 div.innerText = k;
                 div.style.cursor = 'pointer';
-                // 添加选中状态的高亮样式
+                if (k === activeFile && selectedAiCtxs.length === 0) {
+                    selectedAiCtxs = [k];
+                    updateAiCtxDisplay();
+                }
                 if (selectedAiCtxs.includes(k)) {
                     div.style.background = 'var(--amber)';
                     div.style.color = 'var(--bg)';
@@ -3317,7 +3345,6 @@ function scrollToAiTop(button) {
 }
 
 function copyAiResponse(button, content) {
-    // 解码转义字符
     const decodedContent = content.replace(/\\`/g, '`');
     navigator.clipboard.writeText(decodedContent).then(() => {
         const originalText = button.textContent;
@@ -3347,35 +3374,34 @@ function copyAiResponse(button, content) {
     });
 }
 
-function undoToPrompt(event, chatId, messageIndex, originalQuery) {
-    event.stopPropagation(); // 阻止冒泡
-    
-    if (confirm('确定要回退到此对话吗？此操作将删除此prompt及其之后的所有对话记录。')) {
-        if (chatHistory[chatId] && chatHistory[chatId].length > messageIndex) {
-            chatHistory[chatId] = chatHistory[chatId].slice(0, messageIndex);
-            localStorage.setItem('ind_console_chat_history', JSON.stringify(chatHistory));
-        }
+    function undoToPrompt(event, chatId, messageIndex, originalQuery) {
+        event.stopPropagation();
         
-        if (aiChatHistory[chatId] && aiChatHistory[chatId].length > messageIndex) {
-            aiChatHistory[chatId] = aiChatHistory[chatId].slice(0, messageIndex);
-            localStorage.setItem('ind_console_ai_history', JSON.stringify(aiChatHistory));
-        }
-        
-        const chat = document.getElementById(chatId);
-        if (chat) {
-            chat.innerHTML = aiChatHistory[chatId].join('');
-            chat.scrollTo({ top: chat.scrollHeight, behavior: 'smooth' });
-        }
-        
-        const input = document.getElementById('ai-in');
-        if (input) {
-            input.value = originalQuery;
-            input.focus();
+        if (confirm('确定要回退到此对话吗？此操作将删除此prompt及其之后的所有对话记录。')) {
+            if (chatHistory[chatId] && chatHistory[chatId].length > messageIndex) {
+                chatHistory[chatId] = chatHistory[chatId].slice(0, messageIndex);
+                localStorage.setItem('ind_console_chat_history', JSON.stringify(chatHistory));
+            }
+            
+            if (aiChatHistory[chatId] && aiChatHistory[chatId].length > messageIndex) {
+                aiChatHistory[chatId] = aiChatHistory[chatId].slice(0, messageIndex);
+                localStorage.setItem('ind_console_ai_history', JSON.stringify(aiChatHistory));
+            }
+            
+            const chat = document.getElementById(chatId);
+            if (chat) {
+                chat.innerHTML = aiChatHistory[chatId].join('');
+                chat.scrollTo({ top: chat.scrollHeight, behavior: 'smooth' });
+            }
+            
+            const input = document.getElementById('ai-in');
+            if (input) {
+                input.value = originalQuery;
+                input.focus();
+            }
         }
     }
-}
-   
-
+    
     initResizer(document.getElementById('h-drag-left'), document.getElementById('explorer'), true, false);
     initResizer(document.getElementById('v-drag-explorer'), document.getElementById('file-section'), false, false);
     
@@ -3401,19 +3427,33 @@ function undoToPrompt(event, chatId, messageIndex, originalQuery) {
                 cancelAiRequest();
                 return;
             }
-            
             const query = e.target.value.trim();
             if (!query) return;
-            
             startGenerating();
-            
             sendAi();
         }
     };
 
  
     renderFiles(); renderPlugins(); addTerminal(); restoreAiTabs(); updateProviderDisplay();
-    createEditorTab(activeFile);
+    
+    // 恢复打开的标签
+    if (openedTabs.length > 0) {
+        openedTabs.forEach(fileName => {
+            createEditorTab(fileName);
+        });
+        // 恢复激活的文件
+        activeFile = localStorage.getItem('ind_console_active') || openedTabs[0];
+        if (activeFile) {
+            switchEditorTab(activeFile);
+        }
+    } else {
+        // 如果没有记住的标签，恢复默认文件
+        activeFile = localStorage.getItem('ind_console_active') || 'PROTOCOL.txt';
+        if (activeFile) {
+            createEditorTab(activeFile);
+        }
+    }
 </script>
 </body>
 </html>
