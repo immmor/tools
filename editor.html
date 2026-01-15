@@ -911,29 +911,55 @@ function insertAtTerm(text, offset = 0) {
 async function editorAction(action) {
     if (!activeEditorTab || !editorTabs[activeEditorTab]) return;
     const editor = editorTabs[activeEditorTab].editor;
-    editor.focus();
-    if (action === 'selectAll') {
-        editor.select();
-    } else if (action === 'copy') {
-        const selectedText = editor.value.substring(editor.selectionStart, editor.selectionEnd);
-        await navigator.clipboard.writeText(selectedText);
-    } else if (action === 'cut') {
-        const selectedText = editor.value.substring(editor.selectionStart, editor.selectionEnd);
-        await navigator.clipboard.writeText(selectedText);
-        const before = editor.value.substring(0, editor.selectionStart);
-        const after = editor.value.substring(editor.selectionEnd);
-        editor.value = before + after;
-        editor.selectionStart = editor.selectionEnd = before.length;
-    } else if (action === 'paste') {
-        try {
-            const text = await navigator.clipboard.readText();
+    
+    // Monaco Editor
+        if (editor.getValue) {
+            if (action === 'selectAll') {
+                const fullRange = editor.getModel().getFullModelRange();
+                editor.setSelection(fullRange);
+            } else if (action === 'copy') {
+            const selection = editor.getSelection();
+            const selectedText = editor.getModel().getValueInRange(selection);
+            await navigator.clipboard.writeText(selectedText);
+        } else if (action === 'cut') {
+            const selection = editor.getSelection();
+            const selectedText = editor.getModel().getValueInRange(selection);
+            await navigator.clipboard.writeText(selectedText);
+            editor.executeEdits('', [{ range: selection, text: '' }]);
+        } else if (action === 'paste') {
+            try {
+                const text = await navigator.clipboard.readText();
+                editor.trigger('keyboard', 'paste', { text: text });
+            } catch (err) {
+                addLog("PASTE_ERROR: Permission denied", "var(--term-red)");
+            }
+        }
+    } else {
+        // Textarea
+        editor.focus();
+        if (action === 'selectAll') {
+            editor.select();
+        } else if (action === 'copy') {
+            const selectedText = editor.value.substring(editor.selectionStart, editor.selectionEnd);
+            await navigator.clipboard.writeText(selectedText);
+        } else if (action === 'cut') {
+            const selectedText = editor.value.substring(editor.selectionStart, editor.selectionEnd);
+            await navigator.clipboard.writeText(selectedText);
             const before = editor.value.substring(0, editor.selectionStart);
             const after = editor.value.substring(editor.selectionEnd);
-            editor.value = before + text + after;
-            const newPos = before.length + text.length;
-            editor.selectionStart = editor.selectionEnd = newPos;
-        } catch (err) {
-            addLog("PASTE_ERROR: Permission denied", "var(--term-red)");
+            editor.value = before + after;
+            editor.selectionStart = editor.selectionEnd = before.length;
+        } else if (action === 'paste') {
+            try {
+                const text = await navigator.clipboard.readText();
+                const before = editor.value.substring(0, editor.selectionStart);
+                const after = editor.value.substring(editor.selectionEnd);
+                editor.value = before + text + after;
+                const newPos = before.length + text.length;
+                editor.selectionStart = editor.selectionEnd = newPos;
+            } catch (err) {
+                addLog("PASTE_ERROR: Permission denied", "var(--term-red)");
+            }
         }
     }
 }
@@ -973,26 +999,47 @@ function execTermUndo() {
 }
 function insertAtCursor(text, offset = 0, isReturn = false) {
     if (activeEditorTab && editorTabs[activeEditorTab]) {
-        const el = editorTabs[activeEditorTab].editor;
-        const start = el.selectionStart;
-        const end = el.selectionEnd;
-        const val = el.value;
-
-        let contentToInsert = text;
+        const editor = editorTabs[activeEditorTab].editor;
         
-        // 如果是回车键，尝试模拟简单自动缩进
-        if (isReturn) {
-            const line = val.substring(0, start).split('\n').pop();
-            const trimStart = line.search(/\S/);
-            const indent = trimStart > 0 ? line.substring(0, trimStart) : "";
-            contentToInsert = '\n' + indent;
+        // Monaco Editor
+        if (editor.getValue) {
+            const position = editor.getPosition();
+            const currentLine = editor.getModel().getLineContent(position.lineNumber);
+            
+            let contentToInsert = text;
+            if (isReturn) {
+                const trimStart = currentLine.search(/\S/);
+                const indent = trimStart > 0 ? currentLine.substring(0, trimStart) : "";
+                contentToInsert = '\n' + indent;
+            }
+            
+            editor.trigger('keyboard', 'type', { text: contentToInsert });
+            
+            // 处理偏移
+            if (offset > 0) {
+                const newPos = editor.getPosition();
+                editor.setPosition({ lineNumber: newPos.lineNumber, column: newPos.column - offset });
+            }
+        } else {
+            // Textarea
+            const el = editor;
+            const start = el.selectionStart;
+            const end = el.selectionEnd;
+            const val = el.value;
+            
+            let contentToInsert = text;
+            if (isReturn) {
+                const line = val.substring(0, start).split('\n').pop();
+                const trimStart = line.search(/\S/);
+                const indent = trimStart > 0 ? line.substring(0, trimStart) : "";
+                contentToInsert = '\n' + indent;
+            }
+            
+            el.value = val.substring(0, start) + contentToInsert + val.substring(end);
+            const newPos = start + contentToInsert.length - offset;
+            el.focus();
+            el.setSelectionRange(newPos, newPos);
         }
-
-        el.value = val.substring(0, start) + contentToInsert + val.substring(end);
-        
-        const newPos = start + contentToInsert.length - offset;
-        el.focus();
-        el.setSelectionRange(newPos, newPos);
         
         autoSave();
     }
@@ -1010,8 +1057,22 @@ function handleModifier(type) {
 function execEditorCmd(cmd) {
     if (activeEditorTab && editorTabs[activeEditorTab]) {
         const editor = editorTabs[activeEditorTab].editor;
-        editor.focus();
-        document.execCommand(cmd, false, null);
+        
+        // Monaco Editor
+        if (editor.trigger) {
+            if (cmd === 'undo') {
+                editor.trigger('keyboard', 'undo', null);
+            } else if (cmd === 'redo') {
+                editor.trigger('keyboard', 'redo', null);
+            } else if (cmd === 'selectAll') {
+                editor.trigger('keyboard', 'selectAll', null);
+            }
+        } else {
+            // Textarea
+            editor.focus();
+            document.execCommand(cmd, false, null);
+        }
+        
         autoSave();
     }
 }
@@ -3345,35 +3406,35 @@ function scrollToAiTop(button) {
     }
 }
 
-function copyAiResponse(button, content) {
-    const decodedContent = content.replace(/\\`/g, '`');
-    navigator.clipboard.writeText(decodedContent).then(() => {
-        const originalText = button.textContent;
-        button.textContent = 'Done';
-        button.style.color = '#ffa500';
-        setTimeout(() => {
-            button.textContent = originalText;
+    function copyAiResponse(button, content) {
+        const decodedContent = content.replace(/\\`/g, '`');
+        navigator.clipboard.writeText(decodedContent).then(() => {
+            const originalText = button.textContent;
+            button.textContent = 'Done';
+            button.style.color = '#ffa500';
+            setTimeout(() => {
+                button.textContent = originalText;
+                button.style.color = 'var(--amber)';
+            }, 1000);
+        }).catch(err => {
+            console.error('复制失败:', err);
+            // 备用复制方法
+            const textArea = document.createElement('textarea');
+            textArea.value = decodedContent;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            
+            const originalText = button.textContent;
+            button.textContent = 'Done';
             button.style.color = 'var(--amber)';
-        }, 1000);
-    }).catch(err => {
-        console.error('复制失败:', err);
-        // 备用复制方法
-        const textArea = document.createElement('textarea');
-        textArea.value = decodedContent;
-        document.body.appendChild(textArea);
-        textArea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textArea);
-        
-        const originalText = button.textContent;
-        button.textContent = 'Done';
-        button.style.color = 'var(--amber)';
-        setTimeout(() => {
-            button.textContent = originalText;
-            button.style.color = 'var(--amber-dim)';
-        }, 1000);
-    });
-}
+            setTimeout(() => {
+                button.textContent = originalText;
+                button.style.color = 'var(--amber-dim)';
+            }, 1000);
+        });
+    }
 
     function undoToPrompt(event, chatId, messageIndex, originalQuery) {
         event.stopPropagation();
@@ -3435,27 +3496,19 @@ function copyAiResponse(button, content) {
         }
     };
 
- 
     renderFiles(); renderPlugins(); addTerminal(); restoreAiTabs(); updateProviderDisplay();
     
-    // 恢复打开的标签
     if (openedTabs.length > 0) {
-        // 先保存要激活的文件
         const activeTabName = localStorage.getItem('ind_console_active') || openedTabs[0];
-        
-        // 创建所有标签
         openedTabs.forEach(fileName => {
             createEditorTab(fileName);
         });
-        
-        // 延迟切换到激活的标签，确保Monaco Editor初始化完成
         setTimeout(() => {
             if (activeTabName && editorTabs[activeTabName]) {
                 switchEditorTab(activeTabName);
             }
         }, 60);
     } else {
-        // 如果没有记住的标签，恢复默认文件
         activeFile = localStorage.getItem('ind_console_active') || 'PROTOCOL.txt';
         if (activeFile) {
             createEditorTab(activeFile);
