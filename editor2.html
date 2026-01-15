@@ -2,266 +2,3395 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>IMMMOR // NEURAL_ORB_v10</title>
-    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>immmor code</title>
+    <link rel="icon" type="image/png" href="iwe.png">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
-
     <style>
         :root {
-            --orb-color: #ffb000;
-            --orb-glow: rgba(255, 176, 0, 0.4);
-            --bg: #0a0a0a;
-            --glass: rgba(20, 18, 12, 0.85);
-            --neon-green: #00ff41;
-            --neon-red: #ff3e3e;
+            --amber: #ffb000;
+            --amber-dim: #714e00;
+            --bg: #12100b;
+            --panel-bg: #1c1912;
+            --border-w: 2px;
+            --term-red: #ff3e3e;
+            --term-green: #00ff41;
         }
 
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; cursor: default; }
+        
         body, html {
             margin: 0; padding: 0; height: 100vh; width: 100vw;
-            background: var(--bg); color: var(--orb-color);
-            font-family: 'Fira Code', 'Courier New', monospace; overflow: hidden;
+            background: var(--bg); color: var(--amber);
+            font-family: 'Courier New', Courier, monospace; overflow: hidden;
+            background-image: linear-gradient(rgba(18, 16, 11, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 255, 0, 0.06));
+            background-size: 100% 4px, 3px 100%;
         }
 
-        /* 背景流体动画 */
-        .bg-gradient {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: radial-gradient(circle at 90% 90%, #1a1500 0%, transparent 40%);
-            z-index: -1;
+        .header {
+            height: 40px; border-bottom: var(--border-w) solid var(--amber);
+            display: flex; align-items: center; padding: 0 15px;
+            font-size: 14px; font-weight: bold; background: var(--panel-bg);
+            text-shadow: 0 0 5px var(--amber); gap: 20px;
         }
 
-        /* 布局 */
-        .workspace { display: flex; height: 100vh; padding: 10px; gap: 10px; }
+        .menu-btn { cursor: pointer !important; padding: 5px 10px; border: 1px solid transparent; }
+        .menu-btn:hover { border-color: var(--amber); background: rgba(255, 176, 0, 0.1); }
 
-        /* 左侧极致精简 */
-        .side-nav { width: 50px; display: flex; flex-direction: column; align-items: center; gap: 20px; padding-top: 20px; background: rgba(0,0,0,0.3); border-radius: 25px; }
-        .nav-icon { width: 30px; height: 30px; cursor: pointer; opacity: 0.5; transition: 0.3s; }
-        .nav-icon:hover { opacity: 1; transform: scale(1.2); }
+        .workspace { display: flex; flex-direction: row; height: calc(100vh - 40px); width: 100%; position: relative; }
 
-        /* 编辑器主区 - 悬浮卡片感 */
-        .editor-container { 
-            flex: 1; background: var(--glass); border-radius: 20px; 
-            border: 1px solid rgba(255,176,0,0.1); display: flex; flex-direction: column;
-            overflow: hidden; position: relative;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        .panel { 
+            background: var(--panel-bg); display: flex; flex-direction: column; 
+            overflow: hidden; position: relative; height: 100%;
         }
+
+        .panel.maximized {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;   /* 必须设为0，确保从屏幕最左边开始 */
+            width: 100vw !important; /* 占据整个屏幕宽度 */
+            height: 100vh !important; /* 占据整个屏幕高度 */
+            z-index: 999 !important; /* 确保层级高于一切 */
+            background: var(--bg) !important; /* 背景不透明，遮住底下的编辑器 */
+            display: flex !important;
+            flex-direction: column !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        
+        .panel.maximized .p-head {
+            height: 40px !important;
+            flex-shrink: 0 !important;
+        }
+        
+        .panel.maximized .term-tabs {
+            height: 30px !important;
+            flex-shrink: 0 !important;
+        }
+        
+        .panel.maximized #editor-container,
+        .panel.maximized #ai-container,
+        .panel.maximized #term-container {
+            flex: 1 !important;
+            overflow: auto !important;
+        }
+        
+        .panel.maximized {
+            border-left: none !important;
+            border-right: none !important;
+        }
+        
+        .panel.maximized .p-head {
+            position: relative;
+            height: 40px !important;
+        }
+        
+        .panel-tabs {
+            position: absolute;
+            top: 40px;
+            left: 0;
+            right: 0;
+            display: flex;
+            background: var(--panel-bg);
+            border-bottom: 1px solid var(--amber-dim);
+            height: 30px;
+            z-index: 0;
+        }
+        
+        .panel-tab {
+            flex: 1;
+            padding: 6px 12px;
+            text-align: center;
+            cursor: pointer;
+            border-right: 1px solid var(--amber-dim);
+            transition: background 0.2s;
+            font-size: 11px;
+            line-height: 18px;
+        }
+        
+        .panel-tab:last-child {
+            border-right: none;
+        }
+        
+        .panel-tab:hover {
+            background: var(--amber-dim);
+        }
+        
+        .panel-tab.active {
+            background: var(--amber);
+            color: #000;
+        }
+        
+        /* 为面板切换tab栏留出空间 */
+        .panel.maximized .term-tabs {
+            margin-top: 30px !important;
+        }
+        
+        /* 确保快捷键按钮在终端标签下方 */
+        .panel.maximized .editor-tools {
+            margin-top: 0 !important;
+            z-index: 1 !important;
+            position: relative !important;
+        }
+        
+        .panel.maximized #file-list {
+            margin-top: 30px !important;
+            height: calc(100% - 70px) !important;
+        }
+        
+        .panel.maximized #search-container {
+            margin-top: 30px !important;
+            position: relative !important;
+            z-index: 2 !important;
+        }
+        
+        .panel.maximized #search-results {
+            margin-top: 0px !important; /* 修复全屏模式下的顶部空白 */
+            height: calc(100% - 110px) !important;
+        }
+
+        .divider-h { width: 6px; background: var(--amber-dim); cursor: col-resize !important; flex-shrink: 0; }
+        .divider-h:hover, .divider-h.active { background: var(--amber); box-shadow: 0 0 10px var(--amber); }
+
+        .divider-v { height: 6px; background: var(--amber-dim); cursor: row-resize !important; flex-shrink: 0; }
+        .divider-v:hover, .divider-v.active { background: var(--amber); box-shadow: 0 0 10px var(--amber); }
+
+        .p-head {
+            height: 30px; border-bottom: 1px solid var(--amber-dim);
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 10px; font-size: 11px; background: rgba(113, 78, 0, 0.1);
+        }
+        .ctrl-group { display: flex; gap: 5px; }
+        .ctrl { 
+            cursor: pointer !important; 
+            width: 18px; height: 18px;
+            display: flex; align-items: center; justify-content: center;
+            border: 1px solid var(--amber-dim); 
+            font-size: 10px;
+            line-height: 1;
+        }
+        .ctrl:hover { background: var(--amber); color: var(--bg); }
+
+        #explorer { 
+            width: 200px; 
+            border-right: 1px solid var(--amber-dim); 
+            display: flex; 
+            flex-direction: column; 
+            overflow: hidden;
+        }
+        #file-section, #plugin-section {
+            min-height: 0;
+            overflow: hidden;
+        }
+        #file-list, #plugin-list { overflow-y: auto; flex: 1; }
+        #plugin-section { 
+            flex: 1; 
+            display: flex; 
+            flex-direction: column; 
+            min-height: 50px;
+        }
+        .file-item, .plugin-item { 
+            padding: 8px 15px; font-size: 13px; cursor: pointer !important; 
+            border-bottom: 1px solid rgba(113, 78, 0, 0.05); 
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            display: flex; align-items: center; 
+            color: var(--amber); opacity: 0.7; 
+        }
+        .file-item:hover, .plugin-item:hover { background: rgba(255, 176, 0, 0.05); opacity: 0.9; }
+        .file-item.active { background: var(--amber); color: var(--bg) !important; font-weight: bold; opacity: 1; }
+        .file-item.folder { color: var(--amber); font-weight: bold; opacity: 1; border-left: 2px solid var(--amber-dim); }
+
+        .plugin-item { justify-content: space-between; font-size: 11px; }
+        .plugin-status { width: 8px; height: 8px; border-radius: 50%; background: var(--amber-dim); }
+        .plugin-status.active { background: var(--term-green); box-shadow: 0 0 5px var(--term-green); }
+
+        .file-rename-input {
+            background: var(--amber); color: var(--bg); border: none; outline: none;
+            font-family: inherit; font-size: 13px; width: 100%; padding: 0; margin: 0; font-weight: bold;
+        }
+
+        #main-stack { flex: 1; display: flex; flex-direction: column; min-width: 0; }
         #editor {
-            flex: 1; background: transparent; color: #fff; border: none;
-            padding: 30px; font-size: 16px; outline: none; resize: none; line-height: 1.6;
+            flex: 1; background: transparent; border: none; outline: none;
+            padding: 20px; color: var(--amber); font-size: 16px;
+            line-height: 1.5; resize: none; font-family: inherit; cursor: text !important;
         }
 
-        /* --- AI 神经元核心 (重点) --- */
-        .ai-core-wrapper {
-            position: fixed; bottom: 40px; right: 40px; z-index: 1000;
+        #terminal { height: 220px; }
+        .term-tabs { display: flex; background: #000; border-bottom: 1px solid var(--amber-dim); overflow-x: auto; scrollbar-width: none; }
+        .term-tabs::-webkit-scrollbar { display: none; }
+        .term-tab { 
+            padding: 5px 12px; font-size: 10px; border-right: 1px solid var(--amber-dim); 
+            cursor: pointer !important; opacity: 0.6; display: flex; align-items: center; gap: 8px; 
+            white-space: nowrap;
+        }
+        #term-tabs .term-tab:only-child .term-close,
+        #ai-tabs .term-tab:only-child .term-close {
+            display: none !important;
+        }
+        .term-tab.active { background: var(--amber-dim); color: #fff; opacity: 1; }
+        .term-close { font-size: 12px; font-weight: bold; cursor: pointer !important; color: var(--term-red); }
+        .term-close:hover { color: #fff; }
+        
+        .term-body { flex: 1; display: none; flex-direction: column; overflow: hidden; }
+        .term-body.active { display: flex; }
+        .term-out { flex: 1; padding: 10px; overflow-y: auto; font-size: 12px; color: rgba(255, 176, 0, 0.8); white-space: pre-wrap; word-break: break-all; }
+        .term-input-wrap { display: flex; padding: 8px 10px; background: #000; border-top: 1px solid var(--amber-dim); gap: 10px; align-items: center; }
+        .cmd-in { background: transparent; border: none; outline: none; flex: 1; color: #fff; font-family: inherit; cursor: text !important; }
+
+        #ai-panel { width: 600px; border-left: 1px solid var(--amber-dim); }
+        #ai-chat { flex: 1; padding: 15px; overflow-y: auto; font-size: 13px; scroll-behavior: smooth; }
+        
+        .msg { margin-bottom: 15px; line-height: 1.4; border-left: 2px solid var(--amber-dim); padding-left: 10px; word-wrap: break-word; overflow-wrap: break-word; white-space: pre-wrap; }
+        .msg.ai { border-left-color: var(--amber); }
+        .msg.user { color: #fff; opacity: 0.8; position: relative; margin-top: 20px; }
+        .undo-btn { 
+            position: absolute; top: -18px; left: 0; 
+            color: #ff6b6b; font-size: 9px; cursor: pointer;
+            background: rgba(0,0,0,0.8); padding: 2px 6px; border-radius: 3px;
+        }
+        
+        .copy-ai-btn { 
+            position: absolute; bottom: -12px; right: 0; 
+            color: var(--amber); font-size: 9px; cursor: pointer;
+            background: rgba(0,0,0,0.8); padding: 2px 6px; border-radius: 3px;
+        }
+        
+        .scroll-top-btn { 
+            position: absolute; bottom: -12px; right: 40px; 
+            color: var(--amber); font-size: 9px; cursor: pointer;
+            background: rgba(0,0,0,0.8); padding: 2px 6px; border-radius: 3px;
+        }
+        
+        .ai-tools { padding: 8px 10px; background: rgba(113, 78, 0, 0.1); border-top: 1px solid var(--amber-dim); font-size: 10px; position: relative; }
+        
+        .custom-select-trigger { 
+            background: #000; color: var(--amber); border: 1px solid var(--amber-dim); 
+            font-size: 10px; width: 100%; padding: 6px; cursor: pointer !important;
+            display: flex; justify-content: space-between; align-items: center; white-space: nowrap;
+        }
+        .custom-select-trigger.active span:last-child {
+            transform: rotate(180deg);
+        }
+        .custom-select-options {
+            position: absolute; bottom: 100%; left: 10px; right: 10px; background: var(--panel-bg);
+            border: 1px solid var(--amber); display: none; z-index: 600; max-height: 200px; overflow-y: auto;
+        }
+        .custom-select-options div { padding: 8px; border-bottom: 1px solid var(--amber-dim); cursor: pointer !important; }
+        .custom-select-options div:hover { background: var(--amber); color: #000; }
+
+        .ai-input-area { padding: 10px; background: rgba(0,0,0,0.3); border-top: 1px solid var(--amber-dim); display: flex; gap: 5px; }
+        #ai-in { background: transparent; border: 1px solid var(--amber-dim); color: #fff; flex: 1; padding: 5px; outline: none; cursor: text !important; }
+        .ai-btn { background: var(--amber-dim); color: #fff; border: none; padding: 5px 10px; cursor: pointer !important; font-size: 10px; }
+        .ai-btn:hover { background: var(--amber); color: var(--bg); }
+        
+        .template-dropdown {
+            position: absolute;
+            bottom: 100%;
+            left: 10px;
+            right: 10px;
+            background: var(--panel-bg);
+            border: 1px solid var(--amber);
+            display: none;
+            z-index: 600;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .template-option {
+            padding: 8px;
+            border-bottom: 1px solid var(--amber-dim);
+            cursor: pointer !important;
+            font-size: 11px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .template-option:hover {
+            background: var(--amber);
+            color: #000;
+        }
+        .template-actions {
+            display: flex;
+            gap: 5px;
+        }
+        .template-action {
+            background: transparent;
+            border: 1px solid currentColor;
+            color: inherit;
+            padding: 1px 4px;
+            font-size: 9px;
+            cursor: pointer;
+            border-radius: 2px;
+        }
+        .template-action:hover {
+            background: rgba(0,0,0,0.2);
+        }
+        .template-header {
+            padding: 8px;
+            background: var(--amber-dim);
+            color: #fff;
+            font-size: 10px;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--amber-dim);
+        }
+        .template-add-btn {
+            background: var(--amber);
+            color: #000;
+            border: none;
+            padding: 2px 6px;
+            font-size: 9px;
+            cursor: pointer;
+            border-radius: 2px;
         }
 
-        /* 核心球体 */
-        .orb {
-            width: 60px; height: 60px; background: var(--orb-color);
-            border-radius: 50%; cursor: pointer;
-            box-shadow: 0 0 20px var(--orb-glow), inset 0 0 15px rgba(255,255,255,0.5);
-            animation: orb-pulse 2s infinite ease-in-out;
-            display: flex; align-items: center; justify-content: center;
-            font-weight: bold; color: #000; font-size: 10px;
-        }
-        @keyframes orb-pulse {
-            0% { transform: scale(1); box-shadow: 0 0 20px var(--orb-glow); }
-            50% { transform: scale(1.1); box-shadow: 0 0 40px var(--orb-glow); }
-            100% { transform: scale(1); box-shadow: 0 0 20px var(--orb-glow); }
+        #ai-container .msg {
+            font-size: 12px;
+            margin-bottom: 10px;
         }
 
-        /* 环形菜单 */
-        .orb-menu {
-            position: absolute; bottom: 0; right: 0; width: 200px; height: 200px;
-            pointer-events: none; opacity: 0; transition: 0.4s; transform: scale(0.5) rotate(-90deg);
+        .search-res-item {
+            padding: 5px 10px; font-size: 11px;
+            border-bottom: 1px solid rgba(113, 78, 0, 0.1);
+            cursor: pointer !important;
         }
-        .ai-core-wrapper:hover .orb-menu {
-            opacity: 1; pointer-events: auto; transform: scale(1.1) rotate(0deg);
-        }
+        .search-res-item:hover { background: rgba(255, 176, 0, 0.1); }
+        .search-match { color: #fff; background: var(--amber-dim); padding: 0 2px; }
+        .search-path { font-size: 9px; opacity: 0.5; display: block; margin-bottom: 2px; }
 
-        .menu-item {
-            position: absolute; width: 45px; height: 45px; background: var(--glass);
-            border: 1px solid var(--orb-color); border-radius: 50%;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 10px; cursor: pointer; transition: 0.2s;
+        .inject-btn { display: inline-block; margin-top: 8px; font-size: 9px; padding: 2px 6px; border: 1px solid var(--amber); cursor: pointer !important; color: var(--amber); }
+        .inject-btn:hover { background: var(--amber); color: #000; }
+        
+        .ai-typing { animation: pulse 1.5s ease-in-out infinite; }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
         }
-        .menu-item:hover { background: var(--orb-color); color: #000; }
-        .m-1 { top: 0; left: 75px; }     /* 顶部：解释 */
-        .m-2 { top: 40px; left: 15px; }  /* 左：DEBUG */
-        .m-3 { top: 110px; left: 15px; } /* 左下：重构 */
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+        
+        .code-block {
+            background: rgba(255, 176, 0, 0.05);
+            border: 1px solid var(--amber-dim);
+            border-radius: 4px;
+            margin: 8px 0;
+            padding: 12px;
+            position: relative;
+        }
+        .code-lang {
+            position: absolute;
+            top: -10px;
+            left: 10px;
+            background: var(--amber);
+            color: #000;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: bold;
+        }
+        .code-block .inject-btn, .code-block .run-btn {
+            position: absolute;
+            top: -10px;
+            right: 55px;
+            background: var(--amber);
+            color: #000;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: bold;
+            border: none;
+            cursor: pointer;
+            margin: 0;
+            height: 18px;
+            line-height: 14px;
+            box-sizing: border-box;
+        }
+        .code-block .inject-btn:hover, .code-block .run-btn:hover {
+            background: #fff;
+            color: #000;
+        }
+        .code-block .copy-btn {
+            position: absolute;
+            top: -10px;
+            right: 10px;
+            background: var(--amber-dim);
+            color: var(--amber);
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: bold;
+            border: none;
+            cursor: pointer;
+            margin: 0;
+            height: 18px;
+            line-height: 14px;
+            box-sizing: border-box;
+        }
+        .code-block .copy-btn:hover {
+            background: var(--amber);
+            color: #000;
+        }
+        .code-block pre {
+            margin: 0;
+            overflow-x: auto;
+        }
+        .code-block code {
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            color: var(--amber);
+            white-space: pre-wrap;
+        }
+        .inline-code {
+            background: rgba(255, 176, 0, 0.1);
+            padding: 1px 4px;
+            border-radius: 2px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: var(--amber);
+        }
+        strong { color: #fff; font-weight: bold; }
+        em { color: var(--amber); font-style: italic; }
 
-        /* 弹出式对话面板 - 像从 Orb 喷射出来的气泡 */
-        #ai-dialog {
-            position: absolute; bottom: 80px; right: 0; width: 350px; max-height: 500px;
-            background: var(--glass); border: 1px solid var(--orb-color);
-            border-radius: 20px 20px 0 20px; display: none; flex-direction: column;
-            box-shadow: 0 15px 40px rgba(0,0,0,0.8); backdrop-filter: blur(10px);
+        #ctx, #plugin-ctx, .custom-modal {
+            position: fixed; display: none; background: var(--panel-bg);
+            border: 2px solid var(--amber); z-index: 1000; min-width: 200px;
         }
+        .opt { padding: 12px 15px; font-size: 12px; font-weight: bold; cursor: pointer !important; }
+        .opt:hover { background: var(--amber); color: var(--bg); }
+        .opt.disabled { opacity: 0.5; pointer-events: none; }
 
-        .dialog-chat { flex: 1; overflow-y: auto; padding: 15px; font-size: 13px; }
-        .bubble { 
-            margin-bottom: 12px; padding: 10px; border-radius: 12px; 
-            background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+        .modal-overlay {
+            position: fixed; top:0; left:0; width:100%; height:100%;
+            background: rgba(0,0,0,0.8); z-index: 2000; display: none;
+            align-items: center; justify-content: center;
         }
-        .bubble.ai { border-left: 3px solid var(--neon-green); }
-        .bubble pre { background: #000 !important; padding: 10px; border-radius: 8px; margin-top: 8px; font-size: 12px; }
+        .custom-modal { display: block; position: relative; width: 320px; }
+        .modal-body { padding: 20px; }
+        .modal-input { width: 100%; background: #000; border: 1px solid var(--amber); color: #fff; padding: 8px; outline: none; font-family: inherit; margin-top: 10px; margin-bottom: 15px; }
+        .modal-btns { display: flex; justify-content: flex-end; gap: 10px; margin-top: 5px; }
+        
+        .type-selector { display: flex; gap: 15px; margin-bottom: 10px; font-size: 11px; }
+        .type-opt { cursor: pointer !important; display: flex; align-items: center; gap: 5px; }
+        .type-opt input { cursor: pointer !important; accent-color: var(--amber); }
 
-        .dialog-input {
-            padding: 10px; border-top: 1px solid rgba(255,255,255,0.1); display: flex;
+        .editor-tools {
+            display: flex; gap: 2px; padding: 5px;
+            background: rgba(28, 25, 18, 0.8);
+            border-bottom: 1px solid var(--amber-dim);
+            overflow-x: auto; white-space: nowrap;
+            scrollbar-width: none;
         }
-        #ai-text {
-            flex: 1; background: transparent; border: none; color: #fff; outline: none; padding: 5px;
+        .editor-tools::-webkit-scrollbar { display: none; }
+        .key-btn {
+            padding: 4px 12px;
+            background: var(--bg);
+            border: 1px solid var(--amber-dim);
+            color: var(--amber);
+            font-size: 11px;
+            cursor: pointer !important;
+            text-transform: uppercase;
         }
-
-        /* 终端面板 */
-        .terminal-panel {
-            height: 150px; background: rgba(0,0,0,0.6); margin-top: 10px;
-            border-radius: 20px; padding: 15px; font-size: 12px; color: var(--neon-green);
-            overflow-y: auto; border: 1px solid rgba(0,255,65,0.1);
+        .key-btn:active {
+            background: var(--amber);
+            color: var(--bg);
         }
-
-        /* Diff 动画样式 */
-        .line-diff-add { color: var(--neon-green); background: rgba(0,255,65,0.1); animation: highlight 1s forwards; }
-        @keyframes highlight { from { background: rgba(0,255,65,0.4); } to { background: rgba(0,255,65,0.1); } }
     </style>
 </head>
-<body>
+     <body>
 
-<div class="bg-gradient"></div>
-
-<div class="workspace">
-    <nav class="side-nav">
-        <div class="nav-icon" title="Files">📂</div>
-        <div class="nav-icon" title="Python">🐍</div>
-        <div class="nav-icon" title="Plugins">🧩</div>
-    </nav>
-
-    <div style="flex: 1; display: flex; flex-direction: column;">
-        <div class="editor-container">
-            <div style="padding: 10px 20px; font-size: 10px; background: rgba(0,0,0,0.2); display: flex; justify-content: space-between;">
-                <span>FILE: main.js</span>
-                <span id="ai-status">CORE_STABLE</span>
-            </div>
-            <textarea id="editor" spellcheck="false" onkeydown="handleKeys(event)">
-function neural_process() {
-    console.log("Waiting for AI commands...");
-    // 选中这段代码，看右下角 Orb
-}
-            </textarea>
+<div class="header">
+    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+        <div style="display: flex; gap: 0px;">
+            <div class="menu-btn" onclick="handleCtx(event, 10, 40)">FILE</div>
+            <div class="menu-btn" onclick="saveZip()">ARCHIVE</div>
+            <div class="menu-btn" onclick="clearTerm()">RESET</div>
         </div>
-
-        <div class="terminal-panel" id="term-out">
-            > Neural Engine v10.0 Online.<br>
-            > Waiting for connection pulse...
-        </div>
+        <div style="text-shadow: 0 0 10px var(--amber); padding-right:10px;">IMMMOR</div>
     </div>
 </div>
 
-<div class="ai-core-wrapper">
-    <div class="orb-menu">
-        <div class="menu-item m-1" onclick="quickAction('Explain')">EXPLAIN</div>
-        <div class="menu-item m-2" onclick="quickAction('Debug')">DEBUG</div>
-        <div class="menu-item m-3" onclick="quickAction('Refactor')">CLEAN</div>
+<div class="workspace">
+    <aside class="panel" id="explorer">
+        <div id="file-section" style="height: 50%; display:flex; flex-direction:column; overflow:hidden;">  
+            <div class="p-head">
+                <span>FILESYSTEM</span>
+                <div class="ctrl-group">
+                    <span class="ctrl" onclick="toggleSearch()" title="SEARCH_ALL">⌕</span>
+                    <span class="ctrl" onclick="openModal()" title="NEW NODE">+</span>
+                    <span class="ctrl" onclick="toggleExplorerMax('file-section')">◰</span>
+                </div>
+            </div>
+            <div id="search-container" style="display:none; padding: 10px; border-bottom: 1px solid var(--amber-dim);">
+                <input type="text" id="global-search-in" class="modal-input" placeholder="Search all content (files/plugins/terminal/ai)..." style="margin:0; font-size:11px;" oninput="executeGlobalSearch()">
+            </div>
+            <div id="file-list" oncontextmenu="handleCtx(event)"></div>
+            <div id="search-results" style="display:none; overflow-y:auto; flex:1;"></div>
+        </div>
+
+        <div class="divider-v" id="v-drag-explorer"></div>
+
+        <div id="plugin-section" style="flex: 1; display:flex; flex-direction:column; overflow:hidden;">
+            <div class="p-head">
+                <span>PLUGINS</span>
+                <div class="ctrl-group">
+                    <span class="ctrl" onclick="openPluginModal()" title="ADD PLUGIN">+</span>
+                    <span class="ctrl" onclick="toggleExplorerMax('plugin-section')">◰</span>
+                </div>
+            </div>
+            <div id="plugin-list"></div>
+        </div>
+    </aside>
+
+    <div class="divider-h" id="h-drag-left"></div>
+
+    <div id="main-stack">
+        <main class="panel" id="editor-p" style="flex:1">
+            <div class="p-head">
+                <span>EDITOR</span>
+                <div class="ctrl-group">
+                    <span class="ctrl" onclick="runCurrentFile()" title="RUN_NODE" style="color:var(--amber)">▶</span>
+                    <span class="ctrl" onclick="toggleMax('editor-p')">◰</span>
+                </div>
+            </div>
+            <div class="term-tabs" id="editor-tabs"></div>
+            <div class="editor-tools">
+                <div class="key-btn" onclick="saveCurrentFile()">SAVE</div>
+                <div class="key-btn" onclick="insertAtCursor('\t')">TAB</div>
+                <div class="key-btn" onclick="execEditorCmd('undo')">UNDO</div>
+                
+                <div class="key-btn" onclick="editorAction('selectAll')"">ALL</div>
+                <div class="key-btn" onclick="editorAction('cut')">CUT</div>
+                <div class="key-btn" onclick="editorAction('copy')">COPY</div>
+                <div class="key-btn" onclick="editorAction('paste')">PASTE</div>
+
+                <div class="key-btn" onclick="insertAtCursor('{}', 1)">{ }</div>
+                <div class="key-btn" onclick="insertAtCursor('()', 1)">( )</div>
+                <div class="key-btn" onclick="insertAtCursor('[]', 1)">[ ]</div>
+                <div class="key-btn" onclick="insertAtCursor('\'\'', 1)">' '</div>
+            </div>
+            <div id="editor-container" style="flex:1; display:flex; flex-direction:column; overflow:hidden;"></div>
+        </main>
+        
+        <div class="divider-v" id="v-drag"></div>
+
+        <footer class="panel" id="terminal">
+    <div class="p-head">
+        <span>TERMINAL</span>
+        <div class="ctrl-group">
+            <span class="ctrl" onclick="addTerminal()">+</span>
+            <span class="ctrl" onclick="toggleMax('terminal')">◰</span>
+        </div>
+    </div>
+    <div class="term-tabs" id="term-tabs"></div>
+    <div class="editor-tools">
+        <div class="key-btn" onclick="insertAtTerm('\t')">TAB</div>
+        <div class="key-btn" onclick="execTermUndo()">UNDO</div>
+        
+        <div class="key-btn" onclick="termAction('selectAll')">ALL</div>
+        <div class="key-btn" onclick="termAction('cut')">CUT</div>
+        <div class="key-btn" onclick="termAction('copy')">COPY</div>
+        <div class="key-btn" onclick="termAction('paste')">PASTE</div>
+
+        <div class="key-btn" onclick="insertAtTerm('{}', 1)">{ }</div>
+        <div class="key-btn" onclick="insertAtTerm('()', 1)">( )</div>
+        <div class="key-btn" onclick="insertAtTerm('[]', 1)">[ ]</div>
+        <div class="key-btn" onclick="insertAtTerm('\'\'', 1)">' '</div>
+    </div>
+    <div id="term-container" style="flex:1; display:flex; flex-direction:column; overflow:hidden;"></div>
+</footer>
     </div>
 
-    <div id="ai-dialog">
-        <div class="dialog-chat" id="chat-flow">
-            <div class="bubble ai">Neural Link established. Command me.</div>
-        </div>
-        <div class="dialog-input">
-            <input type="text" id="ai-text" placeholder="Pulse input..." autocomplete="off">
-            <button onclick="sendAi()" style="background:var(--orb-color); border:none; border-radius:5px; cursor:pointer">SYNC</button>
+    <div class="divider-h" id="h-drag-right"></div>
+
+    <aside class="panel" id="ai-panel">
+    <div class="p-head">
+        <span>AI</span>
+        <div class="ctrl-group">
+            <span class="ctrl" onclick="addAiTab(true)" title="NEW CHAT">+</span>
+            <span class="ctrl" onclick="openHistoryManager()" title="MANAGE HISTORY">≡</span>
+            <span class="ctrl" onclick="openSettings()" title="CONFIG">⚙</span>
+            <span class="ctrl" onclick="toggleMax('ai-panel')">◰</span>
         </div>
     </div>
+    <div class="term-tabs" id="ai-tabs"></div>
+    
+    <div id="ai-container" style="flex:1; display:flex; flex-direction:column; overflow:hidden;">
+        </div>
 
-    <div class="orb" onclick="toggleDialog()">CORE</div>
+    <div class="ai-tools">
+    <div style="margin-bottom: 10px;">
+        <label style="display:block; margin-bottom:5px">AI_PROVIDER:</label>
+        <div class="custom-select-trigger" id="ai-provider-trigger" onclick="toggleProviderSelect()">
+            <span id="active-provider-name">---</span>
+            <span>▼</span>
+        </div>
+        <div class="custom-select-options" id="ai-provider-options"></div>
+    </div>
+
+    <label style="display:block; margin-bottom:5px">CONTEXT_NODE:</label>
+    <div class="custom-select-trigger" id="ai-ctx-trigger" onclick="toggleAiSelect()">
+        <span id="ai-ctx-val">-- NO_CONTEXT --</span>
+        <span>▼</span>
+    </div>
+    <div class="custom-select-options" id="ai-ctx-options"></div>
+</div>
+    <div class="ai-input-area" style="position:relative;">
+        <button class="ai-btn" id="template-btn" onclick="toggleTemplateDropdown()">TEMP</button>
+        <div class="template-dropdown" id="template-dropdown">
+            <div class="template-header">
+                <span>提示词模板</span>
+                <button class="template-add-btn" onclick="addTemplate()">+ 添加</button>
+            </div>
+            <div id="template-options"></div>
+        </div>
+        <input type="text" id="ai-in" placeholder="Query..." autocomplete="off">
+        <button class="ai-btn" id="ai-send-btn" onclick="handleAiSend()">SEND</button>
+    </div>
+</aside>
+</div>
+
+<div id="ctx">
+    <div class="opt" id="ctx-new-node" onclick="openModal()">[+] NEW_FILE</div>
+    <div class="opt" id="ctx-rename" onclick="startRenameFromCtx()">[R] RENAME_FILE</div>
+    <div class="opt" id="ctx-delete" onclick="deleteNodeFromCtx()" style="color:var(--term-red)">[X] DELETE_NODE</div>
+    <div class="opt" id="ctx-copy-path" onclick="copyPathFromCtx()">[C] COPY_PATH</div>
+    <div style="border-top:1px solid var(--amber-dim); margin:4px 0;"></div>
+    <div class="opt" onclick="saveFile()">DOWNLOAD_FILE</div>
+    <div class="opt" onclick="saveZip()">DOWNLOAD_DIR</div>
+    <div class="opt" onclick="clearTerm()">RESET_CONSOLE</div>
+</div>
+
+<div id="plugin-ctx">
+    <div class="opt" onclick="renamePlugin()">[R] RENAME_PLUGIN</div>
+    <div class="opt" onclick="startEditPlugin()">[E] EDIT_PLUGIN</div>
+    <div class="opt" onclick="confirmDeletePlugin()" style="color:var(--term-red)">[X] UNINSTALL_PLUGIN</div>
+</div>
+
+<div id="modal-overlay" class="modal-overlay">
+    <div class="custom-modal">
+        <div class="p-head"><span id="modal-title">SYSTEM_PROMPT</span></div>
+        <div class="modal-body" id="modal-content"></div>
+    </div>
 </div>
 
 <script>
-    const editor = document.getElementById('editor');
-    const chatFlow = document.getElementById('chat-flow');
-    const aiText = document.getElementById('ai-text');
-    const aiDialog = document.getElementById('ai-dialog');
+    let storage = JSON.parse(localStorage.getItem('ind_console_storage')) || {
+        'PROTOCOL.txt': 'SYSTEM OVERRIDE: ACTIVE\nENCRYPTION: ENABLED',
+        'script.js': 'console.log("Node WASM active");',
+        'main.py': 'print("Python WASM initialized")'
+    };
+    let plugins = JSON.parse(localStorage.getItem('ind_console_plugins')) || [
+        { 
+            name: 'Matrix_Rain', 
+            code: 'const canvas = document.createElement(\'canvas\');const ctx = canvas.getContext(\'2d\');canvas.id = \'matrix-canvas\';canvas.style.cssText = \'position:fixed;top:0;left:0;width:100%;height:100%;z-index:22;opacity:0.4;pointer-events:none;\';document.body.appendChild(canvas);let w = canvas.width = window.innerWidth;let h = canvas.height = window.innerHeight;const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ$+-*/=<>!%";const fontSize = 14;const columns = Math.floor(w / fontSize);const drops = new Array(columns).fill(1);function draw() { ctx.fillStyle = \'rgba(18, 16, 11, 0.05)\'; ctx.fillRect(0, 0, w, h); ctx.fillStyle = \'#ffb000\'; ctx.font = fontSize + \'px "Courier New"\'; for (let i = 0; i < drops.length; i++) { const text = chars[Math.floor(Math.random() * chars.length)]; ctx.fillText(text, i * fontSize, drops[i] * fontSize); if (drops[i] * fontSize > h && Math.random() > 0.975) drops[i] = 0; drops[i]++; } }const interval = setInterval(draw, 33);const resizeHandler = () => { w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight; };window.addEventListener(\'resize\', resizeHandler);return () => { clearInterval(interval); window.removeEventListener(\'resize\', resizeHandler); if (canvas.parentNode) canvas.parentNode.removeChild(canvas); };', 
+            active: false 
+        }
+    ];
+    let config = JSON.parse(localStorage.getItem('ind_console_config')) || {
+        activeProviderIndex: 0,
+        providers: [
+            {
+                name: 'Gemini Default',
+                apiBaseUrl: 'https://mrok.dpdns.org/v1',
+                apiKey: '',
+                model: 'gemini-flash-latest'
+            }
+        ]
+    };
+    let selectedProviderIndices = [config.activeProviderIndex]; // 只支持单个供应商
+    let aiChatHistory = JSON.parse(localStorage.getItem('ind_console_ai_history')) || {};
+    let activeFile = localStorage.getItem('ind_console_active') || 'PROTOCOL.txt';
+    let expandedDirs = JSON.parse(localStorage.getItem('ind_console_expanded')) || ['SYSTEM/'];
+    
+    // 提示词模板数据（支持本地存储）
+    let aiTemplates = JSON.parse(localStorage.getItem('ind_console_templates')) || {
+        '代码优化': '请帮我优化以下代码，提高性能和可读性：\n\n[代码]',
+        '代码解释': '请详细解释以下代码的功能和工作原理：\n\n[代码]'
+    };
+    
+    function saveTemplates() {
+        localStorage.setItem('ind_console_templates', JSON.stringify(aiTemplates));
+    }
+    let termCount = 0;
+    let activeTermId = null;
+    let selectedAiCtx = 'none';
+    let pyodideInstance = null;
+    let ctxTarget = null;
+    let pluginCtxTarget = null;
+    let currentAiRequest = null;
+    
+    let editorTabs = {};
+    let activeEditorTab = null;
+    let fileModifiedState = {};
 
-    marked.setOptions({
-        highlight: (code) => Prism.highlight(code, Prism.languages.javascript, 'javascript')
-    });
+    let isSearching = false;
+    function toggleSearch() {
+        const searchCont = document.getElementById('search-container');
+        const fileList = document.getElementById('file-list');
+        const searchRes = document.getElementById('search-results');
+        const searchInput = document.getElementById('global-search-in');
 
-    // 1. 切换对话框显示
-    function toggleDialog() {
-        const isNone = aiDialog.style.display === 'none' || aiDialog.style.display === '';
-        aiDialog.style.display = isNone ? 'flex' : 'none';
-        if(isNone) aiText.focus();
+        isSearching = !isSearching;
+
+        if (isSearching) {
+            searchCont.style.display = 'block';
+            searchRes.style.display = 'block';
+            fileList.style.display = 'none';
+            searchInput.focus();
+        } else {
+            searchCont.style.display = 'none';
+            searchRes.style.display = 'none';
+            fileList.style.display = 'block';
+            searchInput.value = '';
+        }
     }
 
-    // 2. AI 核心动作
-    async function sendAi() {
-        const val = aiText.value;
-        if(!val) return;
-        addBubble('user', val);
-        aiText.value = '';
+    function executeGlobalSearch() {
+        const query = document.getElementById('global-search-in').value.toLowerCase();
+        const resultsCont = document.getElementById('search-results');
+        resultsCont.innerHTML = '';
 
-        // 修改 Orb 状态为“思考” (红色脉冲)
-        document.querySelector('.orb').style.backgroundColor = 'var(--neon-green)';
-        
-        setTimeout(() => {
-            const mockCode = `function neural_process() {\n    const flow = "SYNCED";\n    console.info(\`System Flow: \${flow}\`);\n}`;
-            const res = `解析完成。我已同步了神经元逻辑：\n\n\`\`\`javascript\n${mockCode}\n\`\`\``;
-            const bubble = addBubble('ai', marked.parse(res));
+        if (!query) return;
+
+        Object.keys(storage).forEach(path => {
+            const isFolder = path.endsWith('/');
+            const content = storage[path];
             
-            // 代码注入按钮
-            bubble.querySelectorAll('pre').forEach(pre => {
-                pre.style.cursor = 'pointer';
-                pre.title = 'Click to Inject Code';
-                pre.onclick = () => {
-                    editor.value = pre.innerText;
-                    log("Code synced from AI memory.");
-                    toggleDialog();
+            const fileNameMatch = path.toLowerCase().includes(query);
+            
+            let contentMatch = null;
+            if (!isFolder && typeof content === 'string') {
+                const index = content.toLowerCase().indexOf(query);
+                if (index !== -1) {
+                    const start = Math.max(0, index - 20);
+                    const end = Math.min(content.length, index + query.length + 20);
+                    contentMatch = content.substring(start, end).replace(/\n/g, ' ');
+                }
+            }
+
+            if (fileNameMatch || contentMatch) {
+                const div = document.createElement('div');
+                div.className = 'search-res-item';
+                
+                let innerHTML = `<span class="search-path">📁 ${path}</span>`;
+                if (contentMatch) {
+                    const highlighted = contentMatch.replace(new RegExp(query, 'gi'), (m) => `<span class="search-match">${m}</span>`);
+                    innerHTML += `<span style="opacity:0.8">...${highlighted}...</span>`;
+                } else {
+                    innerHTML += `<span style="color:var(--amber)">[MATCH_IN_FILENAME]</span>`;
+                }
+
+                div.innerHTML = innerHTML;
+                div.onclick = () => {
+                    activeFile = path;
+                    if (!isFolder) {
+                        smartSwitch('editor');
+                        openFile(path);
+                    }
+                    toggleSearch();
+                    renderFiles();
                 };
+                resultsCont.appendChild(div);
+            }
+        });
+
+        plugins.forEach((plugin, index) => {
+            const pluginNameMatch = plugin.name.toLowerCase().includes(query);
+            const pluginCodeMatch = plugin.code.toLowerCase().includes(query);
+            
+            if (pluginNameMatch || pluginCodeMatch) {
+                const div = document.createElement('div');
+                div.className = 'search-res-item';
+                
+                let innerHTML = `<span class="search-path">🔌 ${plugin.name}</span>`;
+                if (pluginCodeMatch) {
+                    const index = plugin.code.toLowerCase().indexOf(query);
+                    const start = Math.max(0, index - 20);
+                    const end = Math.min(plugin.code.length, index + query.length + 20);
+                    const snippet = plugin.code.substring(start, end).replace(/\n/g, ' ');
+                    const highlighted = snippet.replace(new RegExp(query, 'gi'), (m) => `<span class="search-match">${m}</span>`);
+                    innerHTML += `<span style="opacity:0.8">...${highlighted}...</span>`;
+                } else {
+                    innerHTML += `<span style="color:var(--amber)">[MATCH_IN_PLUGIN_NAME]</span>`;
+                }
+
+                div.innerHTML = innerHTML;
+                div.onclick = () => {
+                    pluginCtxTarget = index;
+                    smartSwitch('editor-p');
+                    startEditPlugin();
+                    toggleSearch();
+                };
+                resultsCont.appendChild(div);
+            }
+        });
+
+        const terminalLogs = document.getElementById('terminal-logs');
+        if (terminalLogs) {
+            const logs = terminalLogs.innerText.toLowerCase();
+            if (logs.includes(query)) {
+                const div = document.createElement('div');
+                div.className = 'search-res-item';
+                div.innerHTML = `<span class="search-path">💻 TERMINAL</span><span style="color:var(--amber)">[MATCH_IN_TERMINAL]</span>`;
+                div.onclick = () => {
+                    // 切换到终端面板
+                    smartSwitch('terminal');
+                    toggleSearch();
+                    // 滚动到终端底部显示最新内容
+                    setTimeout(() => {
+                        const termLogs = document.getElementById('terminal-logs');
+                        if (termLogs) termLogs.scrollTop = termLogs.scrollHeight;
+                    }, 100);
+                };
+                resultsCont.appendChild(div);
+            }
+        }
+
+        Object.keys(aiChatHistory).forEach(chatId => {
+            const chatContent = aiChatHistory[chatId].join('').toLowerCase();
+            if (chatContent.includes(query)) {
+                const div = document.createElement('div');
+                div.className = 'search-res-item';
+                
+                const index = chatContent.indexOf(query);
+                const start = Math.max(0, index - 20);
+                const end = Math.min(chatContent.length, index + query.length + 20);
+                const snippet = chatContent.substring(start, end).replace(/\n/g, ' ');
+                const highlighted = snippet.replace(new RegExp(query, 'gi'), (m) => `<span class="search-match">${m}</span>`);
+                
+                const chatNum = chatId.replace('ai-chat-', '');
+                div.innerHTML = `<span class="search-path">🤖 CHAT_${chatNum}</span><span style="opacity:0.8">...${highlighted}...</span>`;
+                div.onclick = () => {
+                    smartSwitch('ai-panel');
+                    toggleSearch();
+                    setTimeout(() => {
+                        switchAiTab(chatId);
+                        const chatBody = document.getElementById(chatId);
+                        if (chatBody) {
+                            const content = chatBody.innerText.toLowerCase();
+                            const matchIndex = content.indexOf(query);
+                            if (matchIndex !== -1) {
+                                chatBody.scrollTop = matchIndex * 2;
+                            }
+                        }
+                    }, 100);
+                };
+                resultsCont.appendChild(div);
+            }
+        });
+
+        if (resultsCont.innerHTML === '') {
+            resultsCont.innerHTML = '<div style="padding:10px; font-size:10px; opacity:0.5;">NO_MATCHES_FOUND</div>';
+        }
+    }
+
+function insertAtTerm(text, offset = 0) {
+    if (!activeTermId) return;
+    const input = document.getElementById(activeTermId).querySelector('.cmd-in');
+    if (!input) return;
+
+    const start = input.selectionStart;
+    const end = input.selectionEnd;
+    input.value = input.value.substring(0, start) + text + input.value.substring(end);
+
+    const newPos = start + text.length - offset;
+    input.focus();
+    input.setSelectionRange(newPos, newPos);
+}
+
+async function editorAction(action) {
+    if (!activeEditorTab || !editorTabs[activeEditorTab]) return;
+    const editor = editorTabs[activeEditorTab].editor;
+    editor.focus();
+    if (action === 'selectAll') {
+        editor.select();
+    } else if (action === 'copy') {
+        const selectedText = editor.value.substring(editor.selectionStart, editor.selectionEnd);
+        await navigator.clipboard.writeText(selectedText);
+    } else if (action === 'cut') {
+        const selectedText = editor.value.substring(editor.selectionStart, editor.selectionEnd);
+        await navigator.clipboard.writeText(selectedText);
+        const before = editor.value.substring(0, editor.selectionStart);
+        const after = editor.value.substring(editor.selectionEnd);
+        editor.value = before + after;
+        editor.selectionStart = editor.selectionEnd = before.length;
+    } else if (action === 'paste') {
+        try {
+            const text = await navigator.clipboard.readText();
+            const before = editor.value.substring(0, editor.selectionStart);
+            const after = editor.value.substring(editor.selectionEnd);
+            editor.value = before + text + after;
+            const newPos = before.length + text.length;
+            editor.selectionStart = editor.selectionEnd = newPos;
+        } catch (err) {
+            addLog("PASTE_ERROR: Permission denied", "var(--term-red)");
+        }
+    }
+}
+
+async function termAction(action) {
+    if (!activeTermId) return;
+    const input = document.getElementById(activeTermId).querySelector('.cmd-in');
+    if (!input) return;
+    input.focus();
+
+    if (action === 'selectAll') {
+        input.select();
+    } else if (action === 'copy') {
+        const selectedText = input.value.substring(input.selectionStart, input.selectionEnd);
+        await navigator.clipboard.writeText(selectedText);
+    } else if (action === 'cut') {
+        const selectedText = input.value.substring(input.selectionStart, input.selectionEnd);
+        await navigator.clipboard.writeText(selectedText);
+        input.value = input.value.substring(0, input.selectionStart) + input.value.substring(input.selectionEnd);
+    } else if (action === 'paste') {
+        try {
+            const text = await navigator.clipboard.readText();
+            insertAtTerm(text);
+        } catch (err) {
+            console.error("Paste failed");
+        }
+    }
+}
+
+function execTermUndo() {
+    if (!activeTermId) return;
+    const input = document.getElementById(activeTermId).querySelector('.cmd-in');
+    if (input) {
+        input.focus();
+        document.execCommand('undo', false, null);
+    }
+}
+function insertAtCursor(text, offset = 0, isReturn = false) {
+    if (activeEditorTab && editorTabs[activeEditorTab]) {
+        const el = editorTabs[activeEditorTab].editor;
+        const start = el.selectionStart;
+        const end = el.selectionEnd;
+        const val = el.value;
+
+        let contentToInsert = text;
+        
+        // 如果是回车键，尝试模拟简单自动缩进
+        if (isReturn) {
+            const line = val.substring(0, start).split('\n').pop();
+            const trimStart = line.search(/\S/);
+            const indent = trimStart > 0 ? line.substring(0, trimStart) : "";
+            contentToInsert = '\n' + indent;
+        }
+
+        el.value = val.substring(0, start) + contentToInsert + val.substring(end);
+        
+        const newPos = start + contentToInsert.length - offset;
+        el.focus();
+        el.setSelectionRange(newPos, newPos);
+        
+        autoSave();
+    }
+}
+
+
+// 模拟 Ctrl/Shift 的复合功能（由于网页端限制，通常用于快速选择或快捷键）
+function handleModifier(type) {
+    const el = document.getElementById('editor');
+    addLog(`[SYSTEM]: MODIFIER_${type}_ACTIVE`, 'var(--amber-dim)');
+    el.focus();
+    // 这里可以根据需求扩展，例如点击 Shift 后下次点击方向键变为选中模式
+}
+// 执行基础编辑命令 (Undo/Redo)
+function execEditorCmd(cmd) {
+    if (activeEditorTab && editorTabs[activeEditorTab]) {
+        const editor = editorTabs[activeEditorTab].editor;
+        editor.focus();
+        document.execCommand(cmd, false, null);
+        autoSave();
+    }
+}
+
+// 拦截物理 Tab 键 (如果是外接键盘)
+function initEditorTabEvents() {
+    if (activeEditorTab && editorTabs[activeEditorTab]) {
+        const editor = editorTabs[activeEditorTab].editor;
+        editor.addEventListener('keydown', function(e) {
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                insertAtCursor('    ');
+            }
+        });
+    }
+}
+
+    // --- Plugins Logic ---
+    function renderPlugins() {
+        const list = document.getElementById('plugin-list');
+        list.innerHTML = '';
+        plugins.forEach((p, index) => {
+            const div = document.createElement('div');
+            div.className = 'plugin-item';
+            div.innerHTML = `
+                <span>${p.name}</span>
+                <div class="plugin-status ${p.active ? 'active' : ''}"></div>
+            `;
+            div.onclick = () => togglePlugin(index);
+            div.oncontextmenu = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                pluginCtxTarget = index;
+                showPluginCtx(e);
+            };
+            list.appendChild(div);
+        });
+        
+        // 自动激活标记为激活的插件
+        plugins.forEach((p, index) => {
+            if (p.active && !p._cleanup) {
+                try { 
+                    const pluginReturn = new Function(p.code)(); 
+                    plugins[index]._cleanup = typeof pluginReturn === 'function' ? pluginReturn : null;
+                } catch(e) { console.error("PLUGIN_BOOT_ERR:", e); }
+            }
+        });
+    }
+
+    // 公共函数：防止菜单被窗口边界遮挡
+    function positionMenu(menu, x, y) {
+        const menuWidth = menu.offsetWidth;
+        const menuHeight = menu.offsetHeight;
+        const windowWidth = window.innerWidth;
+        const windowHeight = window.innerHeight;
+        
+        let left = x;
+        let top = y;
+        
+        // 水平方向：如果菜单会超出右边界，向左偏移
+        if (left + menuWidth > windowWidth) {
+            left = Math.max(0, windowWidth - menuWidth - 10);
+        }
+        
+        // 垂直方向：如果菜单会超出下边界，向上偏移
+        if (top + menuHeight > windowHeight) {
+            top = Math.max(0, windowHeight - menuHeight - 10);
+        }
+        
+        menu.style.left = left + 'px';
+        menu.style.top = top + 'px';
+    }
+    
+    function showPluginCtx(e) {
+        const pCtx = document.getElementById('plugin-ctx');
+        pCtx.style.display = 'block';
+        positionMenu(pCtx, e.pageX, e.pageY);
+    }
+
+    function startEditPlugin() {
+        if (pluginCtxTarget === null) return;
+        const p = plugins[pluginCtxTarget];
+        document.getElementById('plugin-ctx').style.display = 'none';
+        smartSwitch('editor-p');
+        
+        const pluginTabName = p.name;
+        
+        if (editorTabs[pluginTabName]) {
+            switchEditorTab(pluginTabName);
+        } else {
+            createEditorTab(pluginTabName);
+            let pluginCode = p.code;
+            if (!pluginCode.includes("// 插件名称:")) {
+                pluginCode = `// 插件名称: ${p.name}\n${pluginCode}`;
+            }
+            editorTabs[pluginTabName].editor.value = pluginCode;
+        }
+    }
+
+    async function runCurrentFile() {
+        if (!activeFile || activeFile.endsWith('/')) return;
+        smartSwitch('terminal');
+        autoSave();
+        const fileName = activeFile.toLowerCase();
+        if (!activeTermId) {
+            addTerminal();
+        }
+        addLog(`[SYSTEM]: EXEC_START >> ${activeFile}`, 'var(--amber)');
+
+        if (fileName.endsWith('.js')) {
+            try {
+                const code = storage[activeFile];
+                new Function('console', code)({
+                    log: (m) => addLog(m, 'var(--term-green)'),
+                    error: (m) => addLog(`ERR: ${m}`, 'var(--term-red)')
+                });
+            } catch (e) {
+                addLog(`RUNTIME_ERR: ${e.message}`, 'var(--term-red)');
+            }
+        } else if (fileName.endsWith('.py')) {
+            try {
+                addLog("INITIALIZING_PYTHON_WASM...", "var(--amber-dim)");
+                const py = await initPython();
+                py.setStdout({ batched: (str) => addLog(str, 'var(--term-green)') });
+                await py.runPythonAsync(storage[activeFile]);
+            } catch (e) {
+                addLog(`PYTHON_ERR: ${e.message}`, 'var(--term-red)');
+            }
+        } else {
+            addLog(`ERR: NO_EXECUTOR_FOR_EXTENSION (${activeFile.split('.').pop()})`, 'var(--term-red)');
+        }
+    }
+
+    function renamePlugin() {
+        if (pluginCtxTarget === null) return;
+        const p = plugins[pluginCtxTarget];
+        document.getElementById('plugin-ctx').style.display = 'none';
+        
+        const newName = prompt('输入新插件名：', p.name);
+        if (newName && newName.trim() && newName !== p.name) {
+            // 直接修改插件名，不是创建新插件
+            p.name = newName.trim();
+            savePlugins();
+            
+            // 如果插件正在编辑中，更新标签名
+            if (editorTabs[p.name]) {
+                const tab = editorTabs[p.name].tab;
+                tab.innerHTML = `<span>${p.name}</span><span class="term-close" onclick="closeEditorTab('${p.name}')">×</span>`;
+            }
+        }
+    }
+    
+    function confirmDeletePlugin() {
+        if (pluginCtxTarget === null) return;
+        if(confirm(`UNINSTALL ${plugins[pluginCtxTarget].name}?`)) {
+            plugins.splice(pluginCtxTarget, 1);
+            savePlugins();
+        }
+        document.getElementById('plugin-ctx').style.display = 'none';
+    }
+
+    function togglePlugin(index) {
+        plugins[index].active = !plugins[index].active;
+        if (plugins[index].active) {
+            try { 
+                const pluginReturn = new Function(plugins[index].code)(); 
+                plugins[index]._cleanup = typeof pluginReturn === 'function' ? pluginReturn : null;
+            } catch(e) { console.error("PLUGIN_BOOT_ERR:", e); }
+        } else {
+            if (plugins[index]._cleanup) {
+                plugins[index]._cleanup();
+            } else {
+                console.log("REBOOT_REQUIRED: Plugin state persists.");
+            }
+        }
+        savePlugins();
+    }
+
+    function savePlugins() {
+        localStorage.setItem('ind_console_plugins', JSON.stringify(plugins));
+        renderPlugins();
+    }
+
+    function openPluginModal() {
+        // 创建新插件编辑标签
+        const newPluginTabName = "New_Plugin";
+        
+        if (editorTabs[newPluginTabName]) {
+            switchEditorTab(newPluginTabName);
+        } else {
+            createEditorTab(newPluginTabName);
+            editorTabs[newPluginTabName].editor.value = "// 插件名称: 新插件\n";
+        }
+        
+        // 全屏模式下切换到编辑面板
+        if (document.querySelector('.panel.maximized')) {
+            smartSwitch('editor-p');
+        }
+    }
+
+    function confirmPlugin() {
+        // 这个函数现在由编辑器自动保存替代，保留空实现
+        console.log('插件创建已改为实时保存模式');
+    }
+
+    // --- Core Logic ---
+    async function initPython() {
+        if (!pyodideInstance) pyodideInstance = await loadPyodide();
+        return pyodideInstance;
+    }
+
+    function saveCurrentFile() {
+        if (activeEditorTab && editorTabs[activeEditorTab]) {
+            const editor = editorTabs[activeEditorTab].editor;
+            const content = editor.value;
+            
+            // 清除修改标记
+            clearFileModified(activeEditorTab);
+            
+            // 判断是普通文件还是插件
+            if (plugins.find(p => p.name === activeEditorTab) || activeEditorTab === "New_Plugin") {
+                // 解析插件名（从代码中提取）
+                let pluginName = activeEditorTab;
+                
+                // 尝试从代码中提取插件名
+                const nameMatch = content.match(/\/\/\s*插件名[称]?[:：]\s*(.+)/i) || 
+                                 content.match(/\/\/\s*Plugin[\s\w]*[:：]\s*(.+)/i);
+                if (nameMatch && nameMatch[1]) {
+                    pluginName = nameMatch[1].trim();
+                }
+                
+                // 查找是否已存在同名插件
+                const existingIndex = plugins.findIndex(p => p.name === pluginName);
+                
+                if (existingIndex !== -1) {
+                    // 更新现有插件
+                    plugins[existingIndex].code = content;
+                    savePlugins();
+                    renderPlugins();
+                    
+                    // 如果插件名改变，更新标签
+                    if (pluginName !== activeEditorTab) {
+                        updateEditorTabName(activeEditorTab, pluginName);
+                    }
+                } else {
+                    // 创建新插件
+                    if (content.trim()) {
+                        plugins.push({ name: pluginName, code: content, active: false });
+                        savePlugins();
+                        renderPlugins();
+                        
+                        // 如果插件名改变，更新标签
+                        if (pluginName !== activeEditorTab) {
+                            updateEditorTabName(activeEditorTab, pluginName);
+                        }
+                    }
+                }
+            } else {
+                // 保存普通文件
+                storage[activeEditorTab] = content;
+                localStorage.setItem('ind_console_storage', JSON.stringify(storage));
+            }
+            
+            // 保存当前活动标签
+            localStorage.setItem('ind_console_active', activeEditorTab);
+            localStorage.setItem('ind_console_expanded', JSON.stringify(expandedDirs));
+            
+            // 显示保存成功的提示
+            console.log(`文件 ${activeEditorTab} 已保存`);
+        }
+    }
+    
+    function updateEditorTabName(oldName, newName) {
+        if (editorTabs[oldName]) {
+            // 更新标签对象
+            editorTabs[newName] = editorTabs[oldName];
+            delete editorTabs[oldName];
+            
+            // 更新标签DOM元素
+            const tab = editorTabs[newName].tab;
+            tab.id = 'editor-tab-' + newName;
+            tab.innerHTML = `<span>${newName}</span><span class="term-close" onclick="closeEditorTab('${newName}')">×</span>`;
+            tab.onclick = () => switchEditorTab(newName);
+            
+            // 更新活动标签
+            if (activeEditorTab === oldName) {
+                activeEditorTab = newName;
+            }
+        }
+    }
+    
+    function autoSave() {
+        // 保留函数但不再自动调用
+        // 现在需要手动保存
+    }
+    
+    function openFile(fileName) {
+        // 检查文件是否已经在标签中打开
+        if (editorTabs[fileName]) {
+            // 如果已经打开，直接切换到该标签
+            switchEditorTab(fileName);
+        } else {
+            // 创建新标签
+            createEditorTab(fileName);
+        }
+        
+        // 全屏模式下切换到编辑面板
+        if (document.querySelector('.panel.maximized')) {
+            smartSwitch('editor-p');
+        }
+    }
+    
+    function createEditorTab(fileName) {
+        // 创建标签
+        const tab = document.createElement('div');
+        tab.className = 'term-tab';
+        tab.id = 'editor-tab-' + fileName;
+        tab.innerHTML = `<span><span class="modified-dot" style="display:none; margin-right: 3px;">•</span>${fileName}</span><span class="term-close" onclick="closeEditorTab('${fileName}')">×</span>`;
+        tab.onclick = () => switchEditorTab(fileName);
+        
+        // 初始化文件状态
+        fileModifiedState[fileName] = false;
+        
+        // 添加拖拽功能
+        tab.setAttribute('draggable', 'true');
+        tab.addEventListener('dragstart', handleTabDragStart);
+        tab.addEventListener('dragover', handleTabDragOver);
+        tab.addEventListener('drop', handleTabDrop);
+        tab.addEventListener('dragend', handleTabDragEnd);
+        
+        document.getElementById('editor-tabs').appendChild(tab);
+        
+        // 创建编辑器内容区
+        const editorArea = document.createElement('textarea');
+        editorArea.className = 'editor-body';
+        editorArea.id = 'editor-' + fileName;
+        editorArea.spellcheck = false;
+        
+        // 判断是普通文件还是插件
+        if (plugins.find(p => p.name === fileName)) {
+            // 插件标签（直接使用插件名）
+            const plugin = plugins.find(p => p.name === fileName);
+            editorArea.value = plugin ? plugin.code : '';
+        } else {
+            // 普通文件
+            editorArea.value = storage[fileName] || '';
+        }
+        
+        // 监听编辑器变化
+        editorArea.addEventListener('input', () => {
+            markFileModified(fileName);
+        });
+        
+        editorArea.style.display = 'none';
+        editorArea.style.flex = '1';
+        editorArea.style.resize = 'none';
+        editorArea.style.border = 'none';
+        editorArea.style.background = 'transparent';
+        editorArea.style.color = 'inherit';
+        editorArea.style.fontFamily = 'inherit';
+        editorArea.style.fontSize = 'inherit';
+        editorArea.style.padding = '10px';
+        editorArea.style.outline = 'none';
+        
+        // 添加快捷键支持
+        editorArea.onkeydown = function(e) {
+            if (e.ctrlKey || e.metaKey) {
+                switch(e.key) {
+                    case 's':
+                        e.preventDefault();
+                        saveCurrentFile();
+                        break;
+                    case 'z':
+                        e.preventDefault();
+                        document.execCommand('undo');
+                        break;
+                    case 'y':
+                        e.preventDefault();
+                        document.execCommand('redo');
+                        break;
+                }
+            }
+        };
+        
+        document.getElementById('editor-container').appendChild(editorArea);
+        
+        // 保存标签信息
+        editorTabs[fileName] = {
+            tab: tab,
+            editor: editorArea
+        };
+        
+        // 切换到新标签
+        switchEditorTab(fileName);
+        
+        // 检查初始状态是否已修改
+        const originalContent = plugins.find(p => p.name === fileName) ? 
+            plugins.find(p => p.name === fileName).code : 
+            storage[fileName] || '';
+        if (editorArea.value !== originalContent) {
+            markFileModified(fileName);
+        }
+        
+        initEditorTabEvents();
+    }
+    
+    function switchEditorTab(fileName) {
+        Object.keys(editorTabs).forEach(tabName => {
+            const editor = editorTabs[tabName].editor;
+            editor.style.display = 'none';
+            editorTabs[tabName].tab.classList.remove('active');
+        });
+        
+        if (editorTabs[fileName]) {
+            editorTabs[fileName].editor.style.display = 'block';
+            editorTabs[fileName].tab.classList.add('active');
+            editorTabs[fileName].editor.focus();
+            activeEditorTab = fileName;
+            activeFile = fileName;
+            localStorage.setItem('ind_console_active', fileName);
+        }
+    }
+    
+    function markFileModified(fileName) {
+        if (!fileModifiedState[fileName]) {
+            fileModifiedState[fileName] = true;
+            const tab = document.getElementById('editor-tab-' + fileName);
+            if (tab) {
+                const dot = tab.querySelector('.modified-dot');
+                if (dot) dot.style.display = 'inline';
+            }
+        }
+    }
+    
+    function clearFileModified(fileName) {
+        if (fileModifiedState[fileName]) {
+            fileModifiedState[fileName] = false;
+            const tab = document.getElementById('editor-tab-' + fileName);
+            if (tab) {
+                const dot = tab.querySelector('.modified-dot');
+                if (dot) dot.style.display = 'none';
+            }
+        }
+    }
+    
+    function closeEditorTab(fileName) {
+    const tabs = Object.keys(editorTabs);
+    if (tabs.length <= 1) return; // 至少保留一个标签
+    
+    const tabInfo = editorTabs[fileName];
+    const wasActive = tabInfo.tab.classList.contains('active');
+    
+    // 删除DOM元素
+    tabInfo.tab.remove();
+    tabInfo.editor.remove();
+    
+    // 从标签管理中删除
+    delete editorTabs[fileName];
+    
+    // 如果关闭的是当前活动标签，切换到其他标签
+    if (wasActive) {
+        const remainingTabs = Object.keys(editorTabs);
+        if (remainingTabs.length > 0) {
+            switchEditorTab(remainingTabs[0]);
+            initEditorTabEvents();
+        }
+    }
+}
+
+// 标签拖拽功能
+let draggedTab = null;
+
+function handleTabDragStart(e) {
+    draggedTab = this;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', this.innerHTML);
+    this.style.opacity = '0.4';
+}
+
+function handleTabDragOver(e) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    return false;
+}
+
+function handleTabDrop(e) {
+    e.stopPropagation();
+    e.preventDefault();
+    
+    if (draggedTab !== this) {
+        // 获取标签容器
+        const tabsContainer = this.parentNode;
+        const tabs = Array.from(tabsContainer.children);
+        const fromIndex = tabs.indexOf(draggedTab);
+        const toIndex = tabs.indexOf(this);
+        
+        // 移动标签
+        if (fromIndex < toIndex) {
+            tabsContainer.insertBefore(draggedTab, this.nextSibling);
+        } else {
+            tabsContainer.insertBefore(draggedTab, this);
+        }
+        
+        // 根据标签类型重新排序对应的内容
+        const tabType = tabsContainer.id;
+        if (tabType === 'editor-tabs') {
+            reorderEditorTabs();
+        } else if (tabType === 'ai-tabs') {
+            reorderAiTabs();
+        } else if (tabType === 'term-tabs') {
+            reorderTermTabs();
+        }
+    }
+    
+    return false;
+}
+
+function handleTabDragEnd(e) {
+    this.style.opacity = '1';
+    draggedTab = null;
+}
+
+function reorderEditorTabs() {
+    const tabs = Array.from(document.getElementById('editor-tabs').children);
+    const container = document.getElementById('editor-container');
+    
+    // 重新排序编辑器
+    tabs.forEach(tab => {
+        const fileName = tab.id.replace('editor-tab-', '');
+        const editor = editorTabs[fileName].editor;
+        container.appendChild(editor);
+    });
+}
+
+function reorderAiTabs() {
+    const tabs = Array.from(document.getElementById('ai-tabs').children);
+    const container = document.getElementById('ai-container');
+    
+    // 重新排序AI聊天窗口
+    tabs.forEach(tab => {
+        const chatId = tab.id.replace('tab-', '');
+        const chatBody = document.getElementById(chatId);
+        if (chatBody) {
+            container.appendChild(chatBody);
+        }
+    });
+}
+
+function reorderTermTabs() {
+    const tabs = Array.from(document.getElementById('term-tabs').children);
+    const container = document.getElementById('term-container');
+    
+    // 重新排序终端窗口
+    tabs.forEach(tab => {
+        const termId = tab.id.replace('tab-', '');
+        const termBody = document.getElementById(termId);
+        if (termBody) {
+            container.appendChild(termBody);
+        }
+    });
+}
+
+    function addLog(txt, color = 'var(--amber)') {
+        if (activeTermId) {
+            const output = document.getElementById(activeTermId).querySelector('.term-out');
+            const d = document.createElement('div'); 
+            d.style.color = color; 
+            d.innerText = txt;
+            output.appendChild(d); 
+            output.scrollTop = output.scrollHeight;
+        } else {
+            console.log(txt);
+        }
+    }
+
+    function initResizer(bar, target, isH, isInverse = false) {
+        let dragging = false;
+        bar.style.touchAction = 'none';
+
+        const start = (e) => { 
+            dragging = true; 
+            bar.classList.add('active'); 
+            if (e.cancelable) e.preventDefault(); 
+        };
+
+        const stop = () => { 
+            dragging = false; 
+            bar.classList.remove('active'); 
+        };
+
+        const move = (e) => {
+            if (!dragging) return;
+            let clientX, clientY;
+            const touch = e.touches && e.touches[0];
+            clientX = touch ? touch.clientX : e.clientX;
+            clientY = touch ? touch.clientY : e.clientY;
+
+            if (isH) {
+                let p = (clientX / window.innerWidth) * 100;
+                if (isInverse) p = 100 - p;
+                p = Math.max(0, Math.min(100, p));
+                target.style.width = p.toFixed(2) + '%'; 
+                target.style.flex = "none"; 
+            } else {
+                let parentRect = target.parentNode.getBoundingClientRect();
+                let p;
+                if (isInverse) {
+                    p = ((parentRect.bottom - clientY) / parentRect.height) * 100;
+                } else {
+                    p = ((clientY - parentRect.top) / parentRect.height) * 100;
+                }
+                p = Math.max(0, Math.min(99, p)); 
+                
+                target.style.height = p.toFixed(2) + '%';
+                target.style.flex = "none"; 
+                const nextEl = target.nextElementSibling?.classList.contains('divider-v') 
+                               ? target.nextElementSibling.nextElementSibling 
+                               : null;
+                if (nextEl) {
+                    nextEl.style.flex = "1";
+                    nextEl.style.minHeight = "0px";
+                }
+            }
+        };
+
+        bar.addEventListener('mousedown', start);
+        document.addEventListener('mousemove', move);
+        document.addEventListener('mouseup', stop);
+        bar.addEventListener('touchstart', start, { passive: false });
+        document.addEventListener('touchmove', move, { passive: false });
+        document.addEventListener('touchend', stop);
+    }
+
+    function toggleMax(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    
+    // 切换最大化类名
+    const isMax = el.classList.toggle('maximized');
+    
+    if (isMax) {
+        // 进入最大化：强制移除侧边栏对其高度和伸缩的限制
+        // 使用 dataset 备份原始的行内样式，以便还原
+        el.dataset.origHeight = el.style.height;
+        el.dataset.origFlex = el.style.flex;
+        
+        // 强制全屏显示，!important 确保覆盖 HTML 标签上的 style="height: 50%"
+        el.style.setProperty('height', '100vh', 'important');
+        el.style.setProperty('flex', 'none', 'important');
+        
+        // 创建面板选择tab栏
+        createPanelTabs(id);
+        
+        console.log(`Node ${id} 已进入真正的全屏模式`);
+    } else {
+        // 退出最大化：还原原始行内样式
+        el.style.height = el.dataset.origHeight || '';
+        el.style.flex = el.dataset.origFlex || '';
+        
+        // 移除面板选择tab栏
+        removePanelTabs();
+        
+        console.log(`Node ${id} 已恢复至侧边栏`);
+    }
+}
+
+// 创建面板选择tab栏
+function createPanelTabs(currentPanelId) {
+    // 移除已存在的tab栏
+    removePanelTabs();
+    
+    const currentPanel = document.getElementById(currentPanelId);
+    if (!currentPanel) return;
+    
+    const tabs = document.createElement('div');
+    tabs.className = 'panel-tabs';
+    tabs.id = 'panel-tabs';
+    
+    // 定义所有面板
+    const panels = [
+        { id: 'explorer', name: 'EXPLORER' },
+        { id: 'editor-p', name: 'EDITOR' },
+        { id: 'terminal', name: 'TERMINAL' },
+        { id: 'ai-panel', name: 'AI' },
+    ];
+    
+    panels.forEach(panel => {
+        const tab = document.createElement('div');
+        tab.className = 'panel-tab';
+        if (panel.id === currentPanelId) {
+            tab.classList.add('active');
+        }
+        tab.textContent = panel.name;
+        tab.onclick = () => {
+            if (panel.id !== currentPanelId) {
+                switchToPanel(currentPanelId, panel.id);
+            }
+        };
+        tabs.appendChild(tab);
+    });
+    
+    currentPanel.appendChild(tabs);
+}
+
+// 移除面板选择tab栏
+function removePanelTabs() {
+    const existingTabs = document.getElementById('panel-tabs');
+    if (existingTabs) {
+        existingTabs.remove();
+    }
+}
+
+// 切换到指定面板
+function switchToPanel(fromPanelId, toPanelId) {
+    // 退出当前面板全屏
+    const currentPanel = document.getElementById(fromPanelId);
+    if (currentPanel) {
+        currentPanel.classList.remove('maximized');
+        currentPanel.style.height = currentPanel.dataset.origHeight || '';
+        currentPanel.style.flex = currentPanel.dataset.origFlex || '';
+    }
+    
+    // 最大化目标面板
+    toggleMax(toPanelId);
+}
+
+// 智能面板切换
+function smartSwitch(targetPanelId) {
+    const currentPanel = document.querySelector('.panel.maximized');
+    if (currentPanel && currentPanel.id !== targetPanelId) {
+        switchToPanel(currentPanel.id, targetPanelId);
+    }
+}
+
+    function toggleExplorerMax(sectionId) {
+        const explorer = document.getElementById('explorer');
+        const fileSection = document.getElementById('file-section');
+        const pluginSection = document.getElementById('plugin-section');
+        const divider = document.getElementById('v-drag-explorer');
+        
+        // 检查是否已经最大化
+        const isMax = explorer.classList.contains('maximized');
+        
+        if (isMax) {
+            // 退出最大化：还原所有样式
+            explorer.classList.remove('maximized');
+            explorer.style.width = explorer.dataset.origWidth || '';
+            explorer.style.flex = explorer.dataset.origFlex || '';
+            
+            // 移除面板选择tab栏
+            removePanelTabs();
+            
+            // 还原文件系统和插件系统的显示
+            fileSection.style.display = 'flex';
+            pluginSection.style.display = 'flex';
+            divider.style.display = 'block';
+            
+            // 显示其他面板和分割线
+            document.getElementById('main-stack').style.display = 'flex';
+            document.getElementById('h-drag-left').style.display = 'block';
+            document.getElementById('h-drag-right').style.display = 'block';
+            document.getElementById('ai-panel').style.display = 'flex';
+            
+            console.log(`Explorer 已恢复`);
+        } else {
+            // 进入最大化：备份原始样式
+            explorer.dataset.origWidth = explorer.style.width;
+            explorer.dataset.origFlex = explorer.style.flex;
+            
+            // 强制全屏显示
+            explorer.classList.add('maximized');
+            explorer.style.setProperty('width', '100vw', 'important');
+            explorer.style.setProperty('flex', 'none', 'important');
+            
+            // 根据点击的section隐藏另一个section
+            if (sectionId === 'file-section') {
+                fileSection.style.display = 'flex';
+                pluginSection.style.display = 'none';
+                divider.style.display = 'none';
+            } else if (sectionId === 'plugin-section') {
+                fileSection.style.display = 'none';
+                pluginSection.style.display = 'flex';
+                divider.style.display = 'none';
+            }
+            
+            // 隐藏其他面板和分割线
+            document.getElementById('main-stack').style.display = 'none';
+            document.getElementById('h-drag-left').style.display = 'none';
+            document.getElementById('h-drag-right').style.display = 'none';
+            document.getElementById('ai-panel').style.display = 'none';
+            
+            console.log(`${sectionId} 已进入全屏模式`);
+        }
+    }
+    
+    function renderFiles() {
+        const list = document.getElementById('file-list');
+        list.innerHTML = '';
+        const sortedKeys = Object.keys(storage).sort((a,b) => {
+            const aDir = a.includes('/') ? 0 : 1;
+            const bDir = b.includes('/') ? 0 : 1;
+            return aDir - bDir || a.localeCompare(b);
+        });
+
+        sortedKeys.forEach(k => {
+            const isFolder = k.endsWith('/');
+            const pathParts = k.split('/').filter(p => p);
+            const depth = pathParts.length - 1;
+            
+            if (depth > 0) {
+                let parentPath = "";
+                for(let i=0; i<depth; i++) {
+                    parentPath += pathParts[i] + "/";
+                    if (!expandedDirs.includes(parentPath)) return;
+                }
+            }
+
+            const div = document.createElement('div');
+            div.className = `file-item ${k === activeFile ? 'active' : ''} ${isFolder ? 'folder' : ''}`;
+            div.style.paddingLeft = (15 + depth * 15) + 'px';
+            
+            const nameSpan = document.createElement('span');
+            nameSpan.innerText = pathParts[pathParts.length-1] + (isFolder ? '/' : '');
+            div.appendChild(nameSpan);
+            
+            div.onclick = () => {
+                autoSave();
+                activeFile = k;
+                if (isFolder) {
+                    if (expandedDirs.includes(k)) {
+                        expandedDirs = expandedDirs.filter(d => d !== k);
+                    } else {
+                        expandedDirs.push(k);
+                    }
+                } else {
+                    openFile(k);
+                    smartSwitch('editor-p'); // 智能切换到编辑器
+                }
+                renderFiles();
+            };
+            
+            div.oncontextmenu = (e) => {
+                ctxTarget = { path: k, el: nameSpan, isFolder: isFolder };
+                handleCtx(e);
+            };
+            list.appendChild(div);
+        });
+        updateAiCtxOptions();
+    }
+
+    function startRenameFromCtx() {
+        if (!ctxTarget) return;
+        document.getElementById('ctx').style.display = 'none';
+        const { el, path, isFolder } = ctxTarget;
+        const currentName = el.innerText.replace(/\/$/, '');
+        const input = document.createElement('input');
+        input.className = 'file-rename-input';
+        input.value = currentName;
+        el.parentNode.replaceChild(input, el);
+        input.focus();
+        input.onblur = () => {
+            const newName = input.value.trim();
+            if (newName && newName !== currentName) applyRename(path, newName, isFolder);
+            else renderFiles();
+        };
+        input.onkeydown = (e) => { if (e.key === 'Enter') input.blur(); };
+    }
+
+    function applyRename(oldPath, newName, isFolder) {
+        let newPath;
+        const parts = oldPath.split('/');
+        if (isFolder) {
+            parts[parts.length - 2] = newName.replace(/\//g, '');
+            newPath = parts.join('/');
+            Object.keys(storage).forEach(key => {
+                if (key.startsWith(oldPath)) {
+                    storage[newPath + key.substring(oldPath.length)] = storage[key];
+                    delete storage[key];
+                }
+            });
+        } else {
+            parts[parts.length - 1] = newName;
+            newPath = parts.join('/');
+            storage[newPath] = storage[oldPath];
+            delete storage[oldPath];
+        }
+        if (activeFile === oldPath) activeFile = newPath;
+        
+        if (editorTabs[oldPath]) {
+            editorTabs[newPath] = editorTabs[oldPath];
+            delete editorTabs[oldPath];
+            const tab = editorTabs[newPath].tab;
+            tab.innerHTML = `<span>${newName}</span><span class="term-close" onclick="closeEditorTab('${newPath}')">×</span>`;
+            if (activeEditorTab === oldPath) {
+                activeEditorTab = newPath;
+            }
+        }
+        
+        localStorage.setItem('ind_console_storage', JSON.stringify(storage));
+        localStorage.setItem('ind_console_active', activeFile);
+        localStorage.setItem('ind_console_expanded', JSON.stringify(expandedDirs));
+        
+        renderFiles();
+    }
+
+    function deleteNodeFromCtx() {
+        if (!ctxTarget) return;
+        const { path, isFolder } = ctxTarget;
+        if (confirm(`PURGE NODE: ${path}?`)) {
+            if (isFolder) {
+                Object.keys(storage).forEach(k => {
+                    if (k.startsWith(path)) delete storage[k];
+                });
+            } else {
+                delete storage[path];
+            }
+            
+            // 更新多标签编辑器系统
+            if (editorTabs[path]) {
+                closeEditorTab(path);
+            }
+            
+            // 保存到localStorage
+            localStorage.setItem('ind_console_storage', JSON.stringify(storage));
+            renderFiles();
+        }
+        document.getElementById('ctx').style.display = 'none';
+    }
+
+    function copyPathFromCtx() {
+        if (ctxTarget) {
+            navigator.clipboard.writeText(ctxTarget.path);
+            document.getElementById('ctx').style.display = 'none';
+        }
+    }
+
+    let selectedAiCtxs = []; // 支持多选
+    
+    // 对话历史记忆
+    let chatHistory = JSON.parse(localStorage.getItem('ind_console_chat_history')) || {}; // 存储每个聊天窗口的对话历史
+
+    function updateAiCtxOptions() {
+        const container = document.getElementById('ai-ctx-options');
+        container.innerHTML = `<div onclick="selectAiCtx('none')">-- NO_CONTEXT --</div>`;
+        Object.keys(storage).forEach(k => {
+            if (!k.endsWith('/')) {
+                const div = document.createElement('div');
+                div.innerText = k;
+                div.style.cursor = 'pointer';
+                // 添加选中状态的高亮样式
+                if (selectedAiCtxs.includes(k)) {
+                    div.style.background = 'var(--amber)';
+                    div.style.color = 'var(--bg)';
+                }
+                div.onclick = (e) => {
+                    e.stopPropagation();
+                    toggleAiCtx(k);
+                };
+                container.appendChild(div);
+            }
+        });
+    }
+
+    function toggleAiCtx(val) {
+        if (val === 'none') {
+            selectedAiCtxs = [];
+        } else {
+            const index = selectedAiCtxs.indexOf(val);
+            if (index > -1) {
+                selectedAiCtxs.splice(index, 1);
+            } else {
+                selectedAiCtxs.push(val);
+            }
+        }
+        updateAiCtxDisplay();
+        updateAiCtxOptions(); // 重新渲染选项以更新高亮显示
+    }
+
+    function updateAiCtxDisplay() {
+        const displayText = selectedAiCtxs.length === 0 ? '-- NO_CONTEXT --' : 
+                           selectedAiCtxs.length === 1 ? selectedAiCtxs[0] : 
+                           `[${selectedAiCtxs.length} SELECTED]`;
+        document.getElementById('ai-ctx-val').innerText = displayText;
+    }
+
+    function selectAiCtx(val) {
+        selectedAiCtxs = val === 'none' ? [] : [val];
+        updateAiCtxDisplay();
+        document.getElementById('ai-ctx-options').style.display = 'none';
+    }
+
+    function addTerminal() {
+    const id = 'term-' + (++termCount);
+    
+    // 创建标签
+    const tab = document.createElement('div');
+    tab.className = 'term-tab';
+    tab.id = 'tab-' + id;
+    tab.innerHTML = `<span>TERM_${termCount}</span><span class="term-close" onclick="removeTerminal(event, '${id}')">×</span>`;
+    tab.onclick = () => switchTerminal(id);
+    
+    // 添加拖拽功能
+    tab.setAttribute('draggable', 'true');
+    tab.addEventListener('dragstart', handleTabDragStart);
+    tab.addEventListener('dragover', handleTabDragOver);
+    tab.addEventListener('drop', handleTabDrop);
+    tab.addEventListener('dragend', handleTabDragEnd);
+    
+    document.getElementById('term-tabs').appendChild(tab);
+        const body = document.createElement('div');
+        body.className = 'term-body'; body.id = id;
+        body.innerHTML = `<div class="term-out">Terminal ${termCount} Ready.</div><div class="term-input-wrap"><span>>></span><input type="text" class="cmd-in" autocomplete="off" spellcheck="false"><button class="ai-btn" onclick="handleCommand('${id}')">SEND</button></div>`;
+        body.querySelector('.cmd-in').onkeydown = (e) => { if(e.key === 'Enter') handleCommand(id); };
+        document.getElementById('term-container').appendChild(body);
+        switchTerminal(id);
+    }
+
+    function removeTerminal(e, id) {
+        e.stopPropagation();
+        const tabs = document.querySelectorAll('#term-tabs .term-tab'); 
+        const tab = document.getElementById('tab-' + id);
+        const body = document.getElementById(id);
+        const wasActive = tab.classList.contains('active');
+        
+        tab.remove();
+        body.remove();
+        
+        if (wasActive) {
+            const nextTab = document.querySelector('#term-tabs .term-tab');
+            if (nextTab) switchTerminal(nextTab.id.replace('tab-', ''));
+        }
+    }
+
+    function switchTerminal(id) {
+        document.querySelectorAll('.term-tab, .term-body').forEach(el => el.classList.remove('active'));
+        document.getElementById('tab-' + id).classList.add('active');
+        document.getElementById(id).classList.add('active');
+        activeTermId = id;
+        const input = document.getElementById(id).querySelector('.cmd-in');
+        if(input) input.focus();
+    }
+
+    async function handleCommand(id) {
+        const body = document.getElementById(id);
+        const input = body.querySelector('.cmd-in');
+        const output = body.querySelector('.term-out');
+        const val = input.value.trim();
+        if(!val) return;
+        const log = (txt, color = 'rgba(255,176,0,0.8)') => {
+            const d = document.createElement('div'); d.style.color = color; d.innerText = txt;
+            output.appendChild(d); output.scrollTop = output.scrollHeight;
+        };
+        log(`>> ${val}`, '#fff');
+        const args = val.split(' '), cmd = args[0].toLowerCase(), fileName = args[1];
+        switch(cmd) {
+            case 'help':
+                log('AVAILABLE_COMMANDS: ls, cat, rm, touch, mkdir, pwd, echo, date, whoami, info, clear, node, python, ssh', 'var(--amber)');
+                log('SSH Usage: ssh user@host[:port] [password]', 'var(--amber)');
+                break;
+
+            case 'cat': // 查看文件内容
+                if (storage[fileName]) log(storage[fileName]);
+                else log(`ERR: NODE_NOT_FOUND: ${fileName}`, 'var(--term-red)');
+                break;
+
+            case 'touch': // 创建空文件
+                if (fileName) {
+                    if (!storage[fileName]) {
+                        storage[fileName] = "";
+                        renderFiles();
+                        log(`SUCCESS: NODE_CREATED: ${fileName}`, 'var(--term-green)');
+                    } else {
+                        log(`ERR: NODE_EXISTS`, 'var(--term-red)');
+                    }
+                }
+                break;
+
+            case 'mkdir': // 创建目录
+                if (fileName) {
+                    let dirName = fileName.endsWith('/') ? fileName : fileName + '/';
+                    storage[dirName] = "DIR";
+                    renderFiles();
+                    log(`SUCCESS: DIR_CREATED: ${dirName}`, 'var(--term-green)');
+                }
+                break;
+
+            case 'rm': // 删除文件/目录
+                if (storage[fileName]) {
+                    delete storage[fileName];
+                    localStorage.setItem('ind_console_storage', JSON.stringify(storage));
+                    renderFiles();
+                    log(`SUCCESS: NODE_PURGED: ${fileName}`, 'var(--term-red)');
+                } else {
+                    log(`ERR: NODE_NOT_FOUND`, 'var(--term-red)');
+                }
+                break;
+
+            case 'pwd': // 显示当前路径 (模拟)
+                log(activeFile.includes('/') ? activeFile.substring(0, activeFile.lastIndexOf('/') + 1) : 'ROOT/');
+                break;
+
+            case 'echo': // 输出文本
+                log(args.slice(1).join(' '));
+                break;
+
+            case 'date': // 显示系统时间
+                log(new Date().toString());
+                break;
+
+            case 'whoami': // 用户信息
+                log('IMMMOR_OPERATOR::ROOT', 'var(--amber)');
+                break;
+
+            case 'info': // 存储统计
+                const count = Object.keys(storage).length;
+                const size = JSON.stringify(storage).length;
+                log(`NODES: ${count} | TOTAL_SIZE: ${size} bytes | STATUS: OPTIMAL`);
+                break;
+            case 'ls': log(Object.keys(storage).join('    ')); break;
+            case 'clear': output.innerHTML = ''; break;
+            case 'node':
+                try {
+                    new Function('console', storage[fileName])({ log: (m) => log(m) });
+                } catch (e) { log(`ERR: ${e.message}`, 'var(--term-red)'); }
+                break;
+            case 'python':
+                const py = await initPython();
+                py.setStdout({ batched: (str) => log(str, 'var(--term-green)') });
+                await py.runPythonAsync(storage[fileName]);
+                break;
+            case 'ssh':
+                // SSH连接命令格式: ssh user@host[:port] [password]
+                if (args.length < 2) {
+                    log('Usage: ssh user@host[:port] [password]', 'var(--term-red)');
+                    break;
+                }
+                
+                const sshTarget = args[1];
+                const sshPassword = args[2] || null;
+                
+                // 解析SSH连接信息
+                const match = sshTarget.match(/^(\w+)@([\w.-]+)(?::(\d+))?$/);
+                if (!match) {
+                    log('ERR: Invalid SSH format. Use: user@host[:port]', 'var(--term-red)');
+                    break;
+                }
+                
+                const [, user, host, port = '22'] = match;
+                
+                log(`Connecting to ${user}@${host}:${port}...`, 'var(--amber)');
+                
+                // 尝试使用WebSocket进行真正的SSH连接
+                try {
+                    await connectSSH(user, host, parseInt(port), sshPassword, id);
+                } catch (err) {
+                    log(`SSH Connection failed: ${err.message}`, 'var(--term-red)');
+                    log('Falling back to simulated SSH...', 'var(--amber)');
+                    
+                    // 如果WebSocket连接失败，使用模拟SSH
+                    simulateSSHConnection(user, host, port, id);
+                }
+                break;
+                
+            default: log(`ERR: UNKNOWN_CMD`, 'var(--term-red)');
+        }
+        input.value = '';
+    }
+    
+    // WebSocket SSH连接函数
+    async function connectSSH(user, host, port, password, termId) {
+        const body = document.getElementById(termId);
+        const output = body.querySelector('.term-out');
+        const input = body.querySelector('.cmd-in');
+        const log = (txt, color = 'rgba(255,176,0,0.8)') => {
+            const d = document.createElement('div'); d.style.color = color; d.innerText = txt;
+            output.appendChild(d); output.scrollTop = output.scrollHeight;
+        };
+        
+        // 创建WebSocket连接
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${wsProtocol}//${window.location.host}/ssh-proxy`;
+        
+        const ws = new WebSocket(wsUrl);
+        
+        ws.onopen = () => {
+            log('WebSocket connected. Establishing SSH tunnel...', 'var(--term-green)');
+            // 发送SSH连接参数
+            ws.send(JSON.stringify({
+                type: 'ssh_connect',
+                user, host, port, password
+            }));
+        };
+        
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.type === 'ssh_output') {
+                log(data.output, 'var(--term-green)');
+            } else if (data.type === 'ssh_error') {
+                log(`SSH Error: ${data.error}`, 'var(--term-red)');
+            }
+        };
+        
+        ws.onerror = (error) => {
+            log(`WebSocket error: ${error.message}`, 'var(--term-red)');
+            throw new Error('WebSocket connection failed');
+        };
+        
+        // 设置SSH命令输入
+        const originalOnKeyDown = input.onkeydown;
+        input.onkeydown = (e) => {
+            if (e.key === 'Enter') {
+                const command = input.value.trim();
+                if (command === 'exit') {
+                    ws.send(JSON.stringify({ type: 'ssh_disconnect' }));
+                    ws.close();
+                    input.onkeydown = originalOnKeyDown;
+                    log('SSH connection closed.', 'var(--amber)');
+                } else {
+                    ws.send(JSON.stringify({ type: 'ssh_command', command }));
+                }
+                input.value = '';
+            }
+        };
+    }
+    
+    // 模拟SSH连接（当WebSocket不可用时）
+    function simulateSSHConnection(user, host, port, termId) {
+        const body = document.getElementById(termId);
+        const output = body.querySelector('.term-out');
+        const input = body.querySelector('.cmd-in');
+        const log = (txt, color = 'rgba(255,176,0,0.8)') => {
+            const d = document.createElement('div'); d.style.color = color; d.innerText = txt;
+            output.appendChild(d); output.scrollTop = output.scrollHeight;
+        };
+        
+        log(`Connected to ${host} as ${user}`, 'var(--term-green)');
+        log('Welcome to Simulated SSH Terminal', 'var(--amber)');
+        log('Type \'exit\' to disconnect', 'var(--amber)');
+        log(`${user}@${host}:~$ `, '#fff');
+        
+        // 保存原始事件处理
+        const originalOnKeyDown = input.onkeydown;
+        
+        // 模拟SSH命令处理
+        input.onkeydown = (e) => {
+            if (e.key === 'Enter') {
+                const command = input.value.trim();
+                
+                if (command === 'exit') {
+                    input.onkeydown = originalOnKeyDown;
+                    log('Connection to host closed.', 'var(--amber)');
+                    log('>> ', '#fff');
+                } else if (command === 'ls') {
+                    log('bin  etc  home  lib  tmp  usr  var');
+                } else if (command === 'pwd') {
+                    log('/home/' + user);
+                } else if (command === 'whoami') {
+                    log(user);
+                } else if (command.startsWith('echo ')) {
+                    log(command.substring(5));
+                } else if (command === 'date') {
+                    log(new Date().toString());
+                } else if (command === 'uname -a') {
+                    log('Linux simulated-server 5.15.0-generic #1 SMP Mon Oct 3 14:28:35 UTC 2022 x86_64 GNU/Linux');
+                } else {
+                    log(`bash: ${command}: command not found`, 'var(--term-red)');
+                }
+                
+                if (command !== 'exit') {
+                    log(`${user}@${host}:~$ `, '#fff');
+                }
+                input.value = '';
+            }
+        };
+    }
+
+    function openModal() {
+        const isFolder = activeFile && activeFile.endsWith('/');
+        const parentDir = activeFile ? (isFolder ? activeFile : (activeFile.includes('/') ? activeFile.substring(0, activeFile.lastIndexOf('/') + 1) : '')) : '';
+        
+        document.getElementById('modal-title').innerText = "NEW_NODE_CREATION";
+        document.getElementById('modal-content').innerHTML = `
+            <div style="font-size:9px; color:var(--amber-dim); margin-bottom:10px;">TARGET_PATH: ${parentDir || 'ROOT/'}</div>
+            <div class="type-selector">
+                <label class="type-opt"><input type="radio" name="ntype" value="file" checked> FILE</label>
+                <label class="type-opt"><input type="radio" name="ntype" value="folder"> DIR</label>
+            </div>
+            <input type="text" id="modal-input" class="modal-input" placeholder="NAME" autocomplete="off">
+            <div class="modal-btns">
+                <button class="ai-btn" onclick="closeModal()">CANCEL</button>
+                <button class="ai-btn" style="background:var(--amber); color:#000" onclick="confirmModal('${parentDir}')">CONFIRM</button>
+            </div>`;
+        document.getElementById('modal-overlay').style.display = 'flex';
+        document.getElementById('modal-input').focus();
+    }
+
+    function confirmModal(parentDir) {
+        let name = document.getElementById('modal-input').value.trim();
+        const type = document.querySelector('input[name="ntype"]:checked').value;
+        if (name) {
+            let finalPath = parentDir + name;
+            if (type === 'folder') { 
+                if (!finalPath.endsWith('/')) finalPath += '/'; 
+                storage[finalPath] = "DIR"; 
+                activeFile = finalPath;
+            } else { 
+                storage[finalPath] = ""; 
+                activeFile = finalPath;
+                createEditorTab(finalPath);
+                
+                if (document.querySelector('.panel.maximized')) {
+                    smartSwitch('editor-p');
+                }
+            }
+            
+            localStorage.setItem('ind_console_storage', JSON.stringify(storage));
+            localStorage.setItem('ind_console_active', activeFile);
+            
+            renderFiles(); 
+            closeModal();
+        }
+    }
+
+    function closeModal() { document.getElementById('modal-overlay').style.display = 'none'; }
+    function toggleAiSelect() { 
+    const opt = document.getElementById('ai-ctx-options');
+    const trigger = document.getElementById('ai-ctx-trigger');
+    
+    document.getElementById('ai-provider-options').style.display = 'none';
+    document.getElementById('ai-provider-trigger').classList.remove('active');
+    
+    const isOpening = opt.style.display !== 'block';
+    opt.style.display = isOpening ? 'block' : 'none';
+    trigger.classList.toggle('active', isOpening);
+}
+    
+    function openSettings() {
+    document.getElementById('modal-title').innerText = "AI_PROVIDERS_CONFIG";
+    
+    let providersHtml = config.providers.map((p, i) => `
+        <div style="border: 1px solid var(--amber-dim); padding: 10px; margin-bottom: 10px; position: relative;">
+            <div style="font-size: 10px; margin-bottom: 5px; color: ${config.activeProviderIndex === i ? 'var(--term-green)' : 'var(--amber)'}">
+                ${config.activeProviderIndex === i ? '[ACTIVE_NODE]' : 'NODE_' + i}
+            </div>
+            <input type="text" placeholder="NAME" class="modal-input" style="margin:2px 0" value="${p.name}" onchange="updateProvider(${i}, 'name', this.value)">
+            <input type="text" placeholder="BASE_URL" class="modal-input" style="margin:2px 0" value="${p.apiBaseUrl}" onchange="updateProvider(${i}, 'apiBaseUrl', this.value)">
+            <input type="text" placeholder="MODEL" class="modal-input" style="margin:2px 0" value="${p.model}" onchange="updateProvider(${i}, 'model', this.value)">
+            <input type="password" placeholder="API_KEY" class="modal-input" style="margin:2px 0" value="${p.apiKey}" onchange="updateProvider(${i}, 'apiKey', this.value)">
+            
+            <div style="display:flex; gap: 10px; margin-top: 5px;">
+                <button class="ai-btn" onclick="config.activeProviderIndex = ${i}; openSettings();">ACTIVATE</button>
+                <button class="ai-btn" style="color:var(--term-red)" onclick="deleteProvider(${i})">DELETE</button>
+            </div>
+        </div>
+    `).join('');
+
+    document.getElementById('modal-content').innerHTML = `
+        <div style="max-height: 400px; overflow-y: auto;">
+            ${providersHtml}
+            <button class="ai-btn" style="width:100%; border: 1px dashed var(--amber); margin-top:10px;" onclick="addProvider()">+ ADD_NEW_PROVIDER</button>
+        </div>
+        <div class="modal-btns">
+            <button class="ai-btn" onclick="closeModal()">CLOSE</button>
+            <button class="ai-btn" style="background:var(--amber); color:#000" onclick="saveSettings()">SAVE_TO_DISK</button>
+        </div>`;
+    document.getElementById('modal-overlay').style.display = 'flex';
+}
+
+function updateProvider(index, field, value) {
+    config.providers[index][field] = value;
+}
+
+function addProvider() {
+    config.providers.push({ name: 'New Provider', apiBaseUrl: '', apiKey: '', model: '' });
+    openSettings();
+}
+
+function deleteProvider(index) {
+    if (config.providers.length <= 1) return alert("MINIMUM_ONE_PROVIDER_REQUIRED");
+    config.providers.splice(index, 1);
+    if (config.activeProviderIndex >= config.providers.length) config.activeProviderIndex = 0;
+    openSettings();
+}
+
+function saveSettings() {
+    localStorage.setItem('ind_console_config', JSON.stringify(config)); 
+    closeModal();
+}
+
+function renderProviderOptions() {
+    const container = document.getElementById('ai-provider-options');
+    container.innerHTML = '';
+    
+    config.providers.forEach((p, i) => {
+        const div = document.createElement('div');
+        div.style.display = 'flex';
+        div.style.justifyContent = 'space-between';
+        
+        const isChecked = selectedProviderIndices.includes(i);
+        
+        div.innerHTML = `
+            <span>${isChecked ? '[X]' : '[ ]'} ${p.name}</span>
+            <span style="font-size:8px; opacity:0.5">${p.model}</span>
+        `;
+        
+        if (i === config.activeProviderIndex) div.style.color = 'var(--term-green)';
+
+        div.onclick = (e) => {
+            e.stopPropagation(); // 防止触发全局点击关闭
+            toggleProviderSelection(i);
+        };
+        container.appendChild(div);
+    });
+}
+
+function toggleProviderSelection(index) {
+    // 只支持单个供应商，直接切换
+    config.activeProviderIndex = index;
+    selectedProviderIndices = [index];
+    renderProviderOptions();
+    updateProviderDisplay();
+}
+
+// 修改显示文字，提示选中了几个
+function updateProviderDisplay() {
+    const el = document.getElementById('active-provider-name');
+    if (!el) return;
+    
+    const p = config.providers[config.activeProviderIndex];
+    el.innerText = p ? p.name : 'NONE';
+    el.style.color = 'var(--term-green)';
+}
+
+function toggleProviderSelect() {
+    const opt = document.getElementById('ai-provider-options');
+    const trigger = document.getElementById('ai-provider-trigger');
+    
+    document.getElementById('ai-ctx-options').style.display = 'none';
+    document.getElementById('ai-ctx-trigger').classList.remove('active');
+    
+    const isOpening = opt.style.display !== 'block';
+    opt.style.display = isOpening ? 'block' : 'none';
+    trigger.classList.toggle('active', isOpening);
+    
+    if (isOpening) renderProviderOptions();
+}
+
+function selectProvider(index) {
+    config.activeProviderIndex = index;
+    localStorage.setItem('ind_console_config', JSON.stringify(config));
+    updateProviderDisplay();
+    document.getElementById('ai-provider-options').style.display = 'none';
+    document.getElementById('ai-provider-trigger').classList.remove('active');
+    addLog(`[SYSTEM]: SWITCHED_TO_PROVIDER >> ${config.providers[index].name}`, 'var(--term-green)');
+}
+
+    function newAiChat() {
+        if (confirm("START NEW CONVERSATION? (Current view will be cleared)")) {
+            addAiTab();
+            document.getElementById('ai-in').focus();
+        }
+    }
+    let aiCount = 0;
+    let activeAiId = null;
+
+function copyPrompt(element, query) {
+    navigator.clipboard.writeText(query).then(() => {
+        const originalText = element.textContent;
+        element.textContent = '✓ Copied';
+        setTimeout(() => element.textContent = originalText, 1000);
+    }).catch(err => console.error('Failed to copy:', err));
+}
+
+function bindAiMessageButtons(container) {
+    container.addEventListener('click', (e) => {
+        const btn = e.target.closest('.inject-btn, .copy-btn, .run-btn');
+        if (!btn) return;
+        
+        const blockId = btn.getAttribute('data-code');
+        if (!blockId?.startsWith('code-block-')) return;
+        
+        const msgElement = btn.closest('.msg.ai');
+        if (!msgElement) return;
+        
+        const blockIndex = parseInt(blockId.replace('code-block-', ''));
+        const code = JSON.parse(msgElement.dataset.codeBlocks || '[]')[blockIndex];
+        if (!code) return;
+        
+        if (btn.classList.contains('inject-btn')) {
+            // 只在全屏模式下切换到编辑面板
+            const currentPanel = document.querySelector('.panel.maximized');
+            if (currentPanel) {
+                // 在全屏模式下，使用智能切换到编辑面板
+                smartSwitch('editor-p');
+                // 等待面板切换完成后再注入代码
+                setTimeout(() => {
+                    if (activeEditorTab && editorTabs[activeEditorTab]) {
+                        editorTabs[activeEditorTab].editor.value += "\n" + code;
+                        markFileModified(activeEditorTab);
+                    }
+                }, 100);
+            } else {
+                // 非全屏模式下直接注入代码
+                if (activeEditorTab && editorTabs[activeEditorTab]) {
+                    editorTabs[activeEditorTab].editor.value += "\n" + code;
+                    markFileModified(activeEditorTab);
+                }
+            }
+        } else if (btn.classList.contains('run-btn')) {
+            // 执行bash命令
+            executeBashCommands(code);
+        } else if (btn.classList.contains('copy-btn')) {
+            navigator.clipboard.writeText(code).then(() => {
+                const originalText = btn.textContent;
+                btn.textContent = 'Done';
+                setTimeout(() => btn.textContent = originalText, 2000);
+            }).catch(err => console.error('Failed to copy:', err));
+        }
+    });
+}
+
+// 执行bash命令
+function executeBashCommands(code) {
+    // 只在全屏模式下切换到终端面板
+    const currentPanel = document.querySelector('.panel.maximized');
+    if (currentPanel) {
+        // 在全屏模式下，使用智能切换到终端面板
+        smartSwitch('terminal');
+        // 等待面板切换完成后再执行命令
+        setTimeout(() => {
+            executeCommands(code);
+        }, 100);
+    } else {
+        // 非全屏模式下直接执行命令
+        executeCommands(code);
+    }
+}
+
+// 执行命令的实际逻辑
+function executeCommands(code) {
+    // 将命令按行分割，过滤掉空行和注释
+    const commands = code.split('\n')
+        .filter(line => line.trim() && !line.trim().startsWith('#'))
+        .map(line => line.trim());
+    
+    if (commands.length === 0) return;
+    
+    // 依次执行每个命令
+    let currentIndex = 0;
+    
+    function executeNext() {
+        if (currentIndex >= commands.length) return;
+        
+        const command = commands[currentIndex];
+        
+        // 像用户手动输入一样执行命令
+        if (activeTermId) {
+            const input = document.getElementById(activeTermId).querySelector('.cmd-in');
+            if (input) {
+                // 设置输入框的值并触发命令执行
+                input.value = command;
+                handleCommand(activeTermId);
+                
+                // 等待命令执行完成后再执行下一个
+                setTimeout(() => {
+                    currentIndex++;
+                    executeNext();
+                }, 500);
+            }
+        }
+    }
+    
+    executeNext();
+}
+
+// 取消AI请求
+function cancelAiRequest() {
+    if (currentAiRequest) {
+        currentAiRequest.abort();
+        currentAiRequest = null;
+    }
+    resetSendButton();
+}
+
+// 重置发送按钮状态
+function resetSendButton() {
+    const sendBtn = document.getElementById('ai-send-btn');
+    if (sendBtn) {
+        sendBtn.textContent = 'SEND';
+        sendBtn.style.background = ''; // 恢复默认样式
+    }
+}
+
+// 页面加载时恢复聊天窗口
+function restoreAiTabs() {
+    // 获取所有保存的聊天历史记录
+    const savedChats = Object.keys(aiChatHistory);
+    
+    if (savedChats.length > 0) {
+        // 找到最大的聊天ID来确定aiCount
+        const maxId = Math.max(...savedChats.map(id => parseInt(id.replace('ai-chat-', ''))));
+        aiCount = maxId;
+        
+        // 为每个保存的聊天记录创建标签
+        savedChats.forEach(chatId => {
+            const idNum = parseInt(chatId.replace('ai-chat-', ''));
+            
+            // 1. 创建标签
+            const tab = document.createElement('div');
+            tab.className = 'term-tab'; 
+            tab.id = 'tab-' + chatId;
+            tab.innerHTML = `<span>CHAT_${idNum}</span><span class="term-close" onclick="removeAiTab(event, '${chatId}')">×</span>`;
+            tab.onclick = () => switchAiTab(chatId);
+            
+            // 添加拖拽功能
+            tab.setAttribute('draggable', 'true');
+            tab.addEventListener('dragstart', handleTabDragStart);
+            tab.addEventListener('dragover', handleTabDragOver);
+            tab.addEventListener('drop', handleTabDrop);
+            tab.addEventListener('dragend', handleTabDragEnd);
+            
+            document.getElementById('ai-tabs').appendChild(tab);
+
+            // 2. 创建聊天内容区
+            const body = document.createElement('div');
+            body.className = 'term-body'; 
+            body.id = chatId;
+            body.style.padding = '15px';
+            body.style.overflowY = 'auto';
+            body.style.flex = '1';
+            
+            if (aiChatHistory[chatId] && aiChatHistory[chatId].length > 0) {
+                body.innerHTML = aiChatHistory[chatId].join('');
+                bindAiMessageButtons(body);
+            }
+            
+            document.getElementById('ai-container').appendChild(body);
+        });
+        
+        activeAiId = savedChats[0];
+        switchAiTab(activeAiId);
+    } else {
+        addAiTab(false);
+    }
+}
+
+function addAiTab(forceNew = true) {
+    const id = 'ai-chat-' + (++aiCount);
+    const tab = document.createElement('div');
+    tab.className = 'term-tab'; 
+    tab.id = 'tab-' + id;
+    const currentP = config.providers[config.activeProviderIndex];
+    const label = currentP ? currentP.name.substring(0, 8) : aiCount;
+    tab.innerHTML = `<span>CHAT_${aiCount}</span><span class="term-close" onclick="removeAiTab(event, '${id}')">×</span>`;
+    tab.onclick = () => switchAiTab(id);
+    
+    // 添加拖拽功能
+    tab.setAttribute('draggable', 'true');
+    tab.addEventListener('dragstart', handleTabDragStart);
+    tab.addEventListener('dragover', handleTabDragOver);
+    tab.addEventListener('drop', handleTabDrop);
+    tab.addEventListener('dragend', handleTabDragEnd);
+    
+    document.getElementById('ai-tabs').appendChild(tab);
+
+    // 2. 创建聊天内容区 (复用原本的 ai-chat 结构)
+    const body = document.createElement('div');
+    body.className = 'term-body'; // 使用 term-body 的 display:none 逻辑
+    body.id = id;
+    body.style.padding = '15px';
+    body.style.overflowY = 'auto';
+    body.style.flex = '1';
+    
+    if (!forceNew && aiChatHistory[id] && aiChatHistory[id].length > 0) {
+        body.innerHTML = aiChatHistory[id].join('');
+        body.querySelectorAll('.inject-btn').forEach(btn => {
+            btn.onclick = () => {
+                const code = btn.getAttribute('data-code');
+                if (activeEditorTab && editorTabs[activeEditorTab] && code) {
+                    editorTabs[activeEditorTab].editor.value += "\n" + code;
+                    markFileModified(activeEditorTab);
+                }
+            };
+        });
+    } else {
+        if (forceNew) {
+            aiChatHistory[id] = [];
+            localStorage.setItem('ind_console_ai_history', JSON.stringify(aiChatHistory));
+        }
+    }
+    
+    document.getElementById('ai-container').appendChild(body);
+    
+    activeAiId = id; 
+    switchAiTab(id);
+    return id;
+}
+
+function switchAiTab(id) {
+    document.querySelectorAll('#ai-tabs .term-tab').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('#ai-container .term-body').forEach(el => el.classList.remove('active'));
+    document.getElementById('tab-' + id).classList.add('active');
+    const body = document.getElementById(id);
+    body.classList.add('active');
+    
+    activeAiId = id;
+    document.getElementById('ai-in').focus();
+}
+
+function removeAiTab(e, id) {
+    e.stopPropagation();
+    const tabs = document.querySelectorAll('#ai-tabs .term-tab');
+    if (tabs.length <= 1) return; // 至少保留一个
+    
+    const tab = document.getElementById('tab-' + id);
+    const body = document.getElementById(id);
+    const wasActive = tab.classList.contains('active');
+    delete aiChatHistory[id];
+    localStorage.setItem('ind_console_ai_history', JSON.stringify(aiChatHistory));
+    
+    tab.remove();
+    body.remove();
+    
+    if (wasActive) {
+        const nextTab = document.querySelector('#ai-tabs .term-tab');
+        if (nextTab) switchAiTab(nextTab.id.replace('tab-', ''));
+    }
+}
+
+function openHistoryManager() {
+    const modal = document.getElementById('modal-overlay');
+    const modalContent = document.getElementById('modal-content');
+    
+    modal.style.display = 'flex';
+    document.getElementById('modal-title').innerText = 'AI CONVERSATION HISTORY';
+    
+    // 清空内容
+    modalContent.innerHTML = '';
+    
+    // 创建滚动容器
+    const scrollContainer = document.createElement('div');
+    scrollContainer.style.maxHeight = '400px';
+    scrollContainer.style.overflowY = 'auto';
+    
+    if (Object.keys(aiChatHistory).length === 0) {
+        const emptyMsg = document.createElement('div');
+        emptyMsg.style.textAlign = 'center';
+        emptyMsg.style.padding = '20px';
+        emptyMsg.style.opacity = '0.5';
+        emptyMsg.textContent = 'No conversation history found.';
+        scrollContainer.appendChild(emptyMsg);
+    } else {
+        Object.keys(aiChatHistory).forEach(chatId => {
+            const idNum = parseInt(chatId.replace('ai-chat-', ''));
+            const messages = aiChatHistory[chatId];
+            const lastMessage = messages.length > 0 ? messages[messages.length - 1] : '';
+            const preview = lastMessage.includes('>') ? 
+                lastMessage.split('>')[1].substring(0, 50) + '...' : 
+                lastMessage.substring(0, 50) + '...';
+            
+            // 创建对话条目容器
+            const chatItem = document.createElement('div');
+            chatItem.style.border = '1px solid var(--amber-dim)';
+            chatItem.style.marginBottom = '10px';
+            chatItem.style.padding = '10px';
+            
+            // 创建标题行
+            const header = document.createElement('div');
+            header.style.display = 'flex';
+            header.style.justifyContent = 'space-between';
+            header.style.alignItems = 'center';
+            header.style.marginBottom = '5px';
+            
+            const title = document.createElement('strong');
+            title.textContent = `CHAT_${idNum}`;
+            
+            const buttons = document.createElement('div');
+            
+            const restoreBtn = document.createElement('button');
+            restoreBtn.className = 'ai-btn';
+            restoreBtn.style.fontSize = '9px';
+            restoreBtn.style.padding = '2px 6px';
+            restoreBtn.textContent = 'RESTORE';
+            restoreBtn.onclick = () => restoreChat(chatId);
+            
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'ai-btn';
+            deleteBtn.style.fontSize = '9px';
+            deleteBtn.style.padding = '2px 6px';
+            deleteBtn.style.background = 'var(--term-red)';
+            deleteBtn.textContent = 'DELETE';
+            deleteBtn.onclick = () => deleteChat(chatId);
+            
+            buttons.appendChild(restoreBtn);
+            buttons.appendChild(deleteBtn);
+            
+            header.appendChild(title);
+            header.appendChild(buttons);
+            
+            // 创建预览行
+            const previewDiv = document.createElement('div');
+            previewDiv.style.fontSize = '10px';
+            previewDiv.style.opacity = '0.7';
+            previewDiv.textContent = `Last message: ${preview}`;
+            
+            // 创建消息计数行
+            const countDiv = document.createElement('div');
+            countDiv.style.fontSize = '9px';
+            countDiv.style.opacity = '0.5';
+            countDiv.textContent = `Messages: ${messages.length}`;
+            
+            chatItem.appendChild(header);
+            chatItem.appendChild(previewDiv);
+            chatItem.appendChild(countDiv);
+            
+            scrollContainer.appendChild(chatItem);
+        });
+    }
+    
+    modalContent.appendChild(scrollContainer);
+    
+    // 创建关闭按钮容器
+    const closeContainer = document.createElement('div');
+    closeContainer.className = 'modal-btns';
+    closeContainer.style.marginTop = '15px';
+    closeContainer.style.textAlign = 'center';
+    
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'ai-btn';
+    closeBtn.textContent = 'CLOSE';
+    closeBtn.onclick = closeModal;
+    
+    closeContainer.appendChild(closeBtn);
+    modalContent.appendChild(closeContainer);
+}
+
+function toggleTemplateDropdown() {
+    const dropdown = document.getElementById('template-dropdown');
+    if (dropdown.style.display === 'block') {
+        dropdown.style.display = 'none';
+    } else {
+        renderTemplateOptions();
+        dropdown.style.display = 'block';
+    }
+}
+
+// 渲染模板选项
+function renderTemplateOptions() {
+    const optionsContainer = document.getElementById('template-options');
+    optionsContainer.innerHTML = '';
+    
+    Object.entries(aiTemplates).forEach(([name, template]) => {
+        const option = document.createElement('div');
+        option.className = 'template-option';
+        option.innerHTML = `
+            <div>
+                <strong>${name}</strong><br>
+                <span style="opacity:0.7; font-size:9px">${template.substring(0, 40)}...</span>
+            </div>
+            <div class="template-actions">
+                <button class="template-action" onclick="editTemplate('${name}')">编辑</button>
+                <button class="template-action" onclick="deleteTemplate('${name}')">删除</button>
+            </div>
+        `;
+        option.onclick = (e) => {
+            if (!e.target.classList.contains('template-action')) {
+                document.getElementById('ai-in').value = template;
+                document.getElementById('template-dropdown').style.display = 'none';
+                document.getElementById('ai-in').focus();
+            }
+        };
+        optionsContainer.appendChild(option);
+    });
+}
+
+// 添加新模板
+function addTemplate() {
+    const name = prompt('请输入模板名称：');
+    if (!name) return;
+    
+    const template = prompt('请输入模板内容：');
+    if (!template) return;
+    
+    aiTemplates[name] = template;
+    saveTemplates();
+    renderTemplateOptions();
+}
+
+// 编辑模板
+function editTemplate(name) {
+    const newName = prompt('请输入新的模板名称：', name);
+    if (!newName) return;
+    
+    const template = prompt('请输入新的模板内容：', aiTemplates[name]);
+    if (!template) return;
+    
+    delete aiTemplates[name];
+    aiTemplates[newName] = template;
+    saveTemplates();
+    renderTemplateOptions();
+}
+
+// 删除模板
+function deleteTemplate(name) {
+    if (confirm(`确定要删除模板"${name}"吗？`)) {
+        delete aiTemplates[name];
+        saveTemplates();
+        renderTemplateOptions();
+    }
+}
+
+function restoreChat(chatId) {
+    // 检查是否已经存在该聊天窗口
+    const existingTab = document.getElementById('tab-' + chatId);
+    if (!existingTab) {
+        // 确保aiCount与恢复的聊天ID同步
+        const idNum = parseInt(chatId.replace('ai-chat-', ''));
+        if (idNum > aiCount) {
+            aiCount = idNum;
+        }
+        
+        // 创建新的标签
+        const tab = document.createElement('div');
+        tab.className = 'term-tab'; 
+        tab.id = 'tab-' + chatId;
+        tab.innerHTML = `<span>CHAT_${idNum}</span><span class="term-close" onclick="removeAiTab(event, '${chatId}')">×</span>`;
+        tab.onclick = () => switchAiTab(chatId);
+        document.getElementById('ai-tabs').appendChild(tab);
+
+        // 创建聊天内容区
+        const body = document.createElement('div');
+        body.className = 'term-body'; 
+        body.id = chatId;
+        body.style.padding = '15px';
+        body.style.overflowY = 'auto';
+        body.style.flex = '1';
+        
+        // 加载历史记录
+        if (aiChatHistory[chatId] && aiChatHistory[chatId].length > 0) {
+            body.innerHTML = aiChatHistory[chatId].join('');
+            // 重新绑定所有按钮的点击事件
+            bindAiMessageButtons(body);
+        }
+        
+        document.getElementById('ai-container').appendChild(body);
+        
+        activeAiId = chatId;
+        switchAiTab(chatId);
+    }
+    
+    document.getElementById('modal-overlay').style.display = 'none';
+}
+
+function deleteChat(chatId) {
+    if (confirm(`Permanently delete CHAT_${parseInt(chatId.replace('ai-chat-', ''))}? This action cannot be undone.`)) {
+        delete aiChatHistory[chatId];
+        localStorage.setItem('ind_console_ai_history', JSON.stringify(aiChatHistory));
+        
+        const existingTab = document.getElementById('tab-' + chatId);
+        if (existingTab) {
+            const tabs = document.querySelectorAll('#ai-tabs .term-tab');
+            if (tabs.length > 1) {
+                existingTab.remove();
+                const chatBody = document.getElementById(chatId);
+                if (chatBody) chatBody.remove();
+                
+                const nextTab = document.querySelector('#ai-tabs .term-tab');
+                if (nextTab) switchAiTab(nextTab.id.replace('tab-', ''));
+            }
+        }
+        
+        openHistoryManager();
+        addLog(`[SYSTEM]: Chat ${chatId} permanently deleted`, "var(--term-green)");
+    }
+}
+
+function removeAiTab(e, id) {
+    e.stopPropagation();
+    const tabs = document.querySelectorAll('#ai-tabs .term-tab');
+    if (tabs.length <= 1) return; // 至少保留一个
+    
+    const tab = document.getElementById('tab-' + id);
+    const body = document.getElementById(id);
+    const wasActive = tab.classList.contains('active');
+    
+    // 注意：这里不再删除历史记录，只是关闭窗口
+    tab.remove();
+    body.remove();
+    
+    if (wasActive) {
+        const nextTab = document.querySelector('#ai-tabs .term-tab');
+        if (nextTab) switchAiTab(nextTab.id.replace('tab-', ''));
+    }
+}
+
+async function handleAiSend() {
+    const input = document.getElementById('ai-in');
+    const query = input.value.trim();
+    
+    // 检查当前是否正在生成，如果是则取消
+    if (isGenerating()) {
+        cancelAiRequest();
+        return;
+    }
+    
+    if (!query) return;
+
+    // 开始生成
+    startGenerating();
+    
+    // 只支持单个供应商，直接发送
+    sendAi(null, activeAiId);
+}
+
+async function sendAi(overrideQuery = null, targetTabId = null) {
+    const input = document.getElementById('ai-in');
+    const query = (overrideQuery !== null) ? overrideQuery : input.value.trim();
+    
+    // 确定使用哪个 ID：传了用传的，没传用全局活跃的
+    const currentChatId = targetTabId || activeAiId;
+    
+    const provider = config.providers[config.activeProviderIndex];
+    if (!query || !provider || !provider.apiKey || !currentChatId) return;
+
+    // 只在单模型模式下清空输入框
+    if (overrideQuery === null) {
+        input.value = '';
+    }
+
+    const chat = document.getElementById(currentChatId);
+    const uMsg = document.createElement('div');
+    uMsg.className = 'msg user'; 
+    uMsg.style.cursor = 'pointer';
+    
+    const ctxText = selectedAiCtxs.length === 0 ? 'none' : 
+                   selectedAiCtxs.length === 1 ? selectedAiCtxs[0] : 
+                   `[${selectedAiCtxs.length} files]`;
+    const promptText = `[CTX:${ctxText}] > ${query}`;
+    //  height: 18px;
+    uMsg.innerHTML = `<div style="position: relative;"><span class="undo-btn" title="回退到此对话" onclick="undoToPrompt(event, '${currentChatId}', ${aiChatHistory[currentChatId] ? aiChatHistory[currentChatId].length : 0}, '${query.replace(/'/g, "\\'")}')">Revert</span></div><span class="prompt-content">${promptText}</span>`;
+    
+    uMsg.querySelector('.prompt-content').setAttribute('onclick', `copyPrompt(this, '${query.replace(/'/g, "\\'")}')`);
+    
+    chat.appendChild(uMsg);
+    
+    if (!aiChatHistory[currentChatId]) {
+        aiChatHistory[currentChatId] = [];
+    }
+    aiChatHistory[currentChatId].push(`<div class="msg user" style="cursor: pointer; position: relative; margin-top: 20px;" title="点击复制prompt"><div style="position: relative;"><span class="undo-btn" style="position: absolute; top: -18px; left: 0; color: #ff6b6b; font-size: 9px; cursor: pointer; background: rgba(0,0,0,0.8); padding: 2px 6px; border-radius: 3px;" title="回退到此对话" onclick="undoToPrompt(event, '${currentChatId}', ${aiChatHistory[currentChatId] ? aiChatHistory[currentChatId].length : 0}, '${query.replace(/'/g, "\\'")}')">Revert</span></div><span class="prompt-content" onclick="copyPrompt(this, '${query.replace(/'/g, "\\'")}')">${promptText}</span></div>`);
+
+    const aiMsg = document.createElement('div');
+    aiMsg.className = 'msg ai'; 
+    aiMsg.innerHTML = 'AI: <span class="ai-typing">Thinking</span>';
+    chat.appendChild(aiMsg); 
+    
+    const scrollChat = () => chat.scrollTo({ top: chat.scrollHeight, behavior: 'smooth' });
+    scrollChat();
+
+    try {
+        if (!chatHistory[currentChatId]) {
+            chatHistory[currentChatId] = [];
+        }
+        
+        const userMessage = {
+            role: 'user', 
+            content: selectedAiCtxs.length > 0 ? 
+                `Context:\n${selectedAiCtxs.map(f => `${f}:\n${storage[f]}`).join('\n\n')}\n\nQuery: ${query}` : 
+                query 
+        };
+        
+        chatHistory[currentChatId].push(userMessage);
+        localStorage.setItem('ind_console_chat_history', JSON.stringify(chatHistory));
+        
+        const controller = new AbortController();
+        currentAiRequest = controller;
+        
+        const response = await fetch(`${provider.apiBaseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json', 
+                'Authorization': `Bearer ${provider.apiKey}` 
+            },
+            body: JSON.stringify({ 
+                model: provider.model, 
+                messages: chatHistory[currentChatId], // 发送完整对话历史
+                stream: false
+            }),
+            signal: controller.signal
+        });
+
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        const fullContent = data.choices[0].message.content;
+        
+        // 请求完成，清除控制器
+        currentAiRequest = null;
+        
+        // 将AI回复添加到对话历史并保存
+        chatHistory[currentChatId].push({
+            role: 'assistant',
+            content: fullContent
+        });
+        localStorage.setItem('ind_console_chat_history', JSON.stringify(chatHistory));
+        
+        // 恢复按钮状态
+        resetSendButton();
+        
+        // Markdown渲染函数
+        const renderMarkdown = (text) => {
+            const codeBlocks = [];
+            
+            // 先提取代码块并保存原始内容
+            let processedText = text.replace(/```(\w+)?\n([\s\S]*?)```/g, (match, lang, code) => {
+                const cleanCode = code.trim();
+                const blockId = `code-block-${codeBlocks.length}`;
+                codeBlocks.push(cleanCode);
+                
+                // 安全处理代码内容：转义HTML特殊字符
+                const escapedCode = cleanCode
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#x27;');
+                
+                const displayCode = escapedCode.replace(/\n/g, '<br>');
+                
+                // 根据语言类型决定按钮文本
+                const isBash = lang && (lang.toLowerCase() === 'bash' || lang.toLowerCase() === 'sh' || lang.toLowerCase() === 'shell');
+                const actionBtnText = isBash ? 'Run' : 'Apply';
+                const actionBtnClass = isBash ? 'run-btn' : 'inject-btn';
+                
+                const actionBtn = cleanCode ? 
+                    `<div class="copy-btn" data-code="${blockId}">Copy</div><div class="${actionBtnClass}" data-code="${blockId}" data-lang="${lang || 'code'}">${actionBtnText}</div>` : '';
+                
+                return `<div class="code-block"><span class="code-lang">${lang || 'code'}</span><pre><code>${displayCode}</code></pre>${actionBtn}</div>`;
             });
             
-            document.querySelector('.orb').style.backgroundColor = 'var(--orb-color)';
-            Prism.highlightAll();
+            // 处理其他Markdown格式（保持简洁）
+            processedText = processedText
+                .replace(/^### (.+)$/gm, '<div style="font-size:1.2em; font-weight:bold; margin:4px 0;">$1</div>')  // ### 标题
+                .replace(/^## (.+)$/gm, '<div style="font-size:1.3em; font-weight:bold; margin:4px 0;">$1</div>')   // ## 标题
+                .replace(/^# (.+)$/gm, '<div style="font-size:1.4em; font-weight:bold; margin:4px 0;">$1</div>')    // # 标题
+                .replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>')  // 行内代码
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')          // 粗体
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')                      // 斜体
+                .replace(/^---$/gm, '<hr style="border:none; border-top:1px solid var(--amber-dim); margin:8px 0;">')  // 横线
+                .replace(/\n\n/g, '<br><br>')  // 段落间距
+                .replace(/\n/g, '<br>');       // 换行
+            
+            aiMsg.dataset.codeBlocks = JSON.stringify(codeBlocks);
+            
+            return processedText;
+        };
+        
+        const renderedContent = renderMarkdown(fullContent);
+        // 安全处理：转义HTML特殊字符
+        const safeContent = fullContent
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#x27;');
+        aiMsg.innerHTML = `<div style="position: relative;">AI: ${renderedContent}<span class="scroll-top-btn" onclick="scrollToAiTop(this)">▲</span><span class="copy-ai-btn" onclick="copyAiResponse(this, \`${safeContent.replace(/`/g, '\\\\`')}\`)">Copy</span></div>`;
+        
+        bindAiMessageButtons(aiMsg);
+        scrollChat();
+        
+        aiChatHistory[currentChatId].push(aiMsg.outerHTML);
+        localStorage.setItem('ind_console_ai_history', JSON.stringify(aiChatHistory));
+    } catch (err) { 
+        const errorMessage = `[ERR]: ${err.message}`;
+        aiMsg.innerText = `AI: ${errorMessage}`; 
+        
+        // 恢复按钮状态
+        resetSendButton();
+        
+        // 将错误信息添加到对话历史并保存
+        chatHistory[currentChatId].push({
+            role: 'assistant',
+            content: errorMessage
+        });
+        localStorage.setItem('ind_console_chat_history', JSON.stringify(chatHistory));
+        
+        scrollChat();
+    }
+}
+
+function handleExtractButton(container) {
+    const text = container.innerText;
+    if (text.includes('```')) {
+        const code = text.split('```')[1].split('\n').slice(1).join('\n');
+        const btn = document.createElement('div');
+        btn.className = 'inject-btn'; 
+        btn.innerText = '>> EXTRACT_CODE';
+        btn.setAttribute('data-code', code);
+        btn.onclick = () => { 
+            if (activeEditorTab && editorTabs[activeEditorTab]) {
+                editorTabs[activeEditorTab].editor.value += "\n" + code;
+                markFileModified(activeEditorTab);
+            }
+        };
+        container.appendChild(document.createElement('br')); 
+        container.appendChild(btn);
+    }
+}
+    function handleCtx(e, x, y) {
+        e.preventDefault();
+        const ctxMenu = document.getElementById('ctx');
+        const isItem = e.target.closest('.file-item');
+        
+        // 如果在空白处右键，禁用文件相关操作
+        const isFileList = e.target.id === 'file-list';
+        const shouldDisable = !isItem && !isFileList;
+        
+        document.getElementById('ctx-rename').classList.toggle('disabled', shouldDisable);
+        document.getElementById('ctx-delete').classList.toggle('disabled', shouldDisable);
+        document.getElementById('ctx-copy-path').classList.toggle('disabled', shouldDisable);
+        
+        ctxMenu.style.display = 'block';
+        positionMenu(ctxMenu, x || e.pageX, y || e.pageY);
+    }
+
+    async function saveZip() {
+        const zip = new JSZip(); 
+        Object.keys(storage).forEach(k => { if(!k.endsWith('/')) zip.file(k, storage[k]); });
+        const b = await zip.generateAsync({type:"blob"}), a = document.createElement('a');
+        a.href = URL.createObjectURL(b); a.download = "archive.zip"; a.click();
+    }
+    
+    function saveFile() { 
+        if (!activeFile || activeFile.endsWith('/')) {
+            alert('请先选择一个文件');
+            return;
+        }
+        
+        const content = storage[activeFile] || '';
+        const b = new Blob([content], {type:'text/plain'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(b);
+        a.download = activeFile.split('/').pop();
+        a.click();
+    }
+    
+    function clearTerm() { if(activeTermId) document.getElementById(activeTermId).querySelector('.term-out').innerHTML = 'READY.'; }
+        function isGenerating() {
+        const sendBtn = document.getElementById('ai-send-btn');
+        return sendBtn && sendBtn.textContent === 'CANC';
+    }
+    
+    function startGenerating() {
+        const sendBtn = document.getElementById('ai-send-btn');
+        if (sendBtn) {
+            sendBtn.textContent = 'CANC';
+            sendBtn.style.background = 'var(--term-red)';
+        }
+    }
+    
+    function cancelAiRequest() {
+        if (currentAiRequest) {
+            currentAiRequest.abort();
+            currentAiRequest = null;
+        }
+        stopGenerating();
+    }
+    
+function stopGenerating() {
+    const sendBtn = document.getElementById('ai-send-btn');
+    if (sendBtn) {
+        sendBtn.textContent = 'SEND';
+        sendBtn.style.background = 'var(--amber-dim)';
+    }
+}
+
+function scrollToAiTop(button) {
+    const aiMsg = button.closest('.msg.ai');
+    if (aiMsg) {
+        aiMsg.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'start',
+            inline: 'nearest'
+        });
+    }
+}
+
+function copyAiResponse(button, content) {
+    // 解码转义字符
+    const decodedContent = content.replace(/\\`/g, '`');
+    navigator.clipboard.writeText(decodedContent).then(() => {
+        const originalText = button.textContent;
+        button.textContent = 'Done';
+        button.style.color = '#ffa500';
+        setTimeout(() => {
+            button.textContent = originalText;
+            button.style.color = 'var(--amber)';
         }, 1000);
-    }
+    }).catch(err => {
+        console.error('复制失败:', err);
+        // 备用复制方法
+        const textArea = document.createElement('textarea');
+        textArea.value = decodedContent;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        
+        const originalText = button.textContent;
+        button.textContent = 'Done';
+        button.style.color = 'var(--amber)';
+        setTimeout(() => {
+            button.textContent = originalText;
+            button.style.color = 'var(--amber-dim)';
+        }, 1000);
+    });
+}
 
-    function quickAction(type) {
-        aiText.value = `${type} this code.`;
-        sendAi();
+function undoToPrompt(event, chatId, messageIndex, originalQuery) {
+    event.stopPropagation(); // 阻止冒泡
+    
+    if (confirm('确定要回退到此对话吗？此操作将删除此prompt及其之后的所有对话记录。')) {
+        if (chatHistory[chatId] && chatHistory[chatId].length > messageIndex) {
+            chatHistory[chatId] = chatHistory[chatId].slice(0, messageIndex);
+            localStorage.setItem('ind_console_chat_history', JSON.stringify(chatHistory));
+        }
+        
+        if (aiChatHistory[chatId] && aiChatHistory[chatId].length > messageIndex) {
+            aiChatHistory[chatId] = aiChatHistory[chatId].slice(0, messageIndex);
+            localStorage.setItem('ind_console_ai_history', JSON.stringify(aiChatHistory));
+        }
+        
+        const chat = document.getElementById(chatId);
+        if (chat) {
+            chat.innerHTML = aiChatHistory[chatId].join('');
+            chat.scrollTo({ top: chat.scrollHeight, behavior: 'smooth' });
+        }
+        
+        const input = document.getElementById('ai-in');
+        if (input) {
+            input.value = originalQuery;
+            input.focus();
+        }
     }
+}
+   
 
-    // 3. 辅助功能
-    function addBubble(role, content) {
-        const div = document.createElement('div');
-        div.className = `bubble ${role}`;
-        div.innerHTML = `<b>${role.toUpperCase()}:</b><br>${content}`;
-        chatFlow.appendChild(div);
-        chatFlow.scrollTop = chatFlow.scrollHeight;
-        return div;
+    initResizer(document.getElementById('h-drag-left'), document.getElementById('explorer'), true, false);
+    initResizer(document.getElementById('v-drag-explorer'), document.getElementById('file-section'), false, false);
+    
+    if (window.innerWidth < 768) {
+        setTimeout(() => toggleMax('editor-p'), 100);
     }
+    initResizer(document.getElementById('h-drag-right'), document.getElementById('ai-panel'), true, true);
+    initResizer(document.getElementById('v-drag'), document.getElementById('terminal'), false, true);
+    
+    document.addEventListener('click', (e) => {
+        if (!document.getElementById('ctx').contains(e.target)) document.getElementById('ctx').style.display = 'none';
+        if (!document.getElementById('plugin-ctx').contains(e.target)) document.getElementById('plugin-ctx').style.display = 'none';
+        if (!document.getElementById('ai-ctx-trigger').contains(e.target)) {
+            document.getElementById('ai-ctx-options').style.display = 'none';
+        }
+        if (!document.getElementById('ai-provider-trigger').contains(e.target)) {
+            document.getElementById('ai-provider-options').style.display = 'none';
+        }
+    });
+    document.getElementById('ai-in').onkeydown = (e) => { 
+        if(e.key === 'Enter') {
+            if (isGenerating()) {
+                cancelAiRequest();
+                return;
+            }
+            
+            const query = e.target.value.trim();
+            if (!query) return;
+            
+            startGenerating();
+            
+            sendAi();
+        }
+    };
 
-    function log(msg) {
-        const line = document.createElement('div');
-        line.innerHTML = `> [${new Date().toLocaleTimeString()}] ${msg}`;
-        document.getElementById('term-out').appendChild(line);
-        document.getElementById('term-out').scrollTop = 10000;
-    }
-
-    function handleKeys(e) {
-        if(e.ctrlKey && e.key === 'i') { e.preventDefault(); toggleDialog(); }
-        if(e.key === 'Enter' && aiDialog.style.display === 'flex') { sendAi(); }
-    }
-
-    // 集成原有插件/Python 逻辑接口
-    function initOldModules() {
-        log("Checking legacy plugin compatibility...");
-        log("Python 3.10 Runtime Ready (WASM)");
-    }
-    initOldModules();
-
+ 
+    renderFiles(); renderPlugins(); addTerminal(); restoreAiTabs(); updateProviderDisplay();
+    createEditorTab(activeFile);
 </script>
 </body>
 </html>

@@ -7,6 +7,9 @@
     <link rel="icon" type="image/png" href="iwe.png">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
+    <!-- Monaco Editor -->
+    <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.50.0/min/vs/loader.min.js"></script> -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.47.0/min/vs/loader.min.js"></script>
     <style>
         :root {
             --amber: #ffb000;
@@ -1014,15 +1017,32 @@ function execEditorCmd(cmd) {
 
 // 拦截物理 Tab 键 (如果是外接键盘)
 function initEditorTabEvents() {
-    if (activeEditorTab && editorTabs[activeEditorTab]) {
-        const editor = editorTabs[activeEditorTab].editor;
-        editor.addEventListener('keydown', function(e) {
-            if (e.key === 'Tab') {
-                e.preventDefault();
-                insertAtCursor('    ');
-            }
-        });
-    }
+    // Monaco Editor 自带Tab键支持，无需额外处理
+}
+
+function getLanguageFromFileName(fileName) {
+    const ext = fileName.split('.').pop().toLowerCase();
+    const langMap = {
+        'js': 'javascript',
+        'py': 'python',
+        'html': 'html',
+        'css': 'css',
+        'json': 'json',
+        'txt': 'plaintext',
+        'md': 'markdown',
+        'xml': 'xml',
+        'sql': 'sql',
+        'java': 'java',
+        'c': 'c',
+        'cpp': 'cpp',
+        'cs': 'csharp',
+        'php': 'php',
+        'rb': 'ruby',
+        'go': 'go',
+        'rs': 'rust',
+        'sh': 'shell'
+    };
+    return langMap[ext] || 'plaintext';
 }
 
     // --- Plugins Logic ---
@@ -1222,7 +1242,8 @@ function initEditorTabEvents() {
     function saveCurrentFile() {
         if (activeEditorTab && editorTabs[activeEditorTab]) {
             const editor = editorTabs[activeEditorTab].editor;
-            const content = editor.value;
+            // 兼容Monaco Editor和textarea
+            const content = editor.getValue ? editor.getValue() : editor.value;
             
             // 清除修改标记
             clearFileModified(activeEditorTab);
@@ -1340,91 +1361,93 @@ function initEditorTabEvents() {
         
         document.getElementById('editor-tabs').appendChild(tab);
         
-        // 创建编辑器内容区
-        const editorArea = document.createElement('textarea');
-        editorArea.className = 'editor-body';
-        editorArea.id = 'editor-' + fileName;
-        editorArea.spellcheck = false;
+        // 创建Monaco Editor容器
+        const editorContainer = document.createElement('div');
+        editorContainer.className = 'monaco-editor-container';
+        editorContainer.id = 'editor-' + fileName;
+        editorContainer.style.display = 'none';
+        editorContainer.style.flex = '1';
+        editorContainer.style.height = '100%';
         
-        // 判断是普通文件还是插件
-        if (plugins.find(p => p.name === fileName)) {
-            // 插件标签（直接使用插件名）
-            const plugin = plugins.find(p => p.name === fileName);
-            editorArea.value = plugin ? plugin.code : '';
-        } else {
-            // 普通文件
-            editorArea.value = storage[fileName] || '';
-        }
+        document.getElementById('editor-container').appendChild(editorContainer);
         
-        // 监听编辑器变化
-        editorArea.addEventListener('input', () => {
-            markFileModified(fileName);
-        });
+        // 获取文件内容
+        const fileContent = plugins.find(p => p.name === fileName) ? 
+            (plugins.find(p => p.name === fileName).code || '') : 
+            (storage[fileName] || '');
         
-        editorArea.style.display = 'none';
-        editorArea.style.flex = '1';
-        editorArea.style.resize = 'none';
-        editorArea.style.border = 'none';
-        editorArea.style.background = 'transparent';
-        editorArea.style.color = 'inherit';
-        editorArea.style.fontFamily = 'inherit';
-        editorArea.style.fontSize = 'inherit';
-        editorArea.style.padding = '10px';
-        editorArea.style.outline = 'none';
-        
-        // 添加快捷键支持
-        editorArea.onkeydown = function(e) {
-            if (e.ctrlKey || e.metaKey) {
-                switch(e.key) {
-                    case 's':
-                        e.preventDefault();
-                        saveCurrentFile();
-                        break;
-                    case 'z':
-                        e.preventDefault();
-                        document.execCommand('undo');
-                        break;
-                    case 'y':
-                        e.preventDefault();
-                        document.execCommand('redo');
-                        break;
+        // 初始化Monaco Editor
+        require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.47.0/min/vs' }});
+        require(['vs/editor/editor.main'], function() {
+            const editor = monaco.editor.create(editorContainer, {
+                value: fileContent,
+                language: getLanguageFromFileName(fileName),
+                theme: 'vs-dark',
+                fontSize: 13,
+                fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
+                automaticLayout: true,
+                minimap: { enabled: false },
+                scrollBeyondLastLine: false,
+                wordWrap: 'on',
+                lineNumbers: 'on',
+                folding: true,
+                renderWhitespace: 'selection',
+                renderControlCharacters: true,
+                scrollbar: {
+                    verticalScrollbarSize: 6,
+                    horizontalScrollbarSize: 6
                 }
+            });
+            
+            // 监听内容变化
+            editor.onDidChangeModelContent(() => {
+                markFileModified(fileName);
+            });
+            
+            // 添加快捷键支持
+            editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, function() {
+                saveCurrentFile();
+            });
+            
+            // 保存编辑器实例
+            editorTabs[fileName] = {
+                tab: tab,
+                editor: editor,
+                container: editorContainer
+            };
+            
+            // 检查初始状态是否已修改
+            const originalContent = plugins.find(p => p.name === fileName) ? 
+                plugins.find(p => p.name === fileName).code : 
+                storage[fileName] || '';
+            if (editor.getValue() !== originalContent) {
+                markFileModified(fileName);
             }
-        };
-        
-        document.getElementById('editor-container').appendChild(editorArea);
-        
-        // 保存标签信息
-        editorTabs[fileName] = {
-            tab: tab,
-            editor: editorArea
-        };
+        });
         
         // 切换到新标签
         switchEditorTab(fileName);
         
-        // 检查初始状态是否已修改
-        const originalContent = plugins.find(p => p.name === fileName) ? 
-            plugins.find(p => p.name === fileName).code : 
-            storage[fileName] || '';
-        if (editorArea.value !== originalContent) {
-            markFileModified(fileName);
-        }
+        // 检查初始状态是否已修改（在Monaco Editor初始化回调中处理）
         
         initEditorTabEvents();
     }
     
     function switchEditorTab(fileName) {
         Object.keys(editorTabs).forEach(tabName => {
-            const editor = editorTabs[tabName].editor;
-            editor.style.display = 'none';
-            editorTabs[tabName].tab.classList.remove('active');
+            const editorTab = editorTabs[tabName];
+            if (editorTab.container) {
+                editorTab.container.style.display = 'none';
+            }
+            editorTab.tab.classList.remove('active');
         });
         
         if (editorTabs[fileName]) {
-            editorTabs[fileName].editor.style.display = 'block';
+            editorTabs[fileName].container.style.display = 'block';
             editorTabs[fileName].tab.classList.add('active');
-            editorTabs[fileName].editor.focus();
+            if (editorTabs[fileName].editor) {
+                editorTabs[fileName].editor.focus();
+            }
             activeEditorTab = fileName;
             activeFile = fileName;
             localStorage.setItem('ind_console_active', fileName);
@@ -3125,7 +3148,15 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
                 const blockId = `code-block-${codeBlocks.length}`;
                 codeBlocks.push(cleanCode);
                 
-                const displayCode = cleanCode.replace(/\n/g, '<br>');
+                // 安全处理代码内容：转义HTML特殊字符
+                const escapedCode = cleanCode
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#x27;');
+                
+                const displayCode = escapedCode.replace(/\n/g, '<br>');
                 
                 // 根据语言类型决定按钮文本
                 const isBash = lang && (lang.toLowerCase() === 'bash' || lang.toLowerCase() === 'sh' || lang.toLowerCase() === 'shell');
@@ -3156,7 +3187,14 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
         };
         
         const renderedContent = renderMarkdown(fullContent);
-        aiMsg.innerHTML = `<div style="position: relative;">AI: ${renderedContent}<span class="scroll-top-btn" onclick="scrollToAiTop(this)">▲</span><span class="copy-ai-btn" onclick="copyAiResponse(this, \`${fullContent.replace(/`/g, '\\\\`')}\`)">Copy</span></div>`;
+        // 安全处理：转义HTML特殊字符
+        const safeContent = fullContent
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#x27;');
+        aiMsg.innerHTML = `<div style="position: relative;">AI: ${renderedContent}<span class="scroll-top-btn" onclick="scrollToAiTop(this)">▲</span><span class="copy-ai-btn" onclick="copyAiResponse(this, \`${safeContent.replace(/`/g, '\\\\`')}\`)">Copy</span></div>`;
         
         bindAiMessageButtons(aiMsg);
         scrollChat();
