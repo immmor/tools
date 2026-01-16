@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>CyberDex | Fluid v11</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        :root { --accent: #00f3ff; --glow: rgba(0, 243, 255, 0.4); }
+        body {
+            background: radial-gradient(circle at 50% 50%, #061118 0%, #000 100%);
+            color: #fff; font-family: 'Space Mono', monospace;
+            height: 100vh; overflow: hidden;
+        }
+
+        /* 粒子背景模拟 */
+        .particles {
+            position: fixed; inset: 0; pointer-events: none;
+            background-image: radial-gradient(circle at 2px 2px, rgba(255,255,255,0.05) 1px, transparent 0);
+            background-size: 40px 40px; animation: drift 60s linear infinite;
+        }
+        @keyframes drift { from { background-position: 0 0; } to { background-position: 500px 1000px; } }
+
+        /* 毛玻璃面板 */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8);
+            transition: all 0.3s ease;
+        }
+        .glass-panel:hover { border-color: var(--accent); box-shadow: 0 0 20px var(--glow); }
+
+        /* 流光边框 */
+        .aurora-btn {
+            position: relative; overflow: hidden; border-radius: 12px;
+            background: linear-gradient(45deg, #00f3ff, #ff00ff); padding: 1px;
+        }
+        .aurora-inner {
+            background: #000; border-radius: 11px; padding: 12px;
+            display: flex; justify-content: center; align-items: center;
+            height: 100%; transition: background 0.3s;
+        }
+        .aurora-btn:hover .aurora-inner { background: transparent; color: #000; font-weight: bold; }
+
+        /* 波动深度图 */
+        .wave-container { display: flex; align-items: flex-end; gap: 2px; height: 40px; }
+        .wave-bar { width: 4px; background: var(--accent); border-radius: 2px; animation: pulse 1.5s ease-in-out infinite; }
+
+        @keyframes pulse { 0%, 100% { height: 20%; opacity: 0.3; } 50% { height: 100%; opacity: 1; } }
+
+        #tv_chart { width: 100%; height: 100%; border-radius: 16px; overflow: hidden; }
+    </style>
+</head>
+<body class="p-4 flex flex-col gap-4">
+    <div class="particles"></div>
+
+    <header class="h-16 glass-panel flex justify-between items-center px-8">
+        <div class="flex items-center gap-10">
+            <div class="text-2xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-purple-500">
+                NEURAL_GRID_v11
+            </div>
+            <nav class="flex gap-6 text-[11px] text-gray-400 font-bold">
+                <a href="#" class="hover:text-cyan-400">EXCHANGE</a>
+                <a href="#" class="hover:text-cyan-400">LIQUIDITY</a>
+                <a href="#" class="hover:text-cyan-400">NEURAL_STAKING</a>
+            </nav>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="text-right px-4 border-r border-white/10">
+                <div class="text-[9px] text-cyan-500">BLOCK_HEIGHT</div>
+                <div class="text-sm font-mono tracking-widest">#19,421,084</div>
+            </div>
+            <div class="w-10 h-10 rounded-full border-2 border-cyan-500 flex items-center justify-center bg-cyan-500/10">
+                <div class="w-6 h-6 rounded-full bg-cyan-400 animate-ping"></div>
+            </div>
+        </div>
+    </header>
+
+    <div class="flex-1 grid grid-cols-12 gap-4">
+        <div class="col-span-3 flex flex-col gap-4">
+            <div class="glass-panel p-6 flex-1">
+                <h3 class="text-xs font-bold text-cyan-400 mb-6 uppercase tracking-widest">Global_Sentiments</h3>
+                <div class="flex justify-center py-4">
+                    <div class="relative w-32 h-32 border-4 border-dashed border-cyan-900 rounded-full flex items-center justify-center">
+                        <div class="absolute inset-0 border-4 border-cyan-500 rounded-full animate-spin" style="border-top-color: transparent; animation-duration: 3s;"></div>
+                        <span class="text-3xl font-black">74%</span>
+                    </div>
+                </div>
+                <div class="mt-8 space-y-4">
+                    <div class="flex justify-between text-xs"><span>Volatility</span><span class="text-orange-500 font-bold">STABLE</span></div>
+                    <div class="flex justify-between text-xs"><span>Neural_Load</span><span class="text-green-500 font-bold">OPTIMAL</span></div>
+                </div>
+            </div>
+
+            <div class="glass-panel p-6 h-48">
+                <h3 class="text-xs font-bold text-purple-400 mb-4 uppercase">Depth_Pulse</h3>
+                <div class="wave-container">
+                    <script>
+                        for(let i=0; i<30; i++) document.write(`<div class="wave-bar" style="animation-delay: ${i*0.1}s"></div>`);
+                    </script>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-span-6 flex flex-col gap-4">
+            <div class="glass-panel p-4 flex-[3] relative">
+                <div class="absolute top-8 left-8 z-10 flex flex-col gap-1">
+                    <span class="text-4xl font-black tracking-tighter" id="price">98,241.50</span>
+                    <span class="text-xs text-cyan-500 font-bold bg-cyan-500/10 px-2 py-1 rounded">BTC / USDT_PERP</span>
+                </div>
+                <div id="tv_chart"></div>
+            </div>
+
+            <div class="glass-panel p-6 h-32 grid grid-cols-3 gap-6">
+                <div>
+                    <div class="text-[9px] text-gray-500">NET_FLOW_24H</div>
+                    <div class="text-lg font-bold text-green-400">+$214.2M</div>
+                </div>
+                <div class="border-x border-white/5 px-6">
+                    <div class="text-[9px] text-gray-500">WHALE_ENTROPY</div>
+                    <div class="text-lg font-bold">0.842</div>
+                </div>
+                <div class="text-right">
+                    <div class="text-[9px] text-gray-500">GAS_ECONOMY</div>
+                    <div class="text-lg font-bold text-cyan-400">12 Gwei</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-span-3 flex flex-col gap-4">
+            <div class="glass-panel p-8 flex flex-col h-full">
+                <h3 class="text-sm font-black mb-10 tracking-widest border-l-4 border-purple-500 pl-4">EXECUTION_CORE</h3>
+                
+                <div class="space-y-6 flex-1">
+                    <div class="group">
+                        <label class="text-[10px] text-gray-500 group-hover:text-cyan-400 transition">SWAP_FROM</label>
+                        <div class="flex justify-between items-center py-4 border-b border-white/10">
+                            <input type="number" value="1.0" class="bg-transparent text-2xl font-bold outline-none w-1/2">
+                            <span class="text-sm font-bold opacity-50">ETH</span>
+                        </div>
+                    </div>
+                    <div class="group">
+                        <label class="text-[10px] text-gray-500 group-hover:text-purple-400 transition">SWAP_TO</label>
+                        <div class="flex justify-between items-center py-4 border-b border-white/10">
+                            <input type="number" readonly value="3412.55" class="bg-transparent text-2xl font-bold outline-none w-1/2 text-purple-400">
+                            <span class="text-sm font-bold opacity-50">USDT</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-10">
+                    <div class="aurora-btn cursor-pointer">
+                        <div class="aurora-inner text-xs font-black tracking-[0.3em]" onclick="alert('Neural Signature Verified.')">
+                            AUTHORIZE_SWAP
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 初始化 K 线图 (采用更柔和的颜色方案)
+        const container = document.getElementById('tv_chart');
+        const chart = LightweightCharts.createChart(container, {
+            layout: { background: { color: 'transparent' }, textColor: 'rgba(255,255,255,0.4)' },
+            grid: { vertLines: { color: 'rgba(255,255,255,0.02)' }, horzLines: { color: 'rgba(255,255,255,0.02)' } },
+            timeScale: { borderColor: 'rgba(255,255,255,0.05)' },
+        });
+
+        const candleSeries = chart.addSeries(LightweightCharts.CandlestickSeries, {
+            upColor: '#00f3ff', downColor: '#ff00ff', borderVisible: false,
+            wickUpColor: '#00f3ff', wickDownColor: '#ff00ff'
+        });
+
+        // 模拟实时数据
+        let price = 98200;
+        const data = [];
+        let t = Math.floor(Date.now() / 1000) - 100 * 60;
+        for(let i=0; i<100; i++) {
+            price += (Math.random()-0.5)*30;
+            data.push({ time: t + i*60, open: price-5, high: price+10, low: price-10, close: price });
+        }
+        candleSeries.setData(data);
+
+        setInterval(() => {
+            const now = Math.floor(Date.now() / 1000);
+            price += (Math.random()-0.5)*10;
+            document.getElementById('price').innerText = price.toFixed(2);
+            candleSeries.update({
+                time: now - (now % 60),
+                open: price-5, high: price+8, low: price-8, close: price
+            });
+        }, 1000);
+
+        // 自适应宽度
+        new ResizeObserver(() => {
+            chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
+        }).observe(container);
+    </script>
+</body>
+</html>

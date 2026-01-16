@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CyberDex | Neural Interface v6</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <style>
+        :root { --n-cyan: #00f3ff; --n-pink: #ff00ff; --n-bg: #000000; }
+        body {
+            background-color: var(--n-bg);
+            color: #e0e0e0;
+            font-family: 'Space Mono', monospace;
+            height: 100vh;
+            overflow: hidden;
+            background-image: radial-gradient(circle at 50% 50%, #0a0a0a 0%, #000 100%);
+        }
+
+        .cyber-panel {
+            background: rgba(10, 10, 10, 0.9);
+            border: 1px solid rgba(0, 243, 255, 0.1);
+            position: relative;
+        }
+
+        /* 雷达扫描动画 */
+        .radar {
+            width: 100px; height: 100px; border-radius: 50%;
+            border: 1px solid rgba(0, 243, 255, 0.2);
+            position: relative; overflow: hidden;
+        }
+        .radar::after {
+            content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: conic-gradient(from 0deg, transparent 0%, rgba(0, 243, 255, 0.4) 100%);
+            animation: rotate 4s linear infinite;
+        }
+        @keyframes rotate { 100% { transform: rotate(360deg); } }
+
+        /* 修复 K线图容器 */
+        #tv_chart { width: 100%; height: 100%; min-height: 300px; }
+
+        .glitch-text { animation: glitch 1s infinite; position: relative; }
+        @keyframes glitch {
+            0% { text-shadow: 2px 0 var(--n-pink); }
+            50% { text-shadow: -2px 0 var(--n-cyan); }
+            100% { text-shadow: 2px 0 var(--n-pink); }
+        }
+
+        /* 隐藏滚动条 */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body class="flex flex-col p-2 gap-2">
+
+    <header class="h-14 cyber-panel flex justify-between items-center px-6 border-cyan-500/20">
+        <div class="flex items-center gap-10">
+            <div class="text-xl font-black italic tracking-[0.2em] glitch-text">NEURAL_DEX_<span class="text-cyan-400">v6</span></div>
+            <div class="hidden lg:flex gap-6 text-[10px] font-mono text-cyan-800">
+                <span>NODE_ID: HK-772</span>
+                <span>ENC: AES-256</span>
+                <span class="text-green-500 animate-pulse">● SYNC_STABLE</span>
+            </div>
+        </div>
+        <button class="bg-cyan-500/10 border border-cyan-500/50 text-cyan-400 px-4 py-1 text-xs hover:bg-cyan-500 hover:text-black transition">CONNECT_WALLET</button>
+    </header>
+
+    <main class="flex-1 grid grid-cols-12 gap-2 overflow-hidden">
+        
+        <div class="col-span-12 lg:col-span-3 flex flex-col gap-2">
+            <div class="cyber-panel p-4 flex flex-col items-center justify-center gap-4 h-1/2">
+                <div class="text-[10px] text-cyan-600 font-bold self-start">NETWORK_RADAR</div>
+                <div class="radar"></div>
+                <div class="w-full space-y-2 text-[9px]">
+                    <div class="flex justify-between"><span>MAINNET</span><span class="text-green-500">CONNECTED</span></div>
+                    <div class="flex justify-between"><span>SOLANA</span><span class="text-orange-500">SYNCING...</span></div>
+                </div>
+            </div>
+            <div class="cyber-panel flex-1 p-3 font-mono text-[9px] bg-black/80 overflow-y-auto no-scrollbar">
+                <div class="text-pink-900 mb-2 font-bold uppercase underline">System_Kernel_Log</div>
+                <div id="kernelLogs" class="space-y-1 text-gray-600"></div>
+            </div>
+        </div>
+
+        <div class="col-span-12 lg:col-span-6 flex flex-col gap-2">
+            <div class="cyber-panel flex-[3] relative bg-black overflow-hidden" id="chart-parent">
+                <div class="absolute top-4 right-4 z-20 flex gap-4 bg-black/80 p-2 border border-cyan-900">
+                    <div class="text-right">
+                        <div class="text-[9px] text-gray-600">LIVE_PRICE</div>
+                        <div class="text-lg font-bold text-cyan-400" id="priceDisplay">98,241.50</div>
+                    </div>
+                </div>
+                <div id="tv_chart"></div>
+            </div>
+
+            <div class="flex-1 cyber-panel p-4 grid grid-cols-4 gap-4">
+                <div class="col-span-3">
+                    <div class="text-[10px] text-gray-600 mb-2 font-bold uppercase">Transaction_Volume_Heatmap</div>
+                    <div class="flex items-end gap-1 h-12">
+                        <div class="flex-1 bg-cyan-950 border-t border-cyan-500 h-[20%]"></div>
+                        <div class="flex-1 bg-cyan-950 border-t border-cyan-500 h-[40%]"></div>
+                        <div class="flex-1 bg-cyan-500/50 border-t border-cyan-400 h-[90%] shadow-[0_0_10px_var(--n-cyan)]"></div>
+                        <div class="flex-1 bg-cyan-950 border-t border-cyan-500 h-[30%]"></div>
+                        <div class="flex-1 bg-pink-500/50 border-t border-pink-400 h-[70%]"></div>
+                    </div>
+                </div>
+                <div class="border-l border-white/5 pl-4 flex flex-col justify-center">
+                    <div class="text-[9px] text-gray-500">GAS_FEES</div>
+                    <div class="text-xl font-bold text-orange-500">14 <span class="text-[10px]">GWEI</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-span-12 lg:col-span-3 flex flex-col gap-2">
+            <div class="cyber-panel p-6 flex flex-col h-full border-l-2 border-l-pink-500/20">
+                <div class="mb-8">
+                    <h3 class="text-xs font-black tracking-widest text-pink-500 mb-1 uppercase">Order_Terminal</h3>
+                    <div class="h-1 w-full bg-gray-900"><div class="h-full bg-pink-500 w-2/3 shadow-[0_0_10px_#ff00ff]"></div></div>
+                </div>
+
+                <div class="space-y-4">
+                    <div class="bg-black/60 border border-white/5 p-4">
+                        <label class="text-[9px] text-gray-500">SELL_AMOUNT</label>
+                        <div class="flex justify-between items-center mt-1">
+                            <input type="number" value="1.0" class="bg-transparent text-xl font-bold outline-none w-1/2">
+                            <span class="text-cyan-400 font-bold">ETH</span>
+                        </div>
+                    </div>
+                    <div class="flex justify-center -my-2"><span class="text-gray-700">⇅</span></div>
+                    <div class="bg-black/60 border border-white/5 p-4">
+                        <label class="text-[9px] text-gray-500">BUY_ESTIMATE</label>
+                        <div class="flex justify-between items-center mt-1">
+                            <input type="number" readonly value="3412.55" class="bg-transparent text-xl font-bold outline-none w-1/2 text-pink-500">
+                            <span class="text-pink-500 font-bold">USDT</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-auto">
+                    <div class="text-[9px] text-cyan-900 mb-4 font-mono leading-tight">
+                        AUTH_HASH: 99a2...f12<br>
+                        SLIPPAGE: 0.5% (STRICT)<br>
+                        SECURITY: LEVEL_MAX
+                    </div>
+                    <button id="execBtn" class="w-full py-4 border border-cyan-400 text-cyan-400 font-black tracking-[0.2em] hover:bg-cyan-400 hover:text-black transition-all shadow-[0_0_15px_rgba(0,243,255,0.1)]">
+                        EXECUTE_SWAP
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // 1. 修复 K线图渲染 (API V4 语法)
+        const container = document.getElementById('tv_chart');
+        const chartOptions = {
+            layout: { background: { color: 'transparent' }, textColor: '#444' },
+            grid: { vertLines: { color: '#0a0a0a' }, horzLines: { color: '#0a0a0a' } },
+            timeScale: { borderColor: '#111' },
+            handleScroll: true, handleScale: true
+        };
+
+        const chart = LightweightCharts.createChart(container, chartOptions);
+        
+        // 重点：修复 addCandlestickSeries 报错，使用最新写法
+        const candleSeries = chart.addSeries(LightweightCharts.CandlestickSeries, {
+            upColor: '#00f3ff', downColor: '#ff00ff',
+            borderVisible: false, wickUpColor: '#00f3ff', wickDownColor: '#ff00ff'
+        });
+
+        // 生成初始数据
+        const initialData = [];
+        let time = Math.floor(Date.now() / 1000) - 100 * 60;
+        for(let i=0; i<100; i++) {
+            initialData.push({
+                time: time + i*60,
+                open: 98000 + Math.random()*100,
+                high: 98200 + Math.random()*100,
+                low: 97800 + Math.random()*100,
+                close: 98100 + Math.random()*100
+            });
+        }
+        candleSeries.setData(initialData);
+
+        // 自动缩放修复
+        const resizeObserver = new ResizeObserver(() => {
+            const parent = document.getElementById('chart-parent');
+            chart.applyOptions({ width: parent.clientWidth, height: parent.clientHeight });
+        });
+        resizeObserver.observe(document.getElementById('chart-parent'));
+
+        // 2. 模拟价格跳动
+        let lastPrice = 98241.50;
+        setInterval(() => {
+            lastPrice += (Math.random() - 0.5) * 20;
+            document.getElementById('priceDisplay').innerText = lastPrice.toFixed(2);
+            // 模拟 K 线实时更新
+            candleSeries.update({
+                time: Math.floor(Date.now() / 1000),
+                open: lastPrice, high: lastPrice + 5, low: lastPrice - 5, close: lastPrice
+            });
+        }, 1000);
+
+        // 3. 模拟内核日志
+        const kernelLogs = document.getElementById('kernelLogs');
+        const sysMsg = ["[OK] Signature_Verified", "[DATA] Syncing_Block_#19234", "[INFO] Peer_HK_Link_Established", "[WARN] Gas_Spike_Detected", "[OK] Contract_Audited"];
+        setInterval(() => {
+            const div = document.createElement('div');
+            div.innerText = `> ${sysMsg[Math.floor(Math.random()*sysMsg.length)]}`;
+            kernelLogs.prepend(div);
+            if(kernelLogs.children.length > 20) kernelLogs.removeChild(kernelLogs.lastChild);
+        }, 2000);
+
+        // 4. 执行动画
+        document.getElementById('execBtn').onclick = function() {
+            this.innerText = "WAITING_FOR_SIGNATURE...";
+            this.style.borderColor = "#ff00ff";
+            this.style.color = "#ff00ff";
+            setTimeout(() => {
+                alert("DECENTRALIZED_MSG: Transaction Success!\nHash: 0x992...f12");
+                this.innerText = "EXECUTE_SWAP";
+                this.style.borderColor = "#00f3ff";
+                this.style.color = "#00f3ff";
+            }, 2000);
+        };
+    </script>
+</body>
+</html>

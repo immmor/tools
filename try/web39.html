@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CyberDex v8 | Neural Interface</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <style>
+        :root { --n-cyan: #00f3ff; --n-pink: #ff00ff; --n-bg: #000000; }
+        body { background: var(--n-bg); color: #fff; font-family: 'Space Mono', monospace; height: 100vh; overflow: hidden; }
+
+        /* 全屏干扰滤镜 */
+        .neural-overlay {
+            position: fixed; inset: 0; pointer-events: none; z-index: 100;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+            background-size: 100% 3px, 3px 100%; opacity: 0.6;
+        }
+
+        .cyber-panel { background: rgba(5, 5, 5, 0.95); border: 1px solid rgba(0, 243, 255, 0.15); position: relative; }
+        
+        /* 深度图波浪动画 */
+        .depth-wave {
+            background: linear-gradient(0deg, var(--n-cyan) 0%, transparent 100%);
+            opacity: 0.2; animation: wave 2s ease-in-out infinite alternate;
+        }
+        @keyframes wave { from { height: 20%; } to { height: 60%; } }
+
+        /* 风险扫描条 */
+        .risk-bar { height: 4px; background: #111; position: relative; overflow: hidden; }
+        .risk-fill { height: 100%; background: var(--n-pink); width: 0%; transition: width 1s; }
+
+        #tv_chart { width: 100%; height: 100%; }
+        .glitch-btn:active { transform: translate(2px, -2px); filter: hue-rotate(90deg); }
+    </style>
+</head>
+<body class="flex flex-col p-2 gap-2">
+    <div class="neural-overlay"></div>
+
+    <header class="h-12 cyber-panel flex justify-between items-center px-4 border-cyan-500/30">
+        <div class="flex items-center gap-6">
+            <div class="text-xl font-black italic tracking-tighter text-white">NEURAL_LINK_<span class="text-cyan-400">v8</span></div>
+            <div class="flex gap-4 text-[9px] font-mono">
+                <span class="text-gray-600">LATENCY: <span class="text-green-500">12ms</span></span>
+                <span class="text-gray-600">PEERS: <span class="text-cyan-400">1,204</span></span>
+            </div>
+        </div>
+        <div class="flex gap-4 items-center">
+            <div class="h-1 w-24 bg-gray-900"><div class="h-full bg-cyan-500" style="width: 75%"></div></div>
+            <button class="bg-cyan-500 text-black px-4 py-1 text-[10px] font-bold skew-x-[-15deg]">SYNC_WALLET</button>
+        </div>
+    </header>
+
+    <main class="flex-1 grid grid-cols-12 gap-2 overflow-hidden">
+        
+        <div class="col-span-12 lg:col-span-3 flex flex-col gap-2">
+            <div class="cyber-panel p-4 flex-1">
+                <div class="text-[10px] text-cyan-500 font-bold mb-4 uppercase">Neural_Bridge_Status</div>
+                <div class="space-y-4">
+                    <div class="relative pt-1">
+                        <div class="flex mb-2 items-center justify-between text-[9px]">
+                            <span class="text-pink-500">ETH > ARBITRUM</span>
+                            <span class="text-pink-500">65%</span>
+                        </div>
+                        <div class="overflow-hidden h-1 flex bg-pink-900">
+                            <div style="width:65%" class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-pink-500"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="cyber-panel h-48 p-4 overflow-hidden">
+                <div class="text-[10px] text-gray-500 mb-2 font-bold uppercase">Liquidity_Depth_Map</div>
+                <div class="flex items-end gap-1 h-full pb-6">
+                    <div class="flex-1 depth-wave" style="animation-delay: 0.1s"></div>
+                    <div class="flex-1 depth-wave" style="animation-delay: 0.3s"></div>
+                    <div class="flex-1 depth-wave" style="animation-delay: 0.5s"></div>
+                    <div class="flex-1 depth-wave" style="animation-delay: 0.2s"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-span-12 lg:col-span-6 flex flex-col gap-2">
+            <div class="cyber-panel flex-[3] relative bg-black" id="chart_container">
+                <div class="absolute top-4 left-4 z-20">
+                    <div class="text-2xl font-black stat-value text-cyan-400" id="live_price">98,241.50</div>
+                    <div class="text-[10px] text-gray-600 font-mono">BTC/USDT_PERP</div>
+                </div>
+                <div id="tv_chart"></div>
+            </div>
+            
+            <div class="h-32 cyber-panel grid grid-cols-3 p-4 gap-4">
+                <div class="flex flex-col">
+                    <span class="text-[9px] text-gray-600 font-bold uppercase">Whale_Activity</span>
+                    <span class="text-xl text-white">LOW</span>
+                </div>
+                <div class="flex flex-col border-l border-white/5 pl-4">
+                    <span class="text-[9px] text-gray-600 font-bold uppercase">Vol_24h</span>
+                    <span class="text-xl text-cyan-400">$4.2B</span>
+                </div>
+                <div class="flex flex-col border-l border-white/5 pl-4">
+                    <span class="text-[9px] text-gray-600 font-bold uppercase">Net_Flow</span>
+                    <span class="text-xl text-pink-500">-$12M</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-span-12 lg:col-span-3 flex flex-col gap-2">
+            <div class="cyber-panel p-6 flex-1 flex flex-col">
+                <div class="mb-6">
+                    <div class="text-[10px] text-cyan-600 font-bold mb-2">SECURITY_SCAN_RESULT</div>
+                    <div class="space-y-2">
+                        <div class="text-[9px] flex justify-between"><span>Audit_Score</span><span>98/100</span></div>
+                        <div class="risk-bar"><div class="risk-fill" id="risk1"></div></div>
+                        <div class="text-[9px] flex justify-between"><span>Slippage_Risk</span><span>LOW</span></div>
+                        <div class="risk-bar"><div class="risk-fill" id="risk2"></div></div>
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+                    <div class="bg-white/5 p-4 border border-white/5">
+                        <input type="number" value="1.0" class="bg-transparent text-2xl font-bold w-full outline-none">
+                        <div class="text-[10px] text-cyan-400 mt-2 font-bold uppercase italic">Input: ETH</div>
+                    </div>
+                    <button id="exec_btn" class="w-full py-4 bg-transparent border border-cyan-500 text-cyan-500 font-black tracking-widest hover:bg-cyan-500 hover:text-black transition glitch-btn uppercase">
+                        Initialize_Trade
+                    </button>
+                </div>
+                
+                <div class="mt-auto pt-6 border-t border-white/5">
+                    <div class="text-[9px] text-gray-600 font-mono leading-tight">
+                        MEMPOOL_STATUS: OPTIMAL<br>
+                        NONCE: 482103<br>
+                        GAS_LIMIT: 21000
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // 1. 修复 TradingView 实时渲染
+        const container = document.getElementById('tv_chart');
+        const chart = LightweightCharts.createChart(container, {
+            layout: { background: { color: 'transparent' }, textColor: '#555' },
+            grid: { vertLines: { color: '#0a0a0a' }, horzLines: { color: '#0a0a0a' } },
+            timeScale: { borderColor: '#111', timeVisible: true },
+            crosshair: { mode: LightweightCharts.CrosshairMode.Normal }
+        });
+
+        const candleSeries = chart.addSeries(LightweightCharts.CandlestickSeries, {
+            upColor: '#00f3ff', downColor: '#ff00ff', borderVisible: false,
+            wickUpColor: '#00f3ff', wickDownColor: '#ff00ff'
+        });
+
+        // 初始历史数据
+        let lastClose = 98000;
+        let lastTime = Math.floor(Date.now() / 1000) - 100 * 60;
+        const initialData = [];
+        for(let i=0; i<100; i++) {
+            lastClose += (Math.random() - 0.5) * 50;
+            initialData.push({ time: lastTime + i*60, open: lastClose-10, high: lastClose+20, low: lastClose-20, close: lastClose });
+        }
+        candleSeries.setData(initialData);
+
+        // 核心修复：实时 Tick 逻辑
+        let currentPrice = lastClose;
+        setInterval(() => {
+            const now = Math.floor(Date.now() / 1000);
+            const secondInMinute = now % 60;
+            const candleTime = now - secondInMinute;
+            
+            currentPrice += (Math.random() - 0.5) * 10;
+            document.getElementById('live_price').innerText = currentPrice.toFixed(2);
+            
+            // 持续更新最后一根 K 线（不动的原因就是没调 update）
+            candleSeries.update({
+                time: candleTime,
+                open: currentPrice - 5,
+                high: currentPrice + 10,
+                low: currentPrice - 10,
+                close: currentPrice
+            });
+        }, 1000);
+
+        // 自适应调整
+        new ResizeObserver(() => {
+            chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
+        }).observe(document.getElementById('chart_container'));
+
+        // 2. 风险扫描条动画
+        setTimeout(() => {
+            document.getElementById('risk1').style.width = "98%";
+            document.getElementById('risk2').style.width = "15%";
+        }, 500);
+
+        // 3. 模拟雷达随机波动
+        setInterval(() => {
+            document.querySelectorAll('.depth-wave').forEach(w => {
+                w.style.height = Math.random() * 80 + 20 + "%";
+            });
+        }, 2000);
+
+        // 4. 执行交易确认
+        document.getElementById('exec_btn').onclick = function() {
+            this.innerText = "SIGNING...";
+            this.classList.add('animate-pulse');
+            setTimeout(() => {
+                alert("TRANSACTION BROADCASTED\nHASH: 0x neural_v8_confirmed\nBLOCK: 1923481");
+                this.innerText = "INITIALIZE_TRADE";
+                this.classList.remove('animate-pulse');
+            }, 1500);
+        };
+    </script>
+</body>
+</html>

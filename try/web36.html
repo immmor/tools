@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CyberDex | Neural Interface</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <style>
+        :root { --n-cyan: #00f3ff; --n-pink: #ff00ff; --n-bg: #010101; }
+        body {
+            background-color: var(--n-bg);
+            color: #e0e0e0;
+            font-family: 'Space Mono', monospace;
+            height: 100vh;
+            overflow: hidden;
+            background-image: radial-gradient(circle at 50% 50%, #0a0a0a 0%, #010101 100%);
+        }
+
+        /* 赛博风格面板 */
+        .cyber-panel {
+            background: rgba(10, 10, 10, 0.85);
+            border: 1px solid rgba(0, 243, 255, 0.1);
+            position: relative;
+            overflow: hidden;
+        }
+        .cyber-panel::before {
+            content: ""; position: absolute; top: 0; left: 0; width: 4px; height: 100%;
+            background: var(--n-cyan); opacity: 0.3;
+        }
+
+        /* 故障背景动画 */
+        .glitch-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: repeating-linear-gradient(0deg, rgba(0,0,0,0.1) 0px, rgba(0,0,0,0.1) 1px, transparent 1px, transparent 2px);
+            pointer-events: none; z-index: 5;
+        }
+
+        /* NFT 网格扫描 */
+        .nft-grid {
+            background-size: 20px 20px;
+            background-image: linear-gradient(to right, rgba(0, 243, 255, 0.05) 1px, transparent 1px),
+                              linear-gradient(to bottom, rgba(0, 243, 255, 0.05) 1px, transparent 1px);
+        }
+
+        .scan-line {
+            width: 100%; height: 2px; background: var(--n-cyan);
+            position: absolute; box-shadow: 0 0 15px var(--n-cyan);
+            animation: scan 3s linear infinite;
+        }
+        @keyframes scan { 0% { top: 0; } 100% { top: 100%; } }
+
+        .stat-value { font-family: 'Share Tech Mono', monospace; text-shadow: 0 0 8px rgba(0, 243, 255, 0.5); }
+    </style>
+</head>
+<body class="flex flex-col p-2 gap-2">
+    <div class="glitch-overlay"></div>
+
+    <header class="h-14 cyber-panel flex justify-between items-center px-6 border-cyan-500/20">
+        <div class="flex items-center gap-10">
+            <div class="text-xl font-black italic tracking-[0.2em] text-white">NEURAL_<span class="text-cyan-400">DEX</span></div>
+            <div class="hidden lg:flex gap-8 text-[10px] font-mono">
+                <div class="flex flex-col"><span class="text-cyan-900">CORE_TEMP</span><span class="text-green-500">32.4°C</span></div>
+                <div class="flex flex-col"><span class="text-cyan-900">TPS_LOAD</span><span class="text-cyan-400">4,129 pk/s</span></div>
+                <div class="flex flex-col"><span class="text-cyan-900">Uptime</span><span class="text-white">99.998%</span></div>
+            </div>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="text-right mr-4">
+                <div class="text-[9px] text-pink-500 font-bold">EMERGENCY_EXIT</div>
+                <div class="text-[10px] text-gray-500">Node: HK-02</div>
+            </div>
+            <button class="bg-white text-black px-6 py-1 text-xs font-black hover:bg-cyan-400 transition transform hover:-translate-y-1">0x71...4F2A</button>
+        </div>
+    </header>
+
+    <div class="flex-1 grid grid-cols-12 gap-2 overflow-hidden">
+        
+        <div class="col-span-12 lg:col-span-3 flex flex-col gap-2">
+            <div class="cyber-panel p-4 flex-1">
+                <h3 class="text-xs font-bold text-cyan-600 mb-4 border-b border-cyan-900 pb-2">CONTRACT_AUDITOR</h3>
+                <div class="space-y-4">
+                    <div class="bg-black/40 p-2 border border-white/5">
+                        <div class="text-[9px] text-gray-500 uppercase">Address</div>
+                        <div class="text-[10px] truncate text-cyan-400">0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c</div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div class="bg-cyan-500/5 p-2 text-center">
+                            <div class="text-[9px] text-gray-500">LIQUIDITY</div>
+                            <div class="text-sm font-bold">$14.2M</div>
+                        </div>
+                        <div class="bg-pink-500/5 p-2 text-center">
+                            <div class="text-[9px] text-gray-500">HOLDER_COUNT</div>
+                            <div class="text-sm font-bold">12,402</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 text-[10px]">
+                        <span class="text-green-500 italic">● AUDIT_PASSED</span>
+                        <span class="text-gray-700">|</span>
+                        <span class="text-cyan-500">LP_LOCKED</span>
+                    </div>
+                </div>
+            </div>
+            <div class="cyber-panel h-1/2 p-3 font-mono text-[9px] bg-black/80">
+                <div class="text-cyan-900 mb-2 font-bold uppercase">MemPool_Stream</div>
+                <div id="mempool" class="space-y-1 text-gray-600 leading-tight"></div>
+            </div>
+        </div>
+
+        <div class="col-span-12 lg:col-span-6 flex flex-col gap-2">
+            <div class="cyber-panel flex-[2] relative bg-black" id="tv-chart-container">
+                <div class="absolute top-4 left-4 z-20 flex gap-6">
+                    <div>
+                        <div class="text-xs text-gray-500 italic uppercase">Current_Price</div>
+                        <div class="text-2xl font-black stat-value text-cyan-400" id="livePrice">98,241.50</div>
+                    </div>
+                    <div class="border-l border-white/10 pl-6">
+                        <div class="text-xs text-gray-500 italic uppercase">24H_High</div>
+                        <div class="text-sm font-bold text-white">99,820.00</div>
+                    </div>
+                </div>
+                <div id="tv_chart" class="w-full h-full"></div>
+            </div>
+
+            <div class="flex-[1] grid grid-cols-3 gap-2">
+                <div class="cyber-panel nft-grid relative p-2 flex flex-col justify-center items-center group">
+                    <div class="scan-line"></div>
+                    <div class="w-16 h-16 border border-cyan-500/30 bg-cyan-500/5 mb-2 group-hover:rotate-12 transition"></div>
+                    <div class="text-[9px] text-cyan-400 font-bold">NFT_SCANNER</div>
+                </div>
+                <div class="cyber-panel col-span-2 p-4">
+                    <div class="text-[10px] text-gray-600 mb-2 uppercase font-bold">Assets_Allocation</div>
+                    <div class="flex items-end gap-1 h-20">
+                        <div class="flex-1 bg-cyan-500/20 border-t-2 border-cyan-400 h-[60%]"></div>
+                        <div class="flex-1 bg-cyan-500/40 border-t-2 border-cyan-400 h-[80%] shadow-[0_0_10px_rgba(0,243,255,0.3)]"></div>
+                        <div class="flex-1 bg-cyan-500/10 border-t-2 border-cyan-400 h-[40%]"></div>
+                        <div class="flex-1 bg-pink-500/20 border-t-2 border-pink-400 h-[90%] shadow-[0_0_10px_rgba(255,0,255,0.3)]"></div>
+                        <div class="flex-1 bg-cyan-500/30 border-t-2 border-cyan-400 h-[55%]"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-span-12 lg:col-span-3 flex flex-col gap-2">
+            <div class="cyber-panel p-6 flex flex-col h-full">
+                <div class="flex justify-between items-center mb-10">
+                    <div class="text-xs font-black border-l-4 border-cyan-500 pl-2">TERMINAL_v5</div>
+                    <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse shadow-[0_0_10px_#22c55e]"></div>
+                </div>
+
+                <div class="space-y-6">
+                    <div>
+                        <label class="text-[9px] text-gray-500 uppercase">You_Give</label>
+                        <div class="flex items-center gap-2 mt-1">
+                            <input type="text" value="1.0" class="bg-white/5 border border-white/10 p-4 text-2xl font-bold w-full outline-none focus:border-cyan-500/50">
+                            <div class="bg-black p-2 border border-cyan-900 text-xs text-cyan-400">ETH</div>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-center -my-3">
+                        <div class="w-8 h-8 bg-cyan-500 flex items-center justify-center text-black font-bold rotate-45 cursor-pointer hover:scale-110 transition">⇄</div>
+                    </div>
+
+                    <div>
+                        <label class="text-[9px] text-gray-500 uppercase">You_Receive</label>
+                        <div class="flex items-center gap-2 mt-1">
+                            <input type="text" readonly value="3412.55" class="bg-white/5 border border-white/10 p-4 text-2xl font-bold w-full text-pink-500">
+                            <div class="bg-black p-2 border border-pink-900 text-xs text-pink-400">USDT</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-auto pt-10">
+                    <button id="tradeBtn" class="w-full py-4 bg-transparent border-2 border-cyan-500 text-cyan-500 font-black tracking-[0.4em] uppercase hover:bg-cyan-500 hover:text-black transition-all hover:shadow-[0_0_30px_rgba(0,243,255,0.4)]">
+                        Initialize
+                    </button>
+                    <div class="mt-4 flex justify-between text-[9px] text-gray-600 font-mono">
+                        <span>Route: Uniswap_v3</span>
+                        <span>Slippage: 0.1%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="h-6 flex justify-between px-4 text-[9px] text-cyan-900 font-mono items-center">
+        <div>CORE_PROTOCOL_STABLE // NO_GOVERNMENT_CONTROL</div>
+        <div id="clock">00:00:00 UTC</div>
+    </footer>
+
+    <script>
+        // 1. 修复 TradingView 渲染
+        const container = document.getElementById('tv_chart');
+        const chart = LightweightCharts.createChart(container, {
+            layout: { background: { color: 'transparent' }, textColor: '#444' },
+            grid: { vertLines: { color: '#111' }, horzLines: { color: '#111' } },
+            timeScale: { borderColor: '#222' },
+        });
+        const candleSeries = chart.addCandlestickSeries({
+            upColor: '#00f3ff', downColor: '#ff00ff', borderVisible: false,
+            wickUpColor: '#00f3ff', wickDownColor: '#ff00ff'
+        });
+
+        // 模拟实时数据
+        let currentPrice = 98241.50;
+        const generateData = () => {
+            let data = [];
+            let time = Math.floor(Date.now() / 1000) - 1000 * 60;
+            for (let i = 0; i < 100; i++) {
+                data.push({ time: time + i * 60, open: 98000, high: 98500, low: 97800, close: 98200 });
+            }
+            return data;
+        };
+        candleSeries.setData(generateData());
+
+        // 实时调整大小逻辑（解决“空”的问题）
+        const resizeChart = () => {
+            chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
+        };
+        window.addEventListener('resize', resizeChart);
+        setTimeout(resizeChart, 100); // 延迟执行确保容器已加载
+
+        // 2. 模拟价格跳动
+        setInterval(() => {
+            currentPrice += (Math.random() - 0.5) * 10;
+            document.getElementById('livePrice').innerText = currentPrice.toFixed(2);
+        }, 1000);
+
+        // 3. 模拟 MemPool 数据流
+        const mempool = document.getElementById('mempool');
+        const txs = ["Incoming TX: 0x42...a1", "Liquidity Added: 40.2 ETH", "Swap: BTC -> USDT", "Contract Call: Mint()", "Gas Price Spike: 45 Gwei"];
+        setInterval(() => {
+            const div = document.createElement('div');
+            div.innerText = `> [${new Date().toLocaleTimeString()}] ${txs[Math.floor(Math.random()*txs.length)]}`;
+            mempool.prepend(div);
+            if(mempool.children.length > 20) mempool.removeChild(mempool.lastChild);
+        }, 1500);
+
+        // 4. 时钟
+        setInterval(() => {
+            document.getElementById('clock').innerText = new Date().toUTCString();
+        }, 1000);
+
+        // 交易逻辑弹窗模拟
+        document.getElementById('tradeBtn').onclick = function() {
+            this.innerText = "BROADCASTING...";
+            this.classList.add('animate-pulse');
+            setTimeout(() => {
+                alert("TRANSACTION SUCCESSFUL\nTX: 0x882a...912b\nStatus: Confirmed on Layer 2");
+                this.innerText = "INITIALIZE";
+                this.classList.remove('animate-pulse');
+            }, 2000);
+        }
+    </script>
+</body>
+</html>

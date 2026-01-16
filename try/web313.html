@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>CyberDex | Industrial v12</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root { --industrial-bg: #121212; --accent-orange: #ff5f00; --line-gray: #282828; }
+        body {
+            background-color: var(--industrial-bg);
+            color: #d1d1d1;
+            font-family: 'Inter', sans-serif;
+            height: 100vh; overflow: hidden;
+            background-image: radial-gradient(var(--line-gray) 1px, transparent 1px);
+            background-size: 32px 32px;
+        }
+
+        .industrial-panel {
+            background: #1a1a1a;
+            border: 1px solid var(--line-gray);
+            border-top: 4px solid #333;
+        }
+        
+        /* 物理刻度盘 */
+        .dial-gauge {
+            width: 120px; height: 120px; border-radius: 50%;
+            border: 8px solid #222; position: relative;
+            background: conic-gradient(from 180deg, var(--accent-orange) var(--val, 0%), #111 0%);
+        }
+
+        /* 工业推杆 */
+        .slider-track { height: 180px; width: 6px; background: #000; position: relative; border-radius: 3px; }
+        .slider-handle { 
+            position: absolute; width: 24px; height: 12px; background: var(--accent-orange); 
+            left: -9px; bottom: 50%; cursor: pointer; border-radius: 2px;
+        }
+
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .btn-industrial {
+            background: #e5e5e5; color: #000; font-weight: 900;
+            padding: 12px; transition: all 0.2s; border-radius: 0;
+        }
+        .btn-industrial:active { background: var(--accent-orange); transform: translateY(2px); }
+
+        #tv_chart { width: 100%; height: 100%; filter: grayscale(1) contrast(1.2); }
+        #tv_chart:hover { filter: none; }
+    </style>
+</head>
+<body class="p-6 flex flex-col gap-6">
+
+    <header class="flex justify-between items-end border-b-2 border-white pb-4">
+        <div>
+            <h1 class="text-4xl font-black tracking-tighter text-white">FOUNDRY_<span class="text-[#ff5f00]">CORE</span></h1>
+            <p class="text-[10px] mono text-gray-500 mt-1 uppercase">Operational Status: High Load // Asset Protection Enabled</p>
+        </div>
+        <div class="flex gap-12 text-right mono">
+            <div><p class="text-[9px] text-gray-600">GAS_PRESSURE</p><p class="text-xl font-bold">14.00 <span class="text-xs">GW</span></p></div>
+            <div><p class="text-[9px] text-gray-600">NET_UPTIME</p><p class="text-xl font-bold">99.98%</p></div>
+            <button class="border-2 border-white px-6 py-2 text-xs font-black hover:bg-white hover:text-black transition">AUTH_0x71...4F</button>
+        </div>
+    </header>
+
+    <main class="flex-1 grid grid-cols-12 gap-6">
+        
+        <div class="col-span-3 flex flex-col gap-6">
+            <div class="industrial-panel p-6 flex flex-col items-center gap-6">
+                <span class="text-[10px] font-bold self-start uppercase tracking-widest text-gray-500">Vol_Concentration</span>
+                <div class="dial-gauge" id="main_dial" style="--val: 74%">
+                    <div class="absolute inset-4 bg-[#1a1a1a] rounded-full flex items-center justify-center">
+                        <span class="text-2xl font-black text-white">74</span>
+                    </div>
+                </div>
+                <div class="grid grid-cols-3 w-full gap-2 h-24">
+                    <div class="flex flex-col items-center gap-2">
+                        <div class="slider-track"><div class="slider-handle" style="bottom: 80%"></div></div>
+                        <span class="text-[8px] mono text-gray-600">SPD</span>
+                    </div>
+                    <div class="flex flex-col items-center gap-2">
+                        <div class="slider-track"><div class="slider-handle" style="bottom: 40%"></div></div>
+                        <span class="text-[8px] mono text-gray-600">ACC</span>
+                    </div>
+                    <div class="flex flex-col items-center gap-2">
+                        <div class="slider-track"><div class="slider-handle" style="bottom: 60%"></div></div>
+                        <span class="text-[8px] mono text-gray-600">FRQ</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="industrial-panel flex-1 p-4 mono text-[10px] overflow-hidden bg-black">
+                <div class="text-[#ff5f00] mb-2 font-bold underline">RAW_TX_FEED</div>
+                <div id="tx_stream" class="space-y-1 opacity-60"></div>
+            </div>
+        </div>
+
+        <div class="col-span-6 flex flex-col gap-6">
+            <div class="industrial-panel flex-[2] bg-black p-1 relative">
+                <div class="absolute top-6 right-6 z-10 text-right">
+                    <p class="text-[10px] text-gray-600 mono">BTC_UNIT_VALUE</p>
+                    <h2 class="text-3xl font-black text-white" id="live_price">98,241.50</h2>
+                </div>
+                <div id="tv_chart"></div>
+            </div>
+
+            <div class="h-40 grid grid-cols-3 gap-6">
+                <div class="industrial-panel p-4 border-t-white">
+                    <p class="text-[9px] font-bold text-gray-500 mb-2 uppercase">Core_Temp</p>
+                    <p class="text-2xl font-black tracking-tighter">34.8°C</p>
+                </div>
+                <div class="industrial-panel p-4 border-t-white">
+                    <p class="text-[9px] font-bold text-gray-500 mb-2 uppercase">Sync_Rate</p>
+                    <p class="text-2xl font-black tracking-tighter">1.04<span class="text-xs">ms</span></p>
+                </div>
+                <div class="industrial-panel p-4 border-t-[#ff5f00]">
+                    <p class="text-[9px] font-bold text-[#ff5f00] mb-2 uppercase">Alert_Status</p>
+                    <p class="text-2xl font-black tracking-tighter animate-pulse">STABLE</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-span-3 flex flex-col gap-6">
+            <div class="industrial-panel p-8 flex-1 flex flex-col">
+                <h3 class="text-lg font-black italic mb-10 border-b-4 border-black pb-2">ORDER_MODULE</h3>
+                
+                <div class="space-y-8 flex-1">
+                    <div>
+                        <p class="text-[10px] font-bold text-gray-500 uppercase mb-2">Input_Payload (ETH)</p>
+                        <input type="text" value="1.0000" class="w-full bg-black border-2 border-[#333] p-4 text-2xl font-black mono text-white focus:border-[#ff5f00] outline-none">
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-bold text-gray-500 uppercase mb-2">Estimated_Output (USDT)</p>
+                        <div class="w-full bg-white p-4 text-2xl font-black mono text-black">3,412.55</div>
+                    </div>
+                </div>
+
+                <div class="pt-10">
+                    <button id="final_btn" class="w-full btn-industrial uppercase tracking-tighter text-xl">Confirm_Production</button>
+                    <p class="mt-4 text-[9px] mono text-gray-600 leading-tight">By confirming, you authorize the neural smart contract to execute liquidity migration on-chain.</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // 1. K 线图：工业风格配置 (单色化)
+        const container = document.getElementById('tv_chart');
+        const chart = LightweightCharts.createChart(container, {
+            layout: { background: { color: '#000' }, textColor: '#555' },
+            grid: { vertLines: { color: '#111' }, horzLines: { color: '#111' } },
+            timeScale: { borderColor: '#222' },
+        });
+
+        const candleSeries = chart.addSeries(LightweightCharts.CandlestickSeries, {
+            upColor: '#ffffff', downColor: '#ff5f00',
+            borderVisible: false, wickUpColor: '#ffffff', wickDownColor: '#ff5f00'
+        });
+
+        let price = 98200;
+        const data = [];
+        let t = Math.floor(Date.now() / 1000) - 100 * 60;
+        for(let i=0; i<100; i++) {
+            price += (Math.random()-0.5)*40;
+            data.push({ time: t + i*60, open: price-5, high: price+10, low: price-10, close: price });
+        }
+        candleSeries.setData(data);
+
+        // 实时 Tick (修复不动)
+        setInterval(() => {
+            const now = Math.floor(Date.now() / 1000);
+            price += (Math.random()-0.5)*15;
+            document.getElementById('live_price').innerText = price.toLocaleString('en-US', {minimumFractionDigits: 2});
+            candleSeries.update({
+                time: now - (now % 60),
+                open: price-5, high: price+8, low: price-8, close: price
+            });
+        }, 1000);
+
+        // 2. 原始日志流
+        const txBox = document.getElementById('tx_stream');
+        setInterval(() => {
+            const div = document.createElement('div');
+            div.innerText = `> BLOCK_${Math.floor(Math.random()*999)}: 0x${Math.random().toString(16).slice(2,10)}...CONFIRMED`;
+            txBox.prepend(div);
+            if(txBox.children.length > 20) txBox.removeChild(txBox.lastChild);
+        }, 1500);
+
+        // 3. 动态刻度盘
+        setInterval(() => {
+            const val = Math.floor(Math.random() * 40 + 40);
+            document.getElementById('main_dial').style.setProperty('--val', val + '%');
+        }, 3000);
+
+        document.getElementById('final_btn').onclick = () => alert("PRODUCTION_CYCLE_STARTED");
+        new ResizeObserver(() => chart.applyOptions({ width: container.clientWidth, height: container.clientHeight })).observe(container);
+    </script>
+</body>
+</html>

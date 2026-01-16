@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CyberDex | Full Control v7</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <style>
+        :root { --n-cyan: #00f3ff; --n-pink: #ff00ff; --n-bg: #000000; }
+        body { background: var(--n-bg); color: #fff; font-family: 'Space Mono', monospace; height: 100vh; overflow: hidden; }
+        
+        /* 1. 背景矩阵噪点 */
+        body::before {
+            content: ""; position: fixed; inset: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 2px, 3px 100%; pointer-events: none; z-index: 100;
+        }
+
+        .cyber-panel { background: rgba(10, 10, 10, 0.95); border: 1px solid rgba(0, 243, 255, 0.1); position: relative; }
+        .cyber-panel:hover { border-color: rgba(0, 243, 255, 0.4); box-shadow: 0 0 15px rgba(0, 243, 255, 0.1); }
+
+        /* 2. 贪婪指数环 */
+        .gauge-bar { clip-path: polygon(0 0, 100% 0, 80% 100%, 20% 100%); }
+
+        /* 3. 故障按钮效果 */
+        .btn-cyber {
+            position: relative; border: 1px solid var(--n-cyan); color: var(--n-cyan);
+            text-transform: uppercase; letter-spacing: 2px; transition: 0.3s;
+        }
+        .btn-cyber:hover { background: var(--n-cyan); color: #000; box-shadow: 0 0 20px var(--n-cyan); }
+
+        /* 4. 雷达扫描修复 */
+        .radar-pulse {
+            width: 80px; height: 80px; border-radius: 50%; border: 1px solid var(--n-cyan);
+            background: conic-gradient(from 0deg, transparent 0%, rgba(0, 243, 255, 0.3) 100%);
+            animation: spin 4s linear infinite;
+        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        /* 5. 闪烁动画 */
+        .blink { animation: blinker 1s linear infinite; }
+        @keyframes blinker { 50% { opacity: 0; } }
+
+        #tv_chart { width: 100%; height: 100%; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body class="flex flex-col p-2 gap-2">
+
+    <header class="h-14 cyber-panel flex justify-between items-center px-4 border-b border-cyan-500/30">
+        <div class="flex items-center gap-6">
+            <div class="text-xl font-black tracking-widest italic glitch-text">CYBER_DEX_v7.0</div>
+            <div class="hidden md:flex gap-4">
+                <select class="bg-black border border-cyan-900 text-[10px] text-cyan-400 px-2 outline-none">
+                    <option>ETHEREUM_MAINNET</option>
+                    <option>ARBITRUM_ONE</option>
+                    <option>SOLANA_V2</option>
+                </select>
+                <div class="text-[10px] self-center text-green-500 font-mono">TPS: 4,821 <span class="blink">●</span></div>
+            </div>
+        </div>
+        <div class="flex items-center gap-6">
+            <div class="flex flex-col text-right">
+                <span class="text-[9px] text-gray-500">GAS_TRACKER</span>
+                <span class="text-xs text-orange-400 font-bold">12 Gwei</span>
+            </div>
+            <button class="btn-cyber px-4 py-1 text-xs font-bold">0x71...4F2A</button>
+        </div>
+    </header>
+
+    <div class="flex-1 grid grid-cols-12 gap-2 overflow-hidden">
+        
+        <div class="col-span-12 lg:col-span-3 flex flex-col gap-2 overflow-y-auto no-scrollbar">
+            <div class="cyber-panel p-4 h-48 flex flex-col justify-between">
+                <span class="text-[10px] text-cyan-600 font-bold">FEAR_GREED_INDEX</span>
+                <div class="relative h-24 flex items-end justify-center">
+                    <div class="radar-pulse absolute top-0"></div>
+                    <span class="text-4xl font-black z-10">74</span>
+                </div>
+                <div class="text-center text-[10px] text-green-400">GREED_STATE: STABLE</div>
+            </div>
+
+            <div class="cyber-panel p-4 flex-1">
+                <span class="text-[10px] text-pink-500 font-bold">AI_NEURAL_STRATEGY</span>
+                <div class="mt-4 space-y-3">
+                    <div class="flex justify-between border-b border-white/5 pb-2">
+                        <span class="text-xs">ETH/USDT</span>
+                        <span class="bg-green-500/20 text-green-500 px-2 text-[9px] font-bold">STRONG_BUY</span>
+                    </div>
+                    <div class="flex justify-between border-b border-white/5 pb-2">
+                        <span class="text-xs">BTC/USDT</span>
+                        <span class="bg-gray-500/20 text-gray-500 px-2 text-[9px] font-bold">HOLD</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cyber-panel h-48 p-2 bg-black/90 font-mono">
+                <div id="console_output" class="text-[9px] text-cyan-800 h-32 overflow-y-auto mb-2 space-y-1"></div>
+                <div class="flex border-t border-cyan-900 pt-1">
+                    <span class="text-cyan-400 mr-2">></span>
+                    <input type="text" placeholder="CMD_INPUT..." class="bg-transparent outline-none text-[10px] w-full text-white uppercase">
+                </div>
+            </div>
+        </div>
+
+        <div class="col-span-12 lg:col-span-6 flex flex-col gap-2">
+            <div class="cyber-panel flex-[3] relative bg-black overflow-hidden" id="main_chart_box">
+                <div class="absolute top-2 left-2 z-20 flex gap-2">
+                    <span class="text-[9px] bg-cyan-500 text-black px-2 py-0.5 font-bold">LIVE_REEL</span>
+                    <span class="text-[9px] bg-black border border-cyan-500 px-2 py-0.5 text-cyan-400" id="current_price_tag">98241.50</span>
+                </div>
+                <div id="tv_chart"></div>
+            </div>
+
+            <div class="flex-1 grid grid-cols-2 gap-2">
+                <div class="cyber-panel p-4">
+                    <span class="text-[10px] text-gray-500">LP_LIQUIDITY_DEPTH</span>
+                    <div class="h-16 mt-2 flex items-end gap-1">
+                        <div class="flex-1 bg-cyan-900 h-[30%]"></div>
+                        <div class="flex-1 bg-cyan-700 h-[60%] shadow-[0_0_10px_var(--n-cyan)]"></div>
+                        <div class="flex-1 bg-cyan-400 h-[90%]"></div>
+                        <div class="flex-1 bg-pink-900 h-[40%]"></div>
+                    </div>
+                </div>
+                <div class="cyber-panel p-4 flex flex-col justify-center">
+                    <span class="text-[9px] text-cyan-900">SECURITY_SCORE</span>
+                    <span class="text-3xl font-black text-white">98.2<span class="text-xs text-green-500 ml-2">SAFE</span></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-span-12 lg:col-span-3 flex flex-col gap-2 overflow-y-auto no-scrollbar">
+            <div class="cyber-panel h-64 p-3 font-mono">
+                <span class="text-[9px] text-gray-600 block mb-2 underline">ORDER_STREAM_DATA</span>
+                <div id="order_stream" class="text-[9px] space-y-1"></div>
+            </div>
+
+            <div class="cyber-panel p-6 flex-1 border-t-2 border-t-pink-500">
+                <div class="space-y-4">
+                    <div class="bg-white/5 p-3 border border-white/5">
+                        <label class="text-[9px] text-gray-500">EXCHANGE_INPUT</label>
+                        <div class="flex justify-between items-center mt-2">
+                            <input type="number" value="1.0" class="bg-transparent text-xl font-bold w-1/2 outline-none">
+                            <span class="text-cyan-400 font-bold border-l border-cyan-900 pl-4">ETH</span>
+                        </div>
+                    </div>
+                    <div class="bg-white/5 p-3 border border-white/5">
+                        <label class="text-[9px] text-gray-500">EXCHANGE_OUTPUT</label>
+                        <div class="flex justify-between items-center mt-2">
+                            <input type="number" readonly value="3412.55" class="bg-transparent text-xl font-bold w-1/2 text-pink-500 outline-none">
+                            <span class="text-pink-500 font-bold border-l border-pink-900 pl-4">USDT</span>
+                        </div>
+                    </div>
+                    <div class="pt-6">
+                        <button id="final_exec" class="w-full py-4 btn-cyber font-black tracking-[0.4em]">INIT_TRANSACTION</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 1. K 线图修复初始化
+        const chartBox = document.getElementById('main_chart_box');
+        const chart = LightweightCharts.createChart(document.getElementById('tv_chart'), {
+            layout: { background: { color: 'transparent' }, textColor: '#444' },
+            grid: { vertLines: { color: '#0a0a0a' }, horzLines: { color: '#0a0a0a' } },
+            timeScale: { borderColor: '#111' },
+            crosshair: { mode: LightweightCharts.CrosshairMode.Normal }
+        });
+
+        // 核心修复：使用最新版 API 方法
+        const candleSeries = chart.addSeries(LightweightCharts.CandlestickSeries, {
+            upColor: '#00f3ff', downColor: '#ff00ff',
+            borderVisible: false, wickUpColor: '#00f3ff', wickDownColor: '#ff00ff'
+        });
+
+        // 模拟数据填充
+        const data = [];
+        let t = Math.floor(Date.now() / 1000) - 100 * 60;
+        for(let i=0; i<100; i++) {
+            data.push({ time: t + i*60, open: 98000, high: 98300, low: 97900, close: 98150 });
+        }
+        candleSeries.setData(data);
+
+        // 自适应宽度
+        new ResizeObserver(() => {
+            chart.applyOptions({ width: chartBox.clientWidth, height: chartBox.clientHeight });
+        }).observe(chartBox);
+
+        // 2. 价格与挂单流实时更新
+        setInterval(() => {
+            const price = (98000 + Math.random()*500).toFixed(2);
+            document.getElementById('current_price_tag').innerText = price;
+            
+            // 挂单流水模拟
+            const stream = document.getElementById('order_stream');
+            const div = document.createElement('div');
+            const isBuy = Math.random() > 0.5;
+            div.className = `flex justify-between ${isBuy ? 'text-green-500' : 'text-pink-500'}`;
+            div.innerHTML = `<span>${isBuy ? 'BUY' : 'SELL'}</span><span>${(Math.random()*2).toFixed(3)}</span><span>${price}</span>`;
+            stream.prepend(div);
+            if(stream.children.length > 12) stream.removeChild(stream.lastChild);
+        }, 800);
+
+        // 3. 控制台模拟
+        const consoleOut = document.getElementById('console_output');
+        const msgs = ["Handshake Node_02...", "Block_Height: 1923488", "Verifying_Hash...", "Mempool_Synced"];
+        setInterval(() => {
+            const d = document.createElement('div');
+            d.innerText = `> ${msgs[Math.floor(Math.random()*msgs.length)]}`;
+            consoleOut.prepend(d);
+            if(consoleOut.children.length > 10) consoleOut.removeChild(consoleOut.lastChild);
+        }, 2000);
+
+        // 4. 交易确认全屏模拟
+        document.getElementById('final_exec').onclick = () => {
+            const confirm = window.confirm("!! SECURITY ALERT !!\nAUTHORIZE ON-CHAIN TRANSACTION?");
+            if(confirm) {
+                alert("TRANSACTION BROADCASTED\nHASH: 0x9e...a21\nNODE STATUS: SUCCESS");
+            }
+        };
+    </script>
+</body>
+</html>

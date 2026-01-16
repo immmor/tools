@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CyberDex v9 | Neural Grid</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <style>
+        :root { --n-cyan: #00f3ff; --n-pink: #ff00ff; --n-bg: #000000; }
+        body { background: var(--n-bg); color: #fff; font-family: 'Space Mono', monospace; height: 100vh; overflow: hidden; }
+
+        /* 全屏 CRT 扫描线 */
+        body::after {
+            content: ""; position: fixed; inset: 0; pointer-events: none;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%), 
+                        repeating-linear-gradient(0deg, transparent 0px, rgba(0, 243, 255, 0.02) 1px, transparent 2px);
+            z-index: 100;
+        }
+
+        .cyber-panel { background: rgba(5, 5, 5, 0.95); border: 1px solid rgba(0, 243, 255, 0.15); position: relative; }
+        .cyber-panel::before { content: ""; position: absolute; top: -1px; left: 10px; width: 30px; height: 1px; background: var(--n-cyan); }
+
+        /* 能量压力表动画 */
+        .pressure-fill {
+            height: 100%; background: linear-gradient(90deg, #22c55e, #eab308, #ef4444);
+            width: 45%; transition: width 0.5s ease; box-shadow: 0 0 10px rgba(239, 68, 68, 0.3);
+        }
+
+        /* 气泡提示 */
+        .trade-bubble {
+            animation: float-up 2s ease-out forwards;
+            position: absolute; pointer-events: none; z-index: 30;
+        }
+        @keyframes float-up { 
+            0% { transform: translateY(0); opacity: 1; } 
+            100% { transform: translateY(-40px); opacity: 0; } 
+        }
+
+        #tv_chart { width: 100%; height: 100%; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body class="flex flex-col p-2 gap-2">
+
+    <header class="h-12 cyber-panel flex justify-between items-center px-4">
+        <div class="flex items-center gap-6">
+            <div class="text-xl font-black italic tracking-tighter text-white">SYSTEM_CORE_<span class="text-cyan-400">v9.2</span></div>
+            <div class="hidden lg:flex gap-4 text-[9px] text-cyan-900 uppercase">
+                <span>Sync_Mode: Neural_Optimized</span>
+                <span>Security: High_Grade</span>
+            </div>
+        </div>
+        <div class="flex gap-4 items-center">
+            <div id="ping_display" class="text-[9px] text-green-500 font-mono">NODE_HK: 24ms</div>
+            <button class="bg-cyan-500/20 border border-cyan-500 text-cyan-400 px-3 py-1 text-[10px] hover:bg-cyan-500 hover:text-black transition">0x71...4F2A</button>
+        </div>
+    </header>
+
+    <main class="flex-1 grid grid-cols-12 gap-2 overflow-hidden">
+        
+        <div class="col-span-12 lg:col-span-3 flex flex-col gap-2">
+            <div class="cyber-panel p-4 flex-1">
+                <div class="text-[10px] text-cyan-500 font-bold mb-4 uppercase">Wallet_Neural_HUD</div>
+                <div class="space-y-4">
+                    <div class="flex justify-between items-end">
+                        <span class="text-[9px] text-gray-500">ETH_BALANCE</span>
+                        <span class="text-lg font-bold">12.42 <span class="text-[10px] text-cyan-700">($42k)</span></span>
+                    </div>
+                    <div class="flex justify-between items-end">
+                        <span class="text-[9px] text-gray-500">USDT_STASH</span>
+                        <span class="text-lg font-bold">9,401.00</span>
+                    </div>
+                    <div class="pt-2 border-t border-white/5">
+                        <div class="text-[9px] text-pink-500 mb-1">ALLOCATION_HEALTH</div>
+                        <div class="h-1 w-full bg-gray-900"><div class="h-full bg-pink-500" style="width: 88%"></div></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cyber-panel h-48 p-3 overflow-hidden">
+                <div class="text-[10px] text-gray-500 mb-2 uppercase">Node_Geo_Sync</div>
+                <div class="space-y-1 font-mono text-[9px]" id="node_list">
+                    <div class="flex justify-between"><span>SINGAPORE-01</span><span class="text-green-500">12ms</span></div>
+                    <div class="flex justify-between text-gray-700"><span>NEW_YORK-04</span><span>142ms</span></div>
+                    <div class="flex justify-between text-gray-700"><span>LONDON-02</span><span>88ms</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-span-12 lg:col-span-6 flex flex-col gap-2">
+            <div class="cyber-panel flex-[3] relative bg-black" id="chart_container">
+                <div id="bubble_layer" class="absolute inset-0 z-20 overflow-hidden pointer-events-none"></div>
+                <div class="absolute top-4 left-4 z-30">
+                    <div class="text-[10px] text-cyan-700 uppercase">BTC_USDT_NEURAL</div>
+                    <div class="text-2xl font-black text-cyan-400" id="price_val">98,241.50</div>
+                </div>
+                <div id="tv_chart"></div>
+            </div>
+            
+            <div class="h-28 cyber-panel p-4 flex flex-col justify-center">
+                <div class="flex justify-between text-[10px] mb-2">
+                    <span class="text-gray-500 uppercase font-bold">Network_Gas_Pressure</span>
+                    <span id="gas_val" class="text-white font-bold">12 Gwei</span>
+                </div>
+                <div class="h-4 bg-gray-900 border border-white/5 relative overflow-hidden">
+                    <div class="pressure-fill" id="gas_bar"></div>
+                </div>
+                <div class="flex justify-between text-[8px] text-gray-700 mt-1 uppercase">
+                    <span>Safe_Low</span><span>Standard</span><span>Rapid_Congestion</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-span-12 lg:col-span-3 flex flex-col gap-2">
+            <div class="cyber-panel flex-1 p-4 font-mono text-[9px] flex flex-col">
+                <div class="text-pink-500 font-bold mb-2 uppercase">Contract_Stack_Trace</div>
+                <div id="stack_trace" class="flex-1 overflow-hidden space-y-1 text-gray-600"></div>
+            </div>
+
+            <div class="cyber-panel p-6">
+                <button id="swap_btn" class="w-full py-4 bg-white text-black font-black tracking-widest hover:bg-cyan-500 transition-all uppercase text-xs">
+                    Execute_Neural_Swap
+                </button>
+                <div class="mt-4 grid grid-cols-2 gap-2 text-[9px] text-gray-700 font-mono">
+                    <div class="border border-white/5 p-1">RELIABILITY: 99.9%</div>
+                    <div class="border border-white/5 p-1">SLIPPAGE: 0.1%</div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // 1. K线图修复与实时注入
+        const container = document.getElementById('tv_chart');
+        const chart = LightweightCharts.createChart(container, {
+            layout: { background: { color: 'transparent' }, textColor: '#444' },
+            grid: { vertLines: { color: '#0a0a0a' }, horzLines: { color: '#0a0a0a' } },
+            timeScale: { borderColor: '#111' },
+            crosshair: { mode: LightweightCharts.CrosshairMode.Normal }
+        });
+
+        const candleSeries = chart.addSeries(LightweightCharts.CandlestickSeries, {
+            upColor: '#00f3ff', downColor: '#ff00ff', borderVisible: false,
+            wickUpColor: '#00f3ff', wickDownColor: '#ff00ff'
+        });
+
+        let curPrice = 98200;
+        const data = [];
+        let t = Math.floor(Date.now() / 1000) - 100 * 60;
+        for(let i=0; i<100; i++) {
+            curPrice += (Math.random() - 0.5) * 40;
+            data.push({ time: t + i*60, open: curPrice-10, high: curPrice+15, low: curPrice-15, close: curPrice });
+        }
+        candleSeries.setData(data);
+
+        // 实时更新逻辑 (修复不动的问题)
+        setInterval(() => {
+            const now = Math.floor(Date.now() / 1000);
+            curPrice += (Math.random() - 0.5) * 15;
+            document.getElementById('price_val').innerText = curPrice.toFixed(2);
+            
+            candleSeries.update({
+                time: now - (now % 60),
+                open: curPrice - 5, high: curPrice + 8, low: curPrice - 8, close: curPrice
+            });
+
+            // 随机触发成交气泡 (新功能 1)
+            if(Math.random() > 0.8) spawnBubble();
+        }, 1000);
+
+        function spawnBubble() {
+            const layer = document.getElementById('bubble_layer');
+            const b = document.createElement('div');
+            const isBuy = Math.random() > 0.5;
+            b.className = `trade-bubble text-[9px] font-bold ${isBuy ? 'text-cyan-400' : 'text-pink-500'}`;
+            b.style.left = Math.random() * 80 + 10 + "%";
+            b.style.bottom = "20%";
+            b.innerText = `${isBuy ? '▲' : '▼'} ${(Math.random() * 5).toFixed(2)} BTC`;
+            layer.appendChild(b);
+            setTimeout(() => b.remove(), 2000);
+        }
+
+        // 2. Gas 压力表逻辑 (新功能 5)
+        setInterval(() => {
+            const gas = Math.floor(Math.random() * 80) + 10;
+            document.getElementById('gas_val').innerText = `${gas} Gwei`;
+            document.getElementById('gas_bar').style.width = gas + "%";
+        }, 3000);
+
+        // 3. Stack Trace 模拟 (新功能 3)
+        const stack = document.getElementById('stack_trace');
+        const hexCodes = ["PUSH1 0x80", "MSTORE", "CALLDATALOAD", "0x5b JUMPDEST", "SWAP1", "0xfe INVALID"];
+        setInterval(() => {
+            const d = document.createElement('div');
+            d.innerText = `[0x${Math.floor(Math.random()*0xffffff).toString(16)}] ${hexCodes[Math.floor(Math.random()*hexCodes.length)]}`;
+            stack.prepend(d);
+            if(stack.children.length > 20) stack.removeChild(stack.lastChild);
+        }, 1200);
+
+        // 4. Ping 模拟 (新功能 4)
+        setInterval(() => {
+            document.getElementById('ping_display').innerText = `NODE_HK: ${Math.floor(Math.random()*15+15)}ms`;
+        }, 4000);
+
+        // 5. 交互执行
+        document.getElementById('swap_btn').onclick = function() {
+            this.innerText = "INITIALIZING_VM...";
+            this.style.background = "#ff00ff";
+            setTimeout(() => {
+                alert("TRANSACTION SUCCESS\nROOT: 0x neural_v9_confirmed\nFEE: 0.0021 ETH");
+                this.innerText = "EXECUTE_NEURAL_SWAP";
+                this.style.background = "white";
+            }, 1500);
+        };
+
+        new ResizeObserver(() => {
+            chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
+        }).observe(document.getElementById('chart_container'));
+    </script>
+</body>
+</html>

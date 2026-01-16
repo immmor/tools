@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CyberDex Ultimate | Zero-Knowledge Terminal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <style>
+        :root { --n-cyan: #00f3ff; --n-pink: #ff00ff; --n-bg: #030303; }
+        body {
+            background-color: var(--n-bg);
+            color: #e0e0e0;
+            font-family: 'Space Mono', monospace;
+            height: 100vh;
+            overflow: hidden; /* 固定高度，内部滚动 */
+        }
+        
+        /* 噪点背景效果 */
+        body::before {
+            content: "";
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: url('https://grainy-gradients.vercel.app/noise.svg');
+            opacity: 0.05; pointer-events: none; z-index: 50;
+        }
+
+        .cyber-border {
+            border: 1px solid rgba(0, 243, 255, 0.15);
+            background: rgba(10, 10, 10, 0.8);
+            backdrop-filter: blur(5px);
+            position: relative;
+        }
+        
+        /* 装饰性角标 */
+        .corner::after {
+            content: ""; position: absolute; bottom: -1px; right: -1px;
+            width: 10px; height: 10px;
+            background: var(--n-cyan);
+            clip-path: polygon(100% 0, 100% 100%, 0 100%);
+        }
+
+        .terminal-text { font-family: 'Share Tech Mono', monospace; }
+        
+        /* 滚动条美化 */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #1a1a1a; border-radius: 2px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--n-cyan); }
+
+        @keyframes pulse-fast { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        .animate-pulse-fast { animation: pulse-fast 0.5s infinite; }
+    </style>
+</head>
+<body class="flex flex-col p-2">
+
+    <header class="flex justify-between items-center px-4 py-2 border-b border-cyan-500/30 mb-2">
+        <div class="flex items-center gap-6">
+            <div class="text-xl font-black tracking-widest text-white italic">
+                CYBER<span class="text-cyan-400">DEX</span> <span class="text-xs font-normal text-cyan-800 tracking-normal ml-2">v4.0.2-stable</span>
+            </div>
+            <div class="hidden lg:flex gap-4 text-[10px] text-gray-500">
+                <span>CPU: <span class="text-green-500 text-[9px]">42%</span></span>
+                <span>MEM: <span class="text-green-500 text-[9px]">1.2GB</span></span>
+                <span>LATENCY: <span class="text-cyan-400 text-[9px]">14ms</span></span>
+            </div>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="h-2 w-32 bg-gray-900 rounded-full overflow-hidden border border-white/5 hidden sm:block">
+                <div class="h-full bg-cyan-500 w-3/4 shadow-[0_0_10px_#00f3ff]"></div>
+            </div>
+            <button class="bg-cyan-500/10 border border-cyan-500/50 text-cyan-400 px-4 py-1 text-xs hover:bg-cyan-500 hover:text-black transition">
+                CONNECT_NODE
+            </button>
+        </div>
+    </header>
+
+    <div class="flex-1 grid grid-cols-12 gap-2 overflow-hidden">
+        
+        <div class="col-span-12 lg:col-span-2 flex flex-col gap-2">
+            <div class="cyber-border flex-1 p-3 overflow-y-auto">
+                <div class="text-[10px] text-cyan-600 mb-3 font-bold uppercase tracking-tighter">Market_Pairs</div>
+                <div class="space-y-2">
+                    <div class="p-2 bg-cyan-500/5 border-l-2 border-cyan-500 flex justify-between cursor-pointer">
+                        <span class="text-xs">BTC/USDT</span>
+                        <span class="text-xs text-green-400">↑</span>
+                    </div>
+                    <div class="p-2 hover:bg-white/5 border-l-2 border-transparent flex justify-between cursor-pointer transition">
+                        <span class="text-xs text-gray-400">ETH/USDT</span>
+                        <span class="text-xs text-red-400">↓</span>
+                    </div>
+                    <div class="p-2 hover:bg-white/5 border-l-2 border-transparent flex justify-between cursor-pointer transition">
+                        <span class="text-xs text-gray-400">SOL/USDT</span>
+                        <span class="text-xs text-green-400">↑</span>
+                    </div>
+                </div>
+            </div>
+            <div class="cyber-border h-48 p-3 bg-black/90 font-mono text-[9px]">
+                <div class="text-cyan-900 mb-1 font-bold">SYSTEM_LOG</div>
+                <div id="terminal" class="text-gray-500 space-y-1 overflow-hidden leading-tight">
+                    <div>> Init smart_contract...</div>
+                    <div>> Accessing liquidity_pool...</div>
+                    <div>> Peer-to-peer link established.</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-span-12 lg:col-span-7 flex flex-col gap-2">
+            <div class="cyber-border flex-1 relative overflow-hidden" id="chart-container">
+                <div class="absolute top-4 left-4 z-10 flex gap-4">
+                    <div class="text-xl font-bold">98,432.12 <span class="text-xs text-green-400 font-normal">+1.24%</span></div>
+                    <div class="text-[10px] text-gray-500 self-end mb-1">Vol: 1.2M BTC</div>
+                </div>
+                </div>
+
+            <div class="h-44 grid grid-cols-3 gap-2">
+                <div class="cyber-border p-3 flex flex-col justify-between group hover:border-pink-500 transition cursor-pointer">
+                    <div class="text-[10px] text-pink-500 font-bold">YIELD_FARMING</div>
+                    <div class="text-2xl font-black">24.5<span class="text-sm">%</span></div>
+                    <div class="text-[9px] text-gray-600">ETH-USDT APY</div>
+                </div>
+                <div class="cyber-border p-3 flex flex-col justify-between group hover:border-cyan-500 transition cursor-pointer">
+                    <div class="text-[10px] text-cyan-500 font-bold">STAKING_TVL</div>
+                    <div class="text-2xl font-black">$1.2B</div>
+                    <div class="text-[9px] text-gray-600">Protocol Global</div>
+                </div>
+                <div class="cyber-border p-3 flex flex-col justify-between group hover:border-white transition cursor-pointer">
+                    <div class="text-[10px] text-gray-500 font-bold">BURN_RATE</div>
+                    <div class="text-2xl font-black">1.2<span class="text-sm">/min</span></div>
+                    <div class="text-[9px] text-gray-600">CYBER Token</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-span-12 lg:col-span-3 flex flex-col gap-2">
+            <div class="cyber-border flex-1 p-6 corner">
+                <div class="flex gap-4 mb-6 border-b border-white/5">
+                    <button class="pb-2 border-b-2 border-cyan-400 text-xs font-bold uppercase">Buy</button>
+                    <button class="pb-2 text-xs font-bold uppercase text-gray-600 hover:text-gray-300 transition">Sell</button>
+                </div>
+                
+                <div class="space-y-4">
+                    <div>
+                        <div class="flex justify-between text-[10px] mb-1">
+                            <span class="text-gray-500 italic uppercase underline">Amount</span>
+                            <span class="text-cyan-800">MAX: 1.50</span>
+                        </div>
+                        <div class="relative">
+                            <input type="number" placeholder="0.00" class="w-full bg-white/5 border border-white/10 p-4 text-xl font-bold focus:border-cyan-500 outline-none transition">
+                            <span class="absolute right-4 top-5 text-gray-600">BTC</span>
+                        </div>
+                    </div>
+
+                    <div class="text-center text-cyan-900 py-1 text-xs">≈</div>
+
+                    <div>
+                        <div class="flex justify-between text-[10px] mb-1">
+                            <span class="text-gray-500 italic uppercase underline">Total Cost</span>
+                        </div>
+                        <div class="relative">
+                            <input type="number" placeholder="0.00" class="w-full bg-white/5 border border-white/10 p-4 text-xl font-bold focus:border-pink-500 outline-none transition">
+                            <span class="absolute right-4 top-5 text-gray-600">USDT</span>
+                        </div>
+                    </div>
+                    
+                    <div class="py-4 space-y-2">
+                        <div class="flex justify-between text-[10px]">
+                            <span class="text-gray-600">Slippage Tolerance</span>
+                            <span class="text-cyan-400">0.5%</span>
+                        </div>
+                        <div class="flex justify-between text-[10px]">
+                            <span class="text-gray-600">Gas Fee (Est.)</span>
+                            <span class="text-pink-600">$4.20</span>
+                        </div>
+                    </div>
+
+                    <button class="w-full bg-white text-black font-black py-4 hover:bg-cyan-400 hover:shadow-[0_0_20px_#00f3ff] transition-all group">
+                        CONFIRM_SWAP
+                        <span class="inline-block ml-2 group-hover:translate-x-1 transition">→</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="h-6 flex items-center justify-between text-[9px] px-2 font-mono text-cyan-900 border-t border-cyan-900/30 mt-2">
+        <div class="flex gap-4">
+            <span class="flex items-center gap-1"><span class="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse-fast"></span> CLOUD_SYNC: ACTIVE</span>
+            <span>ENCRYPTION: AES-256</span>
+        </div>
+        <div>AUTHORIZED ACCESS ONLY // DECENTRALIZED PROTOCOL 2026</div>
+    </footer>
+
+    <script>
+        // 初始化 K 线图
+        const chartContainer = document.getElementById('chart-container');
+        const chart = LightweightCharts.createChart(chartContainer, {
+            layout: { background: { color: 'transparent' }, textColor: '#444' },
+            grid: { vertLines: { color: 'rgba(255,255,255,0.03)' }, horzLines: { color: 'rgba(255,255,255,0.03)' } },
+            crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+            timeScale: { borderColor: 'rgba(255,255,255,0.1)' }
+        });
+        const lineSeries = chart.addLineSeries({ color: '#00f3ff', lineWidth: 2 });
+        
+        // 模拟生成数据
+        let data = [];
+        let now = new Date();
+        for(let i=0; i<100; i++) {
+            data.push({ time: (now.getTime()/1000) + (i * 86400), value: 95000 + Math.random() * 5000 });
+        }
+        lineSeries.setData(data);
+
+        // 模拟终端日志输出
+        const terminal = document.getElementById('terminal');
+        const logs = [
+            "Syncing with Ethereum Mainnet...",
+            "Checking wallet permissions...",
+            "Price impact: < 0.01%",
+            "Route: ETH > USDC > BTC",
+            "Waiting for transaction signature..."
+        ];
+        let logIndex = 0;
+        setInterval(() => {
+            const div = document.createElement('div');
+            div.innerText = "> " + logs[logIndex % logs.length];
+            terminal.appendChild(div);
+            if(terminal.children.length > 8) terminal.removeChild(terminal.firstChild);
+            logIndex++;
+        }, 3000);
+
+        // 响应式图表
+        window.addEventListener('resize', () => {
+            chart.applyOptions({ width: chartContainer.clientWidth, height: chartContainer.clientHeight });
+        });
+        chart.applyOptions({ width: chartContainer.clientWidth, height: chartContainer.clientHeight });
+    </script>
+</body>
+</html>

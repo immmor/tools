@@ -691,7 +691,7 @@
     let plugins = JSON.parse(localStorage.getItem('ind_console_plugins')) || [
         { 
             name: 'Matrix_Rain', 
-            code: 'const canvas = document.createElement(\'canvas\');const ctx = canvas.getContext(\'2d\');canvas.id = \'matrix-canvas\';canvas.style.cssText = \'position:fixed;top:0;left:0;width:100%;height:100%;z-index:22;opacity:0.4;pointer-events:none;\';document.body.appendChild(canvas);let w = canvas.width = window.innerWidth;let h = canvas.height = window.innerHeight;const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ$+-*/=<>!%";const fontSize = 14;const columns = Math.floor(w / fontSize);const drops = new Array(columns).fill(1);function draw() { ctx.fillStyle = \'rgba(18, 16, 11, 0.05)\'; ctx.fillRect(0, 0, w, h); ctx.fillStyle = \'#ffb000\'; ctx.font = fontSize + \'px "Courier New"\'; for (let i = 0; i < drops.length; i++) { const text = chars[Math.floor(Math.random() * chars.length)]; ctx.fillText(text, i * fontSize, drops[i] * fontSize); if (drops[i] * fontSize > h && Math.random() > 0.975) drops[i] = 0; drops[i]++; } }const interval = setInterval(draw, 33);const resizeHandler = () => { w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight; };window.addEventListener(\'resize\', resizeHandler);return () => { clearInterval(interval); window.removeEventListener(\'resize\', resizeHandler); if (canvas.parentNode) canvas.parentNode.removeChild(canvas); };', 
+            code: 'const canvas = document.createElement(\'canvas\');const ctx = canvas.getContext(\'2d\');canvas.id = \'matrix-canvas\';canvas.style.cssText = \'position:fixed;top:0;left:0;width:100%;height:100%;z-index:2222;opacity:0.4;pointer-events:none;\';document.body.appendChild(canvas);let w = canvas.width = window.innerWidth;let h = canvas.height = window.innerHeight;const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ$+-*/=<>!%";const fontSize = 14;const columns = Math.floor(w / fontSize);const drops = new Array(columns).fill(1);function draw() { ctx.fillStyle = \'rgba(18, 16, 11, 0.05)\'; ctx.fillRect(0, 0, w, h); ctx.fillStyle = \'#ffb000\'; ctx.font = fontSize + \'px "Courier New"\'; for (let i = 0; i < drops.length; i++) { const text = chars[Math.floor(Math.random() * chars.length)]; ctx.fillText(text, i * fontSize, drops[i] * fontSize); if (drops[i] * fontSize > h && Math.random() > 0.975) drops[i] = 0; drops[i]++; } }const interval = setInterval(draw, 33);const resizeHandler = () => { w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight; };window.addEventListener(\'resize\', resizeHandler);return () => { clearInterval(interval); window.removeEventListener(\'resize\', resizeHandler); if (canvas.parentNode) canvas.parentNode.removeChild(canvas); };', 
             active: false 
         }
     ];
@@ -2617,17 +2617,11 @@ function bindAiMessageButtons(container) {
                 smartSwitch('editor-p');
                 // 等待面板切换完成后再注入代码
                 setTimeout(() => {
-                    if (activeEditorTab && editorTabs[activeEditorTab]) {
-                        editorTabs[activeEditorTab].editor.value += "\n" + code;
-                        markFileModified(activeEditorTab);
-                    }
+                    injectCodeToEditor(code);
                 }, 100);
             } else {
                 // 非全屏模式下直接注入代码
-                if (activeEditorTab && editorTabs[activeEditorTab]) {
-                    editorTabs[activeEditorTab].editor.value += "\n" + code;
-                    markFileModified(activeEditorTab);
-                }
+                injectCodeToEditor(code);
             }
         } else if (btn.classList.contains('run-btn')) {
             // 执行bash命令
@@ -2657,6 +2651,45 @@ function executeBashCommands(code) {
         // 非全屏模式下直接执行命令
         executeCommands(code);
     }
+}
+
+// 将代码插入到编辑器的函数
+function injectCodeToEditor(code) {
+    if (!activeEditorTab || !editorTabs[activeEditorTab]) {
+        console.warn('No active editor tab found');
+        return;
+    }
+    
+    const editor = editorTabs[activeEditorTab].editor;
+    
+    // 检查编辑器类型并正确插入代码
+    if (editor.getValue) {
+        // Monaco编辑器
+        const selection = editor.getSelection();
+        const range = new monaco.Range(
+            selection.positionLineNumber,
+            selection.positionColumn,
+            selection.positionLineNumber,
+            selection.positionColumn
+        );
+        
+        // 在光标位置插入代码
+        editor.executeEdits("ai-inject", [{
+            range: range,
+            text: "\n" + code,
+            forceMoveMarkers: true
+        }]);
+    } else if (editor.setValue) {
+        // 其他编辑器类型，使用setValue
+        const currentValue = editor.getValue();
+        editor.setValue(currentValue + "\n" + code);
+    } else if (typeof editor === 'string') {
+        // 简单的textarea
+        editor.value += "\n" + code;
+    }
+    
+    markFileModified(activeEditorTab);
+    addLog(`[AI]: Code injected into ${activeEditorTab}`, 'var(--term-green)');
 }
 
 // 执行命令的实际逻辑

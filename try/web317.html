@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>CyberDex | Cyberdeck v16</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --neon-cyan: #00ffff; --neon-magenta: #ff00ff; --neon-yellow: #ffff00;
+            --bg-dark: #080a0c; --grid-line: rgba(0,255,255,0.08);
+        }
+        body {
+            background-color: var(--bg-dark); color: #e0e0e0;
+            font-family: 'Share Tech Mono', monospace; height: 100vh; overflow: hidden;
+            background-image: linear-gradient(var(--grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+            background-size: 20px 20px;
+            position: relative;
+        }
+        /* 扫描线效果 */
+        body::before {
+            content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 100;
+            background: repeating-linear-gradient(0deg, transparent 0px, rgba(0,255,255,0.03) 1px, transparent 2px);
+            opacity: 0.6;
+        }
+
+        /* 赛博面板 */
+        .cyber-panel {
+            background: linear-gradient(145deg, #101214, #0c0e10);
+            border: 1px solid var(--neon-cyan);
+            box-shadow: 0 0 15px rgba(0,255,255,0.2), inset 0 0 5px rgba(0,255,255,0.1);
+            position: relative;
+            transform: skewX(-5deg); /* 斜切效果 */
+        }
+        .cyber-panel > * { transform: skewX(5deg); /* 内容反向倾斜 */ }
+
+        /* 霓虹文字效果 */
+        .neon-text-cyan { color: var(--neon-cyan); text-shadow: 0 0 5px var(--neon-cyan), 0 0 10px rgba(0,255,255,0.5); }
+        .neon-text-magenta { color: var(--neon-magenta); text-shadow: 0 0 5px var(--neon-magenta), 0 0 10px rgba(255,0,255,0.5); }
+        .neon-text-yellow { color: var(--neon-yellow); text-shadow: 0 0 5px var(--neon-yellow), 0 0 10px rgba(255,255,0,0.5); }
+
+        /* 闪烁光标 */
+        .blinking-cursor::after {
+            content: '_'; animation: blink 1s step-end infinite;
+        }
+        @keyframes blink { from, to { visibility: hidden; } 50% { visibility: visible; } }
+
+        /* 能量条 */
+        .power-bar { height: 12px; background: linear-gradient(90deg, #1a1a1c, #0d0d0f); position: relative; overflow: hidden; }
+        .power-fill { height: 100%; background: linear-gradient(90deg, var(--neon-cyan), var(--neon-magenta)); transition: width 0.5s ease-out; }
+
+        /* 数据噪音 */
+        .data-noise {
+            position: absolute; inset: 0; pointer-events: none; z-index: 10;
+            background-image: url('data:image/svg+xml;base64,PHN2ZyB2aWR0aD0iMyIgaGVpZ2h0PSIzIiB2ZXJzaW9uPSIxLjEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGZpbHRlciBpZD0iZiI+PGZlVHVyYnVsZW5jZSB0eXBlPSJmcmFjdGFsTm9pc2UiIGJhc2VGcmVxdWVuY3k9Ii45IiBudW1Octc2NzcwMD48L2ZpbHRlcj48cmVjdCB3aWR0aD0iMyIgaGVpZ2h0PSIzIiBmaWxsPSJyZ2JhKDMwLDMwLDMwLDApIiAvPjxyZWN0IHdpZHRoPSIzIiBoZWlnaHQ9IjMiIGZpbHRlcj0idXJsKCNmKSIgb3BhY2l0eT0iLjE1IiAvPjwvc3ZnPg==');
+            opacity: 0.1;
+        }
+        
+        #tv_chart { width: 100%; height: 100%; filter: saturate(1.8) hue-rotate(180deg) brightness(1.2); }
+        .chart-container-wrapper { border: 2px solid var(--neon-magenta); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body class="p-4 flex flex-col gap-4">
+
+    <header class="h-16 cyber-panel flex justify-between items-center px-8 z-10">
+        <div class="flex items-center gap-10">
+            <h1 class="text-3xl font-black neon-text-cyan uppercase tracking-wider">CYBERDECK_v16<span class="blinking-cursor"></span></h1>
+            <div class="flex gap-6 text-[11px] text-gray-500 uppercase">
+                <span>PROTOCOL: NEURAL_MESH</span>
+                <span class="neon-text-yellow animate-pulse">STATUS: CRITICAL_SYNC</span>
+            </div>
+        </div>
+        <div class="flex gap-4 items-center">
+            <div class="text-right neon-text-magenta">
+                <p class="text-[9px] uppercase">LATENCY</p>
+                <p class="text-lg font-bold" id="ping_display">18ms</p>
+            </div>
+            <button class="bg-transparent border border-neon-cyan px-4 py-2 text-sm text-neon-cyan hover:bg-neon-cyan hover:text-black transition uppercase font-bold">INIT_LOGIN</button>
+        </div>
+    </header>
+
+    <main class="flex-1 grid grid-cols-12 gap-4">
+        
+        <div class="col-span-3 flex flex-col gap-4">
+            <div class="cyber-panel p-6 flex-1 h-64 overflow-hidden">
+                <h3 class="text-sm font-bold neon-text-magenta mb-4 uppercase">ASSET_MATRIX_OVERVIEW</h3>
+                <div class="space-y-4 text-sm">
+                    <div class="flex justify-between"><span>BTC_NEURAL</span><span class="neon-text-cyan">0.824 BTC</span></div>
+                    <div class="flex justify-between"><span>ETH_SYNAPSE</span><span class="neon-text-cyan">12.0 ETH</span></div>
+                    <div class="flex justify-between"><span>USDT_STABLE</span><span class="neon-text-cyan">9,421 USDT</span></div>
+                    <div class="power-bar mt-4"><div class="power-fill" id="asset_power" style="width: 70%;"></div></div>
+                    <span class="text-[9px] text-gray-600">DISTRIBUTION_STRENGTH</span>
+                </div>
+            </div>
+
+            <div class="cyber-panel p-6 h-64 overflow-hidden">
+                <h3 class="text-sm font-bold neon-text-yellow mb-4 uppercase">NETWORK_FLOW_ANALYTICS</h3>
+                <div class="space-y-2">
+                    <div class="flex justify-between text-xs"><span>TX/SEC</span><span class="neon-text-cyan">124.5</span></div>
+                    <div class="flex justify-between text-xs"><span>GAS_AVG</span><span class="neon-text-magenta">22 Gwei</span></div>
+                    <div class="power-bar"><div class="power-fill" id="flow_power" style="width: 85%;"></div></div>
+                    <span class="text-[9px] text-gray-600">CAPACITY_UTILIZATION</span>
+                </div>
+                <div class="mt-4 border-t border-gray-800 pt-4">
+                    <p class="neon-text-cyan text-xs">RISK_ADJUSTED_VOLATILITY</p>
+                    <div class="flex justify-between text-xl font-black neon-text-yellow"><span>HIGH</span><span>! ! !</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-span-6 flex flex-col gap-4">
+            <div class="cyber-panel flex-[3] relative chart-container-wrapper overflow-hidden">
+                <div class="data-noise"></div>
+                <div class="absolute top-6 left-8 z-20">
+                    <h2 class="text-4xl font-black neon-text-cyan" id="live_price">98,241.50</h2>
+                    <p class="text-[11px] text-gray-500 uppercase mt-1">BTC/USDT_SYNTHETIC</p>
+                </div>
+                <div id="tv_chart"></div>
+            </div>
+
+            <div class="h-24 grid grid-cols-3 gap-4">
+                <div class="cyber-panel p-4 flex flex-col justify-center items-center">
+                    <span class="text-[9px] text-gray-500 uppercase">BUY_ORDERS</span>
+                    <span class="text-xl font-bold neon-text-cyan">4.2M</span>
+                </div>
+                <div class="cyber-panel p-4 flex flex-col justify-center items-center">
+                    <span class="text-[9px] text-gray-500 uppercase">SELL_ORDERS</span>
+                    <span class="text-xl font-bold neon-text-magenta">1.8M</span>
+                </div>
+                <button class="cyber-panel bg-transparent border border-neon-yellow text-neon-yellow px-4 py-2 hover:bg-neon-yellow hover:text-black transition uppercase text-sm font-bold">DECRYPT_STREAM</button>
+            </div>
+        </div>
+
+        <div class="col-span-3 flex flex-col gap-4">
+            <div class="cyber-panel p-6 flex flex-col overflow-hidden" style="height: 300px;">
+                <h3 class="text-sm font-bold neon-text-cyan mb-4 uppercase">NEURAL_LOG_MATRIX</h3>
+                <div id="log_output" class="flex-1 overflow-y-auto no-scrollbar text-xs leading-relaxed space-y-1 opacity-70"></div>
+            </div>
+
+            <div class="cyber-panel p-8 flex flex-col">
+                <h3 class="text-xl font-black neon-text-magenta mb-8 uppercase tracking-wider">EXECUTE_PROTOCOL</h3>
+                
+                <div class="space-y-6 flex-1">
+                    <div>
+                        <p class="text-[10px] text-gray-500 uppercase mb-2">AMOUNT_INPUT (ETH)</p>
+                        <input type="text" value="1.000" class="w-full bg-transparent border-b border-gray-700 py-2 text-2xl font-bold neon-text-yellow outline-none focus:border-neon-cyan">
+                    </div>
+                    <div>
+                        <p class="text-[10px] text-gray-500 uppercase mb-2">OUTPUT_EXPECTED (USDT)</p>
+                        <p class="text-2xl font-bold neon-text-cyan">3,412.55</p>
+                    </div>
+                </div>
+
+                <div class="pt-8">
+                    <button class="w-full py-4 bg-transparent border-2 border-neon-magenta text-neon-magenta font-black tracking-widest hover:bg-neon-magenta hover:text-black transition uppercase text-sm">
+                        INIT_TRANSMISSION
+                    </button>
+                    <p class="mt-4 text-[9px] text-gray-600 leading-tight text-center">
+                        WARNING: Unauthorized access will trigger system lockdown protocols.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // 1. K 线图：高对比霓虹配置
+        const container = document.getElementById('tv_chart');
+        const chart = LightweightCharts.createChart(container, {
+            layout: { background: { color: 'transparent' }, textColor: 'rgba(255,255,255,0.4)' },
+            grid: { vertLines: { color: 'rgba(0,255,255,0.05)' }, horzLines: { color: 'rgba(255,0,255,0.05)' } },
+            timeScale: { borderColor: 'rgba(0,255,255,0.1)' },
+        });
+
+        const candleSeries = chart.addSeries(LightweightCharts.CandlestickSeries, {
+            upColor: '#00ffff', downColor: '#ff00ff',
+            borderUpColor: '#00ffff', borderDownColor: '#ff00ff',
+            wickUpColor: '#00ffff', wickDownColor: '#ff00ff',
+        });
+
+        let price = 98200;
+        const data = [];
+        let t = Math.floor(Date.now() / 1000) - 100 * 60;
+        for(let i=0; i<100; i++) {
+            price += (Math.random()-0.5)*40;
+            data.push({ time: t + i*60, open: price-5, high: price+10, low: price-10, close: price });
+        }
+        candleSeries.setData(data);
+
+        // 实时更新 (保证 TradingView 活跃)
+        setInterval(() => {
+            const now = Math.floor(Date.now() / 1000);
+            price += (Math.random()-0.5)*15;
+            document.getElementById('live_price').innerText = price.toLocaleString('en-US', {minimumFractionDigits: 2});
+            candleSeries.update({
+                time: now - (now % 60),
+                open: price-5, high: price+8, low: price-8, close: price
+            });
+        }, 1000);
+
+        // 日志流 (更多内容，更快刷新)
+        const logOutput = document.getElementById('log_output');
+        const logEntries = [
+            "[INIT] System Online. Protocols Loaded.",
+            "[INFO] Neural Link Established. Latency: 18ms",
+            "[ALERT] Data Stream Anomaly Detected. Tracing...",
+            "[WARN] High Volatility Zone Approaching. Brace.",
+            "[TXN] Broadcast: 0x9f1a...4d3a confirmed.",
+            "[CRIT] Firewall Integrity Check: OK.",
+            "[DEBUG] Optimizing Core Routes. CPU Load: 78%.",
+            "[SYNC] Wallet Signature Verified."
+        ];
+        setInterval(() => {
+            const entry = document.createElement('div');
+            entry.innerText = `>${logEntries[Math.floor(Math.random()*logEntries.length)]}`;
+            logOutput.prepend(entry);
+            if(logOutput.children.length > 20) { // 保持更多日志
+                logOutput.removeChild(logOutput.lastChild);
+            }
+        }, 800); // 更快的日志刷新
+
+        // 动态 Ping 值
+        setInterval(() => {
+            document.getElementById('ping_display').innerText = `${Math.floor(Math.random()*10+15)}ms`;
+        }, 2000);
+
+        // 模拟能量条波动
+        setInterval(() => {
+            document.getElementById('asset_power').style.width = `${Math.floor(Math.random()*40+60)}%`;
+            document.getElementById('flow_power').style.width = `${Math.floor(Math.random()*30+70)}%`;
+        }, 1500);
+
+
+        new ResizeObserver(() => chart.applyOptions({ width: container.clientWidth, height: container.clientHeight })).observe(container);
+    </script>
+</body>
+</html>

@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>CyberDex | Atomic v14</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <style>
+        :root { --amber: #ffb000; --amber-low: rgba(255, 176, 0, 0.2); --bg-metal: #1a1a17; }
+        body {
+            background-color: var(--bg-metal); color: var(--amber);
+            font-family: 'VT323', monospace; height: 100vh; overflow: hidden;
+            background-image: linear-gradient(rgba(255,176,0,0.03) 1px, transparent 1px), radial-gradient(#2c2c24 15%, #1a1a17 100%);
+            background-size: 100% 3px, 100% 100%;
+        }
+
+        /* CRT 屏幕畸变与扫描线 */
+        .crt-screen {
+            background: #0d0d0b; border: 15px solid #2a2a24; border-radius: 40px;
+            box-shadow: inset 0 0 40px #000, 0 5px 15px rgba(0,0,0,0.5);
+            position: relative; overflow: hidden;
+        }
+        .crt-screen::before {
+            content: " "; position: absolute; inset: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%), repeating-linear-gradient(0deg, transparent 0px, rgba(255, 176, 0, 0.02) 1px, transparent 2px);
+            z-index: 10; pointer-events: none;
+        }
+
+        /* 琥珀色辉光 */
+        .glow-text { text-shadow: 0 0 8px var(--amber); }
+        .amber-border { border: 1px solid var(--amber); box-shadow: 0 0 10px var(--amber-low); }
+
+        /* 机械摇杆/旋钮模拟 */
+        .knob { width: 40px; height: 40px; border: 3px solid #3d3d34; border-radius: 50%; background: #222; position: relative; }
+        .knob::after { content: ""; position: absolute; top: 4px; left: 50%; width: 3px; height: 10px; background: var(--amber); transform: translateX(-50%); }
+
+        /* 按钮模拟 */
+        .push-btn {
+            background: #2a2a24; border: 2px solid #3d3d34; padding: 10px;
+            color: var(--amber); text-transform: uppercase; letter-spacing: 2px;
+            box-shadow: 0 4px #000; transition: all 0.1s;
+        }
+        .push-btn:active { box-shadow: 0 1px #000; transform: translateY(3px); }
+
+        #tv_chart { width: 100%; height: 100%; filter: sepia(100%) saturate(300%) hue-rotate(5deg); }
+    </style>
+</head>
+<body class="p-4 flex flex-col gap-4">
+
+    <header class="h-16 flex justify-between items-center px-8 border-b-4 border-[#3d3d34]">
+        <div class="flex items-center gap-12">
+            <div class="text-3xl font-bold tracking-widest glow-text uppercase">Vault-Tec_Neural_Link</div>
+            <div class="flex gap-6 text-sm opacity-70">
+                <span>CPU: VACUUM_TUBE_v4</span>
+                <span class="animate-pulse">SIGNAL: STABLE</span>
+            </div>
+        </div>
+        <div class="flex gap-4 items-center">
+            <div class="flex flex-col items-end">
+                <span class="text-xs uppercase">Caps_Balance</span>
+                <span class="text-xl glow-text">98,421.00</span>
+            </div>
+            <div class="w-4 h-4 rounded-full bg-red-900 border-2 border-red-500 shadow-[0_0_10px_red]"></div>
+        </div>
+    </header>
+
+    <div class="flex-1 grid grid-cols-12 gap-4">
+        <div class="col-span-3 flex flex-col gap-4">
+            <div class="crt-screen flex-1 p-6 flex flex-col">
+                <h3 class="text-lg glow-text mb-4 uppercase underline">Market_Radiation</h3>
+                <div class="flex-1 flex flex-col justify-center items-center gap-8">
+                    <div class="text-6xl font-black glow-text animate-pulse">0.84</div>
+                    <div class="grid grid-cols-2 gap-8">
+                        <div class="flex flex-col items-center gap-2">
+                            <div class="knob rotate-[45deg]"></div>
+                            <span class="text-xs">GAIN</span>
+                        </div>
+                        <div class="flex flex-col items-center gap-2">
+                            <div class="knob rotate-[200deg]"></div>
+                            <span class="text-xs">FREQ</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="amber-border p-4 h-32 bg-[#0d0d0b]">
+                <h3 class="text-xs glow-text mb-2 uppercase">Core_Memory_Dump</h3>
+                <div id="log_stream" class="text-[10px] opacity-60 leading-tight"></div>
+            </div>
+        </div>
+
+        <div class="col-span-6 flex flex-col gap-4">
+            <div class="crt-screen flex-[3] relative">
+                <div class="absolute top-6 left-10 z-20">
+                    <div class="text-xs glow-text uppercase">Btc_Oscilloscope_Feed</div>
+                    <div class="text-4xl font-bold" id="price">98,241.50</div>
+                </div>
+                <div id="tv_chart"></div>
+            </div>
+
+            <div class="h-24 grid grid-cols-3 gap-4">
+                <div class="amber-border p-3 flex flex-col justify-center items-center bg-[#0d0d0b]">
+                    <span class="text-[10px]">RADS/SEC</span>
+                    <span class="text-2xl glow-text">12.5</span>
+                </div>
+                <div class="amber-border p-3 flex flex-col justify-center items-center bg-[#0d0d0b]">
+                    <span class="text-[10px]">U-235_LVL</span>
+                    <span class="text-2xl glow-text">HIGH</span>
+                </div>
+                <button class="push-btn">Emergency_Stop</button>
+            </div>
+        </div>
+
+        <div class="col-span-3 flex flex-col gap-4">
+            <div class="crt-screen p-8 flex-1 flex flex-col">
+                <h3 class="text-xl glow-text mb-8 uppercase tracking-widest">Transaction_Batch</h3>
+                
+                <div class="space-y-8 flex-1">
+                    <div class="border-b-2 border-amber-500 pb-2">
+                        <label class="text-xs uppercase opacity-50">Transfer_Quantity</label>
+                        <div class="text-3xl">1.000 <span class="text-sm">ETH</span></div>
+                    </div>
+                    <div class="border-b-2 border-amber-500 pb-2">
+                        <label class="text-xs uppercase opacity-50">Exchange_Yield</label>
+                        <div class="text-3xl text-white">3,412.5 <span class="text-sm text-amber-500">USD</span></div>
+                    </div>
+                </div>
+
+                <div class="pt-8">
+                    <button class="w-full py-4 push-btn text-xl font-bold glow-text" onclick="alert('AUTH_SUCCESS: DISPATCHING CAPS')">
+                        Authorize_Trade
+                    </button>
+                    <p class="mt-4 text-[10px] opacity-40 italic leading-tight">
+                        Warning: Nuclear thermal energy is used to power this swap. System instability may occur.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 1. K 线图：琥珀色单色配置
+        const container = document.getElementById('tv_chart');
+        const chart = LightweightCharts.createChart(container, {
+            layout: { background: { color: 'transparent' }, textColor: '#ffb000' },
+            grid: { vertLines: { color: '#2a2a24' }, horzLines: { color: '#2a2a24' } },
+            timeScale: { borderColor: '#3d3d34' },
+        });
+
+        const candleSeries = chart.addSeries(LightweightCharts.CandlestickSeries, {
+            upColor: '#ffb000', downColor: 'transparent',
+            borderUpColor: '#ffb000', borderDownColor: '#ffb000',
+            wickUpColor: '#ffb000', wickDownColor: '#ffb000',
+            borderVisible: true,
+        });
+
+        let price = 98200;
+        const data = [];
+        let t = Math.floor(Date.now() / 1000) - 100 * 60;
+        for(let i=0; i<100; i++) {
+            price += (Math.random()-0.5)*40;
+            data.push({ time: t + i*60, open: price-5, high: price+10, low: price-10, close: price });
+        }
+        candleSeries.setData(data);
+
+        // 实时更新
+        setInterval(() => {
+            const now = Math.floor(Date.now() / 1000);
+            price += (Math.random()-0.5)*15;
+            document.getElementById('price').innerText = price.toFixed(2);
+            candleSeries.update({
+                time: now - (now % 60),
+                open: price-5, high: price+8, low: price-8, close: price
+            });
+        }, 1000);
+
+        // 日志流
+        const logBox = document.getElementById('log_stream');
+        const msgs = ["Handshaking Node...", "Querying Ledger...", "Syncing Tubes...", "Rad-Shield Active"];
+        setInterval(() => {
+            const d = document.createElement('div');
+            d.innerText = `> ${msgs[Math.floor(Math.random()*msgs.length)]}`;
+            logBox.prepend(d);
+            if(logBox.children.length > 8) logBox.removeChild(logBox.lastChild);
+        }, 2000);
+
+        new ResizeObserver(() => chart.applyOptions({ width: container.clientWidth, height: container.clientHeight })).observe(container);
+    </script>
+</body>
+</html>
