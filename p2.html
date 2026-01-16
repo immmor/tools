@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>immmor Photoshop Pro | 极客图像实验室</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body {
+            background: #0a0a0c;
+            color: #e2e8f0;
+            font-family: 'Inter', system-ui, sans-serif;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .ps-layout {
+            display: grid;
+            grid-template-columns: 60px 300px 1fr 300px;
+            grid-template-rows: 50px 1fr;
+            height: 100vh;
+        }
+        .glass-panel {
+            background: rgba(20, 20, 25, 0.8);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .tool-btn {
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            transition: all 0.2s;
+            color: #94a3b8;
+        }
+        .tool-btn:hover, .tool-btn.active {
+            background: #3b82f6;
+            color: white;
+        }
+        .canvas-area {
+            background-image: 
+                linear-gradient(45deg, #151518 25%, transparent 25%), 
+                linear-gradient(-45deg, #151518 25%, transparent 25%), 
+                linear-gradient(45deg, transparent 75%, #151518 75%), 
+                linear-gradient(-45deg, transparent 75%, #151518 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+            background-color: #050505;
+        }
+        /* 隐藏 Fabric 默认边框，使用 PS 风格蓝框 */
+        .canvas-container { margin: auto !important; }
+        input[type=range] { appearance: none; background: #2d2d35; height: 4px; border-radius: 2px; }
+        input[type=range]::-webkit-slider-thumb { appearance: none; height: 12px; width: 12px; border-radius: 50%; background: #3b82f6; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div class="ps-layout">
+    <header class="col-span-4 glass-panel flex items-center px-4 justify-between border-b">
+        <div class="flex items-center space-x-6">
+            <span class="font-black italic text-blue-500 tracking-tighter text-xl">im.PS</span>
+            <div class="flex space-x-4 text-xs text-gray-400">
+                <button onclick="document.getElementById('fileInput').click()" class="hover:text-white">文件 (F)</button>
+                <button onclick="downloadImage()" class="hover:text-white">导出 (E)</button>
+                <button class="hover:text-white text-blue-400">帮助 (H)</button>
+            </div>
+        </div>
+        <div id="status-text" class="text-[10px] font-mono text-gray-500 uppercase">Canvas: Ready</div>
+    </header>
+
+    <aside class="glass-panel flex flex-col items-center py-4 space-y-4 border-r">
+        <button class="tool-btn active" title="移动工具"><i data-lucide="mouse-pointer-2"></i></button>
+        <button class="tool-btn" onclick="addRect()" title="形状工具"><i data-lucide="square"></i></button>
+        <button class="tool-btn" onclick="addText()" title="文字工具"><i data-lucide="type"></i></button>
+        <button class="tool-btn" onclick="toggleDrawing()" id="brush-btn" title="画笔"><i data-lucide="paintbrush"></i></button>
+        <div class="w-8 h-[1px] bg-gray-800"></div>
+        <button class="tool-btn text-red-500" onclick="deleteSelected()" title="删除选区"><i data-lucide="trash-2"></i></button>
+    </aside>
+
+    <aside class="glass-panel p-4 border-r space-y-6">
+        <div>
+            <h3 class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-4">图层样式 Style</h3>
+            <div class="space-y-4">
+                <div>
+                    <div class="flex justify-between text-xs mb-2">不透明度 <span id="op-val">100%</span></div>
+                    <input type="range" id="opacity" min="0" max="1" step="0.01" value="1" class="w-full" oninput="updateStyle()">
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-xs">填充颜色</span>
+                    <input type="color" id="fill-color" value="#3b82f6" class="bg-transparent border-none w-8 h-8" oninput="updateStyle()">
+                </div>
+            </div>
+        </div>
+
+        <div>
+            <h3 class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-4">专业滤镜 Filters</h3>
+            <div class="space-y-4">
+                <div>
+                    <div class="flex justify-between text-xs mb-2">亮度 Brightness</div>
+                    <input type="range" id="filter-bright" min="-1" max="1" step="0.05" value="0" class="w-full" oninput="applyFilters()">
+                </div>
+                <div>
+                    <div class="flex justify-between text-xs mb-2">噪点 Noise</div>
+                    <input type="range" id="filter-noise" min="0" max="100" step="1" value="0" class="w-full" oninput="applyFilters()">
+                </div>
+                <button onclick="pixelate()" class="w-full py-2 glass-panel rounded text-xs hover:bg-blue-600 transition">马赛克化</button>
+            </div>
+        </div>
+    </aside>
+
+    <main class="canvas-area flex items-center justify-center relative overflow-auto p-10">
+        <canvas id="ps-canvas"></canvas>
+        <input type="file" id="fileInput" class="hidden" accept="image/*">
+    </main>
+
+    <aside class="glass-panel border-l p-4">
+        <h3 class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-4">图层管理 Layers</h3>
+        <div id="layer-list" class="space-y-2 overflow-y-auto max-h-[400px]">
+            </div>
+    </aside>
+</div>
+
+<script>
+    // 1. 初始化画布
+    const canvas = new fabric.Canvas('ps-canvas', {
+        width: 1000,
+        height: 600,
+        preserveObjectStacking: true // 保持叠放顺序
+    });
+
+    // 2. 响应图标加载
+    lucide.createIcons();
+
+    // 3. 文件导入逻辑
+    document.getElementById('fileInput').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        const reader = new FileReader();
+        reader.onload = function(f) {
+            fabric.Image.fromURL(f.target.result, function(img) {
+                // 自动适应屏幕缩放
+                const scale = Math.min(canvas.width / img.width, canvas.height / img.height) * 0.8;
+                img.set({
+                    left: 50,
+                    top: 50,
+                    scaleX: scale,
+                    scaleY: scale,
+                    cornerColor: '#3b82f6',
+                    cornerSize: 8,
+                    transparentCorners: false
+                });
+                canvas.add(img);
+                canvas.setActiveObject(img);
+                updateLayerPanel();
+            });
+        };
+        reader.readAsDataURL(file);
+    });
+
+    // 4. 工具函数
+    function addRect() {
+        const rect = new fabric.Rect({
+            left: 100, top: 100, fill: '#3b82f6', width: 100, height: 100,
+            cornerColor: '#3b82f6'
+        });
+        canvas.add(rect);
+        updateLayerPanel();
+    }
+
+    function addText() {
+        const text = new fabric.IText('双击编辑文字', {
+            left: 100, top: 100, fill: '#ffffff', fontSize: 30,
+            fontFamily: 'sans-serif'
+        });
+        canvas.add(text);
+        updateLayerPanel();
+    }
+
+    function toggleDrawing() {
+        canvas.isDrawingMode = !canvas.isDrawingMode;
+        canvas.freeDrawingBrush.color = document.getElementById('fill-color').value;
+        canvas.freeDrawingBrush.width = 5;
+        document.getElementById('brush-btn').classList.toggle('active');
+    }
+
+    // 5. 样式更新与同步
+    function updateStyle() {
+        const activeObject = canvas.getActiveObject();
+        if (!activeObject) return;
+        
+        const opacity = document.getElementById('opacity').value;
+        const color = document.getElementById('fill-color').value;
+        
+        activeObject.set({ opacity: parseFloat(opacity), fill: color });
+        document.getElementById('op-val').innerText = Math.round(opacity * 100) + '%';
+        canvas.renderAll();
+    }
+
+    // 6. 核心滤镜引擎
+    function applyFilters() {
+        const obj = canvas.getActiveObject();
+        if (!obj || obj.type !== 'image') return;
+
+        const b = parseFloat(document.getElementById('filter-bright').value);
+        const n = parseInt(document.getElementById('filter-noise').value);
+
+        obj.filters = [];
+        if (b !== 0) obj.filters.push(new fabric.Image.filters.Brightness({ brightness: b }));
+        if (n > 0) obj.filters.push(new fabric.Image.filters.Noise({ noise: n }));
+        
+        obj.applyFilters();
+        canvas.renderAll();
+    }
+
+    function pixelate() {
+        const obj = canvas.getActiveObject();
+        if (!obj || obj.type !== 'image') return;
+        obj.filters.push(new fabric.Image.filters.Pixelate({ blocksize: 8 }));
+        obj.applyFilters();
+        canvas.renderAll();
+    }
+
+    // 7. 图层面板交互
+    function updateLayerPanel() {
+        const list = document.getElementById('layer-list');
+        list.innerHTML = '';
+        canvas.getObjects().reverse().forEach((obj, index) => {
+            const div = document.createElement('div');
+            div.className = "flex items-center justify-between p-2 text-[11px] bg-white/5 rounded hover:bg-white/10 cursor-pointer";
+            div.innerHTML = `
+                <div class="flex items-center space-x-2">
+                    <span class="text-gray-600">#${canvas.getObjects().length - index}</span>
+                    <span>${obj.type.toUpperCase()} 图层</span>
+                </div>
+                <i data-lucide="eye" class="w-3 h-3 text-gray-500"></i>
+            `;
+            div.onclick = () => canvas.setActiveObject(obj).renderAll();
+            list.appendChild(div);
+        });
+        lucide.createIcons();
+    }
+
+    // 监听选择事件同步 UI
+    canvas.on('selection:created', (e) => syncUI(e.selected[0]));
+    canvas.on('selection:updated', (e) => syncUI(e.selected[0]));
+
+    function syncUI(obj) {
+        document.getElementById('opacity').value = obj.opacity;
+        document.getElementById('fill-color').value = obj.fill || '#ffffff';
+        document.getElementById('status-text').innerText = `Selected: ${obj.type}`;
+    }
+
+    function deleteSelected() {
+        canvas.remove(...canvas.getActiveObjects());
+        canvas.discardActiveObject().renderAll();
+        updateLayerPanel();
+    }
+
+    function downloadImage() {
+        const dataURL = canvas.toDataURL({ format: 'png', quality: 1 });
+        const link = document.createElement('a');
+        link.download = 'immmor_design_studio.png';
+        link.href = dataURL;
+        link.click();
+    }
+
+    // 绑定键盘删除
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Delete' || e.key === 'Backspace') {
+            if (canvas.getActiveObject() && !canvas.getActiveObject().isEditing) deleteSelected();
+        }
+    });
+
+</script>
+</body>
+</html>

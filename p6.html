@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>immmor PS TITAN AI Max | 终极极客图像实验室</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation"></script>
+    <style>
+        body { background: #020203; color: #e2e8f0; font-family: 'Inter', sans-serif; height: 100vh; overflow: hidden; }
+        .ps-layout { display: grid; grid-template-columns: 60px 280px 1fr 300px; grid-template-rows: 50px 1fr; height: 100vh; }
+        .glass-panel { background: rgba(10, 10, 15, 0.98); backdrop-filter: blur(40px); border: 1px solid rgba(255, 255, 255, 0.05); }
+        .tool-btn { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 12px; transition: 0.2s; color: #475569; margin-bottom: 6px; position: relative; cursor: pointer; }
+        .tool-btn:hover, .tool-btn.active { background: #3b82f6; color: white; box-shadow: 0 0 15px rgba(59, 130, 246, 0.3); }
+        .canvas-area { background-color: #080808; background-image: radial-gradient(#1a1a1a 1px, transparent 1px); background-size: 30px 30px; overflow: hidden; display: flex; align-items: center; justify-content: center; position: relative; }
+        input[type=range] { appearance: none; background: #1e293b; height: 3px; border-radius: 2px; width: 100%; }
+        input[type=range]::-webkit-slider-thumb { appearance: none; height: 10px; width: 10px; border-radius: 50%; background: #3b82f6; cursor: pointer; }
+        .layer-item { transition: 0.2s; border-radius: 8px; margin-bottom: 4px; }
+        .layer-item.active { border: 1px solid #3b82f6; background: rgba(59, 130, 246, 0.15); }
+        .shortcut-tip { position: absolute; left: 50px; background: #1e293b; padding: 2px 6px; border-radius: 4px; font-size: 10px; opacity: 0; pointer-events: none; transition: 0.2s; z-index: 50; }
+        .tool-btn:hover .shortcut-tip { opacity: 1; }
+        .loading-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 1000; display: none; flex-direction: column; align-items: center; justify-content: center; }
+    </style>
+</head>
+<body>
+
+<div id="loader" class="loading-overlay">
+    <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-blue-500 mb-4"></div>
+    <p class="text-blue-400 font-mono text-sm tracking-widest">AI PROCESSING ENGINE...</p>
+</div>
+
+<div class="ps-layout">
+    <header class="col-span-4 glass-panel flex items-center px-6 justify-between border-b border-white/5">
+        <div class="flex items-center space-x-8">
+            <span class="font-black italic text-blue-500 text-2xl tracking-tighter">im.PS TITAN AI</span>
+            <div class="flex space-x-6 text-[10px] uppercase font-bold tracking-widest text-gray-500">
+                <button onclick="document.getElementById('fileInput').click()" class="hover:text-blue-400 transition">Open</button>
+                <button onclick="exportJSON()" class="hover:text-blue-400 transition">Save Project</button>
+                <button onclick="downloadImage()" class="text-blue-500 hover:scale-105 transition">Export PNG</button>
+            </div>
+        </div>
+        <div class="flex items-center space-x-4">
+            <div class="flex bg-white/5 rounded-lg p-1">
+                <button onclick="undo()" class="p-2 hover:text-white" title="Undo (Ctrl+Z)"><i data-lucide="undo-2" class="w-4"></i></button>
+                <button onclick="redo()" class="p-2 hover:text-white" title="Redo (Ctrl+Y)"><i data-lucide="redo-2" class="w-4"></i></button>
+            </div>
+            <span class="bg-blue-600/20 text-blue-400 px-3 py-1 rounded text-[9px] font-bold border border-blue-500/20">AI VISION ACTIVE</span>
+        </div>
+    </header>
+
+    <aside class="glass-panel flex flex-col items-center py-6 border-r border-white/5">
+        <button class="tool-btn active" id="tool-select" onclick="setMode('select')"><i data-lucide="mouse-pointer-2"></i><span class="shortcut-tip">V</span></button>
+        <button class="tool-btn" onclick="addRect()"><i data-lucide="square"></i><span class="shortcut-tip">R</span></button>
+        <button class="tool-btn" onclick="addCircle()"><i data-lucide="circle"></i><span class="shortcut-tip">C</span></button>
+        <button class="tool-btn" onclick="addText()"><i data-lucide="type"></i><span class="shortcut-tip">T</span></button>
+        <button class="tool-btn" id="tool-brush" onclick="toggleDrawing()"><i data-lucide="paintbrush"></i><span class="shortcut-tip">B</span></button>
+        <button class="tool-btn text-purple-400" onclick="removeBackgroundAI()"><i data-lucide="sparkles"></i><span class="shortcut-tip">AI 抠图</span></button>
+        <div class="w-8 h-[1px] bg-gray-800 my-4"></div>
+        <button class="tool-btn" onclick="pickColor()"><i data-lucide="pipette"></i><span class="shortcut-tip">I</span></button>
+        <button class="tool-btn text-red-500" onclick="deleteSelected()"><i data-lucide="trash-2"></i></button>
+    </aside>
+
+    <aside class="glass-panel p-6 border-r border-white/5 space-y-8 overflow-y-auto">
+        <section>
+            <h3 class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-4">变换与样式 Transform</h3>
+            <div class="space-y-4">
+                <div class="flex items-center justify-between text-xs">
+                    <span>填充颜色</span>
+                    <input type="color" id="fill-color" class="w-8 h-8 bg-transparent" oninput="updateStyle()">
+                </div>
+                <div>
+                    <div class="flex justify-between text-[11px] mb-2">不透明度 <span id="op-val">100%</span></div>
+                    <input type="range" id="opacity" min="0" max="1" step="0.01" value="1" oninput="updateStyle()">
+                </div>
+            </div>
+        </section>
+
+        <section>
+            <h3 class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-4">混合模式 Blending</h3>
+            <select id="blend-mode" class="w-full bg-white/5 text-xs p-3 rounded border-none outline-none" onchange="updateStyle()">
+                <option value="source-over">正常 (Normal)</option>
+                <option value="multiply">正片叠底 (Multiply)</option>
+                <option value="screen">滤色 (Screen)</option>
+                <option value="overlay">叠加 (Overlay)</option>
+                <option value="difference">差值 (Difference)</option>
+            </select>
+        </section>
+
+        <section>
+            <h3 class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-4">快捷操作 Actions</h3>
+            <div class="grid grid-cols-2 gap-2">
+                <button onclick="align('center')" class="py-2 bg-white/5 rounded text-[10px] hover:bg-white/10">居中对齐</button>
+                <button onclick="changeZIndex('top')" class="py-2 bg-white/5 rounded text-[10px] hover:bg-white/10">置顶图层</button>
+                <button onclick="applyGradient()" class="col-span-2 py-2 bg-blue-600/20 text-blue-400 rounded text-[10px] font-bold">应用潮流渐变</button>
+            </div>
+        </section>
+    </aside>
+
+    <main class="canvas-area" id="canvas-wrapper">
+        <canvas id="main-canvas"></canvas>
+        <input type="file" id="fileInput" class="hidden">
+        <div class="absolute bottom-6 left-6 bg-white/5 backdrop-blur-md px-4 py-2 rounded-full text-[10px] font-mono tracking-widest text-gray-400 border border-white/5">
+            ZOOM: <span id="zoom-val">100%</span> | SPACE + DRAG TO PAN
+        </div>
+    </main>
+
+    <aside class="glass-panel border-l border-white/5 p-4 flex flex-col">
+        <h3 class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-4">图层管理 Layers</h3>
+        <div id="layer-stack" class="flex-1 overflow-y-auto space-y-1"></div>
+        <button onclick="lockLayer()" class="mt-4 w-full py-2 bg-white/5 rounded text-[10px] hover:bg-red-500/20 transition uppercase">锁定/解锁图层</button>
+    </aside>
+</div>
+
+<script>
+    // 1. 初始化核心
+    const canvas = new fabric.Canvas('main-canvas', {
+        width: 1000, height: 700,
+        backgroundColor: '#080808',
+        preserveObjectStacking: true
+    });
+
+    let history = [];
+    let mods = 0;
+    lucide.createIcons();
+
+    // 2. AI 抠图引擎
+    const selfieSegmentation = new SelfieSegmentation({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`
+    });
+    selfieSegmentation.setOptions({ modelSelection: 1 });
+    selfieSegmentation.onResults(onAIResults);
+
+    let currentAIImage = null;
+
+    async function removeBackgroundAI() {
+        const activeObj = canvas.getActiveObject();
+        if (!activeObj || activeObj.type !== 'image') {
+            alert("请先选中一张图片"); return;
+        }
+        document.getElementById('loader').style.display = 'flex';
+        currentAIImage = activeObj;
+        await selfieSegmentation.send({ image: activeObj._element });
+    }
+
+    function onAIResults(results) {
+        const tempCanvas = document.createElement('canvas');
+        const tCtx = tempCanvas.getContext('2d');
+        tempCanvas.width = results.image.width;
+        tempCanvas.height = results.image.height;
+        tCtx.drawImage(results.segmentationMask, 0, 0, tempCanvas.width, tempCanvas.height);
+        tCtx.globalCompositeOperation = 'source-in';
+        tCtx.drawImage(results.image, 0, 0, tempCanvas.width, tempCanvas.height);
+
+        fabric.Image.fromURL(tempCanvas.toDataURL(), (newImg) => {
+            newImg.set({ left: currentAIImage.left, top: currentAIImage.top, scaleX: currentAIImage.scaleX, scaleY: currentAIImage.scaleY });
+            canvas.remove(currentAIImage);
+            canvas.add(newImg);
+            canvas.setActiveObject(newImg);
+            document.getElementById('loader').style.display = 'none';
+            saveHistory();
+            renderLayers();
+        });
+    }
+
+    // 3. 基础功能整合
+    function addRect() { addObject(new fabric.Rect({ left: 100, top: 100, fill: '#3b82f6', width: 100, height: 100 })); }
+    function addCircle() { addObject(new fabric.Circle({ left: 150, top: 150, fill: '#f472b6', radius: 50 })); }
+    function addText() { addObject(new fabric.IText('TITAN TEXT', { left: 100, top: 100, fill: '#fff', fontSize: 40 })); }
+
+    function addObject(obj) {
+        obj.set({ cornerColor: '#3b82f6', cornerSize: 8, transparentCorners: false });
+        canvas.add(obj); canvas.setActiveObject(obj);
+        saveHistory(); renderLayers();
+    }
+
+    function updateStyle() {
+        const obj = canvas.getActiveObject();
+        if(!obj) return;
+        const op = document.getElementById('opacity').value;
+        obj.set({
+            fill: document.getElementById('fill-color').value,
+            opacity: parseFloat(op),
+            globalCompositeOperation: document.getElementById('blend-mode').value
+        });
+        document.getElementById('op-val').innerText = Math.round(op*100)+'%';
+        canvas.renderAll();
+    }
+
+    // 4. 交互：缩放与平移 (Space + Drag)
+    canvas.on('mouse:wheel', function(opt) {
+        let delta = opt.e.deltaY;
+        let zoom = canvas.getZoom() * (0.999 ** delta);
+        canvas.zoomToPoint({ x: opt.e.offsetX, y: opt.e.offsetY }, zoom);
+        document.getElementById('zoom-val').innerText = Math.round(zoom * 100) + '%';
+        opt.e.preventDefault();
+    });
+
+    let isPanning = false;
+    window.addEventListener('keydown', (e) => { if(e.code === 'Space') isPanning = true; });
+    window.addEventListener('keyup', (e) => { if(e.code === 'Space') isPanning = false; });
+    canvas.on('mouse:move', (opt) => {
+        if (isPanning && opt.e) canvas.relativePan(new fabric.Point(opt.e.movementX, opt.e.movementY));
+    });
+
+    // 5. 辅助功能
+    function deleteSelected() { canvas.remove(...canvas.getActiveObjects()); canvas.discardActiveObject(); renderLayers(); saveHistory(); }
+    
+    async function pickColor() {
+        if (!window.EyeDropper) return alert("浏览器不支持吸管");
+        const result = await new EyeDropper().open();
+        document.getElementById('fill-color').value = result.sRGBHex;
+        updateStyle();
+    }
+
+    function renderLayers() {
+        const stack = document.getElementById('layer-stack');
+        stack.innerHTML = '';
+        canvas.getObjects().reverse().forEach((obj) => {
+            const div = document.createElement('div');
+            div.className = `layer-item flex items-center p-3 text-[10px] cursor-pointer bg-white/5 ${canvas.getActiveObject() === obj ? 'active' : ''}`;
+            div.innerHTML = `<i data-lucide="layers" class="w-3 mr-2"></i> ${obj.type.toUpperCase()} 图层`;
+            div.onclick = () => { canvas.setActiveObject(obj); canvas.renderAll(); renderLayers(); };
+            stack.appendChild(div);
+        });
+        lucide.createIcons();
+    }
+
+    function saveHistory() {
+        if(mods < history.length) history = history.slice(0, mods);
+        history.push(JSON.stringify(canvas)); mods++;
+    }
+
+    function undo() { if(mods > 1) { mods--; canvas.loadFromJSON(history[mods-1], () => canvas.renderAll()); } }
+    function redo() { if(mods < history.length) { canvas.loadFromJSON(history[mods], () => canvas.renderAll()); mods++; } }
+
+    document.getElementById('fileInput').onchange = (e) => {
+        const reader = new FileReader();
+        reader.onload = (f) => fabric.Image.fromURL(f.target.result, img => addObject(img.scaleToWidth(500)));
+        reader.readAsDataURL(e.target.files[0]);
+    };
+
+    function downloadImage() {
+        const link = document.createElement('a');
+        link.download = 'titan-export.png';
+        link.href = canvas.toDataURL({ format: 'png' });
+        link.click();
+    }
+
+    canvas.on('object:modified', saveHistory);
+    canvas.on('selection:created', renderLayers);
+</script>
+</body>
+</html>

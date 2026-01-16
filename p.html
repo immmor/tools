@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>immmor Pro | 极客专业图像编辑器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background: radial-gradient(circle at top right, #1e293b, #0f172a, #000000);
+            min-height: 100vh;
+            color: white;
+            overflow-x: hidden;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .gradient-text {
+            background: linear-gradient(90deg, #60a5fa, #a78bfa, #f472b6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .active-tool {
+            background: rgba(96, 165, 250, 0.2);
+            border-color: #60a5fa;
+        }
+        /* 滑动条美化 */
+        input[type=range] { appearance: none; background: rgba(255,255,255,0.1); height: 4px; border-radius: 2px; }
+        input[type=range]::-webkit-slider-thumb {
+            appearance: none; height: 14px; width: 14px; border-radius: 50%;
+            background: #60a5fa; cursor: pointer; box-shadow: 0 0 8px rgba(96, 165, 250, 0.5);
+        }
+        canvas {
+            max-width: 100%;
+            max-height: 75vh;
+            border-radius: 8px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            cursor: crosshair;
+        }
+        .sidebar-scroll {
+            max-height: calc(100vh - 160px);
+            overflow-y: auto;
+        }
+        .sidebar-scroll::-webkit-scrollbar { width: 4px; }
+        .sidebar-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+    </style>
+</head>
+<body class="p-4">
+
+    <nav class="flex justify-between items-center mb-6 max-w-[1600px] mx-auto w-full">
+        <div class="flex items-center space-x-4">
+            <div class="text-2xl font-black tracking-tighter gradient-text">immmor.PRO</div>
+            <span class="text-[10px] bg-blue-500/20 text-blue-400 px-2 py-1 rounded uppercase tracking-widest">Studio Edition</span>
+        </div>
+        <div class="flex items-center space-x-3">
+            <label class="cursor-pointer bg-white/5 hover:bg-white/10 px-5 py-2 rounded-xl text-sm transition border border-white/10">
+                导入图片
+                <input type="file" id="upload-input" accept="image/*" class="hidden">
+            </label>
+            <button onclick="downloadImage()" class="bg-blue-600 hover:bg-blue-500 px-5 py-2 rounded-xl text-sm font-bold transition shadow-lg shadow-blue-900/20">导出成品</button>
+        </div>
+    </nav>
+
+    <main class="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <aside class="lg:col-span-3 space-y-4 sidebar-scroll pr-2">
+            
+            <div class="glass p-5 rounded-2xl">
+                <h2 class="text-xs font-bold mb-4 text-gray-400 uppercase tracking-widest flex justify-between">
+                    调整 Adjustments
+                    <button onclick="resetFilters()" class="text-blue-400 hover:text-blue-300">重置</button>
+                </h2>
+                <div class="space-y-4">
+                    <div class="filter-group">
+                        <div class="flex justify-between text-[11px] mb-2">亮度 <span id="val-brightness">100%</span></div>
+                        <input type="range" id="brightness" min="0" max="200" value="100" class="w-full">
+                    </div>
+                    <div class="filter-group">
+                        <div class="flex justify-between text-[11px] mb-2">对比度 <span id="val-contrast">100%</span></div>
+                        <input type="range" id="contrast" min="0" max="200" value="100" class="w-full">
+                    </div>
+                    <div class="filter-group">
+                        <div class="flex justify-between text-[11px] mb-2">饱和度 <span id="val-saturate">100%</span></div>
+                        <input type="range" id="saturate" min="0" max="200" value="100" class="w-full">
+                    </div>
+                    <div class="filter-group">
+                        <div class="flex justify-between text-[11px] mb-2">锐化/模糊 <span id="val-blur">0px</span></div>
+                        <input type="range" id="blur" min="0" max="10" value="0" step="0.1" class="w-full">
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass p-5 rounded-2xl">
+                <h2 class="text-xs font-bold mb-4 text-gray-400 uppercase tracking-widest">艺术风格 Luts</h2>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="applyPreset('none')" class="glass py-2 rounded-lg text-[11px] hover:bg-white/10 transition">原图</button>
+                    <button onclick="applyPreset('noir')" class="glass py-2 rounded-lg text-[11px] hover:bg-white/10 transition">暗调诺尔</button>
+                    <button onclick="applyPreset('vintage')" class="glass py-2 rounded-lg text-[11px] hover:bg-white/10 transition">复古胶片</button>
+                    <button onclick="applyPreset('cyber')" class="glass py-2 rounded-lg text-[11px] hover:bg-white/10 transition">赛博朋克</button>
+                </div>
+            </div>
+
+            <div class="glass p-5 rounded-2xl">
+                <h2 class="text-xs font-bold mb-4 text-gray-400 uppercase tracking-widest">画笔工具 Brush</h2>
+                <div class="space-y-4">
+                    <div class="flex space-x-2">
+                        <button id="brush-toggle" onclick="toggleBrush()" class="flex-1 glass py-2 rounded-lg text-[11px] hover:bg-white/10 transition">启用画笔</button>
+                        <input type="color" id="brush-color" value="#60a5fa" class="w-10 h-8 bg-transparent border-none">
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-[11px] mb-2">笔触大小 <span id="val-brush-size">5px</span></div>
+                        <input type="range" id="brush-size" min="1" max="50" value="5" class="w-full">
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass p-5 rounded-2xl">
+                <h2 class="text-xs font-bold mb-4 text-gray-400 uppercase tracking-widest">变换 Transform</h2>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="rotateImage(-90)" class="glass py-2 rounded-lg text-[11px] hover:bg-white/10 transition">左转 90°</button>
+                    <button onclick="rotateImage(90)" class="glass py-2 rounded-lg text-[11px] hover:bg-white/10 transition">右转 90°</button>
+                    <button onclick="flipImage('h')" class="glass py-2 rounded-lg text-[11px] hover:bg-white/10 transition">水平翻转</button>
+                    <button onclick="flipImage('v')" class="glass py-2 rounded-lg text-[11px] hover:bg-white/10 transition">垂直翻转</button>
+                </div>
+            </div>
+        </aside>
+
+        <section class="lg:col-span-9 glass rounded-3xl overflow-hidden flex items-center justify-center bg-black/40 relative min-h-[600px]">
+            <div id="placeholder" class="text-center">
+                <div class="w-20 h-20 mx-auto mb-4 bg-white/5 rounded-full flex items-center justify-center border border-white/10">
+                    <svg class="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                </div>
+                <p class="text-gray-500 text-sm tracking-widest uppercase">等待载入数字资产</p>
+            </div>
+            <canvas id="main-canvas" class="hidden"></canvas>
+            
+            <div class="absolute bottom-4 left-6 right-6 flex justify-between text-[10px] text-gray-500 font-mono">
+                <div id="info-res">RESOLUTION: --</div>
+                <div id="info-tool">TOOL: SELECTION</div>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        const canvas = document.getElementById('main-canvas');
+        const ctx = canvas.getContext('2d');
+        const uploadInput = document.getElementById('upload-input');
+        const placeholder = document.getElementById('placeholder');
+        
+        let imgObj = new Image();
+        let isDrawing = false;
+        let brushActive = false;
+        let currentRotation = 0;
+        let flipH = 1, flipV = 1;
+
+        // 核心配置
+        const filterControls = ['brightness', 'contrast', 'saturate', 'blur'];
+
+        uploadInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                imgObj.onload = () => {
+                    initCanvas();
+                    render();
+                };
+                imgObj.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        function initCanvas() {
+            canvas.width = imgObj.width;
+            canvas.height = imgObj.height;
+            canvas.classList.remove('hidden');
+            placeholder.classList.add('hidden');
+            document.getElementById('info-res').innerText = `RES: ${canvas.width} x ${canvas.height} PX`;
+        }
+
+        function render() {
+            if (!imgObj.src) return;
+
+            // 获取滤镜值
+            const b = document.getElementById('brightness').value;
+            const c = document.getElementById('contrast').value;
+            const s = document.getElementById('saturate').value;
+            const blur = document.getElementById('blur').value;
+
+            // 更新UI
+            document.getElementById('val-brightness').innerText = b + '%';
+            document.getElementById('val-contrast').innerText = c + '%';
+            document.getElementById('val-saturate').innerText = s + '%';
+            document.getElementById('val-blur').innerText = blur + 'px';
+
+            // 绘制基础图层
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.save();
+            
+            // 应用变换
+            ctx.translate(canvas.width/2, canvas.height/2);
+            ctx.rotate(currentRotation * Math.PI / 180);
+            ctx.scale(flipH, flipV);
+            
+            // 应用CSS滤镜效果
+            ctx.filter = `brightness(${b}%) contrast(${c}%) saturate(${s}%) blur(${blur}px)`;
+            
+            ctx.drawImage(imgObj, -imgObj.width/2, -imgObj.height/2);
+            ctx.restore();
+        }
+
+        // 监听所有调节杆
+        filterControls.forEach(id => {
+            document.getElementById(id).addEventListener('input', render);
+        });
+
+        // 专业功能：预设滤镜
+        function applyPreset(type) {
+            resetFilters();
+            switch(type) {
+                case 'noir':
+                    document.getElementById('saturate').value = 0;
+                    document.getElementById('contrast').value = 140;
+                    document.getElementById('brightness').value = 80;
+                    break;
+                case 'vintage':
+                    document.getElementById('saturate').value = 60;
+                    document.getElementById('contrast').value = 90;
+                    document.getElementById('brightness').value = 110;
+                    break;
+                case 'cyber':
+                    document.getElementById('saturate').value = 180;
+                    document.getElementById('contrast').value = 120;
+                    break;
+            }
+            render();
+        }
+
+        // 变换功能
+        function rotateImage(deg) {
+            currentRotation = (currentRotation + deg) % 360;
+            render();
+        }
+        function flipImage(dir) {
+            if(dir === 'h') flipH *= -1;
+            if(dir === 'v') flipV *= -1;
+            render();
+        }
+
+        // 画笔系统
+        function toggleBrush() {
+            brushActive = !brushActive;
+            const btn = document.getElementById('brush-toggle');
+            btn.classList.toggle('active-tool');
+            btn.innerText = brushActive ? '停止画画' : '启用画笔';
+            document.getElementById('info-tool').innerText = brushActive ? 'TOOL: BRUSH' : 'TOOL: SELECTION';
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            if(!brushActive) return;
+            isDrawing = true;
+            draw(e);
+        });
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseup', () => isDrawing = false);
+
+        function draw(e) {
+            if(!isDrawing || !brushActive) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const x = (e.clientX - rect.left) * scaleX;
+            const y = (e.clientY - rect.top) * scaleY;
+
+            ctx.fillStyle = document.getElementById('brush-color').value;
+            const size = document.getElementById('brush-size').value;
+            document.getElementById('val-brush-size').innerText = size + 'px';
+            
+            ctx.beginPath();
+            ctx.arc(x, y, size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function resetFilters() {
+            document.getElementById('brightness').value = 100;
+            document.getElementById('contrast').value = 100;
+            document.getElementById('saturate').value = 100;
+            document.getElementById('blur').value = 0;
+            currentRotation = 0;
+            flipH = 1; flipV = 1;
+            render();
+        }
+
+        function downloadImage() {
+            const link = document.createElement('a');
+            link.download = `IMMMOR_PRO_${Date.now()}.png`;
+            link.href = canvas.toDataURL('image/png', 1.0);
+            link.click();
+        }
+    </script>
+</body>
+</html>
