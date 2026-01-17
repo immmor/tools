@@ -23,12 +23,16 @@
         .tool-btn.active { background: #3b82f6; color: white; }
         .tool-btn:hover:not(.active) { color: #8892b0; background: rgba(255,255,255,0.05); }
         .canvas-area { background-color: #080808; background-image: radial-gradient(#1a1a1a 1px, transparent 1px); background-size: 30px 30px; position: relative; overflow: hidden; }
+        .canvas-container { width: 800px; height: 600px; border: 2px solid rgba(255,255,255,0.1); border-radius: 8px; position: relative; overflow: hidden; box-shadow: 0 0 0 1px rgba(255,255,255,0.05) inset; transform-origin: center center; transition: transform 0.2s ease; }
+        .canvas-container::before { content: ''; position: absolute; inset: 0; border: 1px solid rgba(255,255,255,0.05); border-radius: 6px; pointer-events: none; }
+        #main-canvas { }
         .loading-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 9999; display: none; flex-direction: column; align-items: center; justify-content: center; }
         .layer-item { transition: 0.2s; border-left: 3px solid transparent; margin-bottom: 2px; }
         .layer-item.active { background: rgba(59, 130, 246, 0.15); border-left-color: #3b82f6; color: white; }
         .filter-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
         .filter-btn { background: rgba(255,255,255,0.03); padding: 6px 4px; border-radius: 6px; font-size: 10px; text-align: center; border: 1px solid rgba(255,255,255,0.05); transition: 0.2s; cursor: pointer; }
         .filter-btn:hover { background: #3b82f6; border-color: #3b82f6; }
+        .filter-btn.active { background: #3b82f6; border-color: #3b82f6; color: white; font-weight: 600; }
         input[type="range"] { accent-color: #3b82f6; height: 4px; }
         .histogram-container { height: 60px; background: #000; border: 1px solid #333; position: relative; }
         .histogram-bar { position: absolute; bottom: 0; width: 1px; background: #666; }
@@ -59,8 +63,6 @@
             </div>
             <button onclick="undo()" class="p-2 hover:text-blue-400"><i data-lucide="undo-2" class="w-4"></i></button>
             <button onclick="redo()" class="p-2 hover:text-blue-400"><i data-lucide="redo-2" class="w-4"></i></button>
-            <div class="h-4 w-[1px] bg-white/10 mx-2"></div>
-            <button onclick="toggleFullscreen()" class="p-2 hover:text-blue-400"><i data-lucide="maximize" class="w-4"></i></button>
         </div>
     </header>
 
@@ -126,11 +128,61 @@
         <section>
             <h3 class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-4">滤镜库 Filters</h3>
             <div class="filter-grid">
-                <button class="filter-btn" onclick="applyPreset('Grayscale')">黑白</button>
-                <button class="filter-btn" onclick="applyPreset('Sepia')">复古</button>
-                <button class="filter-btn" onclick="applyPreset('Invert')">反相</button>
-                <button class="filter-btn" onclick="applyPreset('Vintage')">胶片</button>
+                <button class="filter-btn" data-filter="Grayscale" onclick="toggleFilter('Grayscale', this)">黑白</button>
+                <button class="filter-btn" data-filter="Sepia" onclick="toggleFilter('Sepia', this)">复古</button>
+                <button class="filter-btn" data-filter="Invert" onclick="toggleFilter('Invert', this)">反相</button>
+                <button class="filter-btn" data-filter="Vintage" onclick="toggleFilter('Vintage', this)">胶片</button>
+                <button class="filter-btn" data-filter="Blur" onclick="toggleFilter('Blur', this)">模糊</button>
+                <button class="filter-btn" data-filter="Pixelate" onclick="toggleFilter('Pixelate', this)">像素化</button>
+                <button class="filter-btn" data-filter="Noise" onclick="toggleFilter('Noise', this)">噪点</button>
+                <button class="filter-btn" data-filter="Hue" onclick="toggleFilter('Hue', this)">色相</button>
+                <button class="filter-btn" data-filter="Sharpen" onclick="toggleFilter('Sharpen', this)">锐化</button>
+                <button class="filter-btn" data-filter="Emboss" onclick="toggleFilter('Emboss', this)">浮雕</button>
                 <button class="filter-btn col-span-2 text-blue-400" onclick="resetFilters()">重置所有参数</button>
+            </div>
+        </section>
+
+        <section>
+            <h3 class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-4">画布设置 Canvas</h3>
+            <div class="space-y-3 text-[11px]">
+                <div class="space-y-2">
+                    <span class="text-gray-500 text-[10px]">画布比例 Ratio</span>
+                    <select id="canvas-ratio" class="w-full bg-white/5 text-[10px] p-2 rounded border border-white/10" onchange="updateCanvasRatio()">
+                        <option value="1:1">1:1 (正方形)</option>
+                        <option value="4:3" selected>4:3 (标准)</option>
+                        <option value="16:9">16:9 (宽屏)</option>
+                        <option value="3:2">3:2 (照片)</option>
+                        <option value="9:16">9:16 (竖屏)</option>
+                        <option value="custom">自定义</option>
+                    </select>
+                </div>
+                <div id="custom-size" class="hidden space-y-2">
+                    <div class="flex space-x-2">
+                        <input type="number" id="canvas-width" placeholder="宽度" min="100" max="2000" value="800" class="w-full bg-white/5 text-[10px] p-2 rounded border border-white/10">
+                        <input type="number" id="canvas-height" placeholder="高度" min="100" max="2000" value="600" class="w-full bg-white/5 text-[10px] p-2 rounded border border-white/10">
+                    </div>
+                    <button onclick="applyCustomSize()" class="w-full bg-blue-600 hover:bg-blue-500 text-white py-1 rounded text-[10px]">应用尺寸</button>
+                </div>
+                <div class="space-y-2">
+                    <span class="text-gray-500 text-[10px]">背景颜色 Background</span>
+                    <div class="flex space-x-2">
+                        <input type="color" id="canvas-bg-color" value="#080808" oninput="updateCanvasBackground()" class="w-8 h-8 cursor-pointer border-none">
+                        <select id="canvas-bg-preset" class="flex-1 bg-white/5 text-[10px] p-2 rounded border border-white/10" onchange="updateCanvasBackgroundPreset()">
+                            <option value="#080808" selected>深灰</option>
+                            <option value="#000000">纯黑</option>
+                            <option value="#ffffff">纯白</option>
+                            <option value="#f8fafc">浅灰</option>
+                            <option value="#1e40af">深蓝</option>
+                            <option value="#dc2626">深红</option>
+                            <option value="#16a34a">深绿</option>
+                            <option value="custom">自定义</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span>显示网格 Grid</span>
+                    <input type="checkbox" id="show-grid" checked onchange="toggleCanvasGrid()" class="w-4 h-4 accent-blue-500">
+                </div>
             </div>
         </section>
 
@@ -166,7 +218,9 @@
     </aside>
 
     <main class="canvas-area flex items-center justify-center relative">
-        <canvas id="main-canvas"></canvas>
+        <div class="canvas-container">
+            <canvas id="main-canvas"></canvas>
+        </div>
         <input type="file" id="fileInput" class="hidden" accept="image/*">
         
         <div class="absolute bottom-4 left-4 flex space-x-4 bg-black/60 backdrop-blur px-4 py-2 rounded-full text-[9px] font-mono text-gray-300 md:block hidden border border-white/5">
@@ -174,6 +228,9 @@
             <span>[B] 画笔</span>
             <span>[ALT+F] 检测人脸</span>
             <span class="text-blue-400 ml-4" id="zoom-level">100%</span>
+            <button onclick="setCanvasScale(canvasScale - 0.1)" class="hover:text-white">-</button>
+            <button onclick="setCanvasScale(canvasScale + 0.1)" class="hover:text-white">+</button>
+            <button onclick="setCanvasScale(1)" class="hover:text-white">重置</button>
         </div>
     </main>
 
@@ -186,12 +243,6 @@
             </div>
         </div>
         <div id="layer-stack" class="space-y-1 flex-grow overflow-y-auto custom-scrollbar"></div>
-        <div class="pt-4 border-t border-white/5">
-            <div class="text-[9px] text-gray-600 font-mono mb-2 uppercase italic">Project: Titan_v3_FaceAI</div>
-            <button onclick="downloadImage()" class="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-bold rounded tracking-widest uppercase transition shadow-lg shadow-blue-900/20">
-                Generate Image
-            </button>
-        </div>
     </aside>
 
 
@@ -200,11 +251,108 @@
 <script>
     // --- 初始化引擎 ---
     const canvas = new fabric.Canvas('main-canvas', {
-        width: window.innerWidth > 1024 ? window.innerWidth - 640 : window.innerWidth - 70,
-        height: window.innerHeight - 100,
+        width: 800,
+        height: 600,
         backgroundColor: '#080808',
         preserveObjectStacking: true
     });
+    
+    let canvasScale = 1;
+    
+    // 画布缩放功能 - 整个容器一起缩放
+    function setCanvasScale(scale) {
+        canvasScale = Math.max(0.1, Math.min(3, scale));
+        const container = document.querySelector('.canvas-container');
+        container.style.transform = `scale(${canvasScale})`;
+        document.getElementById('zoom-level').innerText = Math.round(canvasScale * 100) + '%';
+    }
+    
+    // 更新画布比例
+    function updateCanvasRatio() {
+        const ratio = document.getElementById('canvas-ratio').value;
+        const container = document.querySelector('.canvas-container');
+        const customSize = document.getElementById('custom-size');
+        
+        if (ratio === 'custom') {
+            customSize.classList.remove('hidden');
+            return;
+        }
+        
+        customSize.classList.add('hidden');
+        
+        let width = 800, height = 600;
+        switch(ratio) {
+            case '1:1': width = height = 600; break;
+            case '16:9': width = 800; height = 450; break;
+            case '3:2': width = 800; height = 533; break;
+            case '9:16': width = 450; height = 800; break;
+            case '4:3': width = 800; height = 600; break;
+        }
+        
+        resizeCanvas(width, height);
+    }
+    
+    // 应用自定义尺寸
+    function applyCustomSize() {
+        const width = parseInt(document.getElementById('canvas-width').value) || 800;
+        const height = parseInt(document.getElementById('canvas-height').value) || 600;
+        resizeCanvas(Math.max(100, Math.min(2000, width)), Math.max(100, Math.min(2000, height)));
+    }
+    
+    // 调整画布尺寸
+    function resizeCanvas(width, height) {
+        const container = document.querySelector('.canvas-container');
+        container.style.width = width + 'px';
+        container.style.height = height + 'px';
+        
+        canvas.setWidth(width);
+        canvas.setHeight(height);
+        canvas.renderAll();
+        
+        // 更新尺寸显示
+        const sizeDisplay = document.querySelector('.absolute.bottom-4.left-4 span:first-child');
+        if (sizeDisplay) {
+            sizeDisplay.innerHTML = `画布尺寸: ${width}×${height}`;
+        }
+    }
+    
+    // 更新画布背景颜色
+    function updateCanvasBackground() {
+        const color = document.getElementById('canvas-bg-color').value;
+        canvas.setBackgroundColor(color, canvas.renderAll.bind(canvas));
+        
+        // 同步预设选择器
+        const preset = document.getElementById('canvas-bg-preset');
+        preset.value = color;
+    }
+    
+    // 更新画布背景预设
+    function updateCanvasBackgroundPreset() {
+        const preset = document.getElementById('canvas-bg-preset').value;
+        if (preset === 'custom') {
+            document.getElementById('canvas-bg-color').click();
+            return;
+        }
+        
+        document.getElementById('canvas-bg-color').value = preset;
+        canvas.setBackgroundColor(preset, canvas.renderAll.bind(canvas));
+    }
+    
+    // 切换网格显示
+    function toggleCanvasGrid() {
+        const showGrid = document.getElementById('show-grid').checked;
+        const area = document.querySelector('.canvas-area');
+        
+        if (showGrid) {
+            area.style.backgroundImage = 'radial-gradient(#1a1a1a 1px, transparent 1px)';
+            area.style.backgroundSize = '30px 30px';
+        } else {
+            area.style.backgroundImage = 'none';
+        }
+    }
+    
+    // 初始化缩放
+    setCanvasScale(1);
 
     let history = [];
     let mods = 0;
@@ -372,23 +520,85 @@
         updateHistogram();
     }
 
-    function applyPreset(type) {
+    // 存储当前应用的滤镜
+    let activeFilters = [];
+    
+    // 切换滤镜（点击添加，再次点击移除）
+    function toggleFilter(type, button) {
         const obj = canvas.getActiveObject();
         if (!obj || obj.type !== 'image') return;
-        obj.filters = [];
-        if (type === 'Grayscale') obj.filters.push(new fabric.Image.filters.Grayscale());
-        if (type === 'Sepia') obj.filters.push(new fabric.Image.filters.Sepia());
-        if (type === 'Invert') obj.filters.push(new fabric.Image.filters.Invert());
-        if (type === 'Vintage') obj.filters.push(new fabric.Image.filters.Brownie());
+        
+        // 检查是否已存在相同类型的滤镜
+        const existingIndex = activeFilters.findIndex(f => f.type === type);
+        
+        if (existingIndex > -1) {
+            // 移除滤镜
+            activeFilters.splice(existingIndex, 1);
+            button.classList.remove('active');
+        } else {
+            // 添加滤镜
+            let filter;
+            switch(type) {
+                case 'Grayscale': filter = new fabric.Image.filters.Grayscale(); break;
+                case 'Sepia': filter = new fabric.Image.filters.Sepia(); break;
+                case 'Invert': filter = new fabric.Image.filters.Invert(); break;
+                case 'Vintage': filter = new fabric.Image.filters.Brownie(); break;
+                case 'Blur': filter = new fabric.Image.filters.Blur({ blur: 0.1 }); break;
+                case 'Pixelate': filter = new fabric.Image.filters.Pixelate({ blocksize: 4 }); break;
+                case 'Noise': filter = new fabric.Image.filters.Noise({ noise: 100 }); break;
+                case 'Hue': filter = new fabric.Image.filters.HueRotation({ rotation: 0.5 }); break;
+                case 'Sharpen': filter = new fabric.Image.filters.Convolute({
+                    matrix: [ 0, -1,  0, -1,  5, -1,  0, -1,  0 ]
+                }); break;
+                case 'Emboss': filter = new fabric.Image.filters.Convolute({
+                    matrix: [ 1,   1,  1, 1, 0.7, -1, -1, -1, -1 ]
+                }); break;
+                default: return;
+            }
+            
+            activeFilters.push({ type, filter });
+            button.classList.add('active');
+        }
+        
+        applyAllFilters();
+    }
+    
+    // 应用所有滤镜
+    function applyAllFilters() {
+        const obj = canvas.getActiveObject();
+        if (!obj) return;
+        
+        obj.filters = activeFilters.map(f => f.filter);
         obj.applyFilters();
         canvas.renderAll();
     }
-
+    
+    // 重置所有滤镜
     function resetFilters() {
         const obj = canvas.getActiveObject();
-        if (obj) { obj.filters = []; obj.applyFilters(); canvas.renderAll(); }
+        activeFilters = [];
+        
+        // 清除所有按钮的激活状态
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        
+        if (obj) { 
+            obj.filters = []; 
+            obj.applyFilters(); 
+            canvas.renderAll(); 
+        }
+        
         document.querySelectorAll('input[type=range]').forEach(r => r.value = 0);
         applyComplexFilter();
+    }
+    
+    // 兼容旧函数（单个滤镜应用）
+    function applyPreset(type) {
+        const button = document.querySelector(`[data-filter="${type}"]`);
+        if (button) {
+            toggleFilter(type, button);
+        }
     }
 
     // --- 3. 抠图与生成 ---
@@ -455,17 +665,72 @@
         if (!elCropRect) return;
         const activeObj = canvas.getObjects().find(o => o !== elCropRect && o.visible);
         if (!activeObj) return cancelCrop();
-        const left = elCropRect.left - activeObj.left;
-        const top = elCropRect.top - activeObj.top;
-        activeObj.set({
-            clipPath: new fabric.Rect({
-                left: left / activeObj.scaleX - activeObj.width/2,
-                top: top / activeObj.scaleY - activeObj.height/2,
-                width: elCropRect.getScaledWidth() / activeObj.scaleX,
-                height: elCropRect.getScaledHeight() / activeObj.scaleY,
-            })
-        });
-        cancelCrop(); saveHistory();
+        
+        // 计算裁剪区域的相对坐标和尺寸
+        const cropLeft = elCropRect.left - activeObj.left;
+        const cropTop = elCropRect.top - activeObj.top;
+        const cropWidth = elCropRect.getScaledWidth();
+        const cropHeight = elCropRect.getScaledHeight();
+        
+        // 如果是图片对象，使用真正的裁剪
+        if (activeObj.type === 'image') {
+            // 创建新的裁剪后的图片
+            const canvasElement = document.createElement('canvas');
+            const ctx = canvasElement.getContext('2d');
+            
+            // 设置裁剪画布尺寸
+            canvasElement.width = cropWidth;
+            canvasElement.height = cropHeight;
+            
+            // 获取原始图片元素
+            const imgElement = activeObj.getElement();
+            
+            // 在画布上绘制裁剪区域
+            ctx.drawImage(
+                imgElement,
+                cropLeft / activeObj.scaleX, // 源图片裁剪起点x
+                cropTop / activeObj.scaleY,  // 源图片裁剪起点y
+                cropWidth / activeObj.scaleX,  // 源图片裁剪宽度
+                cropHeight / activeObj.scaleY, // 源图片裁剪高度
+                0, 0, // 目标画布起点
+                cropWidth, // 目标画布宽度
+                cropHeight  // 目标画布高度
+            );
+            
+            // 创建新的Fabric图片对象
+            fabric.Image.fromURL(canvasElement.toDataURL(), function(img) {
+                // 保持原位置和属性
+                img.set({
+                    left: activeObj.left + cropLeft,
+                    top: activeObj.top + cropTop,
+                    scaleX: 1,
+                    scaleY: 1,
+                    angle: activeObj.angle,
+                    opacity: activeObj.opacity,
+                    data: activeObj.data
+                });
+                
+                // 移除原图片，添加新裁剪后的图片
+                canvas.remove(activeObj);
+                canvas.add(img);
+                canvas.setActiveObject(img);
+                
+                cancelCrop(); 
+                saveHistory();
+            });
+        } else {
+            // 对于非图片对象，使用clipPath（保持原有逻辑）
+            activeObj.set({
+                clipPath: new fabric.Rect({
+                    left: cropLeft / activeObj.scaleX - activeObj.width/2,
+                    top: cropTop / activeObj.scaleY - activeObj.height/2,
+                    width: cropWidth / activeObj.scaleX,
+                    height: cropHeight / activeObj.scaleY,
+                })
+            });
+            cancelCrop(); 
+            saveHistory();
+        }
     }
 
     function cancelCrop() {
@@ -593,11 +858,6 @@
     }
 
     function removeLayer(idx, e) { e.stopPropagation(); canvas.remove(canvas.getObjects()[idx]); saveHistory(); }
-
-    function toggleFullscreen() {
-        if (!document.fullscreenElement) document.documentElement.requestFullscreen();
-        else document.exitFullscreen();
-    }
 
     canvas.on('mouse:wheel', function(opt) {
         let zoom = canvas.getZoom() * (0.999 ** opt.e.deltaY);

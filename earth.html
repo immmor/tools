@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D探索地球 - 交互学习</title>
+    <style>
+        body { margin: 0; background-color: #000; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        #info-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 300px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            border: 1px solid #00f2ff;
+            backdrop-filter: blur(10px);
+            display: none;
+            pointer-events: none;
+            box-shadow: 0 0 20px rgba(0, 242, 255, 0.3);
+        }
+        #ui-hint {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #00f2ff;
+            text-align: center;
+            text-shadow: 0 0 5px #000;
+        }
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="info-panel">
+        <h2 id="country-name">国家名称</h2>
+        <p id="country-desc">这里是关于该国家的知识介绍...</p>
+        <div style="font-size: 0.8em; color: #00f2ff;">点击地球切换目标</div>
+    </div>
+
+    <div id="ui-hint">手势拖拽旋转地球 | 点击探索国家</div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        let scene, camera, renderer, globe, pointer, controls;
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        // 模拟国家数据
+        const countryData = {
+            "China": "中国是世界四大文明古国之一，拥有灿烂的文化和广袤的土地。",
+            "USA": "美国是位于北美的联邦共和制国家，以其多元文化和科技领先闻名。",
+            "Brazil": "巴西是南美洲最大的国家，拥有世界上最大的热带雨林——亚马逊雨林。",
+            "Egypt": "埃及是位于非洲东北部的文明古国，以金字塔和尼罗河著称。"
+        };
+
+        init();
+        animate();
+
+        function init() {
+            // 场景设置
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 4;
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.body.appendChild(renderer.domElement);
+
+            // 光照
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+            scene.add(ambientLight);
+            const pointLight = new THREE.PointLight(0xffffff, 1.5);
+            pointLight.position.set(5, 3, 5);
+            scene.add(pointLight);
+
+            // 创建地球
+            const geometry = new THREE.SphereGeometry(1, 64, 64);
+            const textureLoader = new THREE.TextureLoader();
+            
+            // 使用公共纹理贴图
+            const material = new THREE.MeshPhongMaterial({
+                map: textureLoader.load('https://unpkg.com/threejs-earth@1.0.3/dist/assets/earth_bright.jpg'),
+                bumpMap: textureLoader.load('https://unpkg.com/threejs-earth@1.0.3/dist/assets/earth_bump.jpg'),
+                bumpScale: 0.05,
+                specularMap: textureLoader.load('https://unpkg.com/threejs-earth@1.0.3/dist/assets/earth_specular.jpg'),
+                specular: new THREE.Color('grey')
+            });
+            
+            globe = new THREE.Mesh(geometry, material);
+            scene.add(globe);
+
+            // 创建指针 (一个小圆锥)
+            const pointerGeo = new THREE.ConeGeometry(0.02, 0.1, 12);
+            const pointerMat = new THREE.MeshBasicMaterial({ color: 0x00f2ff });
+            pointer = new THREE.Mesh(pointerGeo, pointerMat);
+            pointer.rotation.x = -Math.PI / 2;
+            pointer.visible = false;
+            scene.add(pointer);
+
+            // 控制器 (支持旋转和缩放手势)
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.rotateSpeed = 0.5;
+
+            // 事件监听
+            window.addEventListener('mousedown', onPointerClick);
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function onPointerClick(event) {
+            // 将鼠标坐标归一化
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(globe);
+
+            if (intersects.length > 0) {
+                const point = intersects[0].point;
+                updatePointer(point);
+                showInfo(point);
+            }
+        }
+
+        function updatePointer(point) {
+            pointer.visible = true;
+            pointer.position.copy(point.clone().multiplyScalar(1.05)); // 稍微浮在表面
+            pointer.lookAt(new THREE.Vector3(0, 0, 0)); // 尖端指向地心
+            pointer.rotateX(Math.PI / 2); // 修正旋转方向
+        }
+
+        function showInfo(point) {
+            // 根据点击点的坐标简单模拟识别（实际应用中需结合GeoJSON）
+            const panel = document.getElementById('info-panel');
+            const title = document.getElementById('country-name');
+            const desc = document.getElementById('country-desc');
+
+            panel.style.display = 'block';
+            
+            // 这里为了演示，逻辑上随机展示数据，实际中需根据经纬度判断
+            const keys = Object.keys(countryData);
+            const randomKey = keys[Math.floor(Math.random() * keys.length)];
+            
+            title.innerText = randomKey;
+            desc.innerText = countryData[randomKey];
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            if (!pointer.visible) {
+                globe.rotation.y += 0.002; // 待机时自动旋转
+            }
+            controls.update();
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
