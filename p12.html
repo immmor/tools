@@ -26,22 +26,24 @@
                 top: 50px; 
                 width: 280px; 
                 height: calc(100vh - 50px); 
-                z-index: 100; 
+                z-index: 200; 
                 transform: translateX(100%); 
                 transition: transform 0.3s ease;
+                pointer-events: auto;
             }
             .sidebar-right.active { 
                 transform: translateX(0); 
             }
             .sidebar-layers { 
                 position: fixed; 
-                left: 60px; 
+                left: 0; 
                 top: 50px; 
                 width: 250px; 
                 height: calc(100vh - 50px); 
-                z-index: 100; 
+                z-index: 200; 
                 transform: translateX(-100%); 
                 transition: transform 0.3s ease;
+                pointer-events: auto;
             }
             .sidebar-layers.active { 
                 transform: translateX(0); 
@@ -50,8 +52,9 @@
                 position: fixed; 
                 inset: 0; 
                 background: rgba(0,0,0,0.7); 
-                z-index: 99; 
+                z-index: 150; 
                 display: none;
+                pointer-events: auto;
             }
             .overlay.active { 
                 display: block; 
@@ -215,7 +218,7 @@
     
     <div class="overlay" id="overlay" onclick="closeAllPanels()"></div>
 
-    <aside class="sidebar-layers glass-panel border-l border-white/5 p-4 hidden lg:flex flex-col z-40" id="layers-panel">
+    <aside class="sidebar-layers glass-panel border-l border-white/5 p-4 hidden lg:flex flex-col" id="layers-panel">
         <div class="flex justify-between items-center mb-4">
             <h3 class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">图层面板 Layers</h3>
             <div class="flex space-x-1">
@@ -251,8 +254,32 @@
     let selectedFaceData = null; // 当前选中的人脸区域数据
 
     lucide.createIcons();
+    
+    // 初始化画笔功能和事件
+    initBrushSettings();
+    initBrushEvents();
 
     // --- 面板控制函数 ---
+    
+    // 初始化画笔事件监听
+    function initBrushEvents() {
+        // 监听画笔绘制结束事件，自动保存历史记录
+        canvas.on('path:created', function() {
+            // 延迟保存，确保路径已经完全创建
+            setTimeout(() => {
+                saveHistory();
+            }, 100);
+        });
+    }
+    
+    // 初始化画笔设置
+    function initBrushSettings() {
+        canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
+        canvas.freeDrawingBrush.width = parseInt(document.getElementById('brush-width').value);
+        canvas.freeDrawingBrush.color = document.getElementById('fill-color').value;
+        canvas.freeDrawingBrush.decimate = 1; // 减少采样率，提高性能
+    }
+
     function togglePanel(panelType) {
         const overlay = document.getElementById('overlay');
         const settingsPanel = document.getElementById('settings-panel');
@@ -618,6 +645,11 @@
         const btn = document.getElementById('tool-' + mode);
         if(btn) btn.classList.add('active');
         document.getElementById('brush-settings').style.display = (mode === 'brush' ? 'block' : 'none');
+        
+        // 如果是画笔模式，重新初始化画笔设置
+        if (mode === 'brush') {
+            updateBrush();
+        }
     }
 
     function updateBrush() {
