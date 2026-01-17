@@ -23,7 +23,7 @@
         .tool-btn.active { background: #3b82f6; color: white; }
         .tool-btn:hover:not(.active) { color: #8892b0; background: rgba(255,255,255,0.05); }
         .canvas-area { background-color: #080808; background-image: radial-gradient(#1a1a1a 1px, transparent 1px); background-size: 30px 30px; position: relative; overflow: hidden; }
-        .canvas-container { width: 800px; height: 600px; border: 2px solid rgba(255,255,255,0.1); border-radius: 8px; position: relative; overflow: hidden; box-shadow: 0 0 0 1px rgba(255,255,255,0.05) inset; transform-origin: center center; transition: transform 0.2s ease; }
+        .canvas-container { width: 800px; height: 600px; border: 2px solid rgba(255,255,255,0.1); border-radius: 8px; position: relative; overflow: hidden; box-shadow: 0 0 0 1px rgba(255,255,255,0.05) inset; transform-origin: center center; transition: transform 0.2s ease; max-width: 90vw; max-height: 70vh; }
         .canvas-container::before { content: ''; position: absolute; inset: 0; border: 1px solid rgba(255,255,255,0.05); border-radius: 6px; pointer-events: none; }
         #main-canvas { }
         .loading-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 9999; display: none; flex-direction: column; align-items: center; justify-content: center; }
@@ -267,10 +267,9 @@
         document.getElementById('zoom-level').innerText = Math.round(canvasScale * 100) + '%';
     }
     
-    // 更新画布比例
+    // 更新画布比例（响应式适配）
     function updateCanvasRatio() {
         const ratio = document.getElementById('canvas-ratio').value;
-        const container = document.querySelector('.canvas-container');
         const customSize = document.getElementById('custom-size');
         
         if (ratio === 'custom') {
@@ -280,23 +279,75 @@
         
         customSize.classList.add('hidden');
         
-        let width = 800, height = 600;
+        // 根据屏幕尺寸计算基础尺寸
+        const screenWidth = window.innerWidth;
+        const screenHeight = window.innerHeight;
+        const maxWidth = Math.min(800, screenWidth * 0.8);
+        const maxHeight = Math.min(600, screenHeight * 0.7);
+        
+        let width, height;
+        
         switch(ratio) {
-            case '1:1': width = height = 600; break;
-            case '16:9': width = 800; height = 450; break;
-            case '3:2': width = 800; height = 533; break;
-            case '9:16': width = 450; height = 800; break;
-            case '4:3': width = 800; height = 600; break;
+            case '1:1': 
+                const size1 = Math.min(maxWidth, maxHeight);
+                width = height = size1;
+                break;
+            case '16:9': 
+                width = maxWidth;
+                height = Math.round(width * 9 / 16);
+                if (height > maxHeight) {
+                    height = maxHeight;
+                    width = Math.round(height * 16 / 9);
+                }
+                break;
+            case '3:2': 
+                width = maxWidth;
+                height = Math.round(width * 2 / 3);
+                if (height > maxHeight) {
+                    height = maxHeight;
+                    width = Math.round(height * 3 / 2);
+                }
+                break;
+            case '9:16': 
+                height = maxHeight;
+                width = Math.round(height * 9 / 16);
+                if (width > maxWidth) {
+                    width = maxWidth;
+                    height = Math.round(width * 16 / 9);
+                }
+                break;
+            case '4:3': 
+                width = maxWidth;
+                height = Math.round(width * 3 / 4);
+                if (height > maxHeight) {
+                    height = maxHeight;
+                    width = Math.round(height * 4 / 3);
+                }
+                break;
         }
+        
+        // 确保最小尺寸
+        width = Math.max(300, width);
+        height = Math.max(200, height);
         
         resizeCanvas(width, height);
     }
     
-    // 应用自定义尺寸
+    // 应用自定义尺寸（响应式限制）
     function applyCustomSize() {
-        const width = parseInt(document.getElementById('canvas-width').value) || 800;
-        const height = parseInt(document.getElementById('canvas-height').value) || 600;
-        resizeCanvas(Math.max(100, Math.min(2000, width)), Math.max(100, Math.min(2000, height)));
+        const screenWidth = window.innerWidth;
+        const screenHeight = window.innerHeight;
+        const maxWidth = Math.min(2000, screenWidth * 0.9);
+        const maxHeight = Math.min(2000, screenHeight * 0.8);
+        
+        let width = parseInt(document.getElementById('canvas-width').value) || 800;
+        let height = parseInt(document.getElementById('canvas-height').value) || 600;
+        
+        // 应用响应式限制
+        width = Math.max(300, Math.min(maxWidth, width));
+        height = Math.max(200, Math.min(maxHeight, height));
+        
+        resizeCanvas(width, height);
     }
     
     // 调整画布尺寸
@@ -868,6 +919,12 @@
     });
 
     window.onload = () => { saveHistory(); renderLayers(); }
+    window.addEventListener('resize', function() {
+        const ratio = document.getElementById('canvas-ratio').value;
+        if (ratio !== 'custom') {
+            updateCanvasRatio();
+        }
+    });
 </script>
 </body>
 </html>
