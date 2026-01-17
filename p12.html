@@ -12,54 +12,7 @@
     <style>
         body { background: #020203; color: #e2e8f0; font-family: 'Inter', sans-serif; height: 100vh; overflow: hidden; }
         .ps-layout { display: grid; grid-template-columns: 60px 280px 1fr 300px; grid-template-rows: 50px 1fr; height: 100vh; }
-        @media (max-width: 1024px) { 
-            .ps-layout { 
-                grid-template-columns: 60px 1fr; 
-                grid-template-rows: 50px 1fr; 
-                grid-template-areas: 
-                    "header header"
-                    "sidebar main";
-            } 
-            .sidebar-right { 
-                position: fixed; 
-                right: 0; 
-                top: 50px; 
-                width: 280px; 
-                height: calc(100vh - 50px); 
-                z-index: 200; 
-                transform: translateX(100%); 
-                transition: transform 0.3s ease;
-                pointer-events: auto;
-            }
-            .sidebar-right.active { 
-                transform: translateX(0); 
-            }
-            .sidebar-layers { 
-                position: fixed; 
-                left: 0; 
-                top: 50px; 
-                width: 250px; 
-                height: calc(100vh - 50px); 
-                z-index: 200; 
-                transform: translateX(-100%); 
-                transition: transform 0.3s ease;
-                pointer-events: auto;
-            }
-            .sidebar-layers.active { 
-                transform: translateX(0); 
-            }
-            .overlay { 
-                position: fixed; 
-                inset: 0; 
-                background: rgba(0,0,0,0.7); 
-                z-index: 150; 
-                display: none;
-                pointer-events: auto;
-            }
-            .overlay.active { 
-                display: block; 
-            }
-        }
+        @media (max-width: 1024px) { .ps-layout { grid-template-columns: 50px 1fr; grid-template-rows: 50px 1fr; } .sidebar-right, .sidebar-layers { position: absolute; top: 50px; right: 0; width: 300px; height: calc(100vh - 50px); z-index: 100; } }
         .glass-panel { background: rgba(10, 10, 15, 0.98); backdrop-filter: blur(40px); border: 1px solid rgba(255, 255, 255, 0.05); }
         .tool-btn { width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; border-radius: 10px; transition: 0.2s; color: #475569; position: relative; cursor: pointer; }
         .tool-btn.active { background: #3b82f6; color: white; }
@@ -86,16 +39,24 @@
 </div>
 
 <div class="ps-layout">
-    <header class="col-span-full glass-panel flex items-center px-4 md:px-6 justify-between border-b border-white/5 z-50" style="grid-area: header;">
+    <header class="col-span-full glass-panel flex items-center px-4 md:px-6 justify-between border-b border-white/5 z-50">
         <div class="flex items-center space-x-4">
             <span class="font-black italic text-blue-500 text-xl tracking-tighter">im.PS AI</span>
             <div class="hidden md:flex space-x-6 text-[10px] uppercase font-bold tracking-widest text-gray-400">
+                <button onclick="document.getElementById('fileInput').click()" class="hover:text-blue-400 transition">Import RAW</button>
                 <button onclick="saveProject()" class="hover:text-blue-400 transition">Save .IMPS</button>
+                <button onclick="downloadImage()" class="text-blue-500 hover:text-blue-300">Export Final</button>
             </div>
         </div>
         <div class="flex items-center space-x-2">
-            <button onclick="togglePanel('layers')" class="p-2 hover:text-blue-400 lg:hidden"><i data-lucide="layers" class="w-4"></i></button>
-            <button onclick="togglePanel('settings')" class="p-2 hover:text-blue-400 lg:hidden"><i data-lucide="settings" class="w-4"></i></button>
+            <div class="flex md:hidden space-x-2">
+                <button onclick="document.querySelector('.sidebar-right').classList.toggle('hidden')" class="p-2 hover:text-blue-400" title="参数设置">
+                    <i data-lucide="sliders-horizontal" class="w-4"></i>
+                </button>
+                <button onclick="document.querySelector('.sidebar-layers').classList.toggle('hidden')" class="p-2 hover:text-blue-400" title="图层界面">
+                    <i data-lucide="layers" class="w-4"></i>
+                </button>
+            </div>
             <button onclick="undo()" class="p-2 hover:text-blue-400"><i data-lucide="undo-2" class="w-4"></i></button>
             <button onclick="redo()" class="p-2 hover:text-blue-400"><i data-lucide="redo-2" class="w-4"></i></button>
             <div class="h-4 w-[1px] bg-white/10 mx-2"></div>
@@ -103,9 +64,9 @@
         </div>
     </header>
 
-    <aside class="glass-panel flex flex-col items-center py-4 border-r border-white/5 space-y-2 z-40" style="grid-area: sidebar;">
-        <button class="tool-btn text-green-400 hover:bg-green-500/20" title="添加图片" onclick="document.getElementById('fileInput').click()"><i data-lucide="image-plus" class="w-5"></i></button>
-        <button class="tool-btn text-blue-400 hover:bg-blue-500/20" title="导出图片" onclick="downloadImage()"><i data-lucide="download" class="w-5"></i></button>
+    <aside class="glass-panel flex flex-col items-center py-4 border-r border-white/5 space-y-2 z-40 overflow-y-auto">
+        <button onclick="document.getElementById('fileInput').click()" class="tool-btn" title="添加图片"><i data-lucide="image-plus" class="w-5"></i></button>
+        <button onclick="downloadImage()" class="tool-btn" title="导出图片"><i data-lucide="download" class="w-5"></i></button>
         <div class="w-6 h-[1px] bg-gray-800 my-2"></div>
         <button class="tool-btn active" id="tool-select" title="选择" onclick="setMode('select')"><i data-lucide="mouse-pointer-2" class="w-5"></i></button>
         <button class="tool-btn" title="矩形" onclick="addRect()"><i data-lucide="square" class="w-5"></i></button>
@@ -121,7 +82,7 @@
         <button class="tool-btn text-red-500 hover:bg-red-500/20" onclick="deleteSelected()"><i data-lucide="trash-2" class="w-5"></i></button>
     </aside>
 
-    <aside class="sidebar-right glass-panel p-5 border-r border-white/5 space-y-6 overflow-y-auto hidden lg:block" id="settings-panel">
+    <aside class="sidebar-right glass-panel p-5 border-r border-white/5 space-y-6 overflow-y-auto hidden lg:block">
         <section id="face-panel" class="hidden border border-yellow-500/30 p-3 rounded bg-yellow-500/5">
             <h3 class="text-[10px] font-bold text-yellow-500 uppercase tracking-widest mb-3 flex items-center gap-2">
                 <i data-lucide="scan-face" class="w-3"></i> Face Retouching
@@ -204,7 +165,7 @@
         </section>
     </aside>
 
-    <main class="canvas-area flex items-center justify-center relative" style="grid-area: main;">
+    <main class="canvas-area flex items-center justify-center relative">
         <canvas id="main-canvas"></canvas>
         <input type="file" id="fileInput" class="hidden" accept="image/*">
         
@@ -215,10 +176,8 @@
             <span class="text-blue-400 ml-4" id="zoom-level">100%</span>
         </div>
     </main>
-    
-    <div class="overlay" id="overlay" onclick="closeAllPanels()"></div>
 
-    <aside class="sidebar-layers glass-panel border-l border-white/5 p-4 hidden lg:flex flex-col" id="layers-panel">
+    <aside class="sidebar-layers glass-panel border-l border-white/5 p-4 hidden lg:flex flex-col z-40">
         <div class="flex justify-between items-center mb-4">
             <h3 class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">图层面板 Layers</h3>
             <div class="flex space-x-1">
@@ -254,77 +213,6 @@
     let selectedFaceData = null; // 当前选中的人脸区域数据
 
     lucide.createIcons();
-    
-    // 初始化画笔功能和事件
-    initBrushSettings();
-    initBrushEvents();
-
-    // --- 面板控制函数 ---
-    
-    // 初始化画笔事件监听
-    function initBrushEvents() {
-        // 监听画笔绘制结束事件，自动保存历史记录
-        canvas.on('path:created', function() {
-            // 延迟保存，确保路径已经完全创建
-            setTimeout(() => {
-                saveHistory();
-            }, 100);
-        });
-    }
-    
-    // 初始化画笔设置
-    function initBrushSettings() {
-        canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
-        canvas.freeDrawingBrush.width = parseInt(document.getElementById('brush-width').value);
-        canvas.freeDrawingBrush.color = document.getElementById('fill-color').value;
-        canvas.freeDrawingBrush.decimate = 1; // 减少采样率，提高性能
-    }
-
-    function togglePanel(panelType) {
-        const overlay = document.getElementById('overlay');
-        const settingsPanel = document.getElementById('settings-panel');
-        const layersPanel = document.getElementById('layers-panel');
-        
-        // 先关闭所有面板
-        closeAllPanels();
-        
-        if (panelType === 'settings') {
-            // 移除隐藏类，添加激活类
-            settingsPanel.classList.remove('hidden');
-            settingsPanel.classList.add('active');
-            overlay.classList.add('active');
-        } else if (panelType === 'layers') {
-            // 移除隐藏类，添加激活类
-            layersPanel.classList.remove('hidden');
-            layersPanel.classList.add('active');
-            overlay.classList.add('active');
-        }
-    }
-
-    function closeAllPanels() {
-        const overlay = document.getElementById('overlay');
-        const settingsPanel = document.getElementById('settings-panel');
-        const layersPanel = document.getElementById('layers-panel');
-        
-        // 移除激活类，恢复隐藏类（仅在小屏幕下）
-        settingsPanel.classList.remove('active');
-        layersPanel.classList.remove('active');
-        
-        // 在小屏幕下重新添加隐藏类
-        if (window.innerWidth <= 1024) {
-            settingsPanel.classList.add('hidden');
-            layersPanel.classList.add('hidden');
-        }
-        
-        overlay.classList.remove('active');
-    }
-
-    // 点击遮罩关闭面板
-    document.addEventListener('click', (e) => {
-        if (e.target.id === 'overlay') {
-            closeAllPanels();
-        }
-    });
 
     fabric.Object.prototype.set({
         transparentCorners: false,
@@ -645,11 +533,6 @@
         const btn = document.getElementById('tool-' + mode);
         if(btn) btn.classList.add('active');
         document.getElementById('brush-settings').style.display = (mode === 'brush' ? 'block' : 'none');
-        
-        // 如果是画笔模式，重新初始化画笔设置
-        if (mode === 'brush') {
-            updateBrush();
-        }
     }
 
     function updateBrush() {
@@ -691,57 +574,10 @@
     };
 
     function downloadImage() {
-        // 获取当前画布尺寸
-        const originalWidth = canvas.getWidth();
-        const originalHeight = canvas.getHeight();
-        
-        // 创建临时画布，保持原始尺寸
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = originalWidth;
-        tempCanvas.height = originalHeight;
-        const tempCtx = tempCanvas.getContext('2d');
-        
-        // 设置高质量渲染
-        tempCtx.imageSmoothingEnabled = false;
-        tempCtx.webkitImageSmoothingEnabled = false;
-        tempCtx.mozImageSmoothingEnabled = false;
-        
-        // 绘制到临时画布
-        tempCtx.fillStyle = canvas.backgroundColor || '#080808';
-        tempCtx.fillRect(0, 0, originalWidth, originalHeight);
-        
-        // 导出所有对象，保持原始质量
-        canvas.getObjects().forEach(obj => {
-            // 保存当前状态
-            const originalLeft = obj.left;
-            const originalTop = obj.top;
-            const originalScaleX = obj.scaleX;
-            const originalScaleY = obj.scaleY;
-            
-            // 临时调整位置到临时画布
-            obj.set({
-                left: obj.left - canvas.viewportTransform[4],
-                top: obj.top - canvas.viewportTransform[5]
-            });
-            
-            // 绘制对象
-            obj.render(tempCtx);
-            
-            // 恢复原始位置
-            obj.set({
-                left: originalLeft,
-                top: originalTop,
-                scaleX: originalScaleX,
-                scaleY: originalScaleY
-            });
-        });
-        
-        // 导出高质量PNG
-        const dataURL = tempCanvas.toDataURL('image/png', 1.0);
+        const dataURL = canvas.toDataURL({ format: 'png', quality: 1, multiplier: 2 });
         const link = document.createElement('a');
-        link.download = `IMPS_HD_${Date.now()}.png`;
-        link.href = dataURL;
-        link.click();
+        link.download = `IMPS_EXPORT_${Date.now()}.png`;
+        link.href = dataURL; link.click();
     }
 
     function deleteSelected() { 
