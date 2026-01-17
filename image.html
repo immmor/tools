@@ -223,11 +223,11 @@
         </div>
         <input type="file" id="fileInput" class="hidden" accept="image/*">
         
-        <div class="absolute bottom-4 left-4 flex space-x-4 bg-black/60 backdrop-blur px-4 py-2 rounded-full text-[9px] font-mono text-gray-300 md:block hidden border border-white/5">
-            <span>[V] 选择</span>
-            <span>[B] 画笔</span>
-            <span>[ALT+F] 检测人脸</span>
-            <span class="text-blue-400 ml-4" id="zoom-level">100%</span>
+        <div class="absolute bottom-4 left-4 flex space-x-4 bg-black/60 backdrop-blur px-4 py-2 rounded-full text-[9px] font-mono text-gray-300 border border-white/5">
+            <span class="hidden md:inline">[V] 选择</span>
+            <span class="hidden md:inline">[B] 画笔</span>
+            <span class="hidden md:inline">[ALT+F] 检测人脸</span>
+            <span class="text-blue-400 ml-2 md:ml-4" id="zoom-level">100%</span>
             <button onclick="setCanvasScale(canvasScale - 0.1)" class="hover:text-white">-</button>
             <button onclick="setCanvasScale(canvasScale + 0.1)" class="hover:text-white">+</button>
             <button onclick="setCanvasScale(1)" class="hover:text-white">重置</button>
@@ -614,14 +614,44 @@
         applyAllFilters();
     }
     
-    // 应用所有滤镜
+    // 应用所有滤镜（修复截断问题）
     function applyAllFilters() {
         const obj = canvas.getActiveObject();
         if (!obj) return;
         
+        // 保存原始尺寸和位置
+        const originalLeft = obj.left;
+        const originalTop = obj.top;
+        const originalScaleX = obj.scaleX;
+        const originalScaleY = obj.scaleY;
+        const originalAngle = obj.angle;
+        
+        // 应用滤镜
         obj.filters = activeFilters.map(f => f.filter);
         obj.applyFilters();
-        canvas.renderAll();
+        
+        // 修复滤镜导致的尺寸和位置问题
+        setTimeout(() => {
+            // 确保图片尺寸正确
+            if (obj._element) {
+                const imgElement = obj._element;
+                const originalWidth = imgElement.naturalWidth || imgElement.width;
+                const originalHeight = imgElement.naturalHeight || imgElement.height;
+                
+                // 重新设置正确的尺寸
+                obj.set({
+                    width: originalWidth,
+                    height: originalHeight,
+                    scaleX: originalScaleX,
+                    scaleY: originalScaleY,
+                    left: originalLeft,
+                    top: originalTop,
+                    angle: originalAngle
+                });
+            }
+            
+            canvas.renderAll();
+        }, 10);
     }
     
     // 重置所有滤镜
@@ -890,10 +920,56 @@
     };
 
     function downloadImage() {
-        const dataURL = canvas.toDataURL({ format: 'png', quality: 1, multiplier: 2 });
-        const link = document.createElement('a');
-        link.download = `IMPS_EXPORT_${Date.now()}.png`;
-        link.href = dataURL; link.click();
+        // 创建高质量图片数据
+        const dataURL = canvas.toDataURL({ 
+            format: 'png', 
+            quality: 1, 
+            multiplier: 2 
+        });
+        
+        // iOS Safari兼容性处理
+        if (/iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream) {
+            // iOS设备使用新的下载方式
+            const img = new Image();
+            img.src = dataURL;
+            
+            img.onload = function() {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                ctx.drawImage(img, 0, 0);
+                
+                // 使用新的下载方法
+                canvas.toBlob(function(blob) {
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `IMPS_EXPORT_${Date.now()}.png`;
+                    
+                    // 创建并触发点击事件
+                    const event = new MouseEvent('click', {
+                        view: window,
+                        bubbles: true,
+                        cancelable: true
+                    });
+                    a.dispatchEvent(event);
+                    
+                    // 清理URL
+                    setTimeout(() => URL.revokeObjectURL(url), 100);
+                }, 'image/png', 1);
+            };
+        } else {
+            // 其他设备使用传统方式
+            const link = document.createElement('a');
+            link.download = `IMPS_EXPORT_${Date.now()}.png`;
+            link.href = dataURL;
+            
+            // 确保链接在DOM中
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
     }
 
     function deleteSelected() { 
