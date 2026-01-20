@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VOID AI - 维度合成器</title>
+    <style>
+        :root {
+            --neon-blue: #00f2ff;
+            --neon-purple: #7000ff;
+            --surface: rgba(10, 10, 20, 0.7);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Orbitron', sans-serif; }
+
+        body {
+            background: #000;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            perspective: 1500px; /* 关键：开启 3D 透视 */
+        }
+
+        /* 3D 场景底座 */
+        .scene {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transform-style: preserve-3d;
+            transition: transform 0.1s ease-out;
+        }
+
+        /* 底部 3D 网格 */
+        .grid-floor {
+            position: absolute;
+            width: 200%;
+            height: 200%;
+            background-image: 
+                linear-gradient(var(--neon-purple) 1px, transparent 1px),
+                linear-gradient(90deg, var(--neon-purple) 1px, transparent 1px);
+            background-size: 60px 60px;
+            transform: rotateX(75deg) translateZ(-400px);
+            opacity: 0.15;
+            mask-image: radial-gradient(circle, black, transparent 70%);
+        }
+
+        /* 中心控制台 */
+        .main-pod {
+            width: 600px;
+            padding: 40px;
+            background: var(--surface);
+            backdrop-filter: blur(20px);
+            border-radius: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            position: relative;
+            z-index: 10;
+            transform: translateZ(50px); /* 向前悬浮 */
+            box-shadow: 0 0 50px rgba(0,0,0,1), 0 0 20px rgba(112, 0, 255, 0.2);
+        }
+
+        .main-pod::before {
+            content: '';
+            position: absolute;
+            inset: -2px;
+            border-radius: 32px;
+            background: linear-gradient(45deg, var(--neon-blue), transparent, var(--neon-purple));
+            z-index: -1;
+            opacity: 0.5;
+        }
+
+        h1 { font-size: 1.8rem; letter-spacing: 4px; margin-bottom: 25px; text-align: center; }
+
+        .input-wrap {
+            position: relative;
+            background: rgba(255,255,255,0.05);
+            border-radius: 15px;
+            padding: 5px;
+            display: flex;
+        }
+
+        input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            padding: 15px;
+            color: white;
+            outline: none;
+            font-size: 1rem;
+        }
+
+        .btn-synth {
+            background: white;
+            border: none;
+            padding: 0 25px;
+            border-radius: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .btn-synth:hover { background: var(--neon-blue); box-shadow: 0 0 20px var(--neon-blue); }
+
+        /* 悬浮的结果卡片 */
+        .floating-results {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            transform-style: preserve-3d;
+        }
+
+        .card {
+            position: absolute;
+            width: 280px;
+            height: 200px;
+            background: var(--surface);
+            border-radius: 20px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            opacity: 0;
+            transition: all 1s cubic-bezier(0.23, 1, 0.32, 1);
+            pointer-events: all;
+        }
+
+        .card:hover { transform: translateZ(80px) !important; border-color: var(--neon-blue); }
+
+        .card img, .card video { width: 100%; height: 100%; object-fit: cover; opacity: 0.8; }
+
+        /* 坐标位置 */
+        .c1 { transform: translate3d(-450px, -150px, 100px) rotateY(20deg); }
+        .c2 { transform: translate3d(450px, 100px, 150px) rotateY(-25deg); }
+        .c3 { transform: translate3d(-400px, 200px, 50px) rotateY(15deg); }
+
+        /* 扫描动画 */
+        .scanner {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 2px;
+            background: var(--neon-blue);
+            box-shadow: 0 0 15px var(--neon-blue);
+            animation: scan 2s infinite linear;
+            display: none;
+        }
+
+        @keyframes scan { 0% { top: 0%; } 100% { top: 100%; } }
+
+    </style>
+</head>
+<body>
+
+<div class="grid-floor"></div>
+
+<div class="scene" id="scene">
+    <div class="main-pod">
+        <h1>VOID GEN v4.0</h1>
+        <div class="input-wrap">
+            <input type="text" id="pInput" placeholder="输入维度坐标描述...">
+            <button class="btn-synth" onclick="synthesize()">SYNTHESIZE</button>
+        </div>
+        <div id="status" style="margin-top:15px; font-size: 10px; color: #555; text-align: center;">IDLE_WAITING...</div>
+    </div>
+
+    <div class="floating-results">
+        <div class="card c1" id="res1">
+            <div class="scanner"></div>
+            <img src="https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=500">
+        </div>
+        <div class="card c2" id="res2">
+            <div class="scanner"></div>
+            <video loop muted autoplay>
+                <source src="https://assets.mixkit.co/videos/preview/mixkit-top-view-of-a-glacier-river-42442-large.mp4" type="video/mp4">
+            </video>
+        </div>
+        <div class="card c3" id="res3">
+            <div class="scanner"></div>
+            <img src="https://images.unsplash.com/photo-1614728894747-a83421e2b9c9?w=500">
+        </div>
+    </div>
+</div>
+
+<script>
+    // 鼠标移动视差效果
+    const scene = document.getElementById('scene');
+    document.addEventListener('mousemove', (e) => {
+        const xAxis = (window.innerWidth / 2 - e.pageX) / 25;
+        const yAxis = (window.innerHeight / 2 - e.pageY) / 25;
+        scene.style.transform = `rotateY(${xAxis}deg) rotateX(${-yAxis}deg)`;
+    });
+
+    function synthesize() {
+        const input = document.getElementById('pInput').value;
+        if(!input) return;
+
+        const status = document.getElementById('status');
+        const cards = document.querySelectorAll('.card');
+        const scanners = document.querySelectorAll('.scanner');
+
+        status.innerText = "SYNTHESIZING_DIMENSIONS...";
+        status.style.color = "var(--neon-blue)";
+
+        cards.forEach(c => {
+            c.style.opacity = '0';
+            c.querySelector('.scanner').style.display = 'block';
+        });
+
+        // 模拟合成过程
+        setTimeout(() => {
+            cards.forEach((c, i) => {
+                setTimeout(() => {
+                    c.style.opacity = '1';
+                    // 完成后关闭扫描线
+                    setTimeout(() => {
+                        c.querySelector('.scanner').style.display = 'none';
+                    }, 2000);
+                }, i * 400);
+            });
+            status.innerText = "SYNTHESIS_COMPLETE";
+            status.style.color = "var(--neon-green)";
+        }, 1500);
+    }
+</script>
+
+</body>
+</html>

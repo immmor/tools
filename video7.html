@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>NEURAL-INTERFACE // 触感生成实验室</title>
+    <style>
+        :root {
+            --bg: #121214;
+            --panel: #1a1a1e;
+            --shadow-light: rgba(255, 255, 255, 0.03);
+            --shadow-dark: rgba(0, 0, 0, 0.5);
+            --neon: #00ffaa;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', system-ui, sans-serif; }
+
+        body {
+            background-color: var(--bg);
+            color: #e0e0e0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        /* 物理面板容器 */
+        .lab-panel {
+            width: 900px;
+            background: var(--panel);
+            padding: 40px;
+            border-radius: 40px;
+            box-shadow: 
+                20px 20px 60px var(--shadow-dark),
+                -5px -5px 20px var(--shadow-light);
+            position: relative;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            padding-bottom: 20px;
+        }
+
+        .status-dot {
+            display: inline-block;
+            width: 8px; height: 8px;
+            background: var(--neon);
+            border-radius: 50%;
+            margin-right: 8px;
+            box-shadow: 0 0 10px var(--neon);
+            animation: breathe 2s infinite;
+        }
+
+        /* 凹陷感输入框 */
+        .input-well {
+            background: #0f0f12;
+            padding: 10px;
+            border-radius: 20px;
+            box-shadow: 
+                inset 6px 6px 12px #08080a, 
+                inset -2px -2px 8px rgba(255,255,255,0.02);
+            display: flex;
+            margin-bottom: 40px;
+        }
+
+        input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            padding: 15px 20px;
+            color: var(--neon);
+            font-size: 1.1rem;
+            outline: none;
+            letter-spacing: 1px;
+        }
+
+        /* 凸起感按钮 */
+        .btn-push {
+            background: var(--panel);
+            color: white;
+            border: none;
+            padding: 0 30px;
+            border-radius: 15px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 
+                6px 6px 12px var(--shadow-dark),
+                -2px -2px 8px rgba(255,255,255,0.05);
+            transition: all 0.2s;
+        }
+
+        .btn-push:active {
+            box-shadow: 
+                inset 4px 4px 8px var(--shadow-dark),
+                inset -2px -2px 8px rgba(255,255,255,0.05);
+            transform: scale(0.98);
+        }
+
+        /* 结果卡片展示区 */
+        .display-area {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 25px;
+            height: 0;
+            overflow: hidden;
+            transition: height 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .result-frame {
+            background: #0d0d0f;
+            border-radius: 25px;
+            padding: 12px;
+            box-shadow: inset 4px 4px 10px #000;
+            position: relative;
+        }
+
+        .result-frame img, .result-frame video {
+            width: 100%;
+            height: 240px;
+            object-fit: cover;
+            border-radius: 18px;
+            opacity: 0;
+            transition: opacity 1s;
+        }
+
+        .data-overlay {
+            position: absolute;
+            bottom: 20px;
+            left: 25px;
+            font-family: monospace;
+            font-size: 10px;
+            color: var(--neon);
+            opacity: 0.5;
+        }
+
+        @keyframes breathe {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        .loading-text {
+            text-align: center;
+            font-size: 12px;
+            color: #444;
+            margin-top: -20px;
+            margin-bottom: 20px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="lab-panel">
+        <header>
+            <div><span class="status-dot"></span>系统就绪 // NEURAL CORE</div>
+            <div style="font-size: 12px; opacity: 0.5;">模式: 深度合成</div>
+        </header>
+
+        <div class="input-well">
+            <input type="text" id="promptInput" placeholder="在此注入创意协议..." autofocus>
+            <button class="btn-push" onclick="ignite()">激发合成</button>
+        </div>
+
+        <div class="loading-text" id="loader">正在对齐潜空间维度...</div>
+
+        <div class="display-area" id="displayArea">
+            <div class="result-frame">
+                <img id="resImg" src="https://images.unsplash.com/photo-1614850523296-d8c1af93d400?w=800">
+                <div class="data-overlay">IMG_RENDER_01 // 1024px</div>
+            </div>
+            <div class="result-frame">
+                <video id="resVid" loop muted>
+                    <source src="https://assets.mixkit.co/videos/preview/mixkit-abstract-liquid-motion-with-purple-colors-2216-large.mp4" type="video/mp4">
+                </video>
+                <div class="data-overlay">VID_FLOW_01 // 60FPS</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 快捷键支持
+        document.getElementById('promptInput').addEventListener('keypress', (e) => {
+            if(e.key === 'Enter') ignite();
+        });
+
+        function ignite() {
+            const val = document.getElementById('promptInput').value;
+            if(!val) return;
+
+            const area = document.getElementById('displayArea');
+            const loader = document.getElementById('loader');
+            const img = document.getElementById('resImg');
+            const vid = document.getElementById('resVid');
+
+            // 交互反馈
+            area.style.height = '0';
+            loader.style.display = 'block';
+            img.style.opacity = '0';
+            vid.style.opacity = '0';
+
+            setTimeout(() => {
+                loader.style.display = 'none';
+                area.style.height = '280px';
+                
+                setTimeout(() => {
+                    img.style.opacity = '1';
+                    vid.style.opacity = '1';
+                    vid.play();
+                }, 400);
+            }, 2000);
+        }
+    </script>
+</body>
+</html>

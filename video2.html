@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEURAL-CORE // AI GENERATOR</title>
+    <style>
+        :root {
+            --neon: #00ff41;
+            --dark: #0a0a0a;
+            --gray: #1a1a1a;
+            --text: #e0e0e0;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Courier New', monospace; }
+
+        body {
+            background-color: var(--dark);
+            color: var(--neon);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 动态网格背景 */
+        .grid-bg {
+            position: fixed;
+            inset: 0;
+            background-image: 
+                linear-gradient(rgba(0, 255, 65, 0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 255, 65, 0.05) 1px, transparent 1px);
+            background-size: 50px 50px;
+            z-index: -1;
+            animation: pulse 8s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+
+        /* 头部状态栏 */
+        header {
+            border-bottom: 1px solid var(--neon);
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            background: rgba(0,0,0,0.8);
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        /* 主界面 */
+        main {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* 左侧控制台 */
+        .console {
+            width: 40%;
+            border-right: 1px solid var(--neon);
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            background: rgba(10, 10, 10, 0.9);
+        }
+
+        .terminal-output {
+            flex: 1;
+            font-size: 0.85rem;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            color: var(--neon);
+            opacity: 0.8;
+        }
+
+        .input-area {
+            border: 1px solid var(--neon);
+            padding: 15px;
+            background: black;
+        }
+
+        textarea {
+            width: 100%;
+            background: transparent;
+            border: none;
+            color: var(--neon);
+            outline: none;
+            resize: none;
+            font-size: 1rem;
+            height: 80px;
+        }
+
+        .btn-execute {
+            width: 100%;
+            background: var(--neon);
+            color: black;
+            border: none;
+            padding: 10px;
+            margin-top: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .btn-execute:hover { background: white; box-shadow: 0 0 20px var(--neon); }
+
+        /* 右侧展示区 */
+        .preview {
+            width: 60%;
+            padding: 40px;
+            display: grid;
+            grid-template-rows: 1fr 1fr;
+            gap: 20px;
+            overflow-y: auto;
+        }
+
+        .display-box {
+            border: 1px dashed var(--neon);
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 255, 65, 0.02);
+            transition: 0.5s;
+        }
+
+        .display-box.active { border-style: solid; }
+
+        .display-box img, .display-box video {
+            max-width: 100%;
+            max-height: 100%;
+            opacity: 0;
+            transition: opacity 1s;
+        }
+
+        .label {
+            position: absolute;
+            top: 10px; right: 10px;
+            font-size: 10px;
+            padding: 2px 5px;
+            background: var(--neon);
+            color: black;
+        }
+
+        /* 遮罩加载效果 */
+        .loader {
+            display: none;
+            position: absolute;
+            font-size: 1.2rem;
+            animation: blink 0.8s infinite;
+        }
+
+        @keyframes blink { 50% { opacity: 0; } }
+
+    </style>
+</head>
+<body>
+
+<div class="grid-bg"></div>
+
+<header>
+    <div>System Status: <span id="sys-status">Standby</span></div>
+    <div>Neural-Core v2.0.4</div>
+    <div id="clock">00:00:00</div>
+</header>
+
+<main>
+    <section class="console">
+        <div class="terminal-output" id="logs">
+            [SYS] 核心系统初始化完毕...<br>
+            [SYS] 准备接收神经脉冲指令...<br>
+        </div>
+        <div class="input-area">
+            <textarea id="prompt" placeholder=">> 输入生成协议 (例如: 赛博森林, 8K, 容积光)..."></textarea>
+            <button class="btn-execute" onclick="startProcess()">EXECUTE / 执行生成</button>
+        </div>
+    </section>
+
+    <section class="preview">
+        <div class="display-box" id="box-img">
+            <div class="label">IMAGE_RENDER</div>
+            <div class="loader">DECODING...</div>
+            <img id="res-img" src="https://images.unsplash.com/photo-1620641788421-7a1c342ea42e?w=800" alt="Generated">
+        </div>
+        <div class="display-box" id="box-vid">
+            <div class="label">VIDEO_STREAM</div>
+            <div class="loader">BUFFERING...</div>
+            <video id="res-vid" loop muted>
+                <source src="https://assets.mixkit.co/videos/preview/mixkit-abstract-cube-pattern-94-large.mp4" type="video/mp4">
+            </video>
+        </div>
+    </section>
+</main>
+
+<script>
+    // 更新时钟
+    setInterval(() => {
+        document.getElementById('clock').innerText = new Date().toLocaleTimeString();
+    }, 1000);
+
+    function addLog(text) {
+        const logs = document.getElementById('logs');
+        logs.innerHTML += `> ${text}<br>`;
+        logs.scrollTop = logs.scrollHeight;
+    }
+
+    function startProcess() {
+        const prompt = document.getElementById('prompt').value;
+        if(!prompt) return addLog("<span style='color:red'>ERROR: 提示词不能为空</span>");
+
+        document.getElementById('sys-status').innerText = "Processing";
+        addLog(`正在锁定协议: ${prompt}`);
+        
+        // 显示加载状态
+        const loaders = document.querySelectorAll('.loader');
+        const images = document.querySelectorAll('.display-box img, .display-box video');
+        
+        loaders.forEach(l => l.style.display = 'block');
+        images.forEach(i => i.style.opacity = '0');
+
+        // 模拟阶段性日志
+        setTimeout(() => addLog("正在注入潜空间向量..."), 1000);
+        setTimeout(() => addLog("权重矩阵重新分配中..."), 2500);
+        setTimeout(() => addLog("渲染引擎已启动 (GPU-0)"), 4000);
+        
+        // 完成模拟
+        setTimeout(() => {
+            loaders.forEach(l => l.style.display = 'none');
+            document.getElementById('res-img').style.opacity = '1';
+            document.getElementById('res-vid').style.opacity = '1';
+            document.getElementById('res-vid').play();
+            document.getElementById('sys-status').innerText = "Standby";
+            addLog("<span style='color:white'>DONE: 视觉流构建完成。</span>");
+        }, 5500);
+    }
+</script>
+
+</body>
+</html>
