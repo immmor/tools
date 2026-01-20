@@ -90,6 +90,49 @@
             transform: scale(1.1);
             box-shadow: 0 0 15px rgba(0,255,255,0.8), 0 0 30px rgba(255,0,255,0.8);
         }
+
+        /* 节点列表 */
+        #node-list {
+            position: fixed; right: 70px; top: 50%;
+            transform: translateY(-50%);
+            background: rgba(0, 0, 0, 0.9);
+            border: 1px solid var(--node-border-main);
+            box-shadow: 0 0 10px var(--node-border-glow);
+            border-radius: 4px;
+            padding: 10px;
+            z-index: 999;
+            display: none;
+        }
+        #node-list ul {
+            list-style: none; padding: 0; margin: 0;
+            min-width: 200px;
+        }
+        #node-list li {
+            padding: 8px 12px;
+            margin-bottom: 5px;
+            background: rgba(10, 0, 30, 0.8);
+            border: 1px solid var(--node-border-main);
+            border-radius: 2px;
+            color: var(--accent-neon);
+            font-size: 0.9em;
+            display: flex; justify-content: space-between; align-items: center;
+            cursor: grab;
+            draggable: true;
+        }
+        #node-list li:last-child {
+            margin-bottom: 0;
+        }
+        #node-list li:hover {
+            border-color: var(--accent-neon);
+        }
+        #node-list .delete-btn {
+            background: linear-gradient(135deg, #ff0000 0%, #ff6600 100%);
+            border: none;
+            color: #000; font-size: 0.8em; font-weight: bold;
+            padding: 2px 6px; border-radius: 2px;
+            cursor: pointer;
+            box-shadow: 0 0 5px rgba(255,0,0,0.5);
+        }
         .run-btn:hover {
             box-shadow: 0 0 15px rgba(255,0,255,0.8), 0 0 30px rgba(0,255,255,0.8);
             transform: scale(1.05);
@@ -114,6 +157,10 @@
             backdrop-filter: blur(5px);
             z-index: 10;
             transition: box-shadow 0.3s ease;
+        }
+        .node.selected {
+            border-color: #00ffff;
+            box-shadow: 0 0 20px rgba(0,255,255,0.8), 0 0 40px rgba(0,255,255,0.4);
         }
         .node:hover { border-color: var(--accent-neon); box-shadow: 0 0 15px var(--port-glow), 0 0 30px rgba(0, 255, 255, 0.4); }
 
@@ -189,12 +236,14 @@
             position: absolute; top: 0; left: 0;
             width: 100%; height: 100%; pointer-events: none;
             z-index: 5;
+            overflow: visible;
         }
 
         /* 小地图 */
         #minimap {
             position: fixed; bottom: 20px; right: 20px;
-            width: 200px; height: 150px;
+            width: clamp(100px, 15vw, 133px); 
+            height: clamp(75px, 10vw, 100px);
             background: rgba(0, 0, 0, 0.8);
             border: 1px solid var(--node-border-main);
             box-shadow: 0 0 10px var(--node-border-glow);
@@ -237,8 +286,17 @@
             <button class="tool-btn" id="run-workflow" title="Run Workflow">
                 <span style="font-size: 0.6em;">▶</span>
             </button>
+            <button class="tool-btn" id="stop-workflow" title="Run Workflow">
+                ■
+            </button>
             <button class="tool-btn" id="add-node" title="Add Node">+</button>
             <button class="tool-btn" id="clear-nodes" title="Clear Nodes">×</button>
+            <button class="tool-btn" id="show-nodes" title="Show Nodes">≡</button>
+        </div>
+
+        <!-- 节点列表 -->
+        <div id="node-list">
+            <ul id="node-list-content"></ul>
         </div>
 
 <div id="canvas-container">
@@ -298,7 +356,7 @@
             <button class="delete-btn" onclick="deleteNode('node-viewer')">×</button>
         </div>
         <div class="node-body">
-            <div style="width:100%; height:180px; background: url('https://via.placeholder.com/260x180/000000/FF00FF?text=RENDER_HERE') no-repeat center center / cover; border: 1px dashed var(--node-border-main); display:flex; align-items:center; justify-content:center; color: #888;">
+            <div id="render-result" style="width:100%; height:180px; background: url('https://via.placeholder.com/260x180/000000/FF00FF?text=RENDER_HERE') no-repeat center center / cover; border: 1px dashed var(--node-border-main); display:flex; align-items:center; justify-content:center; color: #888;">
                 </div>
         </div>
         <div class="port input" data-node-id="node-viewer" data-port-id="in-image"></div>
@@ -478,6 +536,7 @@
                 const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
                 path.setAttribute("d", pathData);
                 path.setAttribute("class", "connection-line");
+                path.setAttribute("vector-effect", "non-scaling-stroke");
                 connectionsSvg.appendChild(path);
             }
         });
@@ -501,6 +560,7 @@
         updateAllConnections();
     };
     window.onresize = updateAllConnections; // 窗口大小改变时更新连线
+    document.getElementById('canvas-container').addEventListener('scroll', updateAllConnections); // 滚动时更新连线
 
     // 工作流运行逻辑
     document.getElementById('run-workflow').addEventListener('click', () => {
@@ -521,6 +581,10 @@
                 const viewerNode = document.getElementById('node-viewer');
                 if (viewerNode) {
                     viewerNode.style.boxShadow = '0 0 30px rgba(0,255,255,0.8), 0 0 60px rgba(0,255,255,0.4)';
+                    // 显示生成的图像
+                    const renderResult = document.getElementById('render-result');
+                    renderResult.style.background = 'url(https://picsum.photos/seed/vaporwave2025/260/180) no-repeat center center / cover';
+                    renderResult.innerHTML = '';
                     setTimeout(() => {
                         viewerNode.style.boxShadow = '0 0 10px var(--node-border-glow), 0 0 20px rgba(255, 0, 255, 0.3)';
                     }, 1000);
@@ -564,8 +628,12 @@
         const ctx = canvas.getContext('2d');
         const nodes = document.querySelectorAll('.node');
 
-        canvas.width = 200;
-        canvas.height = 150;
+        // 获取小地图容器的实际大小
+        const minimap = document.getElementById('minimap');
+        const rect = minimap.getBoundingClientRect();
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+
         ctx.fillStyle = '#000a20';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -606,6 +674,33 @@
     // 监听节点拖拽更新小地图
     nodes.forEach(node => {
         interact(node).on('move', updateMinimap);
+    });
+
+    // 节点选择功能（用于点击连接）
+    let selectedNode = null;
+    nodes.forEach(node => {
+        node.addEventListener('click', (e) => {
+            if (e.target.classList.contains('delete-btn')) return;
+            
+            if (selectedNode && selectedNode !== node) {
+                // 连接两个节点
+                const outputPort = selectedNode.querySelector('.port.output');
+                const inputPort = node.querySelector('.port.input');
+                if (outputPort && inputPort) {
+                    addConnection(outputPort.dataset.portId, inputPort.dataset.portId);
+                }
+                // 清除选择
+                selectedNode.classList.remove('selected');
+                selectedNode = null;
+            } else {
+                // 选择节点
+                if (selectedNode) {
+                    selectedNode.classList.remove('selected');
+                }
+                selectedNode = node;
+                node.classList.add('selected');
+            }
+        });
     });
 
     // 窗口大小变化时更新小地图
@@ -704,6 +799,30 @@
             resetDrawingState();
         });
 
+        // 为新节点添加选择事件
+        newNode.addEventListener('click', (e) => {
+            if (e.target.classList.contains('delete-btn')) return;
+            
+            if (selectedNode && selectedNode !== newNode) {
+                // 连接两个节点
+                const outputPort = selectedNode.querySelector('.port.output');
+                const inputPort = newNode.querySelector('.port.input');
+                if (outputPort && inputPort) {
+                    addConnection(outputPort.dataset.portId, inputPort.dataset.portId);
+                }
+                // 清除选择
+                selectedNode.classList.remove('selected');
+                selectedNode = null;
+            } else {
+                // 选择节点
+                if (selectedNode) {
+                    selectedNode.classList.remove('selected');
+                }
+                selectedNode = newNode;
+                newNode.classList.add('selected');
+            }
+        });
+
         updateMinimap();
     });
 
@@ -743,6 +862,109 @@
             const nodes = document.querySelectorAll('.node');
             nodes.forEach(node => node.remove());
             currentConnections = [];
+            updateAllConnections();
+            updateMinimap();
+        }
+    });
+
+    // 显示节点列表功能
+    document.getElementById('show-nodes').addEventListener('click', () => {
+        const nodeList = document.getElementById('node-list');
+        const nodeListContent = document.getElementById('node-list-content');
+        const nodes = document.querySelectorAll('.node');
+
+        // 清空列表
+        nodeListContent.innerHTML = '';
+
+        // 添加节点到列表
+        nodes.forEach(node => {
+            const li = document.createElement('li');
+            li.dataset.nodeId = node.id;
+            li.draggable = true;
+            li.innerHTML = `
+                <span>${node.querySelector('.node-header span').textContent}</span>
+                <button class="delete-btn" onclick="deleteNodeFromList('${node.id}')">×</button>
+            `;
+            nodeListContent.appendChild(li);
+        });
+
+        // 切换显示状态
+        nodeList.style.display = nodeList.style.display === 'none' ? 'block' : 'none';
+    });
+
+    // 从列表中删除节点
+    window.deleteNodeFromList = function(nodeId) {
+        deleteNode(nodeId);
+        // 更新节点列表
+        const nodeList = document.getElementById('node-list');
+        if (nodeList.style.display === 'block') {
+            const showNodesBtn = document.getElementById('show-nodes');
+            showNodesBtn.click();
+            showNodesBtn.click();
+        }
+    };
+
+    // 节点列表拖拽排序
+    let draggedElement = null;
+    document.getElementById('node-list-content').addEventListener('dragstart', (e) => {
+        if (e.target.tagName === 'LI') {
+            draggedElement = e.target;
+            e.target.style.opacity = '0.5';
+        }
+    });
+    document.getElementById('node-list-content').addEventListener('dragend', (e) => {
+        if (e.target.tagName === 'LI') {
+            e.target.style.opacity = '1';
+            draggedElement = null;
+        }
+    });
+    document.getElementById('node-list-content').addEventListener('dragover', (e) => {
+        e.preventDefault();
+        const afterElement = getDragAfterElement(document.getElementById('node-list-content'), e.clientY);
+        const draggable = draggedElement;
+        if (afterElement == null) {
+            document.getElementById('node-list-content').appendChild(draggable);
+        } else {
+            document.getElementById('node-list-content').insertBefore(draggable, afterElement);
+        }
+    });
+
+    function getDragAfterElement(container, y) {
+        const draggableElements = [...container.querySelectorAll('li:not(.dragging)')];
+        return draggableElements.reduce((closest, child) => {
+            const box = child.getBoundingClientRect();
+            const offset = y - box.top - box.height / 2;
+            if (offset < 0 && offset > closest.offset) {
+                return { offset: offset, element: child };
+            } else {
+                return closest;
+            }
+        }, { offset: Number.NEGATIVE_INFINITY }).element;
+    }
+
+    // 点击其他地方关闭节点列表
+    document.addEventListener('click', (e) => {
+        const nodeList = document.getElementById('node-list');
+        const showNodesBtn = document.getElementById('show-nodes');
+        if (nodeList.style.display === 'block' && e.target !== showNodesBtn && !showNodesBtn.contains(e.target) && !nodeList.contains(e.target)) {
+            nodeList.style.display = 'none';
+        }
+    });
+
+    // 拖拽排序后更新工作流节点位置
+    document.getElementById('node-list-content').addEventListener('dragend', (e) => {
+        if (e.target.tagName === 'LI') {
+            const nodeList = document.getElementById('node-list-content');
+            const items = nodeList.querySelectorAll('li');
+            items.forEach((item, index) => {
+                const nodeId = item.dataset.nodeId;
+                const node = document.getElementById(nodeId);
+                if (node) {
+                    const y = 100 + index * 200;
+                    node.style.transform = `translate(${parseFloat(node.getAttribute('data-x')) || 0}px, ${y}px)`;
+                    node.setAttribute('data-y', y);
+                }
+            });
             updateAllConnections();
             updateMinimap();
         }
