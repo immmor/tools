@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>ComfyUI - Matrix Stream</title>
+    <style>
+        :root {
+            --matrix-green: #00ff41;
+            --matrix-dark: #003b00;
+            --bg: #000;
+        }
+
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            background: var(--bg); color: var(--matrix-green);
+            font-family: 'Courier New', monospace; overflow: hidden;
+        }
+
+        /* Canvas 背景层 */
+        #matrix-bg {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 0; opacity: 0.3;
+        }
+
+        #workspace {
+            position: relative; width: 100vw; height: 100vh;
+            z-index: 10;
+        }
+
+        /* 矩阵节点 */
+        .matrix-node {
+            position: absolute; width: 220px;
+            background: rgba(0, 0, 0, 0.85);
+            border: 1px solid var(--matrix-green);
+            box-shadow: 0 0 15px var(--matrix-dark);
+            padding: 10px; cursor: move;
+        }
+
+        .node-header {
+            border-bottom: 1px solid var(--matrix-green);
+            padding-bottom: 5px; margin-bottom: 10px;
+            font-size: 14px; font-weight: bold;
+            display: flex; justify-content: space-between;
+        }
+
+        /* 代码流连线样式 */
+        .stream-path {
+            fill: none; stroke: var(--matrix-green); stroke-width: 1;
+            stroke-dasharray: 4; opacity: 0.4;
+        }
+
+        /* 传输中的代码文字 */
+        .code-text {
+            font-size: 10px; fill: var(--matrix-green);
+            text-shadow: 0 0 5px var(--matrix-green);
+            font-weight: bold;
+        }
+
+        /* 故障闪烁效果 */
+        .glitch {
+            animation: glitch-anim 0.2s linear 3;
+        }
+
+        @keyframes glitch-anim {
+            0% { transform: translate(0); text-shadow: -2px 0 red, 2px 0 blue; }
+            25% { transform: translate(-2px, 2px); }
+            50% { transform: translate(2px, -2px); }
+            100% { transform: translate(0); }
+        }
+
+        .btn-matrix {
+            position: fixed; top: 20px; right: 20px;
+            background: transparent; border: 1px solid var(--matrix-green);
+            color: var(--matrix-green); padding: 10px 20px;
+            cursor: pointer; font-family: monospace;
+            box-shadow: inset 0 0 5px var(--matrix-green);
+        }
+        .btn-matrix:hover { background: var(--matrix-green); color: #000; }
+    </style>
+</head>
+<body>
+
+<canvas id="matrix-bg"></canvas>
+
+<div id="workspace">
+    <button class="btn-matrix" onclick="injectDataStream()">[ INJECT_DATA_STREAM ]</button>
+
+    <svg id="svg-layer" style="position:absolute; width:100%; height:100%; pointer-events:none;"></svg>
+
+    <div class="matrix-node" id="n-src" style="left:100px; top:200px;">
+        <div class="node-header"><span>ENCODER.EXE</span><span>[OK]</span></div>
+        <div style="font-size:10px;">BUFFER: 0x88FF21<br>STATUS: ACTIVE</div>
+    </div>
+
+    <div class="matrix-node" id="n-dst" style="left:500px; top:150px;">
+        <div class="node-header"><span>DECRYPTOR.SYS</span><span>[WAIT]</span></div>
+        <div id="dst-content" style="font-size:10px;">AWAITING PACKETS...</div>
+    </div>
+</div>
+
+<script>
+    // --- Canvas 字符雨逻辑 ---
+    const canvas = document.getElementById('matrix-bg');
+    const ctx = canvas.getContext('2d');
+    let width = canvas.width = window.innerWidth;
+    let height = canvas.height = window.innerHeight;
+    const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789$+-*/=%\"'#&_(),.;:?!\\|{}<>[]^~";
+    const columns = Math.floor(width / 20);
+    const drops = new Array(columns).fill(1);
+
+    function drawMatrix() {
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+        ctx.fillRect(0, 0, width, height);
+        ctx.fillStyle = '#00ff41';
+        ctx.font = '15px monospace';
+        for (let i = 0; i < drops.length; i++) {
+            const text = characters.charAt(Math.floor(Math.random() * characters.length));
+            ctx.fillText(text, i * 20, drops[i] * 20);
+            if (drops[i] * 20 > height && Math.random() > 0.975) drops[i] = 0;
+            drops[i]++;
+        }
+    }
+    setInterval(drawMatrix, 50);
+
+    // --- 数据流逻辑 ---
+    const svgLayer = document.getElementById('svg-layer');
+
+    function injectDataStream() {
+        const src = document.getElementById('n-src').getBoundingClientRect();
+        const dst = document.getElementById('n-dst').getBoundingClientRect();
+        
+        const x1 = src.right; const y1 = src.top + 40;
+        const x2 = dst.left; const y2 = dst.top + 40;
+
+        // 创建复杂折线路径
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        const mx = x1 + (x2-x1)/2;
+        const d = `M ${x1} ${y1} L ${mx} ${y1} L ${mx} ${y2} L ${x2} ${y2}`;
+        path.setAttribute("d", d);
+        path.setAttribute("class", "stream-path");
+        svgLayer.appendChild(path);
+
+        // 创建滚动的代码文字
+        const textNode = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        const textPath = document.createElementNS("http://www.w3.org/2000/svg", "textPath");
+        
+        const pathId = "path-" + Date.now();
+        path.setAttribute("id", pathId);
+        
+        textPath.setAttributeNS("http://www.w3.org/1999/xlink", "xlink:href", "#" + pathId);
+        textPath.setAttribute("class", "code-text");
+        
+        textNode.appendChild(textPath);
+        svgLayer.appendChild(textNode);
+
+        // 动画逻辑：文字在路径上移动
+        let offset = 0;
+        function animateCode() {
+            offset += 2;
+            textPath.setAttribute("startOffset", offset + "%");
+            // 随机变换代码内容
+            textPath.textContent = Math.random().toString(16).substring(2, 12).toUpperCase();
+            
+            if (offset < 100) {
+                requestAnimationFrame(animateCode);
+            } else {
+                textNode.remove();
+                path.remove();
+                triggerGlitch();
+            }
+        }
+        animateCode();
+    }
+
+    function triggerGlitch() {
+        const dst = document.getElementById('n-dst');
+        const content = document.getElementById('dst-content');
+        dst.classList.add('glitch');
+        content.innerHTML = "PACKET_RECEIVED<br>DECRYPTING...<br>ACCESS_GRANTED";
+        setTimeout(() => {
+            dst.classList.remove('glitch');
+        }, 1000);
+    }
+</script>
+</body>
+</html>

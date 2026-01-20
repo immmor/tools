@@ -113,6 +113,7 @@
             touch-action: none; user-select: none;
             backdrop-filter: blur(5px);
             z-index: 10;
+            transition: box-shadow 0.3s ease;
         }
         .node:hover { border-color: var(--accent-neon); box-shadow: 0 0 15px var(--port-glow), 0 0 30px rgba(0, 255, 255, 0.4); }
 
@@ -360,21 +361,27 @@
                 e.stopPropagation();
             }
         });
+    });
 
-        port.addEventListener('mouseup', (e) => {
+    // 监听节点上的鼠标释放事件，实现节点到节点的连接
+    nodes.forEach(node => {
+        node.addEventListener('mouseup', (e) => {
             if (e.button !== 0 || !drawingConnection) return;
 
-            const targetPort = e.target;
-            const targetPortId = targetPort.dataset.portId;
-            const targetNodeId = targetPort.dataset.nodeId;
-            const targetPortType = targetPort.classList.contains('input') ? 'input' : 'output';
+            // 找到目标节点的第一个输入端口
+            const inputPorts = node.querySelectorAll('.port.input');
+            if (inputPorts.length > 0) {
+                const targetPort = inputPorts[0];
+                const targetPortId = targetPort.dataset.portId;
+                const targetPortType = targetPort.classList.contains('input') ? 'input' : 'output';
 
-            // 检查是否是有效的连接目标 (输出到输入，且不是自己)
-            if (targetPortType === 'input' && targetPortId !== drawingConnection.startPortId) {
-                // 确保目标输入端口没有被连接
-                const existingConnectionToTarget = currentConnections.find(conn => conn.endPortId === targetPortId);
-                if (!existingConnectionToTarget) {
-                    addConnection(drawingConnection.startPortId, targetPortId);
+                // 检查是否是有效的连接目标 (输出到输入，且不是自己)
+                if (targetPortType === 'input' && targetPortId !== drawingConnection.startPortId) {
+                    // 确保目标输入端口没有被连接
+                    const existingConnectionToTarget = currentConnections.find(conn => conn.endPortId === targetPortId);
+                    if (!existingConnectionToTarget) {
+                        addConnection(drawingConnection.startPortId, targetPortId);
+                    }
                 }
             }
 
@@ -487,37 +494,68 @@
 
     // --- 初始状态和事件监听 ---
     window.onload = () => {
+        // 初始连接 (示例工作流)
+        addConnection('out-model', 'in-text');
+        addConnection('out-text', 'in-cond');
+        addConnection('out-image', 'in-image');
         updateAllConnections();
     };
     window.onresize = updateAllConnections; // 窗口大小改变时更新连线
 
     // 工作流运行逻辑
     document.getElementById('run-workflow').addEventListener('click', () => {
-        // 检查关键连接是否存在
-        const hasModelConnection = currentConnections.some(conn => conn.endPortId === 'in-model');
-        const hasPromptConnection = currentConnections.some(conn => conn.endPortId === 'in-cond');
-        const hasViewerConnection = currentConnections.some(conn => conn.endPortId === 'in-image');
-
-        if (!hasModelConnection || !hasPromptConnection || !hasViewerConnection) {
-            alert('请先完成所有必要连接：\n1. MODEL LOADER → SAMPLER CORE\n2. TEXT PROMPT → SAMPLER CORE\n3. SAMPLER CORE → IMAGE VIEWER');
-            return;
-        }
-
-        // 模拟生成图像
-        const viewerContainer = document.querySelector('#node-viewer .node-body div');
-        viewerContainer.style.background = 'url(https://picsum.photos/seed/vaporwave/260/180) no-repeat center center / cover';
-        viewerContainer.innerHTML = '';
-
         // 状态灯切换为运行中
         const statusLight = document.querySelector('.status-light');
-        statusLight.style.background = '#ff00ff';
-        statusLight.style.boxShadow = '0 0 5px #ff00ff, 0 0 15px rgba(255,0,255,0.5)';
+        if (statusLight) {
+            statusLight.style.background = '#ff00ff';
+            statusLight.style.boxShadow = '0 0 5px #ff00ff, 0 0 15px rgba(255,0,255,0.5)';
+        }
 
-        // 模拟生成完成
-        setTimeout(() => {
-            statusLight.style.background = '#0f0';
-            statusLight.style.boxShadow = '0 0 5px #0f0, 0 0 15px rgba(0,255,0,0.5)';
-        }, 3000);
+        // 按顺序运行节点
+        const nodes = ['node-loader', 'node-prompt', 'node-sampler', 'node-viewer'];
+        let currentNodeIndex = 0;
+
+        function runNextNode() {
+            if (currentNodeIndex >= nodes.length) {
+                // 所有节点运行完成
+                const viewerNode = document.getElementById('node-viewer');
+                if (viewerNode) {
+                    viewerNode.style.boxShadow = '0 0 30px rgba(0,255,255,0.8), 0 0 60px rgba(0,255,255,0.4)';
+                    setTimeout(() => {
+                        viewerNode.style.boxShadow = '0 0 10px var(--node-border-glow), 0 0 20px rgba(255, 0, 255, 0.3)';
+                    }, 1000);
+                }
+                // 状态灯恢复
+                if (statusLight) {
+                    statusLight.style.background = '#0f0';
+                    statusLight.style.boxShadow = '0 0 5px #0f0, 0 0 15px rgba(0,255,0,0.5)';
+                }
+                return;
+            }
+
+            // 清除上一个节点的闪烁
+            if (currentNodeIndex > 0) {
+                const prevNode = document.getElementById(nodes[currentNodeIndex - 1]);
+                if (prevNode) {
+                    prevNode.style.boxShadow = '0 0 10px var(--node-border-glow), 0 0 20px rgba(255, 0, 255, 0.3)';
+                }
+            }
+
+            // 闪烁当前节点
+            const currentNode = document.getElementById(nodes[currentNodeIndex]);
+            if (currentNode) {
+                currentNode.style.boxShadow = '0 0 20px rgba(0,255,255,0.8), 0 0 40px rgba(0,255,255,0.4)';
+            }
+
+            // 1秒后运行下一个节点
+            setTimeout(() => {
+                currentNodeIndex++;
+                runNextNode();
+            }, 1000);
+        }
+
+        // 开始运行
+        runNextNode();
     });
 
     // 小地图功能
@@ -640,24 +678,30 @@
                     e.stopPropagation();
                 }
             });
+        });
 
-            port.addEventListener('mouseup', (e) => {
-                if (e.button !== 0 || !drawingConnection) return;
+        // 为新节点添加鼠标释放事件
+        newNode.addEventListener('mouseup', (e) => {
+            if (e.button !== 0 || !drawingConnection) return;
 
-                const targetPort = e.target;
+            // 找到目标节点的第一个输入端口
+            const inputPorts = newNode.querySelectorAll('.port.input');
+            if (inputPorts.length > 0) {
+                const targetPort = inputPorts[0];
                 const targetPortId = targetPort.dataset.portId;
-                const targetNodeId = targetPort.dataset.nodeId;
                 const targetPortType = targetPort.classList.contains('input') ? 'input' : 'output';
 
+                // 检查是否是有效的连接目标 (输出到输入，且不是自己)
                 if (targetPortType === 'input' && targetPortId !== drawingConnection.startPortId) {
+                    // 确保目标输入端口没有被连接
                     const existingConnectionToTarget = currentConnections.find(conn => conn.endPortId === targetPortId);
                     if (!existingConnectionToTarget) {
                         addConnection(drawingConnection.startPortId, targetPortId);
                     }
                 }
+            }
 
-                resetDrawingState();
-            });
+            resetDrawingState();
         });
 
         updateMinimap();

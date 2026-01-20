@@ -2,12 +2,12 @@
 <html lang="zh">
 <head>
     <meta charset="UTF-8">
-    <title>ComfyUI - Mainframe Terminal</title>
+    <title>ComfyUI - Data Flow Logic</title>
     <style>
         :root {
             --amber: #ffb000;
-            --amber-dim: rgba(255, 176, 0, 0.2);
-            --bg: #120d00;
+            --amber-dim: rgba(255, 176, 0, 0.1);
+            --bg: #0a0800;
             --font-main: 'Courier New', Courier, monospace;
         }
 
@@ -15,155 +15,165 @@
             margin: 0; padding: 0; width: 100%; height: 100%;
             background: var(--bg); color: var(--amber);
             font-family: var(--font-main); overflow: hidden;
-            text-transform: uppercase;
-        }
-
-        /* CRT 扫描线和阴极射线管效果 */
-        .crt-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%), 
-                        linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
-            background-size: 100% 3px, 3px 100%;
-            pointer-events: none; z-index: 1000;
         }
 
         #workspace {
             width: 100vw; height: 100vh;
-            background-image: radial-gradient(var(--amber-dim) 1px, transparent 0);
-            background-size: 30px 30px;
+            background-image: linear-gradient(var(--amber-dim) 1px, transparent 1px), 
+                              linear-gradient(90deg, var(--amber-dim) 1px, transparent 1px);
+            background-size: 40px 40px;
             position: relative;
         }
 
         /* 节点样式 */
         .node {
-            position: absolute; width: 220px;
-            background: var(--bg);
-            border: 2px solid var(--amber);
-            box-shadow: 0 0 10px var(--amber-dim);
-            z-index: 10;
+            position: absolute; width: 200px;
+            background: var(--bg); border: 2px solid var(--amber);
+            z-index: 10; padding-bottom: 5px;
         }
 
         .node-header {
-            padding: 5px 10px; background: var(--amber);
-            color: var(--bg); font-weight: bold;
-            cursor: grab; display: flex; justify-content: space-between;
+            padding: 5px; background: var(--amber); color: var(--bg);
+            font-weight: bold; cursor: grab; font-size: 12px;
         }
 
-        .node-body { padding: 10px; border-top: 1px solid var(--amber); }
+        .node-body { padding: 10px; font-size: 11px; text-align: center; }
 
-        input, select {
-            width: 100%; background: transparent; border: 1px solid var(--amber);
-            color: var(--amber); padding: 5px; margin-top: 5px;
-            font-family: var(--font-main); outline: none;
-        }
-
-        /* 端口样式 - 像素方块 */
+        /* 端口 */
         .port {
-            width: 8px; height: 8px; background: var(--amber);
+            width: 10px; height: 10px; background: var(--amber);
             position: absolute; cursor: pointer;
         }
-        .port:hover { box-shadow: 0 0 10px var(--amber); }
-        .port.input { left: -5px; top: 40px; }
-        .port.output { right: -5px; top: 40px; }
+        .port.input { left: -6px; top: 40px; }
+        .port.output { right: -6px; top: 40px; }
 
-        /* 连线 - 直角折线 */
-        .conn-path {
-            fill: none; stroke: var(--amber); stroke-width: 2;
-            stroke-dasharray: 4;
+        /* 基础连线 */
+        .base-line {
+            fill: none; stroke: var(--amber-dim); stroke-width: 2;
         }
 
-        /* 闪烁光标效果 */
-        .cursor { display: inline-block; width: 8px; height: 15px; background: var(--amber); animation: blink 1s infinite; }
-        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+        /* 数据流动画线条 */
+        .flow-line {
+            fill: none; stroke: var(--amber); stroke-width: 3;
+            stroke-dasharray: 10, 100; /* 表现为一个移动的小光点 */
+            stroke-dashoffset: 110;
+            animation: flow-move 1.5s linear forwards;
+            filter: drop-shadow(0 0 5px var(--amber));
+        }
+
+        @keyframes flow-move {
+            to { stroke-dashoffset: 0; }
+        }
+
+        /* 终点闪烁效果 */
+        .node-flash {
+            animation: flash-node 0.4s ease-in-out 3;
+        }
+
+        @keyframes flash-node {
+            0%, 100% { border-color: var(--amber); box-shadow: none; }
+            50% { border-color: #fff; box-shadow: 0 0 20px #fff; background: var(--amber-dim); }
+        }
+
+        .btn-exec {
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+            background: var(--amber); color: var(--bg); border: none;
+            padding: 10px 30px; font-family: var(--font-main); font-weight: bold;
+            cursor: pointer; z-index: 1000;
+        }
+        .btn-exec:hover { box-shadow: 0 0 15px var(--amber); }
 
     </style>
 </head>
 <body>
 
-<div class="crt-overlay"></div>
-
 <div id="workspace">
-    <div style="position:absolute; top:10px; left:20px; z-index:100; font-size: 14px;">
-        CORE_LOADER_V.8.2 <span class="cursor"></span>
-    </div>
+    <button class="btn-exec" onclick="startDataFlow()">EXECUTE DATA TRANSFER</button>
 
     <svg id="svg-layer" style="position:absolute; width:100%; height:100%; pointer-events:none;"></svg>
     
-    <div class="node" id="n1" style="left:100px; top:100px;">
-        <div class="node-header">LOADER.EXE</div>
-        <div class="node-body">
-            SRC: <input type="text" value="USER/DATA_01">
-        </div>
-        <div class="port output" data-id="p1"></div>
+    <div class="node" id="source-node" style="left:150px; top:200px;">
+        <div class="node-header">DATA_SOURCE.DB</div>
+        <div class="node-body">STATUS: IDLE</div>
+        <div class="port output" id="p_out"></div>
     </div>
 
-    <div class="node" id="n2" style="left:400px; top:150px;">
-        <div class="node-header">PROCESS.SYS</div>
-        <div class="node-body">
-            MODE: <select><option>ENCRYPT</option><option>DECODE</option></select>
-        </div>
-        <div class="port input" data-id="p2"></div>
-        <div class="port output" data-id="p3"></div>
+    <div class="node" id="target-node" style="left:550px; top:180px;">
+        <div class="node-header">OUTPUT_TERMINAL</div>
+        <div class="node-body" id="target-status">AWAITING...</div>
+        <div class="port input" id="p_in"></div>
     </div>
 </div>
 
 <script>
-    const workspace = document.getElementById('workspace');
     const svgLayer = document.getElementById('svg-layer');
-    
-    let connections = [{ from: 'p1', to: 'p2' }];
-    let dragNode = null;
-    let offset = { x: 0, y: 0 };
+    const targetNode = document.getElementById('target-node');
+    const targetStatus = document.getElementById('target-status');
 
-    // 基础拖拽逻辑
-    workspace.addEventListener('mousedown', e => {
-        const node = e.target.closest('.node');
-        if (node && !e.target.classList.contains('port')) {
-            dragNode = node;
-            const rect = node.getBoundingClientRect();
-            offset.x = e.clientX - rect.left;
-            offset.y = e.clientY - rect.top;
-        }
-    });
-
-    window.addEventListener('mousemove', e => {
-        if (dragNode) {
-            dragNode.style.left = (e.clientX - offset.x) + 'px';
-            dragNode.style.top = (e.clientY - offset.y) + 'px';
-            updateLines();
-        }
-    });
-
-    window.addEventListener('mouseup', () => {
-        dragNode = null;
-    });
-
-    // 直角折线绘制算法
-    function updateLines() {
-        svgLayer.innerHTML = '';
-        connections.forEach(conn => {
-            const p1 = document.querySelector(`[data-id="${conn.from}"]`);
-            const p2 = document.querySelector(`[data-id="${conn.to}"]`);
-            if (p1 && p2) {
-                const b1 = p1.getBoundingClientRect();
-                const b2 = p2.getBoundingClientRect();
-                const x1 = b1.left + 4; const y1 = b1.top + 4;
-                const x2 = b2.left + 4; const y2 = b2.top + 4;
-
-                const midX = x1 + (x2 - x1) / 2;
-                
-                const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-                // 绘制直角路径: M(起点) -> L(中间转折) -> L(下一个转折) -> L(终点)
-                const d = `M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}`;
-                
-                path.setAttribute("d", d);
-                path.setAttribute("class", "conn-path");
-                svgLayer.appendChild(path);
-            }
-        });
+    function getCoords(id) {
+        const el = document.getElementById(id);
+        const r = el.getBoundingClientRect();
+        return { x: r.left + 5, y: r.top + 5 };
     }
 
-    window.onload = updateLines;
+    function drawStaticPath() {
+        const start = getCoords('p_out');
+        const end = getCoords('p_in');
+        const midX = start.x + (end.x - start.x) / 2;
+        return `M ${start.x} ${start.y} L ${midX} ${start.y} L ${midX} ${end.y} L ${end.x} ${end.y}`;
+    }
+
+    // 初始静态连线
+    function init() {
+        svgLayer.innerHTML = `<path class="base-line" d="${drawStaticPath()}" />`;
+    }
+
+    function startDataFlow() {
+        // 1. 重置状态
+        targetNode.classList.remove('node-flash');
+        targetStatus.innerText = "RECEIVING...";
+        
+        // 2. 创建流动路径
+        const pathData = drawStaticPath();
+        const flowLine = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        flowLine.setAttribute("d", pathData);
+        flowLine.setAttribute("class", "flow-line");
+        
+        // 计算路径长度以便动画精准
+        const length = 1000; // 假定一个足够长的 dasharray
+        flowLine.style.strokeDasharray = `20, ${length}`;
+        flowLine.style.strokeDashoffset = length;
+        
+        // 插入到 SVG
+        svgLayer.appendChild(flowLine);
+
+        // 3. 监听动画结束
+        // 我们根据动画时长（1.5s）设置定时器，或者监听动画事件
+        setTimeout(() => {
+            // 移除流光线条
+            flowLine.remove();
+            
+            // 触发终点节点效果
+            triggerTargetFeedback();
+        }, 1500); // 必须与 CSS 中的 animation 时长一致
+    }
+
+    function triggerTargetFeedback() {
+        // 增加闪烁类
+        targetNode.classList.add('node-flash');
+        targetStatus.innerText = "COMPLETE!";
+        
+        // 播放个提示音（可选）
+        console.log("Data arrived at terminal.");
+        
+        // 3秒后恢复
+        setTimeout(() => {
+            targetStatus.innerText = "IDLE";
+        }, 3000);
+    }
+
+    window.onload = init;
+    // 如果拖动节点，由于本演示侧重动画，需在实际中加入 updateLines
 </script>
 
 </body>

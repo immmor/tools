@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>ComfyUI - Quantum Origami</title>
+    <style>
+        :root {
+            --paper-white: #e8e8e8;
+            --paper-shadow: #bcbcbc;
+            --fold-accent: #3d5afe;
+            --bg: #1a1a1c;
+        }
+
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            background: var(--bg);
+            font-family: 'Inter', sans-serif;
+            overflow: hidden; perspective: 1000px;
+        }
+
+        /* 极简网格，带深度感 */
+        #workspace {
+            width: 100vw; height: 100vh;
+            background-image: linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
+            background-size: 50px 50px;
+            position: relative;
+            transform-style: preserve-3d;
+        }
+
+        /* 3D 折纸节点 */
+        .origami-node {
+            position: absolute; width: 220px;
+            transform-style: preserve-3d;
+            cursor: move;
+            transition: transform 0.1s ease-out;
+        }
+
+        .node-front {
+            background: var(--paper-white);
+            color: #333; padding: 20px;
+            border-left: 8px solid var(--fold-accent);
+            box-shadow: 10px 10px 20px rgba(0,0,0,0.3);
+            position: relative; z-index: 2;
+        }
+
+        /* 模拟 3D 侧边厚度 */
+        .node-side {
+            position: absolute; top: 0; left: 100%;
+            width: 10px; height: 100%;
+            background: var(--paper-shadow);
+            transform-origin: left;
+            transform: rotateY(90deg);
+        }
+
+        .node-header {
+            font-weight: 900; font-size: 14px; margin-bottom: 10px;
+            letter-spacing: -0.5px; border-bottom: 2px solid #ddd;
+        }
+
+        /* 折纸连线 */
+        .ribbon-path {
+            fill: none; stroke: var(--fold-accent); stroke-width: 6;
+            stroke-linejoin: bevel; opacity: 0.8;
+            filter: drop-shadow(4px 4px 2px rgba(0,0,0,0.5));
+        }
+
+        /* 能量折叠动画 */
+        .fold-anim {
+            stroke-dasharray: 20, 1000;
+            animation: fold-run 1.2s cubic-bezier(0.45, 0, 0.55, 1) forwards;
+        }
+
+        @keyframes fold-run {
+            from { stroke-dashoffset: 0; }
+            to { stroke-dashoffset: -1000; }
+        }
+
+        /* 终点弹跳 */
+        .bounce-fold {
+            animation: bounce-out 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes bounce-out {
+            0% { transform: scale(1) translateZ(0); }
+            50% { transform: scale(1.1) translateZ(50px); }
+            100% { transform: scale(1) translateZ(0); }
+        }
+
+        .btn-fold {
+            position: fixed; bottom: 40px; left: 40px;
+            background: #fff; color: #000; border: none;
+            padding: 15px 30px; font-weight: bold; cursor: pointer;
+            box-shadow: 5px 5px 0 var(--fold-accent);
+            transition: 0.2s;
+        }
+        .btn-fold:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--fold-accent); }
+    </style>
+</head>
+<body>
+
+<div id="workspace">
+    <svg id="svg-layer" style="position:absolute; width:100%; height:100%; pointer-events:none; z-index:1;"></svg>
+
+    <div class="origami-node" id="n1" style="left:15%; top:30%;">
+        <div class="node-front">
+            <div class="node-header">INPUT_FOLD</div>
+            <div style="font-size:12px; color:#666;">Dimensional depth active.</div>
+        </div>
+        <div class="node-side"></div>
+    </div>
+
+    <div class="origami-node" id="n2" style="left:60%; top:40%;">
+        <div class="node-front">
+            <div class="node-header">PROCESS_WRAP</div>
+            <div style="font-size:12px; color:#666;">Ready for unfolding...</div>
+        </div>
+        <div class="node-side"></div>
+    </div>
+
+    <button class="btn-fold" onclick="startDimensionalFold()">FOLD REALITY</button>
+</div>
+
+<script>
+    const workspace = document.getElementById('workspace');
+    const svgLayer = document.getElementById('svg-layer');
+
+    // 1. 3D 偏转交互
+    window.addEventListener('mousemove', (e) => {
+        const xAxis = (window.innerWidth / 2 - e.pageX) / 25;
+        const yAxis = (window.innerHeight / 2 - e.pageY) / 25;
+        document.querySelectorAll('.origami-node').forEach(node => {
+            node.style.transform = `rotateY(${xAxis}deg) rotateX(${yAxis}deg)`;
+        });
+    });
+
+    // 2. 空间折叠连线逻辑
+    function startDimensionalFold() {
+        const n1 = document.getElementById('n1').getBoundingClientRect();
+        const n2 = document.getElementById('n2').getBoundingClientRect();
+        
+        const x1 = n1.right; const y1 = n1.top + 50;
+        const x2 = n2.left; const y2 = n2.top + 50;
+        
+        // 创建带有 3 个硬转折的折线（Ribbon）
+        const midX = x1 + (x2 - x1) * 0.5;
+        const offset = 40;
+        const pathData = `M ${x1} ${y1} L ${midX - offset} ${y1} L ${midX + offset} ${y2} L ${x2} ${y2}`;
+
+        // 基础连线
+        const base = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        base.setAttribute("d", pathData);
+        base.setAttribute("class", "ribbon-path");
+        base.style.opacity = "0.1";
+        svgLayer.appendChild(base);
+
+        // 动画连线
+        const anim = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        anim.setAttribute("d", pathData);
+        anim.setAttribute("class", "ribbon-path fold-anim");
+        svgLayer.appendChild(anim);
+
+        // 动画结束反馈
+        setTimeout(() => {
+            anim.remove();
+            base.style.opacity = "0.8";
+            const target = document.getElementById('n2');
+            target.classList.add('bounce-fold');
+            setTimeout(() => target.classList.remove('bounce-fold'), 500);
+        }, 1200);
+    }
+</script>
+</body>
+</html>
