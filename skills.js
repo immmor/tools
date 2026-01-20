@@ -69,7 +69,7 @@ meta_tags = seo_expert.generate_meta_tags(optimized_content)
         title: "PDF 智囊",
         description: "快速扫描数百页法律文档，提取关键条款并进行多维度的合规性对比。",
         tags: ["PDF", "Logic"],
-        icon: "file-search",
+        icon: "file",
         color: "orange",
         skill: `### PDF 智囊技能
 
