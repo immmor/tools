@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ComfyUI - Neon Vaporwave</title>
+    <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap');
+
+        :root {
+            --bg-start: #1c002b; /* 深紫色 */
+            --bg-end: #000a20;   /* 极深蓝 */
+            --node-bg: rgba(10, 0, 30, 0.8);
+            --node-border-main: #ff00ff; /* 洋红色 */
+            --node-border-glow: rgba(255, 0, 255, 0.5);
+            --port-glow: rgba(0, 255, 255, 0.5); /* 青色光效 */
+            --text-main: #f0f0f0;
+            --text-glitch: #ff00ff; /* 故障文字色 */
+            --accent-neon: #00ffff; /* 青色霓虹 */
+            --accent-pink: #ff00ff; /* 粉色霓虹 */
+            --line-color: #00ffff; /* 连线颜色 */
+            --line-glow: rgba(0, 255, 255, 0.4);
+        }
+
+        body {
+            margin: 0; padding: 0;
+            width: 100vw; height: 100vh;
+            background: linear-gradient(135deg, var(--bg-start) 0%, var(--bg-end) 100%);
+            font-family: 'VT323', monospace; /* 像素字体 */
+            color: var(--text-main);
+            overflow: hidden;
+        }
+
+        /* 故障网格背景 */
+        #canvas-container {
+            position: relative; width: 100%; height: 100%;
+            background-image: 
+                linear-gradient(rgba(0, 255, 255, 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 0, 255, 0.1) 1px, transparent 1px);
+            background-size: 40px 40px;
+            filter: hue-rotate(5deg) saturate(1.2) contrast(1.1); /* 模拟故障色偏 */
+            overflow: auto;
+        }
+
+        /* 顶部标题栏 */
+        .top-bar {
+            position: absolute; top: 0; left: 0; width: 100%;
+            padding: 10px 20px;
+            box-sizing: border-box;
+            background: rgba(0, 0, 0, 0.7);
+            border-bottom: 1px solid var(--node-border-main);
+            box-shadow: 0 0 15px var(--node-border-glow);
+            z-index: 100;
+            display: flex; justify-content: space-between; align-items: center;
+            gap: 20px;
+        }
+        .app-title {
+            font-family: 'Press Start 2P', cursive;
+            color: var(--accent-neon);
+            text-shadow: 0 0 10px var(--port-glow), 0 0 20px var(--port-glow);
+            font-size: clamp(0.8em, 2vw, 1.2em);
+            white-space: nowrap;
+        }
+        .status-light {
+            width: 10px; height: 10px; background: #0f0; border-radius: 50%;
+            box-shadow: 0 0 5px #0f0, 0 0 15px rgba(0,255,0,0.5);
+            animation: pulse 1.5s infinite alternate;
+            margin-right: 10px;
+        }
+
+        /* 右侧工具栏 */
+        #toolbar {
+            position: fixed; right: 20px; top: 50%;
+            transform: translateY(-50%);
+            display: flex; flex-direction: column;
+            gap: 10px;
+            z-index: 1000;
+        }
+        .tool-btn {
+            width: 40px; height: 40px;
+            background: linear-gradient(135deg, #00ffff 0%, #ff00ff 100%);
+            border: none; border-radius: 50%;
+            color: #000; font-size: 1.2em;
+            box-shadow: 0 0 10px rgba(0,255,255,0.5), 0 0 20px rgba(255,0,255,0.5);
+            cursor: pointer; transition: all 0.3s ease;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .tool-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 0 15px rgba(0,255,255,0.8), 0 0 30px rgba(255,0,255,0.8);
+        }
+        .run-btn:hover {
+            box-shadow: 0 0 15px rgba(255,0,255,0.8), 0 0 30px rgba(0,255,255,0.8);
+            transform: scale(1.05);
+        }
+        .run-btn:active {
+            transform: scale(0.95);
+        }
+        @keyframes pulse {
+            from { box-shadow: 0 0 5px #0f0, 0 0 15px rgba(0,255,0,0.5); }
+            to { box-shadow: 0 0 8px #0f0, 0 0 25px rgba(0,255,0,0.7); }
+        }
+
+        /* 节点样式 */
+        .node {
+            position: absolute; 
+            width: clamp(240px, 90vw, 280px);
+            background: var(--node-bg);
+            border: 1px solid var(--node-border-main);
+            box-shadow: 0 0 10px var(--node-border-glow), 0 0 20px rgba(255, 0, 255, 0.3);
+            border-radius: 2px; /* 更硬朗的边角 */
+            touch-action: none; user-select: none;
+            backdrop-filter: blur(5px);
+            z-index: 10;
+        }
+        .node:hover { border-color: var(--accent-neon); box-shadow: 0 0 15px var(--port-glow), 0 0 30px rgba(0, 255, 255, 0.4); }
+
+        .node-header {
+            padding: 8px 15px;
+            background: linear-gradient(90deg, rgba(255, 0, 255, 0.2) 0%, rgba(0, 255, 255, 0.2) 100%);
+            border-bottom: 1px solid var(--node-border-main);
+            cursor: grab; font-size: 0.9em; font-weight: bold;
+            color: var(--accent-neon);
+            text-shadow: 0 0 5px var(--port-glow);
+            text-transform: uppercase;
+            /* 故障文本效果 */
+            position: relative;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .delete-btn {
+            background: linear-gradient(135deg, #ff00ff 0%, #00ffff 100%);
+            border: none;
+            color: #000; font-size: 0.9em; font-weight: bold;
+            padding: 4px 8px; border-radius: 2px;
+            cursor: pointer;
+            box-shadow: 0 0 8px rgba(255,0,255,0.6);
+        }
+        .node-header::before {
+            content: attr(data-label);
+            position: absolute; top: -1px; left: 15px;
+            color: var(--accent-pink);
+            filter: blur(1px);
+            opacity: 0.7;
+            clip-path: inset(0 0 50% 0);
+            animation: glitch-text 0.5s infinite alternate;
+        }
+        @keyframes glitch-text {
+            0% { transform: translate(0, 0); }
+            25% { transform: translate(1px, -1px); }
+            50% { transform: translate(-1px, 1px); }
+            75% { transform: translate(1px, 1px); }
+            100% { transform: translate(-1px, -1px); }
+        }
+
+        .node-body { padding: 15px; font-size: clamp(0.8em, 1.5vw, 0.85em); }
+
+        .input-group { margin-bottom: 10px; }
+        label { display: block; margin-bottom: 5px; color: var(--text-main); }
+        input[type="text"], input[type="number"], select, textarea {
+            width: calc(100% - 12px); background: #000; border: 1px solid var(--node-border-main);
+            color: var(--accent-neon); padding: 5px; border-radius: 2px; outline: none;
+            box-shadow: 0 0 5px var(--port-glow);
+            font-family: 'VT323', monospace;
+            text-shadow: 0 0 2px var(--accent-neon);
+        }
+        textarea { height: 60px; resize: vertical; }
+
+        /* 连接点 */
+        .port {
+            width: 14px; height: 14px; background: rgba(0, 0, 0, 0.7);
+            border: 2px solid var(--accent-neon); border-radius: 50%;
+            position: absolute; cursor: crosshair;
+            box-shadow: 0 0 5px var(--port-glow);
+            z-index: 10;
+        }
+        .port:hover {
+            background: var(--accent-neon);
+            box-shadow: 0 0 10px var(--accent-neon), 0 0 20px var(--port-glow);
+        }
+        .port.connected { background: var(--accent-pink); border-color: var(--accent-pink); box-shadow: 0 0 10px var(--accent-pink), 0 0 20px rgba(255, 0, 255, 0.4); }
+
+        .port.input { left: -7px; top: 50%; transform: translateY(-50%); }
+        .port.output { right: -7px; top: 50%; transform: translateY(-50%); }
+
+        /* SVG 连线层 */
+        #connections-svg {
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: 100%; pointer-events: none;
+            z-index: 5;
+        }
+
+        /* 小地图 */
+        #minimap {
+            position: fixed; bottom: 20px; right: 20px;
+            width: 200px; height: 150px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid var(--node-border-main);
+            box-shadow: 0 0 10px var(--node-border-glow);
+            border-radius: 4px;
+            z-index: 1000; /* 确保在所有元素之上 */
+            overflow: hidden;
+        }
+        #minimap canvas {
+            width: 100%; height: 100%;
+            image-rendering: pixelated;
+        }
+
+        .connection-line {
+            fill: none; stroke: var(--line-color); stroke-width: 3;
+            filter: drop-shadow(0 0 8px var(--line-glow));
+            /* 连线动画 */
+            stroke-dasharray: 10 5;
+            animation: line-flow 2s linear infinite;
+        }
+        .temporary-line {
+            fill: none; stroke: var(--accent-pink); stroke-width: 2;
+            stroke-dasharray: 5 5;
+            filter: drop-shadow(0 0 5px rgba(255, 0, 255, 0.5));
+        }
+
+        @keyframes line-flow {
+            from { stroke-dashoffset: 0; }
+            to { stroke-dashoffset: 15; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="top-bar">
+            <div class="app-title">IMMMOR FLOW</div>
+        </div>
+
+        <!-- 右侧工具栏 -->
+        <div id="toolbar">
+            <button class="tool-btn" id="run-workflow" title="Run Workflow">
+                <span style="font-size: 0.6em;">▶</span>
+            </button>
+            <button class="tool-btn" id="add-node" title="Add Node">+</button>
+            <button class="tool-btn" id="clear-nodes" title="Clear Nodes">×</button>
+        </div>
+
+<div id="canvas-container">
+    <svg id="connections-svg"></svg>
+
+    <div class="node" id="node-loader" style="left: clamp(20px, 10vw, 80px); top: 100px;">
+        <div class="node-header" data-label="MODEL LOADER">
+            <span>MODEL LOADER</span>
+            <button class="delete-btn" onclick="deleteNode('node-loader')">×</button>
+        </div>
+        <div class="node-body">
+            <label for="model-select">Model:</label>
+            <select id="model-select">
+                <option value="vaporwave-xl-v1.0">Vaporwave-XL v1.0</option>
+                <option value="synthwave-diffusion">Synthwave Diffusion</option>
+            </select>
+        </div>
+        <div class="port output" data-node-id="node-loader" data-port-id="out-model"></div>
+    </div>
+
+    <div class="node" id="node-prompt" style="left: clamp(20px, 10vw, 400px); top: 250px;">
+        <div class="node-header" data-label="TEXT PROMPT">
+            <span>TEXT PROMPT</span>
+            <button class="delete-btn" onclick="deleteNode('node-prompt')">×</button>
+        </div>
+        <div class="node-body">
+            <label for="prompt-text">Positive Prompt:</label>
+            <textarea id="prompt-text">80s neon cityscape, chrome robot, vibrant colors, retro-futuristic, highly detailed, VHS effect.</textarea>
+        </div>
+        <div class="port input" data-node-id="node-prompt" data-port-id="in-text"></div>
+        <div class="port output" data-node-id="node-prompt" data-port-id="out-text"></div>
+    </div>
+
+    <div class="node" id="node-sampler" style="left: clamp(20px, 10vw, 750px); top: 450px;">
+        <div class="node-header" data-label="SAMPLER CORE">
+            <span>SAMPLER CORE</span>
+            <button class="delete-btn" onclick="deleteNode('node-sampler')">×</button>
+        </div>
+        <div class="node-body">
+            <div class="input-group">
+                <label for="sampler-steps">Steps:</label>
+                <input type="number" id="sampler-steps" value="30">
+            </div>
+            <div class="input-group">
+                <label for="sampler-cfg">CFG Scale:</label>
+                <input type="number" id="sampler-cfg" value="7.0" step="0.1">
+            </div>
+        </div>
+        <div class="port input" data-node-id="node-sampler" data-port-id="in-model"></div>
+        <div class="port input" data-node-id="node-sampler" data-port-id="in-cond"></div>
+        <div class="port output" data-node-id="node-sampler" data-port-id="out-image"></div>
+    </div>
+
+    <div class="node" id="node-viewer" style="left: clamp(20px, 10vw, 1100px); top: 650px;">
+        <div class="node-header" data-label="IMAGE VIEWER">
+            <span>IMAGE VIEWER</span>
+            <button class="delete-btn" onclick="deleteNode('node-viewer')">×</button>
+        </div>
+        <div class="node-body">
+            <div style="width:100%; height:180px; background: url('https://via.placeholder.com/260x180/000000/FF00FF?text=RENDER_HERE') no-repeat center center / cover; border: 1px dashed var(--node-border-main); display:flex; align-items:center; justify-content:center; color: #888;">
+                </div>
+        </div>
+        <div class="port input" data-node-id="node-viewer" data-port-id="in-image"></div>
+    </div>
+</div>
+
+<div id="minimap">
+    <canvas id="minimap-canvas"></canvas>
+</div>
+
+<script>
+    const connectionsSvg = document.getElementById('connections-svg');
+    const nodes = document.querySelectorAll('.node');
+    const ports = document.querySelectorAll('.port');
+    
+    let currentConnections = []; // 存储所有已建立的连接：[{ startPortId, endPortId, pathElement }]
+    let drawingConnection = null; // 存储正在绘制的临时连接信息
+    let tempLine = null; // 临时连线的 SVG 元素
+
+    // --- 节点拖拽功能 (Interact.js) ---
+    interact('.node').draggable({
+        allowFrom: '.node-header',
+        onmove: function (event) {
+            const target = event.target;
+            const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;
+            const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;
+
+            target.style.transform = `translate(${x}px, ${y}px)`;
+            target.setAttribute('data-x', x);
+            target.setAttribute('data-y', y);
+            
+            updateAllConnections(); // 拖拽节点时更新所有连线
+        }
+    });
+
+    // --- 端口连接功能 ---
+    ports.forEach(port => {
+        port.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return; // 只响应鼠标左键
+
+            const portType = port.classList.contains('output') ? 'output' : 'input';
+            const portId = port.dataset.portId;
+            const nodeId = port.dataset.nodeId;
+
+            // 如果点击的是输出端口，开始绘制新线
+            if (portType === 'output') {
+                drawingConnection = {
+                    startPortId: portId,
+                    startNodeId: nodeId,
+                    startX: e.clientX,
+                    startY: e.clientY
+                };
+                tempLine = createTempLine();
+                connectionsSvg.appendChild(tempLine);
+                e.stopPropagation(); // 阻止事件冒泡到节点拖拽
+            }
+            // 如果点击的是输入端口，且它已经连接了，则断开
+            else if (portType === 'input' && port.classList.contains('connected')) {
+                removeConnectionByPort(portId);
+                e.stopPropagation();
+            }
+        });
+
+        port.addEventListener('mouseup', (e) => {
+            if (e.button !== 0 || !drawingConnection) return;
+
+            const targetPort = e.target;
+            const targetPortId = targetPort.dataset.portId;
+            const targetNodeId = targetPort.dataset.nodeId;
+            const targetPortType = targetPort.classList.contains('input') ? 'input' : 'output';
+
+            // 检查是否是有效的连接目标 (输出到输入，且不是自己)
+            if (targetPortType === 'input' && targetPortId !== drawingConnection.startPortId) {
+                // 确保目标输入端口没有被连接
+                const existingConnectionToTarget = currentConnections.find(conn => conn.endPortId === targetPortId);
+                if (!existingConnectionToTarget) {
+                    addConnection(drawingConnection.startPortId, targetPortId);
+                }
+            }
+
+            resetDrawingState();
+        });
+    });
+
+    // 在空白处释放鼠标，断开临时线
+    document.addEventListener('mouseup', (e) => {
+        if (e.button === 0 && drawingConnection) {
+            resetDrawingState();
+        }
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (drawingConnection && tempLine) {
+            const pathData = generatePath(drawingConnection.startX, drawingConnection.startY, e.clientX, e.clientY);
+            tempLine.setAttribute('d', pathData);
+        }
+    });
+
+    // --- 辅助函数 ---
+
+    function getPortPosition(portId) {
+        const portElement = document.querySelector(`[data-port-id="${portId}"]`);
+        if (!portElement) return null;
+
+        const rect = portElement.getBoundingClientRect();
+        const canvasRect = connectionsSvg.getBoundingClientRect();
+
+        return {
+            x: rect.left + rect.width / 2 - canvasRect.left,
+            y: rect.top + rect.height / 2 - canvasRect.top
+        };
+    }
+
+    function generatePath(x1, y1, x2, y2) {
+        const midX = x1 + (x2 - x1) * 0.5;
+        // 调整贝塞尔控制点，使其更像 ComfyUI 的弯曲线
+        const controlPointOffset = Math.max(50, Math.abs(x2 - x1) * 0.3); // 增加弯曲度
+        return `M ${x1} ${y1} C ${x1 + controlPointOffset} ${y1}, ${x2 - controlPointOffset} ${y2}, ${x2} ${y2}`;
+    }
+
+    function createTempLine() {
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("class", "temporary-line");
+        return path;
+    }
+
+    function addConnection(startPortId, endPortId) {
+        // 避免重复连接
+        if (currentConnections.some(c => c.startPortId === startPortId && c.endPortId === endPortId)) return;
+
+        const connection = { startPortId, endPortId };
+        currentConnections.push(connection);
+        updateAllConnections(); // 重新绘制所有连线
+        
+        // 更新端口的连接状态样式
+        document.querySelector(`[data-port-id="${startPortId}"]`).classList.add('connected');
+        document.querySelector(`[data-port-id="${endPortId}"]`).classList.add('connected');
+    }
+
+    function removeConnection(startPortId, endPortId) {
+        currentConnections = currentConnections.filter(conn => !(conn.startPortId === startPortId && conn.endPortId === endPortId));
+        updateAllConnections();
+        updatePortConnectedClasses();
+    }
+
+    function removeConnectionByPort(portId) {
+        currentConnections = currentConnections.filter(conn => conn.startPortId !== portId && conn.endPortId !== portId);
+        updateAllConnections();
+        updatePortConnectedClasses();
+    }
+
+    function updatePortConnectedClasses() {
+        ports.forEach(p => p.classList.remove('connected')); // 移除所有连接状态
+        currentConnections.forEach(conn => {
+            const startP = document.querySelector(`[data-port-id="${conn.startPortId}"]`);
+            const endP = document.querySelector(`[data-port-id="${conn.endPortId}"]`);
+            if (startP) startP.classList.add('connected');
+            if (endP) endP.classList.add('connected');
+        });
+    }
+
+    function updateAllConnections() {
+        connectionsSvg.innerHTML = ''; // 清空所有旧线
+
+        currentConnections.forEach(conn => {
+            const startPos = getPortPosition(conn.startPortId);
+            const endPos = getPortPosition(conn.endPortId);
+
+            if (startPos && endPos) {
+                const pathData = generatePath(startPos.x, startPos.y, endPos.x, endPos.y);
+                const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                path.setAttribute("d", pathData);
+                path.setAttribute("class", "connection-line");
+                connectionsSvg.appendChild(path);
+            }
+        });
+        updatePortConnectedClasses(); // 确保端口样式正确
+    }
+
+    function resetDrawingState() {
+        if (tempLine && tempLine.parentNode) {
+            connectionsSvg.removeChild(tempLine);
+        }
+        drawingConnection = null;
+        tempLine = null;
+    }
+
+    // --- 初始状态和事件监听 ---
+    window.onload = () => {
+        updateAllConnections();
+    };
+    window.onresize = updateAllConnections; // 窗口大小改变时更新连线
+
+    // 工作流运行逻辑
+    document.getElementById('run-workflow').addEventListener('click', () => {
+        // 检查关键连接是否存在
+        const hasModelConnection = currentConnections.some(conn => conn.endPortId === 'in-model');
+        const hasPromptConnection = currentConnections.some(conn => conn.endPortId === 'in-cond');
+        const hasViewerConnection = currentConnections.some(conn => conn.endPortId === 'in-image');
+
+        if (!hasModelConnection || !hasPromptConnection || !hasViewerConnection) {
+            alert('请先完成所有必要连接：\n1. MODEL LOADER → SAMPLER CORE\n2. TEXT PROMPT → SAMPLER CORE\n3. SAMPLER CORE → IMAGE VIEWER');
+            return;
+        }
+
+        // 模拟生成图像
+        const viewerContainer = document.querySelector('#node-viewer .node-body div');
+        viewerContainer.style.background = 'url(https://picsum.photos/seed/vaporwave/260/180) no-repeat center center / cover';
+        viewerContainer.innerHTML = '';
+
+        // 状态灯切换为运行中
+        const statusLight = document.querySelector('.status-light');
+        statusLight.style.background = '#ff00ff';
+        statusLight.style.boxShadow = '0 0 5px #ff00ff, 0 0 15px rgba(255,0,255,0.5)';
+
+        // 模拟生成完成
+        setTimeout(() => {
+            statusLight.style.background = '#0f0';
+            statusLight.style.boxShadow = '0 0 5px #0f0, 0 0 15px rgba(0,255,0,0.5)';
+        }, 3000);
+    });
+
+    // 小地图功能
+    function updateMinimap() {
+        const canvas = document.getElementById('minimap-canvas');
+        const ctx = canvas.getContext('2d');
+        const nodes = document.querySelectorAll('.node');
+
+        canvas.width = 200;
+        canvas.height = 150;
+        ctx.fillStyle = '#000a20';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        if (nodes.length === 0) return;
+
+        // 计算边界框（使用getBoundingClientRect确保准确）
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        nodes.forEach(node => {
+            const rect = node.getBoundingClientRect();
+            minX = Math.min(minX, rect.left);
+            minY = Math.min(minY, rect.top);
+            maxX = Math.max(maxX, rect.right);
+            maxY = Math.max(maxY, rect.bottom);
+        });
+
+        // 计算缩放和偏移
+        const worldWidth = maxX - minX;
+        const worldHeight = maxY - minY;
+        const scale = Math.min(canvas.width / worldWidth, canvas.height / worldHeight) * 0.8;
+        const offsetX = (canvas.width - worldWidth * scale) / 2;
+        const offsetY = (canvas.height - worldHeight * scale) / 2;
+
+        // 绘制节点
+        nodes.forEach(node => {
+            const rect = node.getBoundingClientRect();
+            const drawX = (rect.left - minX) * scale + offsetX;
+            const drawY = (rect.top - minY) * scale + offsetY;
+            const drawWidth = rect.width * scale;
+            const drawHeight = rect.height * scale;
+
+            ctx.fillStyle = '#ff00ff';
+            ctx.fillRect(drawX, drawY, drawWidth, drawHeight);
+            ctx.strokeStyle = '#00ffff';
+            ctx.strokeRect(drawX, drawY, drawWidth, drawHeight);
+        });
+    }
+
+    // 监听节点拖拽更新小地图
+    nodes.forEach(node => {
+        interact(node).on('move', updateMinimap);
+    });
+
+    // 窗口大小变化时更新小地图
+    window.addEventListener('resize', updateMinimap);
+
+    // 初始化小地图
+    updateMinimap();
+
+    // 添加节点功能
+    let nodeCounter = 0;
+    document.getElementById('add-node').addEventListener('click', () => {
+        nodeCounter++;
+        const newNode = document.createElement('div');
+        newNode.className = 'node';
+        newNode.id = `node-${nodeCounter}`;
+        newNode.style.left = '200px';
+        newNode.style.top = '200px';
+        newNode.innerHTML = `
+            <div class="node-header" data-label="NEW NODE ${nodeCounter}">
+                <span>NEW NODE ${nodeCounter}</span>
+                <button class="delete-btn" onclick="deleteNode('node-${nodeCounter}')">×</button>
+            </div>
+            <div class="node-body">
+                <label for="node-input-${nodeCounter}">Input:</label>
+                <input type="text" id="node-input-${nodeCounter}" value="New value">
+            </div>
+            <div class="port input" data-node-id="node-${nodeCounter}" data-port-id="in-${nodeCounter}"></div>
+            <div class="port output" data-node-id="node-${nodeCounter}" data-port-id="out-${nodeCounter}"></div>
+        `;
+        document.getElementById('canvas-container').appendChild(newNode);
+
+        // 为新节点添加拖拽功能
+        interact(newNode).draggable({
+            allowFrom: '.node-header',
+            onmove: function (event) {
+                const target = event.target;
+                const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;
+                const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;
+
+                target.style.transform = `translate(${x}px, ${y}px)`;
+                target.setAttribute('data-x', x);
+                target.setAttribute('data-y', y);
+                updateAllConnections();
+                updateMinimap();
+            }
+        });
+
+        // 为新节点的端口添加连接功能
+        const newPorts = newNode.querySelectorAll('.port');
+        newPorts.forEach(port => {
+            port.addEventListener('mousedown', (e) => {
+                if (e.button !== 0) return;
+
+                const portType = port.classList.contains('output') ? 'output' : 'input';
+                const portId = port.dataset.portId;
+                const nodeId = port.dataset.nodeId;
+
+                if (portType === 'output') {
+                    drawingConnection = {
+                        startPortId: portId,
+                        startNodeId: nodeId,
+                        startX: e.clientX,
+                        startY: e.clientY
+                    };
+                    tempLine = createTempLine();
+                    connectionsSvg.appendChild(tempLine);
+                    e.stopPropagation();
+                } else if (portType === 'input' && port.classList.contains('connected')) {
+                    removeConnectionByPort(portId);
+                    e.stopPropagation();
+                }
+            });
+
+            port.addEventListener('mouseup', (e) => {
+                if (e.button !== 0 || !drawingConnection) return;
+
+                const targetPort = e.target;
+                const targetPortId = targetPort.dataset.portId;
+                const targetNodeId = targetPort.dataset.nodeId;
+                const targetPortType = targetPort.classList.contains('input') ? 'input' : 'output';
+
+                if (targetPortType === 'input' && targetPortId !== drawingConnection.startPortId) {
+                    const existingConnectionToTarget = currentConnections.find(conn => conn.endPortId === targetPortId);
+                    if (!existingConnectionToTarget) {
+                        addConnection(drawingConnection.startPortId, targetPortId);
+                    }
+                }
+
+                resetDrawingState();
+            });
+        });
+
+        updateMinimap();
+    });
+
+    // 画布滚动功能
+    let isDraggingCanvas = false;
+    let startX, startY, scrollLeft, scrollTop;
+
+    document.getElementById('canvas-container').addEventListener('mousedown', (e) => {
+        if (e.target.classList.contains('node') || e.target.closest('.node')) return;
+        isDraggingCanvas = true;
+        startX = e.pageX - document.getElementById('canvas-container').offsetLeft;
+        startY = e.pageY - document.getElementById('canvas-container').offsetTop;
+        scrollLeft = document.getElementById('canvas-container').scrollLeft;
+        scrollTop = document.getElementById('canvas-container').scrollTop;
+        document.body.style.cursor = 'grabbing';
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!isDraggingCanvas) return;
+        e.preventDefault();
+        const x = e.pageX - document.getElementById('canvas-container').offsetLeft;
+        const y = e.pageY - document.getElementById('canvas-container').offsetTop;
+        const walkX = (x - startX) * 1.5;
+        const walkY = (y - startY) * 1.5;
+        document.getElementById('canvas-container').scrollLeft = scrollLeft - walkX;
+        document.getElementById('canvas-container').scrollTop = scrollTop - walkY;
+    });
+
+    document.addEventListener('mouseup', () => {
+        isDraggingCanvas = false;
+        document.body.style.cursor = 'default';
+    });
+
+    // 清空节点功能
+    document.getElementById('clear-nodes').addEventListener('click', () => {
+        if (confirm('Are you sure you want to clear all nodes?')) {
+            const nodes = document.querySelectorAll('.node');
+            nodes.forEach(node => node.remove());
+            currentConnections = [];
+            updateAllConnections();
+            updateMinimap();
+        }
+    });
+
+    // 删除单个节点功能
+    window.deleteNode = function(nodeId) {
+        const node = document.getElementById(nodeId);
+        if (node) {
+            // 移除与该节点相关的所有连接
+            currentConnections = currentConnections.filter(conn => {
+                const startPort = document.querySelector(`[data-port-id="${conn.startPortId}"]`);
+                const endPort = document.querySelector(`[data-port-id="${conn.endPortId}"]`);
+                return !(startPort && startPort.dataset.nodeId === nodeId || endPort && endPort.dataset.nodeId === nodeId);
+            });
+            node.remove();
+            updateAllConnections();
+            updateMinimap();
+        }
+    };
+</script>
+
+</body>
+</html>

@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>ComfyUI - Platinum Edition</title>
+    <style>
+        :root {
+            --canvas-bg: #f5f5f7;
+            --node-bg: rgba(255, 255, 255, 0.8);
+            --text-main: #1d1d1f;
+            --text-sub: #86868b;
+            --accent: #0071e3;
+            --border: rgba(0, 0, 0, 0.1);
+            --shadow: 0 8px 30px rgba(0,0,0,0.04);
+        }
+
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            background: var(--canvas-bg);
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+            color: var(--text-main);
+            overflow: hidden;
+        }
+
+        /* 极简网格背景 */
+        #workspace {
+            width: 100vw; height: 100vh;
+            background-image: radial-gradient(#d1d1d6 1px, transparent 1px);
+            background-size: 24px 24px;
+            position: relative;
+        }
+
+        /* 顶部毛玻璃导航 */
+        .glass-nav {
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+            width: 90%; max-width: 1200px; height: 50px;
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
+            border-radius: 25px;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 20px; z-index: 1000;
+            box-shadow: var(--shadow);
+        }
+
+        .btn-primary {
+            background: var(--accent); color: white; border: none;
+            padding: 8px 16px; border-radius: 15px; font-weight: 500;
+            cursor: pointer; transition: 0.2s;
+        }
+        .btn-primary:hover { opacity: 0.9; transform: scale(1.02); }
+
+        /* 节点样式 - 优雅的卡片 */
+        .node {
+            position: absolute; width: 240px;
+            background: var(--node-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            box-shadow: var(--shadow);
+            transition: box-shadow 0.3s, border-color 0.3s;
+            z-index: 10;
+        }
+        .node.selected { border-color: var(--accent); box-shadow: 0 12px 40px rgba(0, 113, 227, 0.15); }
+
+        .node-header {
+            padding: 12px 16px; border-bottom: 1px solid var(--border);
+            display: flex; justify-content: space-between; align-items: center;
+            cursor: grab; font-weight: 600; font-size: 14px;
+        }
+
+        .node-body { padding: 16px; font-size: 13px; color: var(--text-sub); }
+        .node.collapsed .node-body { display: none; }
+
+        input, select {
+            width: 100%; padding: 8px; margin-top: 8px;
+            border-radius: 8px; border: 1px solid var(--border);
+            background: rgba(0,0,0,0.02); outline: none;
+        }
+
+        /* 磁吸端口 */
+        .port {
+            width: 10px; height: 10px; background: white;
+            border: 2px solid #d1d1d6; border-radius: 50%;
+            position: absolute; transition: 0.2s;
+        }
+        .port:hover { border-color: var(--accent); transform: scale(1.2); }
+        .port.input { left: -6px; top: 40px; }
+        .port.output { right: -6px; top: 40px; }
+
+        /* 连接线 */
+        .conn-path {
+            fill: none; stroke: #d1d1d6; stroke-width: 2;
+            transition: stroke 0.3s; pointer-events: all; cursor: pointer;
+        }
+        .conn-path:hover { stroke: var(--accent); stroke-width: 3; }
+
+        /* 右键菜单 */
+        #context-menu {
+            position: fixed; display: none; background: white;
+            border: 1px solid var(--border); border-radius: 12px;
+            box-shadow: var(--shadow); z-index: 2000; padding: 8px 0;
+            min-width: 150px;
+        }
+        .menu-item {
+            padding: 8px 16px; font-size: 13px; cursor: pointer;
+        }
+        .menu-item:hover { background: var(--canvas-bg); color: var(--accent); }
+    </style>
+</head>
+<body>
+
+<nav class="glass-nav">
+    <div style="font-weight: 700; letter-spacing: -0.5px;">PLATINUM <span style="color:var(--accent)">UI</span></div>
+    <button class="btn-primary">Run Workflow</button>
+</nav>
+
+<div id="workspace">
+    <svg id="svg-layer" style="position:absolute; width:100%; height:100%; pointer-events:none;"></svg>
+    
+    <div class="node" id="node-1" style="left:150px; top:150px;">
+        <div class="node-header">Text Input</div>
+        <div class="node-body">
+            Prompt
+            <input type="text" value="A peaceful zen garden...">
+        </div>
+        <div class="port output" data-id="p1"></div>
+    </div>
+
+    <div class="node" id="node-2" style="left:500px; top:120px;">
+        <div class="node-header">AI Processor</div>
+        <div class="node-body">
+            Method
+            <select><option>Stable Diffusion XL</option></select>
+        </div>
+        <div class="port input" data-id="p2"></div>
+        <div class="port output" data-id="p3"></div>
+    </div>
+</div>
+
+<div id="context-menu">
+    <div class="menu-item" onclick="addNewNode()">+ Add New Node</div>
+    <div class="menu-item">Clear Workspace</div>
+</div>
+
+<script>
+    const workspace = document.getElementById('workspace');
+    const svgLayer = document.getElementById('svg-layer');
+    const menu = document.getElementById('context-menu');
+    
+    let connections = [{ from: 'p1', to: 'p2' }];
+    let dragData = { node: null, x: 0, y: 0 };
+    let activePort = null;
+
+    // --- 交互功能 ---
+
+    // 1. 拖拽节点
+    workspace.addEventListener('mousedown', e => {
+        const node = e.target.closest('.node');
+        if (node && !e.target.classList.contains('port')) {
+            dragData.node = node;
+            node.classList.add('selected');
+            const rect = node.getBoundingClientRect();
+            dragData.x = e.clientX - rect.left;
+            dragData.y = e.clientY - rect.top;
+        }
+        menu.style.display = 'none';
+    });
+
+    // 2. 双击折叠节点
+    workspace.addEventListener('dblclick', e => {
+        const node = e.target.closest('.node');
+        if (node) {
+            node.classList.toggle('collapsed');
+            updateLines();
+        }
+    });
+
+    // 3. 右键菜单
+    workspace.addEventListener('contextmenu', e => {
+        e.preventDefault();
+        menu.style.display = 'block';
+        menu.style.left = e.clientX + 'px';
+        menu.style.top = e.clientY + 'px';
+    });
+
+    window.addEventListener('mousemove', e => {
+        if (dragData.node) {
+            dragData.node.style.left = (e.clientX - dragData.x) + 'px';
+            dragData.node.style.top = (e.clientY - dragData.y) + 'px';
+            updateLines();
+        }
+        if (activePort) {
+            drawTempLine(e);
+        }
+    });
+
+    window.addEventListener('mouseup', () => {
+        if (dragData.node) dragData.node.classList.remove('selected');
+        dragData.node = null;
+    });
+
+    // --- 连线逻辑 ---
+    function updateLines() {
+        svgLayer.innerHTML = '';
+        connections.forEach((conn, index) => {
+            const pStart = document.querySelector(`[data-id="${conn.from}"]`);
+            const pEnd = document.querySelector(`[data-id="${conn.to}"]`);
+            if (pStart && pEnd) {
+                const b1 = pStart.getBoundingClientRect();
+                const b2 = pEnd.getBoundingClientRect();
+                const x1 = b1.left + 5; const y1 = b1.top + 5;
+                const x2 = b2.left + 5; const y2 = b2.top + 5;
+                
+                const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                const cp = Math.abs(x2 - x1) * 0.5;
+                path.setAttribute("d", `M ${x1} ${y1} C ${x1 + cp} ${y1}, ${x2 - cp} ${y2}, ${x2} ${y2}`);
+                path.setAttribute("class", "conn-path");
+                path.onclick = () => { connections.splice(index, 1); updateLines(); };
+                svgLayer.appendChild(path);
+            }
+        });
+    }
+
+    // 处理连线点击 (简易版：点击端口建立连接)
+    workspace.addEventListener('click', e => {
+        if (e.target.classList.contains('port')) {
+            if (!activePort) {
+                activePort = e.target.dataset.id;
+                e.target.style.background = 'var(--accent)';
+            } else {
+                const targetPort = e.target.dataset.id;
+                if (activePort !== targetPort) {
+                    connections.push({ from: activePort, to: targetPort });
+                    updateLines();
+                }
+                document.querySelector(`[data-id="${activePort}"]`).style.background = 'white';
+                activePort = null;
+            }
+        }
+    });
+
+    function addNewNode() {
+        alert("Node added! (Logic can be extended to append HTML)");
+        menu.style.display = 'none';
+    }
+
+    window.onload = updateLines;
+</script>
+
+</body>
+</html>

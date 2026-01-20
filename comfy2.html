@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ComfyUI - Industrial Future</title>
+    <style>
+        :root {
+            --bg: #1c1c1e;
+            --panel-bg: #2a2a2c;
+            --border: #4a4a4d;
+            --header-bg: #3c3c3e;
+            --text-color: #f0f0f0;
+            --accent-color: #ff6600; /* 工业橙 */
+            --glow-color: rgba(255, 102, 0, 0.4);
+            --secondary-accent: #9d2d0b; /* 铁锈红 */
+        }
+
+        body {
+            margin: 0; padding: 0;
+            background-color: var(--bg);
+            color: var(--text-color);
+            font-family: 'Roboto Mono', monospace; /* 程序员字体 */
+            overflow: hidden;
+            user-select: none;
+            cursor: default;
+        }
+
+        /* 背景网格 */
+        #workspace {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background-image:
+                linear-gradient(to right, var(--border) 1px, transparent 1px),
+                linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        /* 顶部控制台 */
+        .top-bar {
+            position: absolute; top: 0; left: 0; width: 100%;
+            height: 40px; background: var(--header-bg);
+            border-bottom: 1px solid var(--accent-color);
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 0 20px; box-sizing: border-box; z-index: 100;
+        }
+        .top-bar .title {
+            color: var(--accent-color); font-weight: bold; font-size: 1.2em;
+            text-shadow: 0 0 8px var(--glow-color);
+        }
+        .top-bar button {
+            background: var(--accent-color); color: var(--bg);
+            border: none; padding: 6px 15px; border-radius: 3px;
+            cursor: pointer; font-family: 'Roboto Mono', monospace;
+            font-weight: bold;
+            transition: background 0.2s, box-shadow 0.2s;
+        }
+        .top-bar button:hover {
+            background: #ff8833;
+            box-shadow: 0 0 10px var(--glow-color);
+        }
+
+        /* 节点样式 */
+        .node {
+            position: absolute; width: 260px;
+            background: var(--panel-bg);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.6);
+            cursor: grab;
+            transition: box-shadow 0.2s;
+            z-index: 10;
+        }
+        .node:active { cursor: grabbing; }
+        .node.selected { border-color: var(--accent-color); box-shadow: 0 0 15px var(--glow-color); z-index: 11; }
+
+        .node-header {
+            background: var(--header-bg);
+            padding: 8px 15px;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.9em;
+            font-weight: bold;
+            color: var(--secondary-accent);
+        }
+
+        .node-content {
+            padding: 15px;
+            font-size: 0.85em;
+        }
+
+        .node-content input, .node-content select, .node-content textarea {
+            width: calc(100% - 10px);
+            background: #111113;
+            border: 1px solid var(--border);
+            color: var(--text-color);
+            padding: 6px;
+            margin-top: 5px;
+            border-radius: 3px;
+            font-family: 'Roboto Mono', monospace;
+            box-sizing: border-box;
+        }
+        .node-content input:focus, .node-content select:focus, .node-content textarea:focus {
+            border-color: var(--accent-color);
+            outline: none;
+            box-shadow: 0 0 5px var(--glow-color);
+        }
+
+        /* 端口样式 */
+        .port {
+            width: 14px; height: 14px;
+            border-radius: 50%;
+            background: var(--border);
+            border: 2px solid var(--secondary-accent);
+            position: absolute;
+            cursor: crosshair;
+            transition: background 0.1s, border-color 0.1s, box-shadow 0.1s;
+        }
+        .port:hover {
+            background: var(--accent-color);
+            border-color: var(--accent-color);
+            box-shadow: 0 0 8px var(--glow-color);
+        }
+        .port.input { left: -8px; top: 50%; transform: translateY(-50%); }
+        .port.output { right: -8px; top: 50%; transform: translateY(-50%); }
+
+        /* SVG 连线层 */
+        #connections-svg {
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none; /* 允许点击下方元素 */
+            z-index: 5;
+        }
+        .connection-line {
+            fill: none;
+            stroke: var(--accent-color);
+            stroke-width: 3;
+            filter: drop-shadow(0 0 6px var(--glow-color));
+            pointer-events: all; /* 允许点击线 */
+            cursor: pointer;
+        }
+        .connection-line:hover {
+            stroke: #ff9933;
+            stroke-width: 4;
+            filter: drop-shadow(0 0 10px rgba(255, 153, 51, 0.6));
+        }
+
+        /* 浮动连线指示器 */
+        #temp-line-svg {
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 6;
+        }
+        #temp-line {
+            fill: none;
+            stroke: rgba(255, 102, 0, 0.7);
+            stroke-width: 2;
+            stroke-dasharray: 5 5; /* 虚线 */
+        }
+    </style>
+</head>
+<body>
+
+<div id="workspace">
+    <div class="top-bar">
+        <span class="title">COGNITO LABS // WORKFLOW 001</span>
+        <button onclick="alert('Saving workflow...');">SAVE & EXECUTE</button>
+    </div>
+
+    <svg id="connections-svg"></svg>
+    <svg id="temp-line-svg"></svg>
+
+    <div class="node" id="node1" style="left: 100px; top: 100px;">
+        <div class="node-header">INPUT: DATA SOURCE</div>
+        <div class="node-content">
+            <input type="text" value="dataset_v2.json">
+        </div>
+        <div class="port output" data-port-id="node1-out-1" data-node-id="node1"></div>
+    </div>
+
+    <div class="node" id="node2" style="left: 400px; top: 80px;">
+        <div class="node-header">PROCESSOR: ETL TRANSFORM</div>
+        <div class="node-content">
+            <select>
+                <option>Data Cleanse</option>
+                <option>Feature Scale</option>
+            </select>
+        </div>
+        <div class="port input" data-port-id="node2-in-1" data-node-id="node2"></div>
+        <div class="port output" data-port-id="node2-out-1" data-node-id="node2"></div>
+    </div>
+
+    <div class="node" id="node3" style="left: 700px; top: 120px;">
+        <div class="node-header">OUTPUT: MODEL TRAINER</div>
+        <div class="node-content">
+            <textarea rows="3">epochs: 10
+learning_rate: 0.001</textarea>
+        </div>
+        <div class="port input" data-port-id="node3-in-1" data-node-id="node3"></div>
+    </div>
+
+</div>
+
+<script>
+    const workspace = document.getElementById('workspace');
+    const connectionsSvg = document.getElementById('connections-svg');
+    const tempLineSvg = document.getElementById('temp-line-svg');
+    const tempLinePath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    tempLinePath.setAttribute("id", "temp-line");
+    tempLineSvg.appendChild(tempLinePath);
+
+    let currentConnections = {}; // { connId: { fromPort: id, toPort: id, pathElement: svgPath } }
+    let nextConnectionId = 0; // 用于生成唯一的连接ID
+
+    let draggedNode = null;
+    let offsetX, offsetY;
+
+    let connectingPort = null; // 正在拖拽连接的端口
+    let tempLineVisible = false;
+
+    // --- 节点拖拽逻辑 ---
+    workspace.addEventListener('mousedown', (e) => {
+        const node = e.target.closest('.node');
+        if (node && !e.target.closest('.port')) { // 确保不是点击端口
+            draggedNode = node;
+            node.classList.add('selected'); // 选中效果
+            offsetX = e.clientX - node.getBoundingClientRect().left;
+            offsetY = e.clientY - node.getBoundingClientRect().top;
+            e.preventDefault(); // 防止默认的拖拽行为
+        } else if (e.target.classList.contains('port')) {
+            // 开始连线逻辑
+            connectingPort = e.target;
+            tempLineVisible = true;
+            e.preventDefault();
+        } else if (e.target.classList.contains('connection-line')) {
+            // 点击连线断开
+            const connId = e.target.getAttribute('data-connection-id');
+            if (connId && currentConnections[connId]) {
+                deleteConnection(connId);
+            }
+        }
+    });
+
+    workspace.addEventListener('mousemove', (e) => {
+        if (draggedNode) {
+            let x = e.clientX - offsetX;
+            let y = e.clientY - offsetY;
+            draggedNode.style.left = `${x}px`;
+            draggedNode.style.top = `${y}px`;
+            redrawAllConnections();
+        } else if (connectingPort && tempLineVisible) {
+            drawTempLine(e.clientX, e.clientY);
+        }
+    });
+
+    workspace.addEventListener('mouseup', (e) => {
+        if (draggedNode) {
+            draggedNode.classList.remove('selected');
+            draggedNode = null;
+        }
+
+        if (connectingPort) {
+            const targetPort = e.target.closest('.port');
+            if (targetPort && connectingPort !== targetPort) {
+                // 尝试建立连接
+                const isOutputToInput = (connectingPort.classList.contains('output') && targetPort.classList.contains('input')) ||
+                                       (connectingPort.classList.contains('input') && targetPort.classList.contains('output'));
+
+                // 避免连接到同一个节点或同类型端口
+                const sameNode = connectingPort.dataset.nodeId === targetPort.dataset.nodeId;
+                const sameType = connectingPort.classList.contains('output') && targetPort.classList.contains('output') ||
+                                 connectingPort.classList.contains('input') && targetPort.classList.contains('input');
+
+                if (isOutputToInput && !sameNode && !sameType) {
+                    // 确保是唯一的连接 (不创建重复的)
+                    const existing = Object.values(currentConnections).some(conn =>
+                        (conn.fromPort === connectingPort.dataset.portId && conn.toPort === targetPort.dataset.portId) ||
+                        (conn.fromPort === targetPort.dataset.portId && conn.toPort === connectingPort.dataset.portId)
+                    );
+                    if (!existing) {
+                        createConnection(connectingPort.dataset.portId, targetPort.dataset.portId);
+                    }
+                }
+            }
+            connectingPort = null;
+            tempLineVisible = false;
+            tempLinePath.setAttribute('d', ''); // 清除临时线
+        }
+    });
+
+    // --- 连线逻辑 ---
+    function getPortCenter(portElement) {
+        const rect = portElement.getBoundingClientRect();
+        const workspaceRect = workspace.getBoundingClientRect();
+        return {
+            x: rect.left + rect.width / 2 - workspaceRect.left,
+            y: rect.top + rect.height / 2 - workspaceRect.top
+        };
+    }
+
+    function createConnection(fromPortId, toPortId) {
+        const connId = `conn-${nextConnectionId++}`;
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("class", "connection-line");
+        path.setAttribute("data-connection-id", connId);
+        connectionsSvg.appendChild(path);
+
+        currentConnections[connId] = {
+            fromPort: fromPortId,
+            toPort: toPortId,
+            pathElement: path
+        };
+        redrawConnection(connId);
+    }
+
+    function deleteConnection(connId) {
+        if (currentConnections[connId]) {
+            connectionsSvg.removeChild(currentConnections[connId].pathElement);
+            delete currentConnections[connId];
+        }
+    }
+
+    function redrawConnection(connId) {
+        const conn = currentConnections[connId];
+        if (!conn) return;
+
+        const fromPort = document.querySelector(`[data-port-id="${conn.fromPort}"]`);
+        const toPort = document.querySelector(`[data-port-id="${conn.toPort}"]`);
+
+        if (!fromPort || !toPort) {
+            deleteConnection(connId); // 如果端口不存在，删除连线
+            return;
+        }
+
+        const p1 = getPortCenter(fromPort);
+        const p2 = getPortCenter(toPort);
+
+        const offset = Math.abs(p2.x - p1.x) * 0.4; // 调整贝塞尔曲线的弯曲度
+        const pathData = `M ${p1.x} ${p1.y} C ${p1.x + offset} ${p1.y}, ${p2.x - offset} ${p2.y}, ${p2.x} ${p2.y}`;
+        conn.pathElement.setAttribute("d", pathData);
+    }
+
+    function redrawAllConnections() {
+        Object.keys(currentConnections).forEach(redrawConnection);
+    }
+
+    function drawTempLine(mouseX, mouseY) {
+        if (!connectingPort) return;
+
+        const p1 = getPortCenter(connectingPort);
+        const workspaceRect = workspace.getBoundingClientRect();
+        const p2 = {
+            x: mouseX - workspaceRect.left,
+            y: mouseY - workspaceRect.top
+        };
+
+        const offset = Math.abs(p2.x - p1.x) * 0.4;
+        const pathData = `M ${p1.x} ${p1.y} C ${p1.x + offset} ${p1.y}, ${p2.x - offset} ${p2.y}, ${p2.x} ${p2.y}`;
+        tempLinePath.setAttribute("d", pathData);
+    }
+
+    // 初始创建一些连接
+    document.addEventListener('DOMContentLoaded', () => {
+        createConnection('node1-out-1', 'node2-in-1');
+        createConnection('node2-out-1', 'node3-in-1');
+    });
+
+    window.addEventListener('resize', redrawAllConnections); // 窗口大小改变时重绘
+</script>
+
+</body>
+</html>

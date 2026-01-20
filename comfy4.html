@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>ComfyUI - Mainframe Terminal</title>
+    <style>
+        :root {
+            --amber: #ffb000;
+            --amber-dim: rgba(255, 176, 0, 0.2);
+            --bg: #120d00;
+            --font-main: 'Courier New', Courier, monospace;
+        }
+
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            background: var(--bg); color: var(--amber);
+            font-family: var(--font-main); overflow: hidden;
+            text-transform: uppercase;
+        }
+
+        /* CRT 扫描线和阴极射线管效果 */
+        .crt-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%), 
+                        linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+            background-size: 100% 3px, 3px 100%;
+            pointer-events: none; z-index: 1000;
+        }
+
+        #workspace {
+            width: 100vw; height: 100vh;
+            background-image: radial-gradient(var(--amber-dim) 1px, transparent 0);
+            background-size: 30px 30px;
+            position: relative;
+        }
+
+        /* 节点样式 */
+        .node {
+            position: absolute; width: 220px;
+            background: var(--bg);
+            border: 2px solid var(--amber);
+            box-shadow: 0 0 10px var(--amber-dim);
+            z-index: 10;
+        }
+
+        .node-header {
+            padding: 5px 10px; background: var(--amber);
+            color: var(--bg); font-weight: bold;
+            cursor: grab; display: flex; justify-content: space-between;
+        }
+
+        .node-body { padding: 10px; border-top: 1px solid var(--amber); }
+
+        input, select {
+            width: 100%; background: transparent; border: 1px solid var(--amber);
+            color: var(--amber); padding: 5px; margin-top: 5px;
+            font-family: var(--font-main); outline: none;
+        }
+
+        /* 端口样式 - 像素方块 */
+        .port {
+            width: 8px; height: 8px; background: var(--amber);
+            position: absolute; cursor: pointer;
+        }
+        .port:hover { box-shadow: 0 0 10px var(--amber); }
+        .port.input { left: -5px; top: 40px; }
+        .port.output { right: -5px; top: 40px; }
+
+        /* 连线 - 直角折线 */
+        .conn-path {
+            fill: none; stroke: var(--amber); stroke-width: 2;
+            stroke-dasharray: 4;
+        }
+
+        /* 闪烁光标效果 */
+        .cursor { display: inline-block; width: 8px; height: 15px; background: var(--amber); animation: blink 1s infinite; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+    </style>
+</head>
+<body>
+
+<div class="crt-overlay"></div>
+
+<div id="workspace">
+    <div style="position:absolute; top:10px; left:20px; z-index:100; font-size: 14px;">
+        CORE_LOADER_V.8.2 <span class="cursor"></span>
+    </div>
+
+    <svg id="svg-layer" style="position:absolute; width:100%; height:100%; pointer-events:none;"></svg>
+    
+    <div class="node" id="n1" style="left:100px; top:100px;">
+        <div class="node-header">LOADER.EXE</div>
+        <div class="node-body">
+            SRC: <input type="text" value="USER/DATA_01">
+        </div>
+        <div class="port output" data-id="p1"></div>
+    </div>
+
+    <div class="node" id="n2" style="left:400px; top:150px;">
+        <div class="node-header">PROCESS.SYS</div>
+        <div class="node-body">
+            MODE: <select><option>ENCRYPT</option><option>DECODE</option></select>
+        </div>
+        <div class="port input" data-id="p2"></div>
+        <div class="port output" data-id="p3"></div>
+    </div>
+</div>
+
+<script>
+    const workspace = document.getElementById('workspace');
+    const svgLayer = document.getElementById('svg-layer');
+    
+    let connections = [{ from: 'p1', to: 'p2' }];
+    let dragNode = null;
+    let offset = { x: 0, y: 0 };
+
+    // 基础拖拽逻辑
+    workspace.addEventListener('mousedown', e => {
+        const node = e.target.closest('.node');
+        if (node && !e.target.classList.contains('port')) {
+            dragNode = node;
+            const rect = node.getBoundingClientRect();
+            offset.x = e.clientX - rect.left;
+            offset.y = e.clientY - rect.top;
+        }
+    });
+
+    window.addEventListener('mousemove', e => {
+        if (dragNode) {
+            dragNode.style.left = (e.clientX - offset.x) + 'px';
+            dragNode.style.top = (e.clientY - offset.y) + 'px';
+            updateLines();
+        }
+    });
+
+    window.addEventListener('mouseup', () => {
+        dragNode = null;
+    });
+
+    // 直角折线绘制算法
+    function updateLines() {
+        svgLayer.innerHTML = '';
+        connections.forEach(conn => {
+            const p1 = document.querySelector(`[data-id="${conn.from}"]`);
+            const p2 = document.querySelector(`[data-id="${conn.to}"]`);
+            if (p1 && p2) {
+                const b1 = p1.getBoundingClientRect();
+                const b2 = p2.getBoundingClientRect();
+                const x1 = b1.left + 4; const y1 = b1.top + 4;
+                const x2 = b2.left + 4; const y2 = b2.top + 4;
+
+                const midX = x1 + (x2 - x1) / 2;
+                
+                const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                // 绘制直角路径: M(起点) -> L(中间转折) -> L(下一个转折) -> L(终点)
+                const d = `M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}`;
+                
+                path.setAttribute("d", d);
+                path.setAttribute("class", "conn-path");
+                svgLayer.appendChild(path);
+            }
+        });
+    }
+
+    window.onload = updateLines;
+</script>
+
+</body>
+</html>
