@@ -587,6 +587,7 @@
         <span>TERMINAL</span>
         <div class="ctrl-group">
             <span class="ctrl" onclick="addTerminal()">+</span>
+            <span class="ctrl" id="terminal-mode-btn" onclick="toggleTerminalMode()">L</span>
             <span class="ctrl" onclick="toggleMax('terminal')">◰</span>
         </div>
     </div>
@@ -594,7 +595,6 @@
     <div class="editor-tools">
         <div class="key-btn" onclick="insertAtTerm('\t')">TAB</div>
         <div class="key-btn" onclick="execTermUndo()">UNDO</div>
-        
         <div class="key-btn" onclick="termAction('selectAll')">ALL</div>
         <div class="key-btn" onclick="termAction('cut')">CUT</div>
         <div class="key-btn" onclick="termAction('copy')">COPY</div>
@@ -2163,6 +2163,16 @@ function smartSwitch(targetPanelId) {
         if(input) input.focus();
     }
 
+    // 终端模式切换
+    let terminalMode = 'custom'; // 'custom' (默认) 或 'local'
+    
+    function toggleTerminalMode() {
+        terminalMode = terminalMode === 'local' ? 'custom' : 'local';
+        const btn = document.getElementById('terminal-mode-btn');
+        btn.textContent = terminalMode === 'local' ? 'C' : 'L';
+        addLog(`SWITCHED_TO_${terminalMode.toUpperCase()}_MODE`, 'var(--amber)');
+    }
+    
     async function handleCommand(id) {
         const body = document.getElementById(id);
         const input = body.querySelector('.cmd-in');
@@ -2174,6 +2184,27 @@ function smartSwitch(targetPanelId) {
             output.appendChild(d); output.scrollTop = output.scrollHeight;
         };
         log(`>> ${val}`, '#fff');
+        
+        // 本地终端模式
+        if (terminalMode === 'local') {
+            try {
+                // 调用本地终端服务
+                const response = await fetch('http://localhost:5001/api/terminal/execute', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ command: val, mode: 'local' })
+                });
+                const data = await response.json();
+                if (data.output) log(data.output, 'var(--term-green)');
+                if (data.error) log(data.error, 'var(--term-red)');
+            } catch (e) {
+                log(`ERR: ${e.message}`, 'var(--term-red)');
+            }
+            input.value = '';
+            return;
+        }
+        
+        // 默认前端执行模式
         const args = val.split(' '), cmd = args[0].toLowerCase(), fileName = args[1];
         switch(cmd) {
             case 'help':

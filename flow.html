@@ -257,7 +257,13 @@
             filter: drop-shadow(0 0 8px var(--line-glow));
             /* 连线动画 */
             stroke-dasharray: 10 5;
-            animation: line-flow 2s linear infinite;
+            animation: line-flow 2s linear infinite reverse;
+        }
+
+        .connection-line.running {
+            animation-duration: 0.5s;
+            stroke: var(--accent-pink);
+            filter: drop-shadow(0 0 8px rgba(255, 0, 255, 0.5));
         }
         .temporary-line {
             fill: none; stroke: var(--accent-pink); stroke-width: 2;
@@ -403,6 +409,13 @@
             target.setAttribute('data-y', y);
             
             updateAllConnections(); // 拖拽节点时更新所有连线
+            
+            // 保持运行状态的动画速度
+            if (document.getElementById('status-text').textContent === 'RUNNING') {
+                document.querySelectorAll('.connection-line').forEach(line => {
+                    line.classList.add('running');
+                });
+            }
         }
     });
 
@@ -540,6 +553,7 @@
 
     function updateAllConnections() {
         connectionsSvg.innerHTML = ''; // 清空所有旧线
+        const isRunning = document.getElementById('status-text').textContent === 'RUNNING';
 
         currentConnections.forEach(conn => {
             const startPos = getPortPosition(conn.startPortId);
@@ -549,7 +563,7 @@
                 const pathData = generatePath(startPos.x, startPos.y, endPos.x, endPos.y);
                 const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
                 path.setAttribute("d", pathData);
-                path.setAttribute("class", "connection-line");
+                path.setAttribute("class", isRunning ? "connection-line running" : "connection-line");
                 path.setAttribute("vector-effect", "non-scaling-stroke");
                 connectionsSvg.appendChild(path);
             }
@@ -579,29 +593,31 @@
     // 工作流运行逻辑
     document.getElementById('run-workflow').addEventListener('click', () => {
         // 状态灯切换为运行中
-            const statusLight = document.querySelector('.status-light');
-            const statusText = document.getElementById('status-text');
-            if (statusLight) {
-                statusLight.style.background = '#ff00ff';
-                statusLight.style.boxShadow = '0 0 5px #ff00ff, 0 0 15px rgba(255,0,255,0.5)';
-            }
-            // 更新状态文本
-            if (statusText) {
-                statusText.textContent = 'RUNNING';
-                statusText.style.color = '#ff00ff';
-            }
+        const statusLight = document.querySelector('.status-light');
+        const statusText = document.getElementById('status-text');
+        if (statusLight) {
+            statusLight.style.background = '#ff00ff';
+            statusLight.style.boxShadow = '0 0 5px #ff00ff, 0 0 15px rgba(255,0,255,0.5)';
+        }
+        // 更新状态文本
+        if (statusText) {
+            statusText.textContent = 'RUNNING';
+            statusText.style.color = '#ff00ff';
+        }
+        
+        // 加速连接线动画
+        document.querySelectorAll('.connection-line').forEach(line => {
+            line.classList.add('running');
+        });
 
-        // 按顺序运行节点
         const nodes = ['node-loader', 'node-prompt', 'node-sampler', 'node-viewer'];
         let currentNodeIndex = 0;
 
         function runNextNode() {
             if (currentNodeIndex >= nodes.length) {
-                // 所有节点运行完成
                 const viewerNode = document.getElementById('node-viewer');
                 if (viewerNode) {
                     viewerNode.style.boxShadow = '0 0 30px rgba(0,255,255,0.8), 0 0 60px rgba(0,255,255,0.4)';
-                    // 显示生成的图像
                     const renderResult = document.getElementById('render-result');
                     renderResult.style.background = 'url(https://picsum.photos/seed/vaporwave2025/260/180) no-repeat center center / cover';
                     renderResult.innerHTML = '';
@@ -609,7 +625,6 @@
                         viewerNode.style.boxShadow = '0 0 10px var(--node-border-glow), 0 0 20px rgba(255, 0, 255, 0.3)';
                     }, 1000);
                 }
-                // 状态灯恢复
                 if (statusLight) {
                     statusLight.style.background = '#0f0';
                     statusLight.style.boxShadow = '0 0 5px #0f0, 0 0 15px rgba(0,255,0,0.5)';
@@ -618,10 +633,14 @@
                     statusText.textContent = 'READY';
                     statusText.style.color = '#00ffff';
                 }
+                
+                // 恢复连接线动画速度
+                document.querySelectorAll('.connection-line').forEach(line => {
+                    line.classList.remove('running');
+                });
                 return;
             }
 
-            // 清除上一个节点的闪烁
             if (currentNodeIndex > 0) {
                 const prevNode = document.getElementById(nodes[currentNodeIndex - 1]);
                 if (prevNode) {
@@ -629,21 +648,36 @@
                 }
             }
 
-            // 闪烁当前节点
                 const currentNode = document.getElementById(nodes[currentNodeIndex]);
                 if (currentNode) {
                     currentNode.style.boxShadow = '0 0 20px rgba(0,255,255,0.8), 0 0 40px rgba(0,255,255,0.4)';
                 }
 
-            // 1秒后运行下一个节点
             setTimeout(() => {
                 currentNodeIndex++;
                 runNextNode();
             }, 1000);
         }
 
-        // 开始运行
         runNextNode();
+    });
+
+    document.getElementById('stop-workflow').addEventListener('click', () => {
+        const statusLight = document.querySelector('.status-light');
+        const statusText = document.getElementById('status-text');
+        
+        if (statusLight) {
+            statusLight.style.background = '#0f0';
+            statusLight.style.boxShadow = '0 0 5px #0f0, 0 0 15px rgba(0,255,0,0.5)';
+        }
+        if (statusText) {
+            statusText.textContent = 'READY';
+            statusText.style.color = '#00ffff';
+        }
+        
+        document.querySelectorAll('.connection-line').forEach(line => {
+            line.classList.remove('running');
+        });
     });
 
     // 小地图功能
