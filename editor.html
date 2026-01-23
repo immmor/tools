@@ -1082,7 +1082,16 @@ function execEditorCmd(cmd) {
 
 // 拦截物理 Tab 键 (如果是外接键盘)
 function initEditorTabEvents() {
-    // Monaco Editor 自带Tab键支持，无需额外处理
+    const tabs = document.querySelectorAll('#editor-tabs .term-tab');
+    tabs.forEach(tab => {
+        const fileName = tab.id.replace('editor-tab-', '');
+        tab.onclick = (e) => {
+            // 避免点击关闭按钮时切换标签
+            if (!e.target.closest('.term-close')) {
+                switchEditorTab(fileName);
+            }
+        };
+    });
 }
 
 function getLanguageFromFileName(fileName) {
@@ -1515,6 +1524,12 @@ function getLanguageFromFileName(fileName) {
         });
         
         if (editorTabs[fileName]) {
+            // 确保容器存在
+            if (!editorTabs[fileName].container) {
+                console.error('Editor container not found for', fileName);
+                return;
+            }
+            
             editorTabs[fileName].container.style.display = 'block';
             editorTabs[fileName].tab.classList.add('active');
             if (editorTabs[fileName].editor) {
@@ -1530,7 +1545,7 @@ function getLanguageFromFileName(fileName) {
             // 显示/隐藏预览按钮
             const previewBtn = document.getElementById('preview-btn');
             if (previewBtn) {
-                if (fileName.endsWith('.html')) {
+                if (fileName.endsWith('.html') && !fileName.startsWith('[PREVIEW]')) {
                     previewBtn.style.display = 'flex';
                 } else {
                     previewBtn.style.display = 'none';
@@ -1539,7 +1554,6 @@ function getLanguageFromFileName(fileName) {
         }
     }
     
-    // 当激活文件改变时自动更新AI上下文
     function updateAiContextOnFileChange(fileName) {
         if (fileName && !fileName.endsWith('/')) {
             selectedAiCtxs = [fileName];
@@ -1586,6 +1600,11 @@ function getLanguageFromFileName(fileName) {
     } else if (tabInfo.editor.parentNode) {
         // iframe或其他DOM元素
         tabInfo.editor.parentNode.removeChild(tabInfo.editor);
+    }
+    
+    // 清理全屏按钮
+    if (tabInfo.fullscreenBtn) {
+        tabInfo.fullscreenBtn.remove();
     }
     
     // 清理容器
@@ -2802,6 +2821,21 @@ function previewHtmlFile() {
     const previewContainer = document.createElement('div');
     previewContainer.className = 'term-body';
     
+    // 创建全屏按钮
+    const fullscreenBtn = document.createElement('div');
+    fullscreenBtn.className = 'ctrl';
+    fullscreenBtn.style.position = 'absolute';
+    fullscreenBtn.style.top = '10px';
+    fullscreenBtn.style.right = '10px';
+    fullscreenBtn.style.zIndex = '9999';
+    fullscreenBtn.style.width = '24px';
+    fullscreenBtn.style.height = '24px';
+    fullscreenBtn.style.background = 'rgba(255, 176, 0, 0.8)';
+    fullscreenBtn.style.color = '#000';
+    fullscreenBtn.style.cursor = 'pointer';
+    fullscreenBtn.style.borderRadius = '3px';
+    fullscreenBtn.innerHTML = '⛶';
+    
     // 创建iframe用于预览
     const iframe = document.createElement('iframe');
     iframe.style.width = '100%';
@@ -2810,6 +2844,24 @@ function previewHtmlFile() {
     iframe.srcdoc = htmlContent;
     
     previewContainer.appendChild(iframe);
+    previewContainer.appendChild(fullscreenBtn);
+    
+    // 全屏切换逻辑
+    fullscreenBtn.onclick = () => {
+        if (!document.fullscreenElement) {
+            previewContainer.requestFullscreen().then(() => {
+                fullscreenBtn.innerHTML = '⤢';
+            }).catch(err => {
+                console.error('Error attempting to enable fullscreen:', err);
+            });
+        } else {
+            document.exitFullscreen().then(() => {
+                fullscreenBtn.innerHTML = '⛶';
+            }).catch(err => {
+                console.error('Error attempting to exit fullscreen:', err);
+            });
+        }
+    };
     
     // 添加到编辑器
     document.getElementById('editor-tabs').appendChild(previewTab);
@@ -2819,7 +2871,15 @@ function previewHtmlFile() {
     editorTabs[previewFileName] = {
         tab: previewTab,
         container: previewContainer,
-        editor: iframe
+        editor: iframe,
+        fullscreenBtn: fullscreenBtn
+    };
+    
+    // 手动绑定点击事件
+    previewTab.onclick = (e) => {
+        if (!e.target.closest('.term-close')) {
+            switchEditorTab(previewFileName);
+        }
     };
     
     // 切换到预览标签页
