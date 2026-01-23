@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Project Intro - Immmor Code</title>
+    <style>
+        :root {
+            --accent: #ffb000; /* 匹配你 editor.html 的 amber 颜色 */
+            --bg: #12100b;
+        }
+        body { margin: 0; overflow: hidden; background: var(--bg); font-family: 'Fira Code', 'Courier New', monospace; color: white; }
+
+        /* PPT 容器 */
+        #presentation {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; justify-content: center; align-items: center;
+            z-index: 10; pointer-events: none;
+        }
+
+        .slide {
+            position: absolute; width: 80%; max-width: 900px;
+            opacity: 0; transform: translateX(100px);
+            transition: all 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+            text-align: left;
+        }
+
+        .slide.active { opacity: 1; transform: translateX(0); }
+        .slide.prev { opacity: 0; transform: translateX(-100px); }
+
+        /* 样式细节 */
+        .tag { color: var(--accent); font-size: 1.2rem; margin-bottom: 10px; border: 1px solid var(--accent); display: inline-block; padding: 2px 10px; }
+        h1 { font-size: 4rem; margin: 10px 0; letter-spacing: -1px; }
+        p { font-size: 1.5rem; color: #a5a5a5; line-height: 1.6; }
+        .feature-list { list-style: none; padding: 0; }
+        .feature-list li { font-size: 1.2rem; margin: 15px 0; display: flex; align-items: center; }
+        .feature-list li::before { content: "➤"; color: var(--accent); margin-right: 15px; }
+
+        /* 底部状态栏 */
+        .footer {
+            position: absolute; bottom: 30px; width: 100%; padding: 0 50px;
+            display: flex; justify-content: space-between; box-sizing: border-box;
+            color: #555; font-size: 0.8rem; z-index: 20;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="presentation">
+        <div class="slide active">
+            <div class="tag">PROJECT_INIT</div>
+            <h1>Immmor Code</h1>
+            <p>下一代 Web 端的沉浸式智能代码编辑器。不仅仅是输入工具，更是开发者的数字化第二大脑。</p>
+        </div>
+
+        <div class="slide">
+            <div class="tag">CORE_FEATURES</div>
+            <h1>核心特性</h1>
+            <ul class="feature-list">
+                <li><b>Monaco 内核：</b> 完美的语法高亮与代码提示体验。</li>
+                <li><b>智能 AI 接入：</b> 支持多 Provider 切换，实时辅助代码生成。</li>
+                <li><b>轻量化：</b> 无需安装，基于浏览器，随时随地开启开发模式。</li>
+                <li><b>虚拟终端：</b> 内置模拟终端环境，流程闭环。</li>
+            </ul>
+        </div>
+
+        <div class="slide">
+            <div class="tag">FUTURE_ROADMAP</div>
+            <h1>AI 的未来</h1>
+            <p>从“协助编程”到“自动构建”，我们将探索代码自愈、逻辑推理与多人实时云端协作的终极可能。</p>
+        </div>
+    </div>
+
+    <div class="footer">
+        <div>STATUS: PRESENTATION_MODE</div>
+        <div>USE <span style="color:var(--accent)">← / →</span> KEYS TO NAVIGATE</div>
+        <div id="slide-num">1 / 3</div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // --- 1. 方向键逻辑 ---
+        let currentIdx = 0;
+        const slides = document.querySelectorAll('.slide');
+        const numDisplay = document.getElementById('slide-num');
+
+        function updateSlides(direction) {
+            slides[currentIdx].classList.remove('active');
+            if(direction === 'next') {
+                slides[currentIdx].classList.add('prev');
+                currentIdx = (currentIdx + 1) % slides.length;
+            } else {
+                currentIdx = (currentIdx - 1 + slides.length) % slides.length;
+            }
+            
+            // 重置状态
+            slides.forEach((s, i) => {
+                if(i !== currentIdx) s.classList.remove('active', 'prev');
+            });
+            
+            slides[currentIdx].classList.add('active');
+            numDisplay.innerText = `${currentIdx + 1} / ${slides.length}`;
+            
+            // 改变 3D 背景速度
+            targetSpeed = 0.5; 
+            setTimeout(() => targetSpeed = 0.05, 500);
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight') updateSlides('next');
+            if (e.key === 'ArrowLeft') updateSlides('prev');
+        });
+
+        // --- 2. Three.js 背景：数据流星雨 ---
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        const starGeo = new THREE.BufferGeometry();
+        const starCount = 1500;
+        const posArray = new Float32Array(starCount * 3);
+        for(let i=0; i<starCount*3; i++) {
+            posArray[i] = (Math.random() - 0.5) * 10;
+        }
+        starGeo.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+        const starMat = new THREE.PointsMaterial({ color: 0xffb000, size: 0.005, transparent: true, opacity: 0.4 });
+        const stars = new THREE.Points(starGeo, starMat);
+        scene.add(stars);
+
+        camera.position.z = 2;
+        let speed = 0.05;
+        let targetSpeed = 0.05;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            speed += (targetSpeed - speed) * 0.1; // 平滑过渡
+            stars.rotation.y += speed * 0.2;
+            stars.rotation.x += speed * 0.1;
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>

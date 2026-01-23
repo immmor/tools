@@ -489,6 +489,8 @@
             overflow-x: auto; white-space: nowrap;
             scrollbar-width: none;
         }
+        
+
         .editor-tools::-webkit-scrollbar { display: none; }
         .key-btn {
             padding: 4px 12px;
@@ -558,6 +560,7 @@
                 <span>EDITOR</span>
                 <div class="ctrl-group">
                     <span class="ctrl" onclick="runCurrentFile()" title="RUN_NODE" style="color:var(--amber)">▶</span>
+                    <span class="ctrl" id="preview-btn" style="display: none;" onclick="previewHtmlFile()" title="PREVIEW_HTML">P</span>
                     <span class="ctrl" onclick="toggleMax('editor-p')">◰</span>
                 </div>
             </div>
@@ -1523,6 +1526,16 @@ function getLanguageFromFileName(fileName) {
             
             // 自动更新AI上下文
             updateAiContextOnFileChange(fileName);
+            
+            // 显示/隐藏预览按钮
+            const previewBtn = document.getElementById('preview-btn');
+            if (previewBtn) {
+                if (fileName.endsWith('.html')) {
+                    previewBtn.style.display = 'flex';
+                } else {
+                    previewBtn.style.display = 'none';
+                }
+            }
         }
     }
     
@@ -1565,16 +1578,31 @@ function getLanguageFromFileName(fileName) {
     
     // 删除DOM元素
     tabInfo.tab.remove();
-    tabInfo.editor.remove();
+    
+    // 正确销毁编辑器
+    if (tabInfo.editor.dispose) {
+        // Monaco编辑器
+        tabInfo.editor.dispose();
+    } else if (tabInfo.editor.parentNode) {
+        // iframe或其他DOM元素
+        tabInfo.editor.parentNode.removeChild(tabInfo.editor);
+    }
+    
+    // 清理容器
+    if (tabInfo.container.parentNode) {
+        tabInfo.container.parentNode.removeChild(tabInfo.container);
+    }
     
     // 从标签管理中删除
     delete editorTabs[fileName];
     
-    // 从记住的标签中删除
-    const index = openedTabs.indexOf(fileName);
-    if (index !== -1) {
-        openedTabs.splice(index, 1);
-        localStorage.setItem('ind_console_opened_tabs', JSON.stringify(openedTabs));
+    // 从记住的标签中删除（如果不是预览标签）
+    if (!fileName.startsWith('[PREVIEW]')) {
+        const index = openedTabs.indexOf(fileName);
+        if (index !== -1) {
+            openedTabs.splice(index, 1);
+            localStorage.setItem('ind_console_opened_tabs', JSON.stringify(openedTabs));
+        }
     }
     
     // 如果关闭的是当前活动标签，切换到其他标签
@@ -1960,6 +1988,8 @@ function smartSwitch(targetPanelId) {
             };
             
             div.oncontextmenu = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 ctxTarget = { path: k, el: nameSpan, isFolder: isFolder };
                 handleCtx(e);
             };
@@ -2026,12 +2056,24 @@ function smartSwitch(targetPanelId) {
     function deleteNodeFromCtx() {
         if (!ctxTarget) return;
         const { path, isFolder } = ctxTarget;
+        
+        // 检查文件是否存在
+        if (!isFolder && !storage[path]) {
+            alert(`ERROR: File ${path} not found`);
+            return;
+        }
+        
         if (confirm(`PURGE NODE: ${path}?`)) {
             if (isFolder) {
+                // 删除文件夹及其所有内容
                 Object.keys(storage).forEach(k => {
                     if (k.startsWith(path)) delete storage[k];
                 });
+                
+                // 从展开目录中移除
+                expandedDirs = expandedDirs.filter(dir => !dir.startsWith(path));
             } else {
+                // 删除单个文件
                 delete storage[path];
             }
             
@@ -2040,11 +2082,25 @@ function smartSwitch(targetPanelId) {
                 closeEditorTab(path);
             }
             
+            // 如果删除的是当前激活文件，更新activeFile
+            if (activeFile === path) {
+                activeFile = null;
+                localStorage.removeItem('ind_console_active');
+            }
+            
             // 保存到localStorage
             localStorage.setItem('ind_console_storage', JSON.stringify(storage));
+            localStorage.setItem('ind_console_expanded', JSON.stringify(expandedDirs));
+            
+            // 重置ctxTarget
+            ctxTarget = null;
+            
+            // 重新渲染文件列表
             renderFiles();
+            
+            // 关闭右键菜单
+            document.getElementById('ctx').style.display = 'none';
         }
-        document.getElementById('ctx').style.display = 'none';
     }
 
     function copyPathFromCtx() {
@@ -2723,6 +2779,54 @@ function injectCodeToEditor(code) {
     addLog(`[AI]: Code injected into ${activeEditorTab}`, 'var(--term-green)');
 }
 
+// HTML预览功能
+function previewHtmlFile() {
+    if (!activeEditorTab || !editorTabs[activeEditorTab]) return;
+    
+    const htmlContent = editorTabs[activeEditorTab].editor.getValue();
+    const previewFileName = `[P] ${activeEditorTab}`;
+    
+    // 检查是否已经存在预览标签页
+    if (editorTabs[previewFileName]) {
+        switchEditorTab(previewFileName);
+        return;
+    }
+    
+    // 创建预览标签页
+    const previewTab = document.createElement('div');
+    previewTab.className = 'term-tab';
+    previewTab.id = `editor-tab-${previewFileName}`;
+    previewTab.innerHTML = `<span>${previewFileName}</span><span class="term-close" onclick="closeEditorTab('${previewFileName}')">×</span>`;
+    
+    // 创建预览容器
+    const previewContainer = document.createElement('div');
+    previewContainer.className = 'term-body';
+    
+    // 创建iframe用于预览
+    const iframe = document.createElement('iframe');
+    iframe.style.width = '100%';
+    iframe.style.height = '100%';
+    iframe.style.border = 'none';
+    iframe.srcdoc = htmlContent;
+    
+    previewContainer.appendChild(iframe);
+    
+    // 添加到编辑器
+    document.getElementById('editor-tabs').appendChild(previewTab);
+    document.getElementById('editor-container').appendChild(previewContainer);
+    
+    // 保存到编辑器标签
+    editorTabs[previewFileName] = {
+        tab: previewTab,
+        container: previewContainer,
+        editor: iframe
+    };
+    
+    // 切换到预览标签页
+    switchEditorTab(previewFileName);
+    initEditorTabEvents();
+}
+
 // 执行命令的实际逻辑
 function executeCommands(code) {
     // 将命令按行分割，过滤掉空行和注释
@@ -3393,6 +3497,7 @@ function handleExtractButton(container) {
 }
     function handleCtx(e, x, y) {
         e.preventDefault();
+        e.stopPropagation();
         const ctxMenu = document.getElementById('ctx');
         const isItem = e.target.closest('.file-item');
         
@@ -3538,7 +3643,13 @@ function scrollToAiTop(button) {
     initResizer(document.getElementById('v-drag'), document.getElementById('terminal'), false, true);
     
     document.addEventListener('click', (e) => {
-        if (!document.getElementById('ctx').contains(e.target)) document.getElementById('ctx').style.display = 'none';
+        // 关闭右键菜单
+        const ctxMenu = document.getElementById('ctx');
+        if (!ctxMenu.contains(e.target)) {
+            ctxMenu.style.display = 'none';
+            ctxTarget = null; // 重置上下文目标
+        }
+        
         if (!document.getElementById('plugin-ctx').contains(e.target)) document.getElementById('plugin-ctx').style.display = 'none';
         if (!document.getElementById('ai-ctx-trigger').contains(e.target)) {
             document.getElementById('ai-ctx-options').style.display = 'none';
@@ -3560,6 +3671,31 @@ function scrollToAiTop(button) {
         }
     };
 
+    // 拖拽上传功能
+    const fileList = document.getElementById('file-list');
+    fileList.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        fileList.style.background = 'rgba(255, 176, 0, 0.1)';
+    });
+    fileList.addEventListener('dragleave', () => {
+        fileList.style.background = 'transparent';
+    });
+    fileList.addEventListener('drop', (e) => {
+        e.preventDefault();
+        fileList.style.background = 'transparent';
+        
+        const files = e.dataTransfer.files;
+        Array.from(files).forEach(file => {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                storage[file.name] = event.target.result;
+                localStorage.setItem('ind_console_storage', JSON.stringify(storage));
+                renderFiles();
+            };
+            reader.readAsText(file);
+        });
+    });
+    
     renderFiles(); renderPlugins(); addTerminal(); restoreAiTabs(); updateProviderDisplay();
     
     if (openedTabs.length > 0) {

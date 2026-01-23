@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>AI 未来：数据穿梭</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #050505; color: #fff; font-family: "Orbitron", sans-serif; }
+        /* 引入未来感字体 */
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;900&display=swap');
+
+        #overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; justify-content: center;
+            align-items: center; pointer-events: none;
+        }
+
+        .content-box {
+            text-align: center; max-width: 800px;
+            padding: 20px; border-left: 2px solid #ff0055;
+            background: rgba(255, 0, 85, 0.05);
+            backdrop-filter: blur(5px);
+            transition: all 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+            opacity: 0; transform: scale(0.8) rotateX(20deg);
+        }
+
+        .content-box.active { opacity: 1; transform: scale(1) rotateX(0deg); }
+
+        h1 { font-size: 5rem; font-weight: 900; margin: 0; color: #ff0055; text-transform: uppercase; }
+        p { font-size: 1.2rem; letter-spacing: 4px; color: #00f2ff; margin-top: 10px; }
+
+        .progress-bar {
+            position: absolute; bottom: 0; left: 0; height: 4px;
+            background: linear-gradient(90deg, #ff0055, #00f2ff);
+            transition: width 0.5s ease;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="overlay">
+        <div class="content-box active">
+            <h1>Singularity</h1>
+            <p>奇点临近：计算能力的指数级飞跃</p>
+        </div>
+    </div>
+    <div class="progress-bar" id="progress"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        // 场景配置
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // --- 创建数据隧道 (Tube Geometry) ---
+        const points = [];
+        for (let i = 0; i < 5; i++) {
+            points.push(new THREE.Vector3(0, 0, i * 5));
+        }
+        const curve = new THREE.CatmullRomCurve3(points);
+        const tubeGeo = new THREE.TubeGeometry(curve, 100, 2, 8, false);
+        
+        // 使用线框模式增强科技感
+        const tubeMat = new THREE.MeshBasicMaterial({
+            color: 0xff0055,
+            wireframe: true,
+            transparent: true,
+            opacity: 0.2
+        });
+        const tunnel = new THREE.Mesh(tubeGeo, tubeMat);
+        scene.add(tunnel);
+
+        // --- 核心流光线条 ---
+        const lineCount = 150;
+        const lines = [];
+        for(let i=0; i<lineCount; i++) {
+            const geometry = new THREE.BufferGeometry();
+            const length = Math.random() * 2 + 1;
+            const vertices = new Float32Array([
+                0, 0, 0,
+                0, 0, length
+            ]);
+            geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+            const material = new THREE.LineBasicMaterial({ 
+                color: Math.random() > 0.5 ? 0xff0055 : 0x00f2ff,
+                transparent: true,
+                opacity: Math.random()
+            });
+            const line = new THREE.Line(geometry, material);
+            
+            // 随机分布在圆柱空间内
+            const angle = Math.random() * Math.PI * 2;
+            const radius = 1.5 + Math.random() * 2;
+            line.position.set(Math.cos(angle) * radius, Math.sin(angle) * radius, Math.random() * -20);
+            
+            scene.add(line);
+            lines.push({ mesh: line, speed: Math.random() * 0.2 + 0.1 });
+        }
+
+        camera.position.z = 5;
+
+        // --- 幻灯片数据 ---
+        const slides = [
+            { h: "Singularity", p: "奇点临近：计算能力的指数级飞跃", color: "#ff0055" },
+            { h: "Deep Learning", p: "深度学习：正在进化的机器灵魂", color: "#00f2ff" },
+            { h: "The Beyond", p: "跨越边界：碳基与硅基的融合", color: "#ffffff" }
+        ];
+        let current = 0;
+
+        // 交互：点击切换
+        window.addEventListener('mousedown', () => {
+            current = (current + 1) % slides.length;
+            const box = document.querySelector('.content-box');
+            box.classList.remove('active');
+            
+            setTimeout(() => {
+                box.querySelector('h1').innerText = slides[current].h;
+                box.querySelector('h1').style.color = slides[current].color;
+                box.querySelector('p').innerText = slides[current].p;
+                box.classList.add('active');
+                document.getElementById('progress').style.width = ((current + 1) / slides.length * 100) + '%';
+            }, 400);
+
+            // 瞬间加速效果
+            speedMultiplier = 5;
+        });
+
+        // --- 动画循环 ---
+        let speedMultiplier = 1;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            lines.forEach(line => {
+                line.mesh.position.z += line.speed * speedMultiplier;
+                // 循环线条：跑远了就回到远处
+                if(line.mesh.position.z > 5) {
+                    line.mesh.position.z = -20;
+                }
+            });
+
+            // 速度平滑回归
+            speedMultiplier += (1 - speedMultiplier) * 0.05;
+
+            // 隧道轻微旋转
+            tunnel.rotation.z += 0.005;
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>

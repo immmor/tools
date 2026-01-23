@@ -22,7 +22,9 @@ def execute_command():
                 shell=True, 
                 stdout=subprocess.PIPE, 
                 stderr=subprocess.STDOUT,
-                text=True
+                text=True,
+                cwd=None,  # 使用当前工作目录
+                env=None   # 继承当前环境变量
             )
             
             output = process.communicate()[0]
@@ -51,12 +53,14 @@ def handle_execute_command(data):
                 shell=True, 
                 stdout=subprocess.PIPE, 
                 stderr=subprocess.STDOUT,
-                text=True
+                text=True,
+                cwd=None,  # 使用当前工作目录
+                env=None   # 继承当前环境变量
             )
             
             for line in iter(process.stdout.readline, ''):
                 if line:
-                    emit('command_output', {'output': line.strip()})
+                    emit('command_output', {'output': line.rstrip()})  # 保留换行符
             
             process.wait()
             emit('command_complete', {'returncode': process.returncode})
@@ -67,5 +71,4 @@ def handle_execute_command(data):
     except Exception as e:
         emit('command_error', {'error': str(e)})
 
-if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5001, debug=True)
+socketio.run(app, host='0.0.0.0', port=5001, debug=True)
