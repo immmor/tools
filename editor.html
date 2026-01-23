@@ -439,6 +439,33 @@
             background: var(--amber);
             color: #000;
         }
+        
+        .preview-btn {
+            background: var(--amber);
+            color: #000;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        
+        .preview-btn:hover {
+            background: #fff;
+        }
+        
+        body.preview-fullscreen #editor-p {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 9999;
+        }
+        
+        body.preview-fullscreen #editor-p .term-body {
+            height: 100vh !important;
+        }
         .code-block pre {
             margin: 0;
             overflow-x: auto;
@@ -1602,10 +1629,18 @@ function getLanguageFromFileName(fileName) {
         tabInfo.editor.parentNode.removeChild(tabInfo.editor);
     }
     
+    // 清理检查按钮
+    if (tabInfo.inspectBtn && tabInfo.inspectBtn.parentNode) {
+        tabInfo.inspectBtn.parentNode.removeChild(tabInfo.inspectBtn);
+    }
+    
     // 清理全屏按钮
     if (tabInfo.fullscreenBtn && tabInfo.fullscreenBtn.parentNode) {
         tabInfo.fullscreenBtn.parentNode.removeChild(tabInfo.fullscreenBtn);
     }
+    
+    // 退出全屏模式
+    document.body.classList.remove('preview-fullscreen');
     
     // 清理容器
     if (tabInfo.container.parentNode) {
@@ -2805,29 +2840,77 @@ function previewHtmlFile() {
     const htmlContent = editorTabs[activeEditorTab].editor.getValue();
     const previewFileName = `[P] ${activeEditorTab}`;
     
-    // 检查是否已经存在预览标签页
     if (editorTabs[previewFileName]) {
         switchEditorTab(previewFileName);
         return;
     }
     
-    // 创建预览标签页
     const previewTab = document.createElement('div');
     previewTab.className = 'term-tab';
     previewTab.id = `editor-tab-${previewFileName}`;
     previewTab.innerHTML = `<span>${previewFileName}</span><span class="term-close" onclick="closeEditorTab('${previewFileName}')">×</span>`;
     
-    // 创建预览容器
     const previewContainer = document.createElement('div');
     previewContainer.className = 'term-body';
     previewContainer.style.position = 'relative';
     
-    // 创建iframe用于预览
     const iframe = document.createElement('iframe');
     iframe.style.width = '100%';
     iframe.style.height = '100%';
     iframe.style.border = 'none';
     iframe.srcdoc = htmlContent;
+    
+    // 创建检查按钮
+    const inspectBtn = document.createElement('div');
+    inspectBtn.className = 'ctrl';
+    inspectBtn.style.position = 'absolute';
+    inspectBtn.style.top = '10px';
+    inspectBtn.style.right = '50px';
+    inspectBtn.style.zIndex = '1000';
+    inspectBtn.innerText = '⌕';
+    inspectBtn.title = 'INSPECT ELEMENTS';
+    
+    inspectBtn.onclick = () => {
+        if (iframe.contentWindow) {
+            // 尝试打开开发者工具
+            iframe.contentWindow.document.body.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                // 获取点击的元素
+                const element = e.target;
+                const tagName = element.tagName.toLowerCase();
+                const className = element.className;
+                const id = element.id;
+                
+                // 显示元素信息
+                const info = document.createElement('div');
+                info.style.position = 'absolute';
+                info.style.top = '50px';
+                info.style.right = '10px';
+                info.style.zIndex = '1001';
+                info.style.background = 'var(--amber)';
+                info.style.color = '#000';
+                info.style.padding = '10px';
+                info.style.borderRadius = '3px';
+                info.style.fontSize = '12px';
+                info.style.maxWidth = '300px';
+                info.innerHTML = `
+                    <strong>Element:</strong> &lt;${tagName}&gt;<br>
+                    <strong>Class:</strong> ${className || 'none'}<br>
+                    <strong>ID:</strong> ${id || 'none'}
+                `;
+                
+                // 移除之前的信息
+                const oldInfo = previewContainer.querySelector('.element-info');
+                if (oldInfo) oldInfo.remove();
+                
+                // 添加新信息
+                info.className = 'element-info';
+                previewContainer.appendChild(info);
+            }, { once: true });
+        }
+    };
     
     // 创建全屏按钮
     const fullscreenBtn = document.createElement('div');
@@ -2839,26 +2922,36 @@ function previewHtmlFile() {
     fullscreenBtn.innerText = '◰';
     fullscreenBtn.title = 'FULLSCREEN';
     
-    fullscreenBtn.onclick = () => {
-        if (document.fullscreenElement) {
-            document.exitFullscreen();
-            if (screen.orientation) screen.orientation.unlock();
-            fullscreenBtn.innerText = '◰';
-            fullscreenBtn.title = 'FULLSCREEN';
-        } else {
-            // 支持任意方向的全屏
-            const options = {
-                navigationUI: 'hide',
-                screenOrientation: 'any'
-            };
-            previewContainer.requestFullscreen(options);
-            if (screen.orientation) screen.orientation.lock('portrait-primary');
-            fullscreenBtn.innerText = '◱';
-            fullscreenBtn.title = 'EXIT FULLSCREEN';
-        }
-    };
+    // 全屏切换函数
+    function togglePreviewFullscreen() {
+        const isFullscreen = document.body.classList.contains('preview-fullscreen');
+        const displayValue = isFullscreen ? '' : 'none';
+        
+        document.body.classList.toggle('preview-fullscreen', !isFullscreen);
+        fullscreenBtn.innerText = isFullscreen ? '◰' : '◱';
+        fullscreenBtn.title = isFullscreen ? 'FULLSCREEN' : 'EXIT FULLSCREEN';
+        
+        // 切换除预览界面外的所有内容显示
+        document.querySelectorAll('.panel').forEach(panel => {
+            if (panel.id !== 'editor-p') {
+                panel.style.display = displayValue;
+            }
+        });
+        document.querySelectorAll('.divider-v, .divider-h').forEach(divider => {
+            divider.style.display = displayValue;
+        });
+        document.querySelector('.header').style.display = displayValue;
+        
+        // 切换编辑器的标题栏、tab栏和快捷键显示
+        document.querySelector('#editor-p .p-head').style.display = displayValue;
+        document.querySelector('#editor-tabs').style.display = displayValue;
+        document.querySelector('.editor-tools').style.display = displayValue;
+    }
+    
+    fullscreenBtn.onclick = togglePreviewFullscreen;
     
     previewContainer.appendChild(iframe);
+    previewContainer.appendChild(inspectBtn);
     previewContainer.appendChild(fullscreenBtn);
     
     // 添加到编辑器
@@ -2870,6 +2963,7 @@ function previewHtmlFile() {
         tab: previewTab,
         container: previewContainer,
         editor: iframe,
+        inspectBtn: inspectBtn,
         fullscreenBtn: fullscreenBtn
     };
     
