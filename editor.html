@@ -12,12 +12,19 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.47.0/min/vs/loader.min.js"></script>
     <style>
         :root {
-            --amber: #ffb000;
+            /* --amber: #ffb000;
             --amber-dim: #714e00;
             --bg: #12100b;
             --panel-bg: #1c1912;
             --border-w: 2px;
             --term-red: #ff3e3e;
+            --term-green: #00ff41; */
+            --amber: #00ff9d !important;         /* 幽灵绿 */
+            --amber-dim: #003320 !important;     /* 深绿背景 */
+            --bg: #050505 !important;            /* 极黑 */
+            --panel-bg: #0d0d0d !important; 
+            --border-w: 2px;     /* 灰黑面板 */
+            --term-red: #555 !important;
             --term-green: #00ff41;
         }
 
@@ -757,6 +764,53 @@
     let ctxTarget = null;
     let pluginCtxTarget = null;
     let currentAiRequest = null;
+    
+    // 音效函数
+    function playTone(type) {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        
+        switch(type) {
+            case 'send':
+                // 发送消息音效 - 轻快确认音
+                playBeep(audioContext, 880, 0.08, 'triangle');
+                playBeep(audioContext, 660, 0.08, 'triangle', 0.06);
+                break;
+            case 'success':
+                // 成功音效 - 上升音调
+                playBeep(audioContext, 440, 0.3, 'sine');
+                playBeep(audioContext, 880, 0.2, 'sine', 0.3);
+                break;
+            case 'error':
+                // 错误音效 - 下降音调
+                playBeep(audioContext, 880, 0.2, 'square');
+                playBeep(audioContext, 220, 0.3, 'square', 0.2);
+                break;
+            case 'typing':
+                // 打字音效 - 轻快短促
+                playBeep(audioContext, 660, 0.05, 'triangle', 0, 0.1);
+                break;
+        }
+    }
+    
+    function playBeep(audioContext, frequency, duration, type = 'sine', delay = 0, volume = 0.1) {
+        setTimeout(() => {
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.frequency.value = frequency;
+            oscillator.type = type;
+            
+            gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+            gainNode.gain.linearRampToValueAtTime(volume, audioContext.currentTime + 0.01);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
+            
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + duration);
+        }, delay * 1000);
+    }
     
     let editorTabs = {};
         let activeEditorTab = null;
@@ -3451,6 +3505,9 @@ async function handleAiSend() {
     
     if (!query) return;
 
+    // 播放发送音效
+    playTone('send');
+
     // 开始生成
     startGenerating();
     
@@ -3541,6 +3598,9 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
         // 请求完成，清除控制器
         currentAiRequest = null;
         
+        // 播放成功音效
+        playTone('success');
+        
         // 将AI回复添加到对话历史并保存
         chatHistory[currentChatId].push({
             role: 'assistant',
@@ -3617,6 +3677,9 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
     } catch (err) { 
         const errorMessage = `[ERR]: ${err.message}`;
         aiMsg.innerText = `AI: ${errorMessage}`; 
+        
+        // 播放错误音效
+        playTone('error');
         
         // 恢复按钮状态
         resetSendButton();
@@ -3821,6 +3884,8 @@ function scrollToAiTop(button) {
             }
             const query = e.target.value.trim();
             if (!query) return;
+            // 播放发送音效
+            playTone('send');
             startGenerating();
             sendAi();
         }

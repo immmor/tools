@@ -17,7 +17,7 @@ def chat_completions():
         return response
     try:
         data = request.get_json()
-        model = data.get('model', 'llama3')
+        model = data.get('model', 'qwen2.5:0.5b')
         messages = data.get('messages', [])
         
         # 转换为Ollama API格式
