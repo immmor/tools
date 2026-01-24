@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>ALABASTER - Agent Nexus</title>
+    <style>
+        :root {
+            --bg: #f5f5f7;
+            --card: #ffffff;
+            --primary: #000000;
+            --secondary: #86868b;
+            --accent: #0071e3;
+            --border: rgba(0,0,0,0.08);
+            --success: #28cd41;
+        }
+
+        body, html {
+            margin: 0; padding: 0; height: 100vh;
+            background-color: var(--bg);
+            color: var(--primary);
+            font-family: -apple-system, "SF Pro Text", Helvetica, sans-serif;
+            overflow: hidden;
+        }
+
+        /* 顶部导航 */
+        header {
+            padding: 20px 40px; background: rgba(255,255,255,0.8);
+            backdrop-filter: blur(20px); border-bottom: 1px solid var(--border);
+            display: flex; justify-content: space-between; align-items: center;
+            z-index: 100; position: relative;
+        }
+
+        .logo { font-weight: 700; letter-spacing: -1px; font-size: 20px; }
+
+        /* 画布布局 */
+        .canvas {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: auto auto;
+            gap: 20px; padding: 30px;
+            height: calc(100vh - 120px);
+            overflow-y: auto;
+        }
+
+        /* Agent 磁贴卡片 */
+        .agent-tile {
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 18px; padding: 24px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.04);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative; overflow: hidden;
+        }
+
+        .agent-tile.active {
+            border-color: var(--accent);
+            transform: translateY(-5px);
+            box-shadow: 0 12px 30px rgba(0,0,0,0.08);
+        }
+
+        .agent-tile h3 { margin: 0 0 10px 0; font-size: 14px; color: var(--secondary); text-transform: uppercase; letter-spacing: 1px; }
+        .agent-content { font-size: 15px; line-height: 1.5; height: 60px; overflow: hidden; }
+
+        /* 状态指示器 */
+        .dot { height: 8px; width: 8px; border-radius: 50%; display: inline-block; margin-right: 8px; background: #d2d2d7; }
+        .active .dot { background: var(--success); box-shadow: 0 0 10px var(--success); animation: pulse 2s infinite; }
+
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+
+        /* 底部指令栏 */
+        .command-bar {
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+            width: 600px; background: rgba(255,255,255,0.8);
+            backdrop-filter: blur(20px); border: 1px solid var(--border);
+            border-radius: 30px; padding: 10px 20px;
+            display: flex; align-items: center; box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+
+        .command-bar input {
+            flex-grow: 1; border: none; background: transparent; padding: 10px;
+            font-size: 16px; outline: none; color: var(--primary);
+        }
+
+        .btn-run {
+            background: var(--primary); color: white; border: none;
+            padding: 10px 24px; border-radius: 20px; cursor: pointer; font-weight: 500;
+        }
+
+        /* 特殊：测试监控动画 */
+        .qa-scanner {
+            height: 4px; width: 0%; background: var(--accent);
+            position: absolute; bottom: 0; left: 0; transition: width 0.3s;
+        }
+
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="logo">ALABASTER <span style="font-weight: 300; color: var(--secondary);">NEXUS</span></div>
+    <div style="font-size: 13px;">集群状态: <span style="color: var(--success);">同步中</span></div>
+</header>
+
+<div class="canvas">
+    <div class="agent-tile" id="tile-PM">
+        <h3>Product Manager</h3>
+        <div class="agent-content" id="text-PM">等待任务下发...</div>
+        <div style="margin-top: 15px;"><span class="dot"></span><small>Status: Idle</small></div>
+    </div>
+
+    <div class="agent-tile" id="tile-ARCH">
+        <h3>Architect</h3>
+        <div class="agent-content" id="text-ARCH">系统架构处于待命状态。</div>
+        <div style="margin-top: 15px;"><span class="dot"></span><small>Status: Idle</small></div>
+    </div>
+
+    <div class="agent-tile" id="tile-DEV">
+        <h3>Developer</h3>
+        <div class="agent-content" id="text-DEV">代码仓库就绪，等待逻辑指派。</div>
+        <div style="margin-top: 15px;"><span class="dot"></span><small>Status: Idle</small></div>
+    </div>
+
+    <div class="agent-tile" id="tile-QA">
+        <h3>QA Sentinel</h3>
+        <div class="agent-content" id="text-QA">自动化测试脚本已加载，监控全链路安全。</div>
+        <div class="qa-scanner" id="qa-bar"></div>
+        <div style="margin-top: 15px;"><span class="dot"></span><small>Status: Idle</small></div>
+    </div>
+
+    <div class="agent-tile" id="tile-OPS">
+        <h3>DevOps</h3>
+        <div class="agent-content" id="text-OPS">部署集群处于低功耗模式。</div>
+        <div style="margin-top: 15px;"><span class="dot"></span><small>Status: Idle</small></div>
+    </div>
+
+    <div class="agent-tile" id="tile-MKT">
+        <h3>Growth Hacker</h3>
+        <div class="agent-content" id="text-MKT">市场数据流监听中，SEO 指标正常。</div>
+        <div style="margin-top: 15px;"><span class="dot"></span><small>Status: Idle</small></div>
+    </div>
+</div>
+
+<div class="command-bar">
+    <input type="text" id="userInput" placeholder="输入新的开发指令 (例如: 打造一个极简音乐播放器)">
+    <button class="btn-run" onclick="runSequence()">执行协同</button>
+</div>
+
+<script>
+    async function updateAgent(id, text) {
+        const tile = document.getElementById('tile-' + id);
+        const content = document.getElementById('text-' + id);
+        
+        // 激活状态
+        document.querySelectorAll('.agent-tile').forEach(t => t.classList.remove('active'));
+        tile.classList.add('active');
+        tile.querySelector('small').innerText = 'Status: Active';
+        
+        content.style.opacity = 0;
+        await new Promise(r => setTimeout(r, 200));
+        content.innerText = text;
+        content.style.opacity = 1;
+        
+        await new Promise(r => setTimeout(r, 1500));
+        tile.querySelector('small').innerText = 'Status: Idle';
+    }
+
+    async function runSequence() {
+        const input = document.getElementById('userInput');
+        if(!input.value) return;
+
+        const task = input.value;
+        input.value = "";
+
+        await updateAgent('PM', `需求确认：${task}。正在生成 User Stories 并分配优先级。`);
+        await updateAgent('ARCH', `技术选型：React + Web Audio API。定义单向数据流模型。`);
+        await updateAgent('DEV', `构建 UI 组件。完成核心播放器逻辑与音频解码模块。`);
+        
+        // 测试特殊动效
+        const qaBar = document.getElementById('qa-bar');
+        qaBar.style.width = '100%';
+        await updateAgent('QA', `启动回归测试。检测到 0 错误，覆盖率 98.5%。安全审计通过。`);
+        qaBar.style.width = '0%';
+
+        await updateAgent('OPS', `推送到生产环境。CDN 分发已完成，负载均衡正常。`);
+        await updateAgent('MKT', `自动生成产品推文。社交媒体 API 已发布，预计触达 10k+ 用户。`);
+        
+        document.querySelectorAll('.agent-tile').forEach(t => t.classList.remove('active'));
+    }
+</script>
+
+</body>
+</html>

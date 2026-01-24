@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Zenith - AI Orchestration</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@1,300;1,600&family=Inter:wght@300;400;600&display=swap');
+
+        :root {
+            --bg-paper: #ffffff;
+            --ink-black: #1a1a1a;
+            --border-soft: #eaeaea;
+        }
+
+        body {
+            background-color: var(--bg-paper);
+            color: var(--ink-black);
+            font-family: 'Inter', sans-serif;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .serif-italic { font-family: 'Cormorant Garamond', serif; font-style: italic; }
+
+        /* 极简框架 */
+        .panel {
+            border: 0.5px solid var(--border-soft);
+            background: #fff;
+            transition: all 0.8s cubic-bezier(0.2, 1, 0.3, 1);
+        }
+
+        .agent-card {
+            padding: 1.5rem;
+            border-bottom: 0.5px solid var(--border-soft);
+            opacity: 0.4;
+            transition: all 0.6s ease;
+        }
+
+        .agent-card.active {
+            opacity: 1;
+            padding-left: 2rem;
+            background: #fafafa;
+        }
+
+        .agent-card.active::before {
+            content: "→";
+            position: absolute;
+            left: 0.5rem;
+            font-size: 0.8rem;
+        }
+
+        /* 文本打字效果 */
+        .thought-bubble {
+            animation: fadeInBlur 1.2s ease forwards;
+        }
+
+        @keyframes fadeInBlur {
+            from { opacity: 0; filter: blur(4px); transform: translateY(10px); }
+            to { opacity: 1; filter: blur(0); transform: translateY(0); }
+        }
+
+        /* 进度微动效 */
+        .loading-line {
+            width: 0%;
+            height: 1px;
+            background: var(--ink-black);
+            transition: width 2s linear;
+        }
+
+        /* 隐藏滚动条 */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body class="p-12 flex flex-col">
+
+    <header class="flex justify-between items-end mb-20">
+        <div class="space-y-1">
+            <h1 class="text-sm font-light tracking-[0.4em] uppercase">Zenith Collective</h1>
+            <p class="serif-italic text-2xl">Refined Intelligence Orchestration</p>
+        </div>
+        <div class="text-[10px] uppercase tracking-widest text-gray-400">
+            Phase: <span id="current-phase" class="text-black font-semibold">Idle</span> / 2026.01
+        </div>
+    </header>
+
+    <main class="flex-1 grid grid-cols-12 gap-16">
+        
+        <div class="col-span-3 border-l-[0.5px] border-gray-100">
+            <div id="agent-pm" class="agent-card relative">
+                <p class="text-[9px] uppercase tracking-widest mb-2">Unit 01</p>
+                <h3 class="text-lg font-normal">The Visionary</h3>
+            </div>
+            <div id="agent-arch" class="agent-card relative">
+                <p class="text-[9px] uppercase tracking-widest mb-2">Unit 02</p>
+                <h3 class="text-lg font-normal">The Structuralist</h3>
+            </div>
+            <div id="agent-code" class="agent-card relative">
+                <p class="text-[9px] uppercase tracking-widest mb-2">Unit 03</p>
+                <h3 class="text-lg font-normal">The Artisan</h3>
+            </div>
+            <div id="agent-mkt" class="agent-card relative">
+                <p class="text-[9px] uppercase tracking-widest mb-2">Unit 04</p>
+                <h3 class="text-lg font-normal">The Narrator</h3>
+            </div>
+        </div>
+
+        <div class="col-span-6 flex flex-col">
+            <div id="thought-stream" class="flex-1 space-y-12 no-scrollbar overflow-y-auto pr-10">
+                <div class="thought-bubble">
+                    <p class="text-gray-300 text-[10px] uppercase tracking-tighter mb-4">Core // System</p>
+                    <p class="serif-italic text-3xl leading-snug">"Silence is the canvas of creation. Beginning the collaborative sequence."</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-span-3 space-y-12">
+            <div class="panel p-8">
+                <h4 class="text-[10px] uppercase tracking-widest text-gray-400 mb-8">Harmony Index</h4>
+                <div class="relative h-24 w-24 mx-auto">
+                    <svg class="transform -rotate-90 w-24 h-24">
+                        <circle cx="48" cy="48" r="45" stroke="#f0f0f0" stroke-width="1" fill="none" />
+                        <circle id="harmony-circle" cx="48" cy="48" r="45" stroke="#1a1a1a" stroke-width="1" fill="none" stroke-dasharray="283" stroke-dashoffset="283" style="transition: stroke-dashoffset 2s ease;" />
+                    </svg>
+                    <div class="absolute inset-0 flex items-center justify-center text-xs font-light">
+                        <span id="harmony-val">0</span>%
+                    </div>
+                </div>
+            </div>
+
+            <div class="space-y-4">
+                <div class="flex justify-between items-end">
+                    <span class="text-[10px] uppercase text-gray-400">Memory Flow</span>
+                    <span class="text-[10px]">Stable</span>
+                </div>
+                <div class="w-full h-[0.5px] bg-gray-100 relative">
+                    <div id="memory-line" class="absolute top-0 left-0 h-full bg-black w-0 transition-all duration-1000"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="mt-auto pt-8 border-t-[0.5px] border-gray-100 flex justify-between items-center">
+        <div class="flex gap-10">
+            <span class="text-[10px] uppercase tracking-widest text-gray-300">Lat: 0.002s</span>
+            <span class="text-[10px] uppercase tracking-widest text-gray-300">Sync: Omni</span>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="loading-line w-24" id="main-progress"></div>
+            <span class="text-[10px] font-bold" id="progress-text">00%</span>
+        </div>
+    </footer>
+
+    <script>
+        const agents = [
+            { id: 'agent-pm', name: 'Visionary', color: 'gray', thoughts: ['Observing the unspoken needs of the user.', 'Drafting the blueprint of desire.', 'The path is becoming clear.'] },
+            { id: 'agent-arch', name: 'Structuralist', color: 'gray', thoughts: ['Defining the bones of the system.', 'Ensuring elegance in logic.', 'Stability is the highest form of beauty.'] },
+            { id: 'agent-code', name: 'Artisan', color: 'gray', thoughts: ['Translating thought into tangible code.', 'The algorithm is now breathing.', 'Refining the digital texture.'] },
+            { id: 'agent-mkt', name: 'Narrator', color: 'gray', thoughts: ['Crafting the story for the world.', 'Resonance is the key to growth.', 'The message is sent into the void.'] }
+        ];
+
+        let idx = 0;
+        const stream = document.getElementById('thought-stream');
+
+        async function startZenCycle() {
+            // Reset
+            document.querySelectorAll('.agent-card').forEach(c => c.classList.remove('active'));
+            
+            const agent = agents[idx];
+            document.getElementById(agent.id).classList.add('active');
+            document.getElementById('current-phase').innerText = agent.name;
+
+            for (let thought of agent.thoughts) {
+                await new Promise(r => setTimeout(r, 2500));
+                
+                const div = document.createElement('div');
+                div.className = 'thought-bubble pt-8 border-t-[0.5px] border-gray-50';
+                div.innerHTML = `
+                    <p class="text-gray-400 text-[10px] uppercase tracking-tighter mb-4">${agent.name} // Active</p>
+                    <p class="serif-italic text-2xl leading-snug">"${thought}"</p>
+                `;
+                stream.prepend(div);
+
+                // Update Progress
+                const total = Math.round(((idx * 3 + agent.thoughts.indexOf(thought) + 1) / 12) * 100);
+                document.getElementById('harmony-circle').style.strokeDashoffset = 283 - (283 * total / 100);
+                document.getElementById('harmony-val').innerText = total;
+                document.getElementById('main-progress').style.width = total + '%';
+                document.getElementById('progress-text').innerText = total.toString().padStart(2, '0') + '%';
+                document.getElementById('memory-line').style.width = Math.random() * 100 + '%';
+            }
+
+            idx = (idx + 1) % agents.length;
+            setTimeout(startZenCycle, 1500);
+        }
+
+        setTimeout(startZenCycle, 2000);
+    </script>
+</body>
+</html>

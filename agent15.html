@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>TACTICAL AGENT COMMAND</title>
+    <style>
+        :root {
+            --tech-blue: #00e5ff;
+            --tech-orange: #ff9100;
+            --bg-black: #020406;
+            --panel-rgba: rgba(0, 229, 255, 0.05);
+        }
+
+        body, html {
+            margin: 0; padding: 0; height: 100vh;
+            background-color: var(--bg-black);
+            color: var(--tech-blue);
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+        }
+
+        /* 战术背景线 */
+        .hud-bg {
+            position: fixed; width: 100%; height: 100%;
+            background-image: 
+                radial-gradient(circle at 50% 50%, #0a1118 0%, transparent 80%),
+                linear-gradient(rgba(0, 229, 255, 0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 229, 255, 0.05) 1px, transparent 1px);
+            background-size: 100% 100%, 40px 40px, 40px 40px;
+            z-index: -1;
+        }
+
+        /* 布局网格 */
+        .deck-container {
+            display: grid;
+            grid-template-columns: 280px 1fr 280px;
+            grid-template-rows: 150px 1fr 150px;
+            height: 100vh; gap: 10px; padding: 10px;
+        }
+
+        /* 战术面板通用样式 */
+        .panel {
+            background: var(--panel-rgba);
+            border: 1px solid var(--tech-blue);
+            clip-path: polygon(0 0, 90% 0, 100% 10%, 100% 100%, 10% 100%, 0 90%);
+            padding: 15px; position: relative;
+            transition: all 0.3s;
+        }
+
+        .panel.active {
+            background: rgba(0, 229, 255, 0.15);
+            box-shadow: 0 0 20px rgba(0, 229, 255, 0.3);
+        }
+
+        .panel-title {
+            font-size: 10px; letter-spacing: 2px;
+            border-bottom: 1px solid var(--tech-blue);
+            margin-bottom: 10px; padding-bottom: 5px;
+        }
+
+        /* 中央控制流 */
+        .center-core {
+            grid-column: 2; grid-row: 2;
+            display: flex; flex-direction: column;
+            border: 2px solid var(--tech-blue);
+            clip-path: none !important; background: rgba(0,0,0,0.8);
+        }
+
+        #log-stream {
+            flex-grow: 1; padding: 20px; overflow-y: auto;
+            scrollbar-width: thin;
+        }
+
+        .log-line { margin-bottom: 10px; font-size: 13px; line-height: 1.4; opacity: 0.8; }
+        .log-line span { color: var(--tech-orange); }
+
+        /* 特效：QA雷达 */
+        .radar {
+            width: 80px; height: 80px; border: 1px solid var(--tech-blue);
+            border-radius: 50%; margin: 10px auto; position: relative;
+        }
+        .radar::after {
+            content: ""; position: absolute; width: 50%; height: 2px;
+            background: var(--tech-blue); top: 50%; left: 50%;
+            transform-origin: left; animation: rotate 3s linear infinite;
+        }
+
+        @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+        /* 输入区 */
+        .input-bar {
+            padding: 15px; display: flex; gap: 10px; background: #000;
+        }
+        input {
+            flex-grow: 1; background: transparent; border: 1px solid var(--tech-blue);
+            color: var(--tech-blue); padding: 8px; outline: none;
+        }
+        button {
+            background: var(--tech-blue); color: #000; border: none;
+            padding: 0 20px; font-weight: bold; cursor: pointer;
+        }
+
+    </style>
+</head>
+<body>
+
+<div class="hud-bg"></div>
+
+<div class="deck-container">
+    <div class="panel" id="panel-PM" style="grid-column: 1; grid-row: 1;">
+        <div class="panel-title">01_STRATEGY / PM</div>
+        <div id="stat-PM">STATUS: IDLE</div>
+    </div>
+
+    <div class="panel" id="panel-ARCH" style="grid-column: 3; grid-row: 1;">
+        <div class="panel-title">02_STRUCTURE / ARCH</div>
+        <div id="stat-ARCH">NODES: STANDBY</div>
+    </div>
+
+    <div class="center-core">
+        <div id="log-stream">
+            <div class="log-line">>> TACTICAL INTERFACE INITIALIZED...</div>
+            <div class="log-line">>> AWAITING MISSION COMMANDS.</div>
+        </div>
+        <div class="input-bar">
+            <input type="text" id="userInput" placeholder="输入任务指令...">
+            <button onclick="runMission()">ENGAGE</button>
+        </div>
+    </div>
+
+    <div class="panel" id="panel-DEV" style="grid-column: 1; grid-row: 2;">
+        <div class="panel-title">03_FORGE / DEV</div>
+        <div id="stat-DEV">COMPILER: READY</div>
+        <div style="margin-top: 20px; font-size: 10px;">CORE_TEMP: 32°C</div>
+    </div>
+
+    <div class="panel" id="panel-MKT" style="grid-column: 3; grid-row: 2;">
+        <div class="panel-title">06_PULSE / GROWTH</div>
+        <div id="stat-MKT">REACH: 0.00</div>
+        <div style="height: 50px; border: 1px dashed var(--tech-blue); margin-top: 20px;"></div>
+    </div>
+
+    <div class="panel" id="panel-QA" style="grid-column: 1; grid-row: 3;">
+        <div class="panel-title">04_SENTINEL / QA</div>
+        <div class="radar"></div>
+        <div id="stat-QA" style="text-align: center; font-size: 10px;">SCANNING...</div>
+    </div>
+
+    <div class="panel" id="panel-OPS" style="grid-column: 3; grid-row: 3;">
+        <div class="panel-title">05_VOID / DEVOPS</div>
+        <div id="stat-OPS">CLUSTER: STABLE</div>
+        <div style="margin-top: 10px;">LATENCY: 1.2ms</div>
+    </div>
+</div>
+
+<script>
+    const stream = document.getElementById('log-stream');
+    
+    async function update(role, msg) {
+        // 面板激活效果
+        document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+        document.getElementById('panel-' + role).classList.add('active');
+        document.getElementById('stat-' + role).innerText = 'STATUS: PROCESSING';
+
+        const line = document.createElement('div');
+        line.className = 'log-line';
+        line.innerHTML = `<span>[${role}]</span> ${msg}`;
+        stream.appendChild(line);
+        stream.scrollTop = stream.scrollHeight;
+        
+        await new Promise(r => setTimeout(r, 1200));
+        document.getElementById('stat-' + role).innerText = 'STATUS: COMPLETED';
+    }
+
+    async function runMission() {
+        const input = document.getElementById('userInput');
+        if(!input.value) return;
+        const task = input.value;
+        input.value = "";
+
+        await update('PM', `分解目标：${task}。同步作战计划中。`);
+        await update('ARCH', `生成逻辑蓝图。正在对齐服务矩阵。`);
+        await update('DEV', `生产环境构建中。执行代码注入序列。`);
+        await update('QA', `启动全屏雷达扫描。完整性检查 100%。`);
+        await update('OPS', `任务节点已分发至全球集群。链路激活。`);
+        await update('MKT', `市场脉冲发射。正在接管 SEO 信号频率。`);
+        
+        const end = document.createElement('div');
+        end.style.color = 'var(--tech-orange)';
+        end.innerHTML = `>> MISSION ACCOMPLISHED. SYSTEM STABLE.`;
+        stream.appendChild(end);
+    }
+</script>
+
+</body>
+</html>

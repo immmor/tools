@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Agent Nexus Control</title>
+    <style>
+        :root {
+            --neon-blue: #00f2ff;
+            --neon-purple: #bc13fe;
+            --dark-bg: #050505;
+            --card-bg: rgba(20, 20, 25, 0.8);
+            --border-color: rgba(0, 242, 255, 0.3);
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            background-color: var(--dark-bg);
+            color: white;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        /* 动态背景网格 */
+        .grid-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                linear-gradient(var(--border-color) 1px, transparent 1px),
+                linear-gradient(90deg, var(--border-color) 1px, transparent 1px);
+            background-size: 50px 50px;
+            transform: perspective(500px) rotateX(60deg);
+            transform-origin: center top;
+            animation: move-grid 20s linear infinite;
+            z-index: -1;
+            opacity: 0.3;
+        }
+
+        @keyframes move-grid {
+            from { background-position: 0 0; }
+            to { background-position: 0 1000px; }
+        }
+
+        /* 顶部导航 */
+        header {
+            padding: 20px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.8);
+            border-bottom: 2px solid var(--neon-blue);
+            box-shadow: 0 0 15px var(--neon-blue);
+        }
+
+        .status-dot {
+            height: 10px;
+            width: 10px;
+            background-color: #00ff00;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 10px;
+            box-shadow: 0 0 10px #00ff00;
+        }
+
+        /* 主体布局 */
+        main {
+            display: grid;
+            grid-template-columns: 350px 1fr 300px;
+            gap: 20px;
+            padding: 20px;
+            height: calc(100vh - 100px);
+        }
+
+        /* Agent 卡片列表 */
+        .agent-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            overflow-y: auto;
+        }
+
+        .agent-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            padding: 15px;
+            border-radius: 8px;
+            position: relative;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .agent-card:hover {
+            border-color: var(--neon-blue);
+            box-shadow: 0 0 15px rgba(0, 242, 255, 0.2);
+            transform: translateX(5px);
+        }
+
+        .agent-card.active {
+            border-left: 5px solid var(--neon-purple);
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: #222;
+            margin-top: 10px;
+            border-radius: 2px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--neon-blue);
+            width: 45%;
+            box-shadow: 0 0 8px var(--neon-blue);
+        }
+
+        /* 中央可视化区域 */
+        .visualizer {
+            background: rgba(10, 10, 15, 0.6);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .terminal {
+            flex-grow: 1;
+            padding: 20px;
+            font-family: 'Courier New', Courier, monospace;
+            color: var(--neon-blue);
+            overflow-y: auto;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .input-area {
+            padding: 20px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            gap: 10px;
+        }
+
+        input {
+            flex-grow: 1;
+            background: transparent;
+            border: 1px solid var(--neon-blue);
+            color: white;
+            padding: 10px;
+            border-radius: 4px;
+            outline: none;
+        }
+
+        /* 右侧统计 */
+        .stats-panel {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            padding: 20px;
+            border-radius: 8px;
+        }
+
+        h3 {
+            color: var(--neon-purple);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-top: 0;
+            border-bottom: 1px solid var(--neon-purple);
+            padding-bottom: 10px;
+        }
+
+        .log-entry { margin-bottom: 8px; }
+        .log-time { color: #888; font-size: 12px; margin-right: 8px; }
+        .log-agent { font-weight: bold; color: var(--neon-purple); }
+
+    </style>
+</head>
+<body>
+
+    <div class="grid-bg"></div>
+
+    <header>
+        <div style="font-size: 24px; font-weight: bold; letter-spacing: 4px;">
+            <span style="color: var(--neon-blue);">NEXUS</span> CORE
+        </div>
+        <div>
+            <span class="status-dot"></span>系统运行正常 | 延迟: 12ms
+        </div>
+    </header>
+
+    <main>
+        <section class="agent-panel">
+            <h3>活跃 Agent</h3>
+            <div class="agent-card active">
+                <div style="display:flex; justify-content: space-between;">
+                    <strong>Explorer_01</strong>
+                    <span style="color: var(--neon-blue);">执行中</span>
+                </div>
+                <p style="font-size: 12px; color: #aaa;">任务: 扫描外部API接口</p>
+                <div class="progress-bar"><div class="progress-fill" style="width: 75%;"></div></div>
+            </div>
+
+            <div class="agent-card">
+                <div style="display:flex; justify-content: space-between;">
+                    <strong>Analyst_Alpha</strong>
+                    <span style="color: #888;">待命</span>
+                </div>
+                <p style="font-size: 12px; color: #aaa;">任务: 暂无</p>
+                <div class="progress-bar"><div class="progress-fill" style="width: 0%;"></div></div>
+            </div>
+
+            <div class="agent-card">
+                <div style="display:flex; justify-content: space-between;">
+                    <strong>Coder_Z</strong>
+                    <span style="color: var(--neon-purple);">思考中</span>
+                </div>
+                <p style="font-size: 12px; color: #aaa;">任务: 优化核心重构逻辑</p>
+                <div class="progress-bar"><div class="progress-fill" style="width: 30%; background: var(--neon-purple); box-shadow: 0 0 8px var(--neon-purple);"></div></div>
+            </div>
+        </section>
+
+        <section class="visualizer">
+            <div class="terminal" id="terminal">
+                <div class="log-entry"><span class="log-time">[08:12:44]</span> <span class="log-agent">SYS:</span> 正在初始化多代理协同链路...</div>
+                <div class="log-entry"><span class="log-time">[08:12:45]</span> <span class="log-agent">Explorer_01:</span> 成功连接至目标节点。</div>
+                <div class="log-entry"><span class="log-time">[08:12:46]</span> <span class="log-agent">Analyst_Alpha:</span> 等待数据包下发...</div>
+            </div>
+            <div class="input-area">
+                <input type="text" placeholder="输入指令指派全局任务..." id="userInput">
+                <button style="background: var(--neon-blue); border: none; padding: 10px 20px; cursor: pointer; font-weight: bold;" onclick="sendMessage()">发送指令</button>
+            </div>
+        </section>
+
+        <section class="stats-panel">
+            <h3>协同数据</h3>
+            <div style="margin-top: 20px;">
+                <p>总 Token 消耗: 1.2M</p>
+                <p>通信频率: 45 msg/min</p>
+                <p>成功率: 99.4%</p>
+            </div>
+            <div style="margin-top: 40px; border: 1px dashed var(--neon-blue); padding: 10px; text-align: center; font-size: 12px; color: var(--neon-blue);">
+                [实时神经元连接图]
+                <div style="height: 150px; display: flex; align-items: center; justify-content: center;">
+                    <svg width="100" height="100">
+                        <circle cx="50" cy="50" r="40" stroke="cyan" stroke-width="2" fill="none">
+                            <animate attributeName="r" values="30;45;30" dur="3s" repeatCount="indefinite" />
+                            <animate attributeName="opacity" values="1;0.2;1" dur="3s" repeatCount="indefinite" />
+                        </circle>
+                        <circle cx="50" cy="50" r="10" fill="cyan" />
+                    </svg>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const terminal = document.getElementById('terminal');
+        const input = document.getElementById('userInput');
+
+        function sendMessage() {
+            if (input.value.trim() === "") return;
+            
+            const time = new Date().toLocaleTimeString().split(' ')[0];
+            const userMsg = `<div class="log-entry"><span class="log-time">[${time}]</span> <span class="log-agent" style="color:#fff">USER:</span> ${input.value}</div>`;
+            terminal.innerHTML += userMsg;
+            
+            // 模拟 Agent 响应
+            setTimeout(() => {
+                const response = `<div class="log-entry"><span class="log-time">[${time}]</span> <span class="log-agent">SYS:</span> 指令已接收，正在分发至 Explorer_01...</div>`;
+                terminal.innerHTML += response;
+                terminal.scrollTop = terminal.scrollHeight;
+            }, 600);
+
+            input.value = "";
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+
+        // 模拟随机日志滚动
+        setInterval(() => {
+            const agents = ["Explorer_01", "Analyst_Alpha", "Coder_Z"];
+            const msgs = ["同步心跳包...", "清理缓存数据...", "分析模型权重...", "等待主节点信号..."];
+            const time = new Date().toLocaleTimeString().split(' ')[0];
+            const randomAgent = agents[Math.floor(Math.random() * agents.length)];
+            const randomMsg = msgs[Math.floor(Math.random() * msgs.length)];
+            
+            terminal.innerHTML += `<div class="log-entry" style="opacity: 0.7"><span class="log-time">[${time}]</span> <span class="log-agent">${randomAgent}:</span> ${randomMsg}</div>`;
+            if (terminal.childNodes.length > 20) terminal.removeChild(terminal.firstChild);
+            terminal.scrollTop = terminal.scrollHeight;
+        }, 4000);
+    </script>
+</body>
+</html>
