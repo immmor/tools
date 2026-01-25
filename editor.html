@@ -600,20 +600,21 @@
             </div>
             <div class="term-tabs" id="editor-tabs"></div>
             <div class="editor-tools">
-                <div class="key-btn" onclick="saveCurrentFile()">SAVE</div>
-                <div class="key-btn" onclick="insertAtCursor('\t')">TAB</div>
-                <div class="key-btn" onclick="execEditorCmd('undo')">UNDO</div>
-                
-                <div class="key-btn" onclick="editorAction('selectAll')"">ALL</div>
-                <div class="key-btn" onclick="editorAction('cut')">CUT</div>
-                <div class="key-btn" onclick="editorAction('copy')">COPY</div>
-                <div class="key-btn" onclick="editorAction('paste')">PASTE</div>
+            <div class="key-btn" onclick="saveCurrentFile()">SAVE</div>
+            <div class="key-btn" onclick="toggleFileSearch()" title="Search (Ctrl+F)">FIND</div>
+            <div class="key-btn" onclick="insertAtCursor('\t')">TAB</div>
+            <div class="key-btn" onclick="execEditorCmd('undo')">UNDO</div>
+            
+            <div class="key-btn" onclick="editorAction('selectAll')"">ALL</div>
+            <div class="key-btn" onclick="editorAction('cut')">CUT</div>
+            <div class="key-btn" onclick="editorAction('copy')">COPY</div>
+            <div class="key-btn" onclick="editorAction('paste')">PASTE</div>
 
-                <div class="key-btn" onclick="insertAtCursor('{}', 1)">{ }</div>
-                <div class="key-btn" onclick="insertAtCursor('()', 1)">( )</div>
-                <div class="key-btn" onclick="insertAtCursor('[]', 1)">[ ]</div>
-                <div class="key-btn" onclick="insertAtCursor('\'\'', 1)">' '</div>
-            </div>
+            <div class="key-btn" onclick="insertAtCursor('{}', 1)">{ }</div>
+            <div class="key-btn" onclick="insertAtCursor('()', 1)">( )</div>
+            <div class="key-btn" onclick="insertAtCursor('[]', 1)">[ ]</div>
+            <div class="key-btn" onclick="insertAtCursor('\'\'', 1)">' '</div>
+        </div>
             <div id="editor-container" style="flex:1; display:flex; flex-direction:column; overflow:hidden;"></div>
         </main>
         
@@ -3722,7 +3723,17 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#x27;');
-        aiMsg.innerHTML = `<div style="position: relative;">AI: ${renderedContent}<span class="scroll-top-btn" onclick="scrollToAiTop(this)">▲</span><span class="copy-ai-btn" onclick="copyAiResponse(this, \`${safeContent.replace(/`/g, '\\\\`')}\`)">Copy</span></div>`;
+        // 使用更安全的方式绑定Copy按钮事件
+        aiMsg.innerHTML = `<div style="position: relative;">AI: ${renderedContent}<span class="scroll-top-btn" onclick="scrollToAiTop(this)">▲</span><span class="copy-ai-btn" data-content="${safeContent}">Copy</span></div>`;
+        
+        // 手动绑定Copy按钮事件
+        const copyBtn = aiMsg.querySelector('.copy-ai-btn');
+        if (copyBtn) {
+            copyBtn.addEventListener('click', function() {
+                const content = this.getAttribute('data-content') || '';
+                copyAiResponse(this, content);
+            });
+        }
         
         bindAiMessageButtons(aiMsg);
         scrollChat();
@@ -3849,11 +3860,18 @@ function scrollToAiTop(button) {
 }
 
     function copyAiResponse(button, content) {
-        const decodedContent = content.replace(/\\`/g, '`');
+        // 确保content参数正确传递
+        const decodedContent = content ? content.replace(/\\`/g, '`') : '';
+        
+        if (!decodedContent) {
+            console.error('复制内容为空');
+            return;
+        }
+        
         navigator.clipboard.writeText(decodedContent).then(() => {
             const originalText = button.textContent;
             button.textContent = 'Done';
-            button.style.color = '#ffa500';
+            button.style.color = '#00ff00';
             setTimeout(() => {
                 button.textContent = originalText;
                 button.style.color = 'var(--amber)';
@@ -3870,10 +3888,10 @@ function scrollToAiTop(button) {
             
             const originalText = button.textContent;
             button.textContent = 'Done';
-            button.style.color = 'var(--amber)';
+            button.style.color = '#00ff00';
             setTimeout(() => {
                 button.textContent = originalText;
-                button.style.color = 'var(--amber-dim)';
+                button.style.color = 'var(--amber)';
             }, 1000);
         });
     }
@@ -3988,6 +4006,14 @@ function scrollToAiTop(button) {
         if (activeFile) {
             createEditorTab(activeFile);
         }
+    }
+
+    function toggleFileSearch() {
+        if (!activeEditorTab || !editorTabs[activeEditorTab]) {
+            return;
+        }
+        const editor = editorTabs[activeEditorTab].editor;
+        editor.getAction('actions.find').run();
     }
 </script>
 </body>
