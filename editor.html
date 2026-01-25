@@ -245,9 +245,9 @@
         
         .term-body { flex: 1; display: none; flex-direction: column; overflow: hidden; }
         .term-body.active { display: flex; }
-        .term-out { flex: 1; padding: 10px; overflow-y: auto; font-size: 12px; color: rgba(255, 176, 0, 0.8); white-space: pre-wrap; word-break: break-all; }
+        .term-out { flex: 1; padding: 10px; overflow-y: auto; font-size: 12px; color: var(--amber); white-space: pre-wrap; word-break: break-all; }
         .term-input-wrap { display: flex; padding: 8px 10px; background: #000; border-top: 1px solid var(--amber-dim); gap: 10px; align-items: center; }
-        .cmd-in { background: transparent; border: none; outline: none; flex: 1; color: #fff; font-family: inherit; cursor: text !important; }
+        .cmd-in { background: transparent; border: none; outline: none; flex: 1; height: 30px; color: #fff; font-family: inherit; cursor: text !important; }
 
         #ai-panel { width: 600px; border-left: 1px solid var(--amber-dim); }
         #ai-chat { flex: 1; padding: 15px; overflow-y: auto; font-size: 13px; scroll-behavior: smooth; }
@@ -290,10 +290,10 @@
         .custom-select-options div { padding: 8px; border-bottom: 1px solid var(--amber-dim); cursor: pointer !important; }
         .custom-select-options div:hover { background: var(--amber); color: #000; }
 
-        .ai-input-area { padding: 10px; background: rgba(0,0,0,0.3); border-top: 1px solid var(--amber-dim); display: flex; gap: 5px; }
+        .ai-input-area { padding: 8px 10px; background: rgba(0,0,0,0.3); border-top: 1px solid var(--amber-dim); display: flex; gap: 5px; }
         #ai-in { background: transparent; border: 1px solid var(--amber-dim); color: #fff; flex: 1; padding: 5px; outline: none; cursor: text !important; }
-        .ai-btn { background: var(--amber-dim); color: #fff; border: none; padding: 5px 10px; cursor: pointer !important; font-size: 10px; }
-        .ai-btn:hover { background: var(--amber); color: var(--bg); }
+        .ai-btn { background: var(--amber); color: #000; border: none; font-size: 12px; cursor: pointer; height: 25px; width: 50px;}
+        .ai-btn:hover { background: #fff; }
         
         .template-dropdown {
             position: absolute;
@@ -771,9 +771,9 @@
         
         switch(type) {
             case 'send':
-                // 发送消息音效 - 轻快确认音
-                playBeep(audioContext, 880, 0.08, 'triangle');
-                playBeep(audioContext, 660, 0.08, 'triangle', 0.06);
+                // 发送消息音效 - 柔和电子音
+                playBeep(audioContext, 330, 0.1, 'sine', 0, 0.08);
+                playBeep(audioContext, 440, 0.08, 'sine', 0.1, 0.06);
                 break;
             case 'success':
                 // 成功音效 - 上升音调
@@ -3237,6 +3237,17 @@ function openHistoryManager() {
     // 清空内容
     modalContent.innerHTML = '';
     
+    // 创建多选操作栏
+    const actionBar = document.createElement('div');
+    actionBar.innerHTML = `
+        <div style="display:flex; gap:10px; margin-bottom:15px; align-items:center;">
+            <button class="ai-btn" style="font-size:10px" onclick="toggleSelectAllChats()">SELECT_ALL</button>
+            <button class="ai-btn" style="font-size:10px; background:var(--term-red)" onclick="deleteSelectedChats()">DELETE</button>
+            <span id="selected-count" style="font-size:10px; opacity:0.7">0 selected</span>
+        </div>
+    `;
+    modalContent.appendChild(actionBar);
+    
     // 创建滚动容器
     const scrollContainer = document.createElement('div');
     scrollContainer.style.maxHeight = '400px';
@@ -3260,9 +3271,25 @@ function openHistoryManager() {
             
             // 创建对话条目容器
             const chatItem = document.createElement('div');
+            chatItem.className = 'chat-history-item';
             chatItem.style.border = '1px solid var(--amber-dim)';
             chatItem.style.marginBottom = '10px';
             chatItem.style.padding = '10px';
+            chatItem.style.display = 'flex';
+            chatItem.style.alignItems = 'center';
+            chatItem.style.gap = '10px';
+            
+            // 创建复选框
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'chat-checkbox';
+            checkbox.dataset.chatId = chatId;
+            checkbox.onchange = updateSelectedCount;
+            chatItem.appendChild(checkbox);
+            
+            // 创建内容容器
+            const contentContainer = document.createElement('div');
+            contentContainer.style.flex = '1';
             
             // 创建标题行
             const header = document.createElement('div');
@@ -3309,9 +3336,11 @@ function openHistoryManager() {
             countDiv.style.opacity = '0.5';
             countDiv.textContent = `Messages: ${messages.length}`;
             
-            chatItem.appendChild(header);
-            chatItem.appendChild(previewDiv);
-            chatItem.appendChild(countDiv);
+            contentContainer.appendChild(header);
+            contentContainer.appendChild(previewDiv);
+            contentContainer.appendChild(countDiv);
+            
+            chatItem.appendChild(contentContainer);
             
             scrollContainer.appendChild(chatItem);
         });
@@ -3333,6 +3362,32 @@ function openHistoryManager() {
     closeContainer.appendChild(closeBtn);
     modalContent.appendChild(closeContainer);
 }
+
+// 多选删除相关函数
+function toggleSelectAllChats() {
+    const checkboxes = document.querySelectorAll('.chat-checkbox');
+    const allChecked = checkboxes.length > 0 && Array.from(checkboxes).every(cb => cb.checked);
+    
+    checkboxes.forEach(cb => cb.checked = !allChecked);
+    updateSelectedCount();
+}
+
+function deleteSelectedChats() {
+    const selected = document.querySelectorAll('.chat-checkbox:checked');
+    if (selected.length === 0 || !confirm(`Delete ${selected.length} conversations?`)) return;
+    
+    selected.forEach(cb => delete aiChatHistory[cb.dataset.chatId]);
+    localStorage.setItem('ind_console_ai_history', JSON.stringify(aiChatHistory));
+    openHistoryManager();
+}
+
+function updateSelectedCount() {
+    const count = document.querySelectorAll('.chat-checkbox:checked').length;
+    const element = document.getElementById('selected-count');
+    if (element) element.textContent = `${count} selected`;
+}
+
+
 
 function toggleTemplateDropdown() {
     const dropdown = document.getElementById('template-dropdown');
