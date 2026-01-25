@@ -2044,6 +2044,7 @@ function smartSwitch(targetPanelId) {
     function renderFiles() {
         const list = document.getElementById('file-list');
         list.innerHTML = '';
+        
         const sortedKeys = Object.keys(storage).sort((a,b) => {
             const aDir = a.includes('/') ? 0 : 1;
             const bDir = b.includes('/') ? 0 : 1;
@@ -2588,20 +2589,63 @@ function smartSwitch(targetPanelId) {
         const isFolder = activeFile && activeFile.endsWith('/');
         const parentDir = activeFile ? (isFolder ? activeFile : (activeFile.includes('/') ? activeFile.substring(0, activeFile.lastIndexOf('/') + 1) : '')) : '';
         
-        document.getElementById('modal-title').innerText = "NEW_NODE_CREATION";
+        document.getElementById('modal-title').innerText = "CREATE_NEW";
         document.getElementById('modal-content').innerHTML = `
             <div style="font-size:9px; color:var(--amber-dim); margin-bottom:10px;">TARGET_PATH: ${parentDir || 'ROOT/'}</div>
-            <div class="type-selector">
+            <div class="type-selector" style="margin-bottom:15px;">
                 <label class="type-opt"><input type="radio" name="ntype" value="file" checked> FILE</label>
                 <label class="type-opt"><input type="radio" name="ntype" value="folder"> DIR</label>
+                <label class="type-opt"><input type="radio" name="ntype" value="github"> GITHUB</label>
             </div>
-            <input type="text" id="modal-input" class="modal-input" placeholder="NAME" autocomplete="off">
+            <div id="modal-content-area">
+                <input type="text" id="modal-input" class="modal-input" placeholder="NAME" autocomplete="off">
+            </div>
             <div class="modal-btns">
                 <button class="ai-btn" onclick="closeModal()">CANCEL</button>
-                <button class="ai-btn" style="background:var(--amber); color:#000" onclick="confirmModal('${parentDir}')">CONFIRM</button>
+                <button class="ai-btn" style="background:var(--amber); color:#000" onclick="handleModalConfirm('${parentDir}')">CONFIRM</button>
             </div>`;
+        
+        // 监听类型切换
+        document.querySelectorAll('input[name="ntype"]').forEach(radio => {
+            radio.addEventListener('change', updateModalContent);
+        });
+        
         document.getElementById('modal-overlay').style.display = 'flex';
         document.getElementById('modal-input').focus();
+        updateModalContent();
+    }
+    
+    function updateModalContent() {
+        const type = document.querySelector('input[name="ntype"]:checked').value;
+        const contentArea = document.getElementById('modal-content-area');
+        
+        if (type === 'github') {
+            contentArea.innerHTML = `
+                <input type="text" id="github-url" class="modal-input" placeholder="GitHub URL" style="margin-bottom:5px;">
+                <input type="text" id="save-filename" class="modal-input" placeholder="Save as filename">
+            `;
+            
+            // 自动填充文件名
+            document.getElementById('github-url').addEventListener('input', function() {
+                const url = this.value.trim();
+                if (url) {
+                    const filename = url.split('/').pop();
+                    document.getElementById('save-filename').value = filename;
+                }
+            });
+        } else {
+            contentArea.innerHTML = '<input type="text" id="modal-input" class="modal-input" placeholder="NAME" autocomplete="off">';
+        }
+    }
+    
+    function handleModalConfirm(parentDir) {
+        const type = document.querySelector('input[name="ntype"]:checked').value;
+        
+        if (type === 'github') {
+            importFromGithub();
+        } else {
+            confirmModal(parentDir);
+        }
     }
 
     function confirmModal(parentDir) {
@@ -4020,6 +4064,60 @@ function scrollToAiTop(button) {
         }
         const editor = editorTabs[activeEditorTab].editor;
         editor.getAction('actions.find').run();
+    }
+
+    // 从GitHub导入文件
+    async function importFromGithub() {
+        const url = document.getElementById('github-url').value.trim();
+        const filename = document.getElementById('save-filename').value.trim();
+        
+        if (!url || !filename) {
+            alert('Please enter both GitHub URL and filename');
+            return;
+        }
+        
+        let rawUrl = url;
+        if (url.startsWith('https://github.com/')) {
+            rawUrl = url.replace('https://github.com/', 'https://raw.githubusercontent.com/').replace('/blob/', '/');
+        }
+        
+        if (!rawUrl.startsWith('https://raw.githubusercontent.com/')) {
+            alert('Please enter a valid GitHub URL');
+            return;
+        }
+        
+        try {
+            const confirmBtn = document.querySelector('.modal-btns .ai-btn[style*="background: var(--amber)"]');
+            if (confirmBtn) {
+                confirmBtn.textContent = 'LOADING...';
+                confirmBtn.disabled = true;
+            }
+            
+            const response = await fetch(rawUrl);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const content = await response.text();
+            
+            storage[filename] = content;
+            localStorage.setItem('ind_console_storage', JSON.stringify(storage));
+            
+            closeModal();
+            renderFiles();
+            
+            createEditorTab(filename);
+            
+        } catch (error) {
+            alert(`Import failed: ${error.message}`);
+            console.error('GitHub import error:', error);
+            
+            const confirmBtn = document.querySelector('.modal-btns .ai-btn[style*="background: var(--amber)"]');
+            if (confirmBtn) {
+                confirmBtn.textContent = 'CONFIRM';
+                confirmBtn.disabled = false;
+            }
+        }
     }
 </script>
 </body>
