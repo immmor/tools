@@ -246,7 +246,7 @@
         .term-body { flex: 1; display: none; flex-direction: column; overflow: hidden; }
         .term-body.active { display: flex; }
         .term-out { flex: 1; padding: 10px; overflow-y: auto; font-size: 12px; color: var(--amber); white-space: pre-wrap; word-break: break-all; }
-        .term-input-wrap { display: flex; padding: 8px 10px; background: #000; border-top: 1px solid var(--amber-dim); gap: 10px; align-items: center; }
+        .term-input-wrap { display: flex; padding: 6px 10px; background: #000; border-top: 1px solid var(--amber-dim); gap: 10px; align-items: center; }
         .cmd-in { background: transparent; border: none; outline: none; flex: 1; height: 30px; color: #fff; font-family: inherit; cursor: text !important; }
 
         #ai-panel { width: 600px; border-left: 1px solid var(--amber-dim); }
@@ -290,9 +290,25 @@
         .custom-select-options div { padding: 8px; border-bottom: 1px solid var(--amber-dim); cursor: pointer !important; }
         .custom-select-options div:hover { background: var(--amber); color: #000; }
 
-        .ai-input-area { padding: 8px 10px; background: rgba(0,0,0,0.3); border-top: 1px solid var(--amber-dim); display: flex; gap: 5px; }
-        #ai-in { background: transparent; border: 1px solid var(--amber-dim); color: #fff; flex: 1; padding: 5px; outline: none; cursor: text !important; }
-        .ai-btn { background: var(--amber); color: #000; border: none; font-size: 12px; cursor: pointer; height: 30px;}
+        .ai-input-area { padding: 10px; background: rgba(0,0,0,0.3); border-top: 1px solid var(--amber-dim); }
+        #ai-in { 
+            background: transparent; 
+            border: 1px solid var(--amber-dim); 
+            color: #fff; 
+            width: 100%; 
+            min-height: 30px; 
+            max-height: 120px; 
+            padding: 5px; 
+            outline: none; 
+            cursor: text !important; 
+            resize: none; 
+            font-family: inherit; 
+            font-size: 12px; 
+            line-height: 1.4;
+            margin-bottom: 5px;
+        }
+        .ai-input-controls { display: flex; gap: 5px; align-items: center; }
+        .ai-btn { background: var(--amber); color: #000; border: none; font-size: 12px; cursor: pointer; height: 25px;}
         .ai-btn:hover { background: #fff; }
         
         .template-dropdown {
@@ -666,33 +682,30 @@
 
     <div class="ai-tools">
     <div style="margin-bottom: 10px;">
-        <label style="display:block; margin-bottom:5px">AI_PROVIDER:</label>
-        <div class="custom-select-trigger" id="ai-provider-trigger" onclick="toggleProviderSelect()">
-            <span id="active-provider-name">---</span>
+        <label style="display:block; margin-bottom:5px">AI_CONTEXT:</label>
+        <div class="custom-select-trigger" id="ai-ctx-trigger" onclick="toggleAiSelect()">
+            <span id="ai-ctx-val">-- NO_CONTEXT --</span>
             <span>▼</span>
         </div>
-        <div class="custom-select-options" id="ai-provider-options"></div>
+        <div class="custom-select-options" id="ai-ctx-options"></div>
     </div>
-
-    <label style="display:block; margin-bottom:5px">CONTEXT_FILE:</label>
-    <div class="custom-select-trigger" id="ai-ctx-trigger" onclick="toggleAiSelect()">
-        <span id="ai-ctx-val">-- NO_CONTEXT --</span>
-        <span>▼</span>
-    </div>
-    <div class="custom-select-options" id="ai-ctx-options"></div>
-</div>
-    <div class="ai-input-area" style="position:relative;">
-        <button class="ai-btn" id="template-btn" onclick="toggleTemplateDropdown()">TEMP</button>
-        <div class="template-dropdown" id="template-dropdown">
-            <div class="template-header">
-                <span>提示词模板</span>
-                <button class="template-add-btn" onclick="addTemplate()">+ 添加</button>
+    <textarea id="ai-in" placeholder="Query..." autocomplete="off"></textarea>
+        <div class="ai-input-controls">
+            <button class="ai-btn" id="template-btn" onclick="toggleTemplateDropdown()">TEMP</button>
+            <div class="template-dropdown" id="template-dropdown">
+                <div class="template-header">
+                    <span>提示词模板</span>
+                    <span class="template-close" onclick="toggleTemplateDropdown()">×</span>
+                </div>
+                <div id="template-options"></div>
             </div>
-            <div id="template-options"></div>
+            <div class="custom-select-trigger" id="ai-provider-trigger" onclick="toggleProviderSelect()">
+                <span id="active-provider-name">AI_PROVIDER</span>
+                <span>▼</span>
+            </div>
+            <div class="custom-select-options" id="ai-provider-options"></div>
+            <button class="ai-btn" id="ai-send-btn" onclick="handleAiSend()">SEND</button>
         </div>
-        <input type="text" id="ai-in" placeholder="Query..." autocomplete="off">
-        <button class="ai-btn" id="ai-send-btn" onclick="handleAiSend()">SEND</button>
-    </div>
 </aside>
 </div>
 
@@ -3183,6 +3196,14 @@ function restoreAiTabs() {
             if (aiChatHistory[chatId] && aiChatHistory[chatId].length > 0) {
                 body.innerHTML = aiChatHistory[chatId].join('');
                 bindAiMessageButtons(body);
+                
+                // 重新绑定Copy按钮事件
+                body.querySelectorAll('.copy-ai-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        const content = this.getAttribute('data-content') || '';
+                        copyAiResponse(this, content);
+                    });
+                });
             }
             
             document.getElementById('ai-container').appendChild(body);
@@ -3999,8 +4020,16 @@ function scrollToAiTop(button) {
             document.getElementById('ai-provider-options').style.display = 'none';
         }
     });
-    document.getElementById('ai-in').onkeydown = (e) => { 
-        if(e.key === 'Enter') {
+    // 输入框自适应高度
+    const aiInput = document.getElementById('ai-in');
+    aiInput.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+    });
+    
+    aiInput.onkeydown = (e) => { 
+        if(e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
             if (isGenerating()) {
                 cancelAiRequest();
                 return;
