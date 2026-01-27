@@ -577,12 +577,13 @@
                 <span>FILESYSTEM</span>
                 <div class="ctrl-group">
                     <span class="ctrl" onclick="toggleSearch()" title="SEARCH_ALL">⌕</span>
+                    <span class="ctrl" onclick="toggleWorkspace()" title="SWITCH WORKSPACE">⧉</span>
                     <span class="ctrl" onclick="openModal()" title="NEW NODE">+</span>
                     <span class="ctrl" onclick="toggleExplorerMax('file-section')">◰</span>
                 </div>
             </div>
             <div id="search-container" style="display:none; padding: 10px; border-bottom: 1px solid var(--amber-dim);">
-                <input type="text" id="global-search-in" class="modal-input" placeholder="Search all content (files/plugins/terminal/ai)..." style="margin:0; font-size:11px;" oninput="executeGlobalSearch()">
+                <input type="text" id="global-search-in" class="modal-input" placeholder="Search all content" style="margin:0; font-size:11px;" oninput="executeGlobalSearch()">
             </div>
             <div id="file-list" oncontextmenu="handleCtx(event)"></div>
             <div id="search-results" style="display:none; overflow-y:auto; flex:1;"></div>
@@ -692,6 +693,7 @@
     <textarea id="ai-in" placeholder="Query..." autocomplete="off"></textarea>
         <div class="ai-input-controls">
             <button class="ai-btn" id="template-btn" onclick="toggleTemplateDropdown()">TEMP</button>
+            <button class="ai-btn" id="agent-btn" onclick="toggleAgent()">֎</button>
             <div class="template-dropdown" id="template-dropdown">
                 <div class="template-header">
                     <span>提示词模板</span>
@@ -729,7 +731,7 @@
 
 <div id="modal-overlay" class="modal-overlay">
     <div class="custom-modal">
-        <div class="p-head"><span id="modal-title">SYSTEM_PROMPT</span></div>
+        <div class="p-head"><span id="modal-title">WORKSPACE</span></div>
         <div class="modal-body" id="modal-content"></div>
     </div>
 </div>
@@ -2016,7 +2018,276 @@ function smartSwitch(targetPanelId) {
     }
 }
 
-    function toggleExplorerMax(sectionId) {
+    // workspace管理
+function toggleWorkspace() {
+    const modal = document.getElementById('modal-overlay');
+    const content = document.getElementById('modal-content');
+    
+    content.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h3 style="margin: 0; color: var(--amber);">Workspace管理</h3>
+            <span onclick="document.getElementById('modal-overlay').style.display = 'none'" 
+                  style="cursor: pointer; color: var(--amber); font-size: 18px; padding: 5px;" 
+                  title="关闭">×</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto;">
+            ${workspaces.map(ws => `
+                <div class="workspace-item ${ws.id === currentWorkspaceId ? 'active' : ''}" 
+                     style="padding: 10px; border: 1px solid ${ws.id === currentWorkspaceId ? 'var(--amber)' : 'var(--amber-dim)'}; border-radius: 3px; display: flex; align-items: center; background: ${ws.id === currentWorkspaceId ? 'rgba(255, 176, 0, 0.1)' : 'transparent'};">
+                    <div onclick="switchWorkspace('${ws.id}')" style="flex: 1; cursor: pointer;">
+                        <div style="font-weight: bold; color: var(--amber);">${ws.name}</div>
+                        <div style="font-size: 11px; color: var(--amber-dim);">${ws.path}</div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 5px; margin-left: 10px;">
+                        ${ws.id !== 'default' ? '<span onclick="deleteWorkspace(\'${ws.id}\')" style="color: #ff3e3e; cursor: pointer;" title="删除">×</span>' : ''}
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+        
+        <div style="margin-top: 15px;">
+            <div style="display: flex; border-bottom: 1px solid var(--amber-dim); margin-bottom: 15px;">
+                <button id="tab-local" class="tab-btn active" onclick="switchTab('local')" style="flex: 1; padding: 8px; background: var(--amber); color: #000; border: none; cursor: pointer;">添加本地Workspace</button>
+                <button id="tab-github" class="tab-btn" onclick="switchTab('github')" style="flex: 1; padding: 8px; background: var(--amber-dim); color: var(--amber); border: none; cursor: pointer;">导入GitHub仓库</button>
+            </div>
+            
+            <div id="tab-content-local" class="tab-content" style="display: block;">
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <input type="text" id="workspace-name" class="modal-input" placeholder="Workspace名称" style="margin: 0;">
+                    <input type="text" id="workspace-path" class="modal-input" placeholder="路径 (如: /path/to/project)" style="margin: 0;">
+                    <button class="ai-btn" onclick="addWorkspace()" style="margin-top: 5px;">添加</button>
+                </div>
+            </div>
+            
+            <div id="tab-content-github" class="tab-content" style="display: none;">
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <input type="text" id="github-repo" class="modal-input" placeholder="GitHub仓库 (如: username/repo)" style="margin: 0;">
+                    <input type="text" id="github-branch" class="modal-input" placeholder="分支 (默认: main)" style="margin: 0;">
+                    <button class="ai-btn" onclick="addGitHubWorkspace()" style="margin-top: 5px;">导入</button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    modal.style.display = 'flex';
+}
+
+// 切换选项卡
+function switchTab(tabName) {
+    // 更新按钮状态
+    document.getElementById('tab-local').classList.toggle('active', tabName === 'local');
+    document.getElementById('tab-github').classList.toggle('active', tabName === 'github');
+    
+    // 更新按钮样式
+    document.getElementById('tab-local').style.background = tabName === 'local' ? 'var(--amber)' : 'var(--amber-dim)';
+    document.getElementById('tab-local').style.color = tabName === 'local' ? '#000' : 'var(--amber)';
+    document.getElementById('tab-github').style.background = tabName === 'github' ? 'var(--amber)' : 'var(--amber-dim)';
+    document.getElementById('tab-github').style.color = tabName === 'github' ? '#000' : 'var(--amber)';
+    
+    // 显示/隐藏内容区域
+    document.getElementById('tab-content-local').style.display = tabName === 'local' ? 'block' : 'none';
+    document.getElementById('tab-content-github').style.display = tabName === 'github' ? 'block' : 'none';
+}
+
+// 删除workspace
+function deleteWorkspace(workspaceId) {
+    if (workspaceId === 'default') {
+        alert('不能删除默认工作区');
+        return;
+    }
+    
+    if (confirm('确定要删除这个workspace吗？')) {
+        workspaces = workspaces.filter(ws => ws.id !== workspaceId);
+        
+        if (currentWorkspaceId === workspaceId) {
+            currentWorkspaceId = 'default';
+            switchWorkspace('default');
+        }
+        
+        localStorage.setItem('ind_console_workspaces', JSON.stringify(workspaces));
+        toggleWorkspace();
+        alert('Workspace已删除');
+    }
+}
+
+// 切换workspace
+function switchWorkspace(workspaceId) {
+    const targetWorkspace = workspaces.find(ws => ws.id === workspaceId);
+    if (!targetWorkspace) return;
+    
+    // 保存当前workspace的文件状态
+    const currentWorkspace = workspaces.find(ws => ws.id === currentWorkspaceId);
+    if (currentWorkspace) {
+        currentWorkspace.files = {...storage};
+    }
+    
+    // 切换到目标workspace
+    currentWorkspaceId = workspaceId;
+    
+    // 更新文件系统
+    Object.keys(storage).forEach(key => {
+        delete storage[key];
+    });
+    Object.assign(storage, targetWorkspace.files);
+    
+    // 保存状态
+    localStorage.setItem('ind_console_storage', JSON.stringify(storage));
+    localStorage.setItem('ind_console_workspaces', JSON.stringify(workspaces));
+    localStorage.setItem('ind_console_current_workspace', currentWorkspaceId);
+    
+    // 重新渲染文件列表
+    renderFiles();
+    
+    // 关闭模态框
+    document.getElementById('modal-overlay').style.display = 'none';
+    
+    // 显示切换提示
+    addLog(`[SYSTEM]: SWITCHED_TO_WORKSPACE >> ${targetWorkspace.name}`, 'var(--term-green)');
+}
+
+// 添加workspace
+function addWorkspace() {
+    const nameInput = document.getElementById('workspace-name');
+    const pathInput = document.getElementById('workspace-path');
+    const name = nameInput.value.trim();
+    const path = pathInput.value.trim();
+    
+    if (!name || !path) {
+        alert('请输入名称和路径');
+        return;
+    }
+    
+    // 创建新workspace
+    const newWorkspace = {
+        id: 'workspace_' + Date.now(),
+        name: name,
+        path: path,
+        files: {
+            'README.md': `# ${name}\n\nWorkspace路径: ${path}\n\n创建时间: ${new Date().toLocaleString()}`,
+            'main.js': 'console.log("Hello from new workspace");',
+            'style.css': '/* 新的样式文件 */',
+            'utils/helper.js': '// 工具函数文件'
+        }
+    };
+    
+    // 添加到workspaces列表
+    workspaces.push(newWorkspace);
+    
+    // 保存到localStorage
+    localStorage.setItem('ind_console_workspaces', JSON.stringify(workspaces));
+    
+    // 清空输入框
+    nameInput.value = '';
+    pathInput.value = '';
+    
+    // 重新打开workspace管理界面
+    toggleWorkspace();
+    
+    addLog(`[SYSTEM]: ADDED_WORKSPACE >> ${name}`, 'var(--term-green)');
+}
+
+// 从GitHub导入workspace
+async function addGitHubWorkspace() {
+    const repoInput = document.getElementById('github-repo');
+    const branchInput = document.getElementById('github-branch');
+    const repo = repoInput.value.trim();
+    const branch = branchInput.value.trim() || 'main';
+    
+    if (!repo) {
+        alert('请输入GitHub仓库地址');
+        return;
+    }
+    
+    if (!repo.includes('/')) {
+        alert('请输入完整的仓库地址 (如: username/repo)');
+        return;
+    }
+    
+    try {
+        addLog('[SYSTEM]: 正在从GitHub下载仓库内容...', 'var(--amber)');
+        
+        // 获取仓库信息
+        const repoInfoResponse = await fetch(`https://api.github.com/repos/${repo}`);
+        if (!repoInfoResponse.ok) {
+            throw new Error('仓库不存在或无法访问');
+        }
+        const repoInfo = await repoInfoResponse.json();
+        
+        // 获取仓库文件树
+        const treeResponse = await fetch(`https://api.github.com/repos/${repo}/git/trees/${branch}?recursive=1`);
+        if (!treeResponse.ok) {
+            throw new Error('无法获取仓库文件树');
+        }
+        const treeData = await treeResponse.json();
+        
+        // 分离文件和文件夹
+        const allItems = treeData.tree || [];
+        const files = allItems.filter(item => item.type === 'blob');
+        const folders = allItems.filter(item => item.type === 'tree');
+        
+        // 过滤出代码文件（排除大文件和二进制文件）
+        const codeFiles = files.filter(file => 
+            file.size < 100000 && // 文件大小限制
+            !file.path.includes('.git/') &&
+            !file.path.includes('node_modules/') &&
+            !file.path.includes('dist/') &&
+            !file.path.includes('build/') &&
+            !file.path.match(/\.(png|jpg|jpeg|gif|bmp|ico|svg|mp4|mp3|wav|ogg|zip|rar|tar|gz|pdf)$/i)
+        );
+        
+        // 创建新workspace
+        const newWorkspace = {
+            id: 'github_' + Date.now(),
+            name: repoInfo.name || repo.split('/')[1],
+            path: `github:${repo}/${branch}`,
+            files: {}
+        };
+        
+        // 首先创建所有文件夹
+        folders.forEach(folder => {
+            newWorkspace.files[folder.path + '/'] = ''; // 空字符串表示文件夹
+        });
+        
+        // 下载文件内容
+        let downloadedCount = 0;
+        for (const file of codeFiles.slice(0, 100)) { // 增加文件数量限制
+            try {
+                const fileResponse = await fetch(`https://raw.githubusercontent.com/${repo}/${branch}/${file.path}`);
+                if (fileResponse.ok) {
+                    const content = await fileResponse.text();
+                    newWorkspace.files[file.path] = content;
+                    downloadedCount++;
+                }
+            } catch (error) {
+                console.warn(`无法下载文件: ${file.path}`, error);
+            }
+        }
+        
+        // 添加README文件说明
+        newWorkspace.files['README.md'] = `# ${repoInfo.name}\n\n从GitHub导入的仓库: ${repo}\n\n分支: ${branch}\n导入时间: ${new Date().toLocaleString()}\n\n成功下载文件数: ${downloadedCount}/${codeFiles.length}\n文件夹数: ${folders.length}`;
+        
+        // 添加到workspaces列表
+        workspaces.push(newWorkspace);
+        
+        // 保存到localStorage
+        localStorage.setItem('ind_console_workspaces', JSON.stringify(workspaces));
+        
+        // 清空输入框
+        repoInput.value = '';
+        branchInput.value = '';
+        
+        // 重新打开workspace管理界面
+        toggleWorkspace();
+        
+        addLog(`[SYSTEM]: 成功导入GitHub仓库: ${repoInfo.name} (${downloadedCount}个文件, ${folders.length}个文件夹)`, 'var(--term-green)');
+        
+    } catch (error) {
+        console.error('GitHub导入失败:', error);
+        addLog(`[SYSTEM]: 导入失败: ${error.message}`, 'var(--term-red)');
+    }
+}
+
+function toggleExplorerMax(sectionId) {
         const explorer = document.getElementById('explorer');
         const fileSection = document.getElementById('file-section');
         const pluginSection = document.getElementById('plugin-section');
@@ -2254,6 +2525,12 @@ function smartSwitch(targetPanelId) {
     
     // 每个聊天的请求状态
     let chatRequestStates = {}; // 存储每个聊天窗口的请求状态
+    
+    // workspace管理
+    let workspaces = JSON.parse(localStorage.getItem('ind_console_workspaces')) || [
+        { id: 'default', name: '默认工作区', path: '/Users/mrok/Documents/Coding/Web/tools', files: storage }
+    ];
+    let currentWorkspaceId = localStorage.getItem('ind_console_current_workspace') || 'default';
 
     function updateAiCtxOptions() {
         const container = document.getElementById('ai-ctx-options');
