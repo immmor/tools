@@ -2039,7 +2039,7 @@ function toggleWorkspace() {
                         <div style="font-size: 11px; color: var(--amber-dim);">${ws.path}</div>
                     </div>
                     <div style="display: flex; align-items: center; gap: 5px; margin-left: 10px;">
-                        ${ws.id !== 'default' ? '<span onclick="deleteWorkspace(\'${ws.id}\')" style="color: #ff3e3e; cursor: pointer;" title="删除">×</span>' : ''}
+                        ${ws.id !== 'default' ? `<span onclick="deleteWorkspace('${ws.id}'); event.stopPropagation();" style="color: #ff3e3e; cursor: pointer;" title="删除">×</span>` : ''}
                     </div>
                 </div>
             `).join('')}
@@ -2060,12 +2060,16 @@ function toggleWorkspace() {
             </div>
             
             <div id="tab-content-github" class="tab-content" style="display: none;">
-                <div style="display: flex; flex-direction: column; gap: 8px;">
-                    <input type="text" id="github-repo" class="modal-input" placeholder="GitHub仓库 (如: username/repo)" style="margin: 0;">
-                    <input type="text" id="github-branch" class="modal-input" placeholder="分支 (默认: main)" style="margin: 0;">
-                    <button class="ai-btn" onclick="addGitHubWorkspace()" style="margin-top: 5px;">导入</button>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+                <input type="text" id="github-repo" class="modal-input" placeholder="GitHub仓库 (如: username/repo)" style="margin: 0;">
+                <input type="text" id="github-branch" class="modal-input" placeholder="分支 (默认: main)" style="margin: 0;">
+                <input type="password" id="github-token" class="modal-input" placeholder="GitHub Token (推送时使用)" value="${githubToken}" style="margin: 0;">
+                <div style="display: flex; gap: 8px;">
+                    <button class="ai-btn" onclick="addGitHubWorkspace()" style="flex: 1;">导入</button>
+                    <button class="ai-btn" onclick="pushToGitHub()" style="flex: 1; background: var(--amber); color: #000;">推送</button>
                 </div>
             </div>
+        </div>
         </div>
     `;
     
@@ -2110,6 +2114,108 @@ function deleteWorkspace(workspaceId) {
     }
 }
 
+// 推送到GitHub
+async function pushToGitHub() {
+    const repoInput = document.getElementById('github-repo');
+    const branchInput = document.getElementById('github-branch');
+    const tokenInput = document.getElementById('github-token');
+    const repo = repoInput.value.trim();
+    const branch = branchInput.value.trim() || 'main';
+    const token = tokenInput.value.trim();
+    
+    if (!repo) {
+        alert('请输入仓库地址');
+        return;
+    }
+    
+    if (token) {
+        // 自动保存token
+        githubToken = token;
+        localStorage.setItem('ind_console_github_token', token);
+    } else if (!githubToken) {
+        alert('请输入GitHub Token');
+        return;
+    }
+    
+    const effectiveToken = token || githubToken;
+    
+    if (!repo.includes('/')) {
+        alert('请输入完整的仓库地址 (如: username/repo)');
+        return;
+    }
+    
+    try {
+        alert('开始推送文件到GitHub...');
+        
+        // 获取当前workspace的文件
+        const currentWorkspace = workspaces.find(ws => ws.id === currentWorkspaceId);
+        if (!currentWorkspace) {
+            alert('没有找到当前workspace');
+            return;
+        }
+        
+        // 获取仓库的当前提交信息
+        const commitsResponse = await fetch(`https://api.github.com/repos/${repo}/commits?sha=${branch}`, {
+            headers: { 'Authorization': `token ${effectiveToken}` }
+        });
+        
+        if (!commitsResponse.ok) {
+            throw new Error('无法访问仓库，请检查Token权限');
+        }
+        
+        const commits = await commitsResponse.json();
+        const latestCommit = commits[0];
+        
+        // 使用Contents API逐个推送文件（更可靠）
+        let pushedCount = 0;
+        let failedFiles = [];
+        
+        for (const [path, content] of Object.entries(storage)) {
+            if (!path.endsWith('/')) { // 只处理文件
+                try {
+                    // 检查文件是否存在
+                    const checkResponse = await fetch(`https://api.github.com/repos/${repo}/contents/${path}?ref=${branch}`, {
+                        headers: { 'Authorization': `token ${effectiveToken}` }
+                    });
+                    
+                    let sha = null;
+                    if (checkResponse.status === 200) {
+                        const fileData = await checkResponse.json();
+                        sha = fileData.sha; // 更新现有文件
+                    }
+                    
+                    // 创建或更新文件
+                    const pushResponse = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Authorization': `token ${effectiveToken}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            message: `Update ${path}`,
+                            content: btoa(unescape(encodeURIComponent(content))),
+                            branch: branch,
+                            sha: sha
+                        })
+                    });
+                    
+                    if (pushResponse.ok) {
+                        pushedCount++;
+                    }
+                } catch (error) {
+                    failedFiles.push({ path, error: error.message });
+                }
+            }
+        }
+        
+        alert(`成功推送到 ${repo}:${branch} (${pushedCount}个文件)`);
+        
+    } catch (error) {
+        console.error('GitHub推送失败:', error);
+        alert(`推送失败: ${error.message}`);
+    }
+}
+
 // 切换workspace
 function switchWorkspace(workspaceId) {
     const targetWorkspace = workspaces.find(ws => ws.id === workspaceId);
@@ -2121,6 +2227,12 @@ function switchWorkspace(workspaceId) {
         currentWorkspace.files = {...storage};
     }
     
+    // 确保默认工作区的文件存在
+    const defaultWorkspace = workspaces.find(ws => ws.id === 'default');
+    if (defaultWorkspace && !defaultWorkspace.files) {
+        defaultWorkspace.files = {};
+    }
+    
     // 切换到目标workspace
     currentWorkspaceId = workspaceId;
     
@@ -2128,7 +2240,7 @@ function switchWorkspace(workspaceId) {
     Object.keys(storage).forEach(key => {
         delete storage[key];
     });
-    Object.assign(storage, targetWorkspace.files);
+    Object.assign(storage, targetWorkspace.files || {});
     
     // 保存状态
     localStorage.setItem('ind_console_storage', JSON.stringify(storage));
@@ -2225,37 +2337,42 @@ async function addGitHubWorkspace() {
         const files = allItems.filter(item => item.type === 'blob');
         const folders = allItems.filter(item => item.type === 'tree');
         
-        // 过滤出代码文件（排除大文件和二进制文件）
-        const codeFiles = files.filter(file => 
-            file.size < 100000 && // 文件大小限制
-            !file.path.includes('.git/') &&
-            !file.path.includes('node_modules/') &&
-            !file.path.includes('dist/') &&
-            !file.path.includes('build/') &&
-            !file.path.match(/\.(png|jpg|jpeg|gif|bmp|ico|svg|mp4|mp3|wav|ogg|zip|rar|tar|gz|pdf)$/i)
-        );
+        // 只排除.git目录，其他文件由.gitignore管理
+        const codeFiles = files.filter(file => !file.path.includes('.git/'));
         
-        // 创建新workspace
-        const newWorkspace = {
-            id: 'github_' + Date.now(),
-            name: repoInfo.name || repo.split('/')[1],
-            path: `github:${repo}/${branch}`,
-            files: {}
-        };
+        // 检查是否已存在同名仓库
+        const existingWorkspace = workspaces.find(ws => ws.path === `github:${repo}/${branch}`);
+        let targetWorkspace;
+        if (existingWorkspace) {
+            // 更新已有仓库
+            existingWorkspace.name = repoInfo.name || repo.split('/')[1];
+            existingWorkspace.files = {};
+            targetWorkspace = existingWorkspace;
+        } else {
+            // 创建新workspace
+            const newWorkspace = {
+                id: 'github_' + Date.now(),
+                name: repoInfo.name || repo.split('/')[1],
+                path: `github:${repo}/${branch}`,
+                files: {}
+            };
+            workspaces.push(newWorkspace);
+            targetWorkspace = newWorkspace;
+        }
         
         // 首先创建所有文件夹
         folders.forEach(folder => {
-            newWorkspace.files[folder.path + '/'] = ''; // 空字符串表示文件夹
+            targetWorkspace.files[folder.path + '/'] = ''; // 空字符串表示文件夹
         });
         
         // 下载文件内容
         let downloadedCount = 0;
-        for (const file of codeFiles.slice(0, 100)) { // 增加文件数量限制
+        for (const file of codeFiles) {
             try {
                 const fileResponse = await fetch(`https://raw.githubusercontent.com/${repo}/${branch}/${file.path}`);
                 if (fileResponse.ok) {
                     const content = await fileResponse.text();
-                    newWorkspace.files[file.path] = content;
+                    targetWorkspace.files[file.path] = content;
                     downloadedCount++;
                 }
             } catch (error) {
@@ -2264,10 +2381,7 @@ async function addGitHubWorkspace() {
         }
         
         // 添加README文件说明
-        newWorkspace.files['README.md'] = `# ${repoInfo.name}\n\n从GitHub导入的仓库: ${repo}\n\n分支: ${branch}\n导入时间: ${new Date().toLocaleString()}\n\n成功下载文件数: ${downloadedCount}/${codeFiles.length}\n文件夹数: ${folders.length}`;
-        
-        // 添加到workspaces列表
-        workspaces.push(newWorkspace);
+        targetWorkspace.files['README.md'] = `# ${repoInfo.name}\n\n从GitHub导入的仓库: ${repo}\n\n分支: ${branch}\n导入时间: ${new Date().toLocaleString()}\n\n文件数: ${downloadedCount}`;
         
         // 保存到localStorage
         localStorage.setItem('ind_console_workspaces', JSON.stringify(workspaces));
@@ -2279,7 +2393,7 @@ async function addGitHubWorkspace() {
         // 重新打开workspace管理界面
         toggleWorkspace();
         
-        addLog(`[SYSTEM]: 成功导入GitHub仓库: ${repoInfo.name} (${downloadedCount}个文件, ${folders.length}个文件夹)`, 'var(--term-green)');
+        addLog(`[SYSTEM]: 成功${existingWorkspace ? '更新' : '导入'}GitHub仓库: ${repoInfo.name} (${downloadedCount}个文件)`, 'var(--term-green)');
         
     } catch (error) {
         console.error('GitHub导入失败:', error);
@@ -2528,9 +2642,10 @@ function toggleExplorerMax(sectionId) {
     
     // workspace管理
     let workspaces = JSON.parse(localStorage.getItem('ind_console_workspaces')) || [
-        { id: 'default', name: '默认工作区', path: '/Users/mrok/Documents/Coding/Web/tools', files: storage }
+        { id: 'default', name: '默认工作区', path: '/Users/mrok/Documents/Coding/Web/tools', files: {...storage} }
     ];
     let currentWorkspaceId = localStorage.getItem('ind_console_current_workspace') || 'default';
+    let githubToken = localStorage.getItem('ind_console_github_token') || '';
 
     function updateAiCtxOptions() {
         const container = document.getElementById('ai-ctx-options');
