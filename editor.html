@@ -704,6 +704,7 @@
                 <span>▼</span>
             </div>
             <div class="custom-select-options" id="ai-provider-options"></div>
+            <button class="ai-btn" id="voice-btn" onclick="toggleVoiceRecognition()" title="语音输入">🎤</button>
             <button class="ai-btn" id="ai-send-btn" onclick="handleAiSend()">SEND</button>
         </div>
 </aside>
@@ -4121,6 +4122,80 @@ function scrollToAiTop(button) {
         }
         const editor = editorTabs[activeEditorTab].editor;
         editor.getAction('actions.find').run();
+    }
+
+    // 语音识别功能
+    let recognition = null;
+    let isListening = false;
+
+    function toggleVoiceRecognition() {
+        if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+            alert('您的浏览器不支持语音识别功能');
+            return;
+        }
+
+        if (!recognition) {
+            recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+            recognition.continuous = true; // 连续识别模式
+            recognition.interimResults = true;
+            recognition.lang = 'zh-CN';
+            recognition.maxAlternatives = 1;
+            
+            // 延长识别时长配置
+            if (recognition.continuous !== undefined) {
+                recognition.continuous = true;
+            }
+            
+            // 禁用自动结束（如果支持）
+            if (recognition.onend) {
+                recognition.onend = null;
+            }
+
+            recognition.onstart = function() {
+                isListening = true;
+                updateVoiceButton();
+            };
+
+            recognition.onresult = function(event) {
+                const transcript = Array.from(event.results)
+                    .map(result => result[0].transcript)
+                    .join('');
+                
+                const aiInput = document.getElementById('ai-in');
+                aiInput.value = transcript;
+                
+                // 触发输入事件以调整高度
+                aiInput.dispatchEvent(new Event('input'));
+            };
+
+            recognition.onend = function() {
+                isListening = false;
+                updateVoiceButton();
+            };
+
+            recognition.onerror = function(event) {
+                isListening = false;
+                updateVoiceButton();
+                console.error('语音识别错误:', event.error);
+            };
+        }
+
+        if (isListening) {
+            recognition.stop();
+        } else {
+            recognition.start();
+        }
+    }
+
+    function updateVoiceButton() {
+        const voiceBtn = document.getElementById('voice-btn');
+        if (isListening) {
+            voiceBtn.innerHTML = '🔴';
+            voiceBtn.style.background = 'var(--term-red)';
+        } else {
+            voiceBtn.innerHTML = '🎤';
+            voiceBtn.style.background = 'var(--amber)';
+        }
     }
 
     // 从GitHub导入文件
