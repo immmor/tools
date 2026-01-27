@@ -2,68 +2,72 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>SmolLM 极速提示词专家</title>
+    <title>Qwen2.5 极速量化版 - 提示词优化</title>
     <style>
-        body { font-family: system-ui, sans-serif; background: #fdfdfd; display: flex; justify-content: center; padding: 20px; }
-        .card { background: white; width: 100%; max-width: 600px; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border: 1px solid #eee; }
-        h2 { margin-top: 0; color: #333; font-size: 1.2rem; }
-        .status-box { font-size: 12px; color: #888; margin-bottom: 10px; }
-        textarea { width: 100%; height: 80px; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-size: 14px; }
-        button { width: 100%; background: #10b981; color: white; border: none; padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 10px; }
-        button:disabled { background: #d1d5db; }
-        #output { margin-top: 20px; padding: 12px; background: #f0fdf4; border-radius: 6px; white-space: pre-wrap; font-size: 13px; color: #166534; min-height: 40px; }
-        .prog { height: 4px; background: #eee; border-radius: 2px; margin: 10px 0; display: none; }
-        #bar { height: 100%; background: #10b981; width: 0%; }
+        body { font-family: system-ui, -apple-system, sans-serif; background: #f0f2f5; display: flex; justify-content: center; padding: 20px; }
+        .card { background: white; width: 100%; max-width: 650px; padding: 30px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        h2 { margin-top: 0; color: #1a1a1a; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        .info { font-size: 13px; color: #666; background: #eef2ff; padding: 10px; border-radius: 8px; margin-bottom: 20px; }
+        textarea { width: 100%; height: 100px; padding: 12px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 15px; margin-top: 10px; }
+        button { width: 100%; background: #4f46e5; color: white; border: none; padding: 14px; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 15px; transition: 0.3s; }
+        button:disabled { background: #cbd5e1; cursor: not-allowed; }
+        #output { margin-top: 25px; padding: 15px; background: #f9fafb; border: 1px dashed #4f46e5; border-radius: 8px; white-space: pre-wrap; min-height: 80px; font-size: 14px; line-height: 1.6; color: #374151; }
+        .progress-box { height: 6px; background: #eee; border-radius: 3px; margin: 15px 0; display: none; overflow: hidden; }
+        #bar { height: 100%; background: #4f46e5; width: 0%; transition: width 0.2s; }
     </style>
 </head>
 <body>
 
 <div class="card">
-    <h2>⚡ SmolLM 极速优化器</h2>
-    <div id="status" class="status-box">准备中...</div>
-    <div class="prog" id="prog"><div id="bar"></div></div>
+    <h2>🪄 提示词专家 <small style="font-size: 12px; font-weight: normal;">(Qwen2.5-0.5B-Q4)</small></h2>
+    
+    <div id="status" class="info">正在准备环境中...</div>
+    <div class="progress-box" id="progressWrapper"><div id="bar"></div></div>
 
-    <textarea id="userInput" placeholder="输入简单描述，例如：写个带猫的科幻故事背景"></textarea>
-    <button id="runBtn" disabled>加载模型中...</button>
+    <textarea id="userInput" placeholder="输入简单的想法，如：帮我写一段关于星空的文案"></textarea>
+    <button id="runBtn" disabled>等待下载完成...</button>
 
-    <div id="output">等待指令...</div>
+    <div id="output">优化后的 Prompt 会出现在这里...</div>
 </div>
 
 <script type="module">
+    // 使用 Transformers.js v3
     import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.0-alpha.19';
 
+    // 禁用本地模型检查，强制走 CDN 下载并缓存
     env.allowLocalModels = false;
 
     const status = document.getElementById('status');
     const btn = document.getElementById('runBtn');
     const output = document.getElementById('output');
     const bar = document.getElementById('bar');
-    const prog = document.getElementById('prog');
+    const progressWrapper = document.getElementById('progressWrapper');
 
     let generator;
 
     async function init() {
         try {
-            // SmolLM-135M 是极小规模模型，这里强制 q4 量化
-            generator = await pipeline('text-generation', 'onnx-community/SmolLM-135M-Instruct', {
+            // 核心修复：指定 dtype: 'q4' 强制加载量化版（约300MB+）
+            generator = await pipeline('text-generation', 'onnx-community/Qwen2.5-0.5B-Instruct', {
                 dtype: 'q4', 
-                device: 'webgpu', 
+                device: 'webgpu', // 如果支持 WebGPU 会极其顺滑
                 progress_callback: (p) => {
-                    prog.style.display = 'block';
+                    progressWrapper.style.display = 'block';
                     if (p.status === 'progress') {
-                        status.innerText = `下载中: ${Math.round(p.loaded/1024/1024)}MB (总共约40-80MB)`;
+                        status.innerText = `下载量化模型中: ${Math.round(p.loaded/1024/1024)}MB / 约350MB`;
                         bar.style.width = `${p.progress}%`;
                     }
                     if (p.status === 'done') {
-                        status.innerText = '✅ 模型已就绪';
-                        prog.style.display = 'none';
+                        status.innerText = '✅ 加载完成！已存储在浏览器缓存中。';
+                        progressWrapper.style.display = 'none';
                         btn.disabled = false;
-                        btn.innerText = '立即优化';
+                        btn.innerText = '开始优化提示词';
                     }
                 }
             });
         } catch (e) {
-            status.innerText = '加载失败：' + e.message;
+            status.innerText = '⚠️ 初始化失败：' + e.message;
+            console.error(e);
         }
     }
 
@@ -72,26 +76,29 @@
         if (!text) return;
 
         btn.disabled = true;
-        output.innerText = '生成中...';
+        btn.innerText = '正在生成...';
+        output.innerText = '正在本地计算中，请稍后...';
 
-        // 注意：SmolLM 对中文支持较弱，建议用简单的中文系统提示
         const messages = [
-            { role: "system", content: "You are a prompt engineer. Refine the user's input into a high-quality, detailed AI prompt. Output the refined prompt only." },
-            { role: "user", content: `Optimize: ${text}` }
+            { role: "system", content: "你是一个专业的提示词专家。你的任务是将用户简单的指令扩充成高质量的提示词。直接给出优化后的 Prompt，不需要解释。" },
+            { role: "user", content: `优化这个提示词: ${text}` }
         ];
 
         try {
             const result = await generator(messages, { 
-                max_new_tokens: 256,
+                max_new_tokens: 512,
                 temperature: 0.6,
                 do_sample: true 
             });
 
-            output.innerText = result[0].generated_text.at(-1).content;
+            // 获取生成的最新内容
+            const response = result[0].generated_text.at(-1).content;
+            output.innerText = response;
         } catch (err) {
-            output.innerText = '错误：' + err.message;
+            output.innerText = '出错啦：' + err.message;
         } finally {
             btn.disabled = false;
+            btn.innerText = '再次优化';
         }
     };
 

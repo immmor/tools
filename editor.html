@@ -2251,6 +2251,9 @@ function smartSwitch(targetPanelId) {
     
     // 对话历史记忆
     let chatHistory = JSON.parse(localStorage.getItem('ind_console_chat_history')) || {}; // 存储每个聊天窗口的对话历史
+    
+    // 每个聊天的请求状态
+    let chatRequestStates = {}; // 存储每个聊天窗口的请求状态
 
     function updateAiCtxOptions() {
         const container = document.getElementById('ai-ctx-options');
@@ -3166,15 +3169,33 @@ function cancelAiRequest() {
         currentAiRequest.abort();
         currentAiRequest = null;
     }
-    resetSendButton();
+    resetSendButton(activeAiId);
 }
 
 // 重置发送按钮状态
-function resetSendButton() {
+function resetSendButton(chatId = null) {
     const sendBtn = document.getElementById('ai-send-btn');
     if (sendBtn) {
+        const targetChatId = chatId || activeAiId;
+        if (targetChatId && chatRequestStates[targetChatId]) {
+            chatRequestStates[targetChatId] = null;
+        }
         sendBtn.textContent = 'SEND';
         sendBtn.style.background = ''; // 恢复默认样式
+    }
+}
+
+// 更新发送按钮状态
+function updateSendButton() {
+    const sendBtn = document.getElementById('ai-send-btn');
+    if (sendBtn && activeAiId) {
+        if (chatRequestStates[activeAiId]) {
+            sendBtn.textContent = 'CANC';
+            sendBtn.style.background = '#ff3e3e';
+        } else {
+            sendBtn.textContent = 'SEND';
+            sendBtn.style.background = '';
+        }
     }
 }
 
@@ -3299,6 +3320,7 @@ function switchAiTab(id) {
     body.classList.add('active');
     
     activeAiId = id;
+    updateSendButton(); // 更新发送按钮状态
     document.getElementById('ai-in').focus();
 }
 
@@ -3726,7 +3748,13 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
         localStorage.setItem('ind_console_chat_history', JSON.stringify(chatHistory));
         
         const controller = new AbortController();
-        currentAiRequest = controller;
+    currentAiRequest = controller;
+    
+    // 设置当前聊天的请求状态
+    if (currentChatId) {
+        chatRequestStates[currentChatId] = controller;
+        updateSendButton();
+    }
         
         const response = await fetch(`${provider.apiBaseUrl}/chat/completions`, {
             method: 'POST',
@@ -3760,7 +3788,7 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
         localStorage.setItem('ind_console_chat_history', JSON.stringify(chatHistory));
         
         // 恢复按钮状态
-        resetSendButton();
+    resetSendButton(currentChatId);
         
         // Markdown渲染函数
         const renderMarkdown = (text) => {
