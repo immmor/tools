@@ -296,7 +296,7 @@
             border: 1px solid var(--amber-dim); 
             color: #fff; 
             width: 100%; 
-            min-height: 30px; 
+            height: 30px;
             max-height: 120px; 
             padding: 5px; 
             outline: none; 
@@ -1555,10 +1555,32 @@ function getLanguageFromFileName(fileName) {
         // 初始化Monaco Editor
         require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.47.0/min/vs' }});
         require(['vs/editor/editor.main'], function() {
+            // 配置Monaco主题 - 使用CSS变量
+        const style = getComputedStyle(document.documentElement);
+        monaco.editor.defineTheme('console-theme', {
+            base: 'vs-dark',
+            inherit: true,
+            rules: [
+                { token: '', foreground: style.getPropertyValue('--amber').trim() || '#00ff9d' },
+            ],
+            colors: {
+                'editor.background': style.getPropertyValue('--bg').trim() || '#050505',
+                'editor.foreground': style.getPropertyValue('--amber').trim() || '#00ff9d',
+                'editor.lineHighlightBackground': style.getPropertyValue('--panel-bg').trim() || '#0d0d0d',
+                'editor.selectionBackground': style.getPropertyValue('--amber-dim').trim() || '#003320',
+                'editor.inactiveSelectionBackground': style.getPropertyValue('--amber-dim').trim() || '#003320',
+                'editorCursor.foreground': style.getPropertyValue('--amber').trim() || '#00ff9d',
+                'editor.lineNumbers.foreground': style.getPropertyValue('--term-red').trim() || '#555',
+                'editorGutter.background': style.getPropertyValue('--bg').trim() || '#050505',
+                'editorIndentGuide.background': style.getPropertyValue('--panel-bg').trim() || '#0d0d0d',
+                'editorIndentGuide.activeBackground': style.getPropertyValue('--amber').trim() || '#00ff9d',
+            }
+        });
+            
             const editor = monaco.editor.create(editorContainer, {
                 value: fileContent,
                 language: getLanguageFromFileName(fileName),
-                theme: 'vs-dark',
+                theme: 'console-theme',
                 fontSize: 13,
                 fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
                 automaticLayout: true,
@@ -3652,9 +3674,10 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
     const provider = config.providers[config.activeProviderIndex];
     if (!query || !provider || !provider.apiKey || !currentChatId) return;
 
-    // 只在单模型模式下清空输入框
+    // 只在单模型模式下清空输入框并重置高度
     if (overrideQuery === null) {
         input.value = '';
+        input.style.height = '30px';
     }
 
     const chat = document.getElementById(currentChatId);
@@ -4023,8 +4046,13 @@ function scrollToAiTop(button) {
     // 输入框自适应高度
     const aiInput = document.getElementById('ai-in');
     aiInput.addEventListener('input', function() {
-        this.style.height = 'auto';
-        this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+        const singleLineHeight = 30; // 单行高度
+        if (this.value.trim() === '' || this.scrollHeight <= singleLineHeight) {
+            this.style.height = singleLineHeight + 'px';
+        } else {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+        }
     });
     
     aiInput.onkeydown = (e) => { 
