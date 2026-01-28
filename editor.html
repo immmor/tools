@@ -2108,7 +2108,7 @@ function deleteWorkspace(workspaceId) {
             switchWorkspace('default');
         }
         
-        localStorage.setItem('ind_console_workspaces', JSON.stringify(workspaces));
+        saveWorkspaces();
         toggleWorkspace();
         alert('Workspace已删除');
     }
@@ -2130,8 +2130,8 @@ async function pushToGitHub() {
     
     if (token) {
         // 自动保存token
-        githubToken = token;
-        localStorage.setItem('ind_console_github_token', token);
+                githubToken = token;
+                localStorage.setItem('ind_console_github_token', token);
     } else if (!githubToken) {
         alert('请输入GitHub Token');
         return;
@@ -2243,9 +2243,8 @@ function switchWorkspace(workspaceId) {
     Object.assign(storage, targetWorkspace.files || {});
     
     // 保存状态
-    localStorage.setItem('ind_console_storage', JSON.stringify(storage));
-    localStorage.setItem('ind_console_workspaces', JSON.stringify(workspaces));
-    localStorage.setItem('ind_console_current_workspace', currentWorkspaceId);
+    saveWorkspaces();
+    saveSetting('currentWorkspaceId', currentWorkspaceId);
     
     // 重新渲染文件列表
     renderFiles();
@@ -2286,7 +2285,7 @@ function addWorkspace() {
     workspaces.push(newWorkspace);
     
     // 保存到localStorage
-    localStorage.setItem('ind_console_workspaces', JSON.stringify(workspaces));
+    // localStorage.setItem('ind_console_workspaces', JSON.stringify(workspaces));
     
     // 清空输入框
     nameInput.value = '';
@@ -2384,7 +2383,7 @@ async function addGitHubWorkspace() {
         targetWorkspace.files['README.md'] = `# ${repoInfo.name}\n\n从GitHub导入的仓库: ${repo}\n\n分支: ${branch}\n导入时间: ${new Date().toLocaleString()}\n\n文件数: ${downloadedCount}`;
         
         // 保存到localStorage
-        localStorage.setItem('ind_console_workspaces', JSON.stringify(workspaces));
+        saveWorkspaces();
         
         // 清空输入框
         repoInput.value = '';
@@ -2640,12 +2639,91 @@ function toggleExplorerMax(sectionId) {
     // 每个聊天的请求状态
     let chatRequestStates = {}; // 存储每个聊天窗口的请求状态
     
-    // workspace管理
-    let workspaces = JSON.parse(localStorage.getItem('ind_console_workspaces')) || [
-        { id: 'default', name: '默认工作区', path: '/Users/mrok/Documents/Coding/Web/tools', files: {...storage} }
-    ];
-    let currentWorkspaceId = localStorage.getItem('ind_console_current_workspace') || 'default';
+    // workspace管理 - 使用IndexedDB存储
+    let workspaces = [{ id: 'default', name: '默认工作区', path: '/Users/mrok/Documents/Coding/Web/tools', files: {...storage} }];
+    let currentWorkspaceId = 'default';
     let githubToken = localStorage.getItem('ind_console_github_token') || '';
+    
+    // 初始化IndexedDB
+    const dbName = 'WorkspaceDB';
+    const dbVersion = 1;
+    let db;
+    
+    const request = indexedDB.open(dbName, dbVersion);
+    
+    request.onupgradeneeded = (event) => {
+        db = event.target.result;
+        if (!db.objectStoreNames.contains('workspaces')) {
+            db.createObjectStore('workspaces', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('settings')) {
+            db.createObjectStore('settings', { keyPath: 'key' });
+        }
+    };
+    
+    request.onsuccess = (event) => {
+        db = event.target.result;
+        loadWorkspaces();
+        loadSettings();
+    };
+    
+    // 加载workspaces
+    function loadWorkspaces() {
+        if (!db.objectStoreNames.contains('workspaces')) {
+            return;
+        }
+        
+        const transaction = db.transaction('workspaces', 'readonly');
+        const store = transaction.objectStore('workspaces');
+        const request = store.getAll();
+        
+        request.onsuccess = (event) => {
+            workspaces = event.target.result.length > 0 ? event.target.result : [{ id: 'default', name: '默认工作区', path: '/Users/mrok/Documents/Coding/Web/tools', files: {...storage} }];
+        };
+    }
+    
+    // 保存workspaces
+    function saveWorkspaces() {
+        if (!db.objectStoreNames.contains('workspaces')) {
+            return;
+        }
+        
+        const transaction = db.transaction('workspaces', 'readwrite');
+        const store = transaction.objectStore('workspaces');
+        
+        workspaces.forEach(workspace => {
+            store.put(workspace);
+        });
+    }
+    
+    // 加载设置
+    function loadSettings() {
+        if (!db.objectStoreNames.contains('settings')) {
+            return;
+        }
+        
+        const transaction = db.transaction('settings', 'readonly');
+        const store = transaction.objectStore('settings');
+        
+        const currentWorkspaceRequest = store.get('currentWorkspaceId');
+        
+        currentWorkspaceRequest.onsuccess = (event) => {
+            if (event.target.result) {
+                currentWorkspaceId = event.target.result.value;
+            }
+        };
+    }
+    
+    // 保存设置
+    function saveSetting(key, value) {
+        if (!db.objectStoreNames.contains('settings')) {
+            return;
+        }
+        
+        const transaction = db.transaction('settings', 'readwrite');
+        const store = transaction.objectStore('settings');
+        store.put({ key, value });
+    }
 
     function updateAiCtxOptions() {
         const container = document.getElementById('ai-ctx-options');
