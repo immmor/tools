@@ -4,8 +4,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
     <style>
-        #container { width: 100vw; height: 90vh; }
-        body { margin: 0; overflow: hidden; }
+        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; }
+        #container { width: 100vw; height: 100vh; }
+        
+        /* 强制覆盖 Monaco 默认样式，允许文本被选中 */
+        .monaco-editor .view-lines {
+            user-select: text !important;
+            -webkit-user-select: text !important;
+            -ms-user-select: text !important;
+        }
     </style>
 </head>
 <body>
@@ -16,58 +23,65 @@
 
         require(['vs/editor/editor.main'], function() {
             const editor = monaco.editor.create(document.getElementById('container'), {
-                value: "// 尝试在手机上长按这段文字\nfunction helloWorld() {\n    console.log('Hello Monaco on Mobile!');\n    // 这里的长文本测试选中：Lorem ipsum dolor sit amet, consectetur adipiscing elit.\n}",
+                value: "function mobilePro() {\n    // 方案：坐标劫持 + 手动选区\n    // 这里的长文本在手机上长按试试\n    const text = 'Monaco Editor 移动端选中测试...';\n    console.log(text);\n    // 更多长文本测试...\n    // " + "Long Text ".repeat(20) + "\n}",
                 language: 'javascript',
                 theme: 'vs-dark',
                 fontSize: 16,
-                contextmenu: false,       // 禁用内置右键菜单，防止干扰
-                smoothScrolling: true,
                 automaticLayout: true,
-                fixedOverflowWidgets: true // 确保弹出框不会被遮挡
+                contextmenu: false, // 必须禁用，否则长按弹出系统菜单会冲突
+                quickSuggestions: false, // 移动端建议框有时会遮挡选区
+                scrollbar: { vertical: 'visible', verticalScrollbarSize: 20 }
             });
 
-            // --- 移动端长按选中逻辑 ---
-            let touchTimer = null;
             const domNode = editor.getDomNode();
+            let startPos = null;
 
+            // 监听 touchstart 获取起点
             domNode.addEventListener('touchstart', (e) => {
-                // 如果是多指触控不处理
                 if (e.touches.length > 1) return;
-
                 const touch = e.touches[0];
-                
-                // 设置长按定时器（500ms）
-                touchTimer = setTimeout(() => {
-                    // 获取触碰点在编辑器中的位置
-                    const target = editor.getTargetAtClientPoint(touch.clientX, touch.clientY);
-                    
-                    if (target && target.position) {
-                        const pos = target.position;
-                        // 逻辑：选中当前点击的单词
-                        const model = editor.getModel();
-                        const word = model.getWordAtPosition(pos);
+                const target = editor.getTargetAtClientPoint(touch.clientX, touch.clientY);
+                if (target && target.position) {
+                    startPos = target.position;
+                }
+            }, { passive: true });
 
+            // 监听 touchend 计算终点并强行选中
+            domNode.addEventListener('touchend', (e) => {
+                const touch = e.changedTouches[0];
+                const target = editor.getTargetAtClientPoint(touch.clientX, touch.clientY);
+                
+                if (target && target.position && startPos) {
+                    const endPos = target.position;
+
+                    // 如果起点和终点不一样（即用户有滑动的意图）
+                    if (startPos.lineNumber !== endPos.lineNumber || startPos.column !== endPos.column) {
+                        editor.setSelection({
+                            startLineNumber: startPos.lineNumber,
+                            startColumn: startPos.column,
+                            endLineNumber: endPos.lineNumber,
+                            endColumn: endPos.column
+                        });
+                    } else {
+                        // 如果是长按（可以通过时间判断），这里选中单词
+                        const word = editor.getModel().getWordAtPosition(endPos);
                         if (word) {
                             editor.setSelection({
-                                startLineNumber: pos.lineNumber,
+                                startLineNumber: endPos.lineNumber,
                                 startColumn: word.startColumn,
-                                endLineNumber: pos.lineNumber,
+                                endLineNumber: endPos.lineNumber,
                                 endColumn: word.endColumn
                             });
-                            // 震动反馈（如果手机支持）
-                            if (navigator.vibrate) navigator.vibrate(50);
                         }
                     }
-                }, 500);
-            }, { passive: true });
+                }
+                startPos = null;
+            });
 
-            domNode.addEventListener('touchmove', () => {
-                clearTimeout(touchTimer); // 滑动时取消长按
-            }, { passive: true });
-
-            domNode.addEventListener('touchend', () => {
-                clearTimeout(touchTimer); // 手抬起时取消定时器
-            }, { passive: true });
+            // 解决 iOS 软键盘遮挡问题
+            window.addEventListener('resize', () => {
+                editor.layout();
+            });
         });
     </script>
 </body>
