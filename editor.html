@@ -1597,65 +1597,7 @@ function getLanguageFromFileName(fileName) {
                 scrollbar: {
                     verticalScrollbarSize: 6,
                     horizontalScrollbarSize: 6
-                },
-                // 移动端文本选择优化
-                contextmenu: false, // 必须禁用，否则长按弹出系统菜单会冲突
-                quickSuggestions: false, // 移动端建议框有时会遮挡选区
-                accessibilitySupport: 'on'
-            });
-            
-            // 移动端文本选择支持
-            const domNode = editor.getDomNode();
-            let startPos = null;
-            let touchStartTime = 0;
-
-            // 监听 touchstart 获取起点
-            domNode.addEventListener('touchstart', (e) => {
-                if (e.touches.length > 1) return;
-                touchStartTime = Date.now();
-                const touch = e.touches[0];
-                const target = editor.getTargetAtClientPoint(touch.clientX, touch.clientY);
-                if (target && target.position) {
-                    startPos = target.position;
                 }
-            }, { passive: true });
-
-            // 监听 touchend 计算终点并强行选中
-            domNode.addEventListener('touchend', (e) => {
-                const touch = e.changedTouches[0];
-                const target = editor.getTargetAtClientPoint(touch.clientX, touch.clientY);
-                
-                if (target && target.position && startPos) {
-                    const endPos = target.position;
-                    const touchDuration = Date.now() - touchStartTime;
-
-                    // 如果起点和终点不一样（即用户有滑动的意图）
-                    if (startPos.lineNumber !== endPos.lineNumber || startPos.column !== endPos.column) {
-                        editor.setSelection({
-                            startLineNumber: startPos.lineNumber,
-                            startColumn: startPos.column,
-                            endLineNumber: endPos.lineNumber,
-                            endColumn: endPos.column
-                        });
-                    } else if (touchDuration > 500) {
-                        // 如果是长按（超过500ms），选中单词
-                        const word = editor.getModel().getWordAtPosition(endPos);
-                        if (word) {
-                            editor.setSelection({
-                                startLineNumber: endPos.lineNumber,
-                                startColumn: word.startColumn,
-                                endLineNumber: endPos.lineNumber,
-                                endColumn: word.endColumn
-                            });
-                        }
-                    }
-                }
-                startPos = null;
-            });
-
-            // 解决 iOS 软键盘遮挡问题
-            window.addEventListener('resize', () => {
-                editor.layout();
             });
             
             // 监听内容变化
@@ -1763,7 +1705,6 @@ function getLanguageFromFileName(fileName) {
     
     function closeEditorTab(fileName) {
     const tabs = Object.keys(editorTabs);
-    if (tabs.length <= 1) return; // 至少保留一个标签
     
     const tabInfo = editorTabs[fileName];
     const wasActive = tabInfo.tab.classList.contains('active');
@@ -4653,7 +4594,7 @@ function scrollToAiTop(button) {
             }
         }, 60);
     } else {
-        activeFile = localStorage.getItem('ind_console_active') || 'PROTOCOL.txt';
+        activeFile = localStorage.getItem('ind_console_active');
         if (activeFile) {
             createEditorTab(activeFile);
         }
