@@ -619,6 +619,7 @@
             <div class="editor-tools">
             <div class="key-btn" onclick="saveCurrentFile()">SAVE</div>
             <div class="key-btn" onclick="toggleFileSearch()" title="Search (Ctrl+F)">FIND</div>
+            <div class="key-btn" onclick="toggleSelectionMode()" title="选择模式 (点击两点选择文本)">SEL</div>
             <div class="key-btn" onclick="insertAtCursor('\t')">TAB</div>
             <div class="key-btn" onclick="execEditorCmd('undo')">UNDO</div>
             
@@ -1588,7 +1589,6 @@ function getLanguageFromFileName(fileName) {
                 fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
                 automaticLayout: true,
                 minimap: { enabled: true },
-                readOnly: true,
                 scrollBeyondLastLine: false,
                 wordWrap: 'off',
                 lineNumbers: 'on',
@@ -1616,6 +1616,49 @@ function getLanguageFromFileName(fileName) {
                 tab: tab,
                 editor: editor,
                 container: editorContainer
+            };
+            
+            // 添加选择模式支持
+            let selectionMode = false;
+            let anchorPosition = null;
+            
+            // 监听鼠标按下事件
+            editor.onMouseDown((e) => {
+                if (selectionMode) {
+                    const position = e.target.position;
+                    if (!anchorPosition) {
+                        anchorPosition = position;
+                        // 设置第一个选择点
+                        editor.setSelection(new monaco.Range(
+                            position.lineNumber, position.column,
+                            position.lineNumber, position.column
+                        ));
+                    } else {
+                        // 设置选中区域
+                        editor.setSelection(new monaco.Range(
+                            anchorPosition.lineNumber, anchorPosition.column,
+                            position.lineNumber, position.column
+                        ));
+                        anchorPosition = null; // 重置
+                        selectionMode = false; // 退出选择模式
+                    }
+                }
+            });
+            
+            // 添加选择模式切换函数
+            window.toggleSelectionMode = function() {
+                selectionMode = !selectionMode;
+                anchorPosition = null;
+                
+                // 更新按钮状态
+                const selectionBtn = document.querySelector('[onclick*="toggleSelectionMode"]');
+                if (selectionBtn) {
+                    selectionBtn.style.background = selectionMode ? 'var(--amber)' : '';
+                    selectionBtn.style.color = selectionMode ? '#000' : '';
+                }
+                
+                // 显示状态提示
+                addLog(`[EDITOR]: SELECTION_MODE ${selectionMode ? 'ENABLED' : 'DISABLED'}`, 'var(--amber)');
             };
             
             // 检查初始状态是否已修改
