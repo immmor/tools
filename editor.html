@@ -619,7 +619,6 @@
             <div class="editor-tools">
             <div class="key-btn" onclick="saveCurrentFile()">SAVE</div>
             <div class="key-btn" onclick="toggleFileSearch()" title="Search (Ctrl+F)">FIND</div>
-            <div class="key-btn" onclick="toggleSelectionMode()" title="选择模式 (点击两点选择文本)">SEL</div>
             <div class="key-btn" onclick="insertAtCursor('\t')">TAB</div>
             <div class="key-btn" onclick="execEditorCmd('undo')">UNDO</div>
             
@@ -1618,40 +1617,6 @@ function getLanguageFromFileName(fileName) {
                 container: editorContainer
             };
             
-            // 添加选择模式支持
-            editor.selectionMode = false;
-            editor.anchorPosition = null;
-            
-            // 监听鼠标按下事件
-            editor.onMouseDown((e) => {
-                if (editor.selectionMode) {
-                    const position = e.target.position;
-                    if (!editor.anchorPosition) {
-                        editor.anchorPosition = position;
-                        // 设置第一个选择点
-                        editor.setSelection(new monaco.Range(
-                            position.lineNumber, position.column,
-                            position.lineNumber, position.column
-                        ));
-                    } else {
-                        // 设置选中区域
-                        editor.setSelection(new monaco.Range(
-                            editor.anchorPosition.lineNumber, editor.anchorPosition.column,
-                            position.lineNumber, position.column
-                        ));
-                        editor.anchorPosition = null; // 重置
-                        editor.selectionMode = false; // 退出选择模式
-                        
-                        // 更新按钮状态
-                        const selectionBtn = document.querySelector('[onclick*="toggleSelectionMode"]');
-                        if (selectionBtn) {
-                            selectionBtn.style.background = '';
-                            selectionBtn.style.color = '';
-                        }
-                    }
-                }
-            });
-            
             // 检查初始状态是否已修改
             const originalContent = plugins.find(p => p.name === fileName) ? 
                 plugins.find(p => p.name === fileName).code : 
@@ -1663,34 +1628,6 @@ function getLanguageFromFileName(fileName) {
         
         // 切换到新标签
         switchEditorTab(fileName);
-        
-        // 添加全局选择模式切换函数
-        window.toggleSelectionMode = function() {
-            const currentEditor = getCurrentEditor();
-            if (!currentEditor) return;
-            
-            currentEditor.selectionMode = !currentEditor.selectionMode;
-            currentEditor.anchorPosition = null;
-            
-            // 更新按钮状态
-            const selectionBtn = document.querySelector('[onclick*="toggleSelectionMode"]');
-            if (selectionBtn) {
-                selectionBtn.style.background = currentEditor.selectionMode ? 'var(--amber)' : '';
-                selectionBtn.style.color = currentEditor.selectionMode ? '#000' : '';
-            }
-            
-            // 显示状态提示
-            addLog(`[EDITOR]: SELECTION_MODE ${currentEditor.selectionMode ? 'ENABLED' : 'DISABLED'}`, 'var(--amber)');
-        };
-        
-        // 获取当前编辑器实例
-        function getCurrentEditor() {
-            const activeTab = document.querySelector('.editor-tab.active');
-            if (!activeTab) return null;
-            
-            const fileName = activeTab.getAttribute('data-file');
-            return editorTabs[fileName]?.editor || null;
-        }
         
         // 检查初始状态是否已修改（在Monaco Editor初始化回调中处理）
         
