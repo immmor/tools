@@ -1619,15 +1619,15 @@ function getLanguageFromFileName(fileName) {
             };
             
             // 添加选择模式支持
-            let selectionMode = false;
-            let anchorPosition = null;
+            editor.selectionMode = false;
+            editor.anchorPosition = null;
             
             // 监听鼠标按下事件
             editor.onMouseDown((e) => {
-                if (selectionMode) {
+                if (editor.selectionMode) {
                     const position = e.target.position;
-                    if (!anchorPosition) {
-                        anchorPosition = position;
+                    if (!editor.anchorPosition) {
+                        editor.anchorPosition = position;
                         // 设置第一个选择点
                         editor.setSelection(new monaco.Range(
                             position.lineNumber, position.column,
@@ -1636,30 +1636,21 @@ function getLanguageFromFileName(fileName) {
                     } else {
                         // 设置选中区域
                         editor.setSelection(new monaco.Range(
-                            anchorPosition.lineNumber, anchorPosition.column,
+                            editor.anchorPosition.lineNumber, editor.anchorPosition.column,
                             position.lineNumber, position.column
                         ));
-                        anchorPosition = null; // 重置
-                        selectionMode = false; // 退出选择模式
+                        editor.anchorPosition = null; // 重置
+                        editor.selectionMode = false; // 退出选择模式
+                        
+                        // 更新按钮状态
+                        const selectionBtn = document.querySelector('[onclick*="toggleSelectionMode"]');
+                        if (selectionBtn) {
+                            selectionBtn.style.background = '';
+                            selectionBtn.style.color = '';
+                        }
                     }
                 }
             });
-            
-            // 添加选择模式切换函数
-            window.toggleSelectionMode = function() {
-                selectionMode = !selectionMode;
-                anchorPosition = null;
-                
-                // 更新按钮状态
-                const selectionBtn = document.querySelector('[onclick*="toggleSelectionMode"]');
-                if (selectionBtn) {
-                    selectionBtn.style.background = selectionMode ? 'var(--amber)' : '';
-                    selectionBtn.style.color = selectionMode ? '#000' : '';
-                }
-                
-                // 显示状态提示
-                addLog(`[EDITOR]: SELECTION_MODE ${selectionMode ? 'ENABLED' : 'DISABLED'}`, 'var(--amber)');
-            };
             
             // 检查初始状态是否已修改
             const originalContent = plugins.find(p => p.name === fileName) ? 
@@ -1672,6 +1663,34 @@ function getLanguageFromFileName(fileName) {
         
         // 切换到新标签
         switchEditorTab(fileName);
+        
+        // 添加全局选择模式切换函数
+        window.toggleSelectionMode = function() {
+            const currentEditor = getCurrentEditor();
+            if (!currentEditor) return;
+            
+            currentEditor.selectionMode = !currentEditor.selectionMode;
+            currentEditor.anchorPosition = null;
+            
+            // 更新按钮状态
+            const selectionBtn = document.querySelector('[onclick*="toggleSelectionMode"]');
+            if (selectionBtn) {
+                selectionBtn.style.background = currentEditor.selectionMode ? 'var(--amber)' : '';
+                selectionBtn.style.color = currentEditor.selectionMode ? '#000' : '';
+            }
+            
+            // 显示状态提示
+            addLog(`[EDITOR]: SELECTION_MODE ${currentEditor.selectionMode ? 'ENABLED' : 'DISABLED'}`, 'var(--amber)');
+        };
+        
+        // 获取当前编辑器实例
+        function getCurrentEditor() {
+            const activeTab = document.querySelector('.editor-tab.active');
+            if (!activeTab) return null;
+            
+            const fileName = activeTab.getAttribute('data-file');
+            return editorTabs[fileName]?.editor || null;
+        }
         
         // 检查初始状态是否已修改（在Monaco Editor初始化回调中处理）
         
