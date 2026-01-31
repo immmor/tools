@@ -1597,7 +1597,9 @@ function getLanguageFromFileName(fileName) {
                 scrollbar: {
                     verticalScrollbarSize: 6,
                     horizontalScrollbarSize: 6
-                }
+                },
+                contextmenu: false, // 必须禁用，否则长按弹出系统菜单会冲突
+                quickSuggestions: false // 移动端建议框有时会遮挡选区
             });
             
             // 监听内容变化
@@ -1605,6 +1607,57 @@ function getLanguageFromFileName(fileName) {
                 markFileModified(fileName);
             });
             
+            // 移动端文本选中支持
+            const domNode = editor.getDomNode();
+            let startPos = null;
+
+            // 监听 touchstart 获取起点
+            domNode.addEventListener('touchstart', (e) => {
+                if (e.touches.length > 1) return;
+                const touch = e.touches[0];
+                const target = editor.getTargetAtClientPoint(touch.clientX, touch.clientY);
+                if (target && target.position) {
+                    startPos = target.position;
+                }
+            }, { passive: true });
+
+            // 监听 touchend 计算终点并强行选中
+            domNode.addEventListener('touchend', (e) => {
+                const touch = e.changedTouches[0];
+                const target = editor.getTargetAtClientPoint(touch.clientX, touch.clientY);
+                
+                if (target && target.position && startPos) {
+                    const endPos = target.position;
+
+                    // 如果起点和终点不一样（即用户有滑动的意图）
+                    if (startPos.lineNumber !== endPos.lineNumber || startPos.column !== endPos.column) {
+                        editor.setSelection({
+                            startLineNumber: startPos.lineNumber,
+                            startColumn: startPos.column,
+                            endLineNumber: endPos.lineNumber,
+                            endColumn: endPos.column
+                        });
+                    } else {
+                        // 如果是长按（可以通过时间判断），这里选中单词
+                        const word = editor.getModel().getWordAtPosition(endPos);
+                        if (word) {
+                            editor.setSelection({
+                                startLineNumber: endPos.lineNumber,
+                                startColumn: word.startColumn,
+                                endLineNumber: endPos.lineNumber,
+                                endColumn: word.endColumn
+                            });
+                        }
+                    }
+                }
+                startPos = null;
+            });
+
+            // 解决 iOS 软键盘遮挡问题
+            window.addEventListener('resize', () => {
+                editor.layout();
+            });
+
             // 添加快捷键支持
             editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, function() {
                 saveCurrentFile();
