@@ -160,6 +160,35 @@
             height: calc(100% - 110px) !important;
         }
 
+        /* 双竖杠选区拉杆样式 */
+        .selection-handle {
+            position: fixed;
+            width: 2px;
+            height: 20px;
+            background-color: var(--amber);
+            z-index: 1000;
+            display: none; /* 默认隐藏 */
+            pointer-events: auto;
+        }
+        /* 拉杆下方的圆点 */
+        .selection-handle::after {
+            content: '';
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            background-color: var(--amber);
+            border-radius: 50%;
+        }
+        /* 增加触摸感应区域 */
+        .selection-handle.start::after { 
+            top: -8px; 
+            left: -5px;
+        } /* 起始点圆点在上 */
+        .selection-handle.end::after { 
+            bottom: -8px; 
+            left: -5px;
+        } /* 结束点圆点在下 */
+
         .divider-h { width: 6px; background: var(--amber-dim); cursor: col-resize !important; flex-shrink: 0; }
         .divider-h:hover, .divider-h.active { background: var(--amber); box-shadow: 0 0 10px var(--amber); }
 
@@ -710,6 +739,10 @@
             <button class="ai-btn" id="ai-send-btn" onclick="handleAiSend()">SEND</button>
         </div>
 </aside>
+
+<!-- 双竖杠选区拉杆 -->
+<div id="handle-start" class="selection-handle start"></div>
+<div id="handle-end" class="selection-handle end"></div>
 </div>
 
 <div id="ctx">
@@ -1607,55 +1640,88 @@ function getLanguageFromFileName(fileName) {
                 markFileModified(fileName);
             });
             
-            // 移动端文本选中支持
-            const domNode = editor.getDomNode();
-            let startPos = null;
+            // 双竖杠移动端文本选中支持
+            const startHandle = document.getElementById('handle-start');
+            const endHandle = document.getElementById('handle-end');
 
-            // 监听 touchstart 获取起点
-            domNode.addEventListener('touchstart', (e) => {
-                if (e.touches.length > 1) return;
-                const touch = e.touches[0];
-                const target = editor.getTargetAtClientPoint(touch.clientX, touch.clientY);
-                if (target && target.position) {
-                    startPos = target.position;
+            // 更新拉杆位置的函数
+            function updateHandles() {
+                const selection = editor.getSelection();
+                if (!selection || selection.isEmpty()) {
+                    startHandle.style.display = 'none';
+                    endHandle.style.display = 'none';
+                    return;
                 }
-            }, { passive: true });
 
-            // 监听 touchend 计算终点并强行选中
-            domNode.addEventListener('touchend', (e) => {
-                const touch = e.changedTouches[0];
-                const target = editor.getTargetAtClientPoint(touch.clientX, touch.clientY);
-                
-                if (target && target.position && startPos) {
-                    const endPos = target.position;
+                // 获取选区首尾的像素坐标
+                const startPos = editor.getScrolledVisiblePosition(selection.getStartPosition());
+                const endPos = editor.getScrolledVisiblePosition(selection.getEndPosition());
 
-                    // 如果起点和终点不一样（即用户有滑动的意图）
-                    if (startPos.lineNumber !== endPos.lineNumber || startPos.column !== endPos.column) {
-                        editor.setSelection({
-                            startLineNumber: startPos.lineNumber,
-                            startColumn: startPos.column,
-                            endLineNumber: endPos.lineNumber,
-                            endColumn: endPos.column
-                        });
-                    } else {
-                        // 如果是长按（可以通过时间判断），这里选中单词
-                        const word = editor.getModel().getWordAtPosition(endPos);
-                        if (word) {
-                            editor.setSelection({
-                                startLineNumber: endPos.lineNumber,
-                                startColumn: word.startColumn,
-                                endLineNumber: endPos.lineNumber,
-                                endColumn: word.endColumn
-                            });
+                if (startPos && endPos) {
+                    const editorRect = editorContainer.getBoundingClientRect();
+                    
+                    startHandle.style.display = 'block';
+                    startHandle.style.left = (editorRect.left + startPos.left) + 'px';
+                    startHandle.style.top = (editorRect.top + startPos.top) + 'px';
+                    startHandle.style.height = startPos.height + 'px';
+
+                    endHandle.style.display = 'block';
+                    endHandle.style.left = (editorRect.left + endPos.left) + 'px';
+                    endHandle.style.top = (editorRect.top + endPos.top) + 'px';
+                    endHandle.style.height = endPos.height + 'px';
+                }
+            }
+
+            // 监听选区变化
+            editor.onDidChangeCursorSelection(() => {
+                updateHandles();
+            });
+
+            // 监听滚动，防止拉杆留在原位
+            editor.onDidScrollChange(() => {
+                updateHandles();
+            });
+
+            // 核心逻辑：实现拉杆的拖拽移动
+            function makeHandleDraggable(handle, isStart) {
+                handle.addEventListener('touchmove', (e) => {
+                    e.preventDefault();
+                    const touch = e.touches[0];
+                    // 将触摸点转换回 Monaco 的行/列位置
+                    const target = editor.getTargetAtClientPoint(touch.clientX, touch.clientY);
+                    
+                    if (target && target.position) {
+                        const currentSel = editor.getSelection();
+                        let newSel;
+                        if (isStart) {
+                            newSel = new monaco.Selection(
+                                target.position.lineNumber, target.position.column,
+                                currentSel.endLineNumber, currentSel.endColumn
+                            );
+                        } else {
+                            newSel = new monaco.Selection(
+                                currentSel.startLineNumber, currentSel.startColumn,
+                                target.position.lineNumber, target.position.column
+                            );
                         }
+                        editor.setSelection(newSel);
                     }
-                }
-                startPos = null;
+                }, { passive: false });
+            }
+
+            makeHandleDraggable(startHandle, true);
+            makeHandleDraggable(endHandle, false);
+
+            // 辅助：双击或长按选中单词
+            editor.onMouseDown((e) => {
+                // Monaco 内部对长按有部分支持，这里确保 UI 能够及时响应
+                setTimeout(updateHandles, 50);
             });
 
             // 解决 iOS 软键盘遮挡问题
             window.addEventListener('resize', () => {
                 editor.layout();
+                updateHandles();
             });
 
             // 添加快捷键支持

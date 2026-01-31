@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #1e1e1e; }
+        #container { width: 100vw; height: 100vh; }
+
+        /* 选区拉杆的容器：增加感应范围 */
+        .handle-container {
+            position: absolute;
+            width: 40px; /* 极大的触摸感应区 */
+            height: 40px;
+            z-index: 9999; /* 确保在最上层 */
+            display: none;
+            touch-action: none; /* 禁用系统翻页逻辑 */
+            /* background: rgba(255,0,0,0.2); // 调试用：打开此行可看到触摸区域 */
+        }
+
+        /* 视觉上的那条蓝线 */
+        .handle-line {
+            position: absolute;
+            left: 19px; /* 居中 */
+            width: 2px;
+            background-color: #0078d4;
+        }
+
+        /* 视觉上的圆点 */
+        .handle-dot {
+            position: absolute;
+            left: 14px;
+            width: 12px;
+            height: 12px;
+            background-color: #0078d4;
+            border-radius: 50%;
+        }
+
+        .start .handle-dot { top: -6px; }
+        .end .handle-dot { bottom: -6px; }
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+    
+    <div id="handle-start" class="handle-container start">
+        <div class="handle-line"></div>
+        <div class="handle-dot"></div>
+    </div>
+    <div id="handle-end" class="handle-container end">
+        <div class="handle-line"></div>
+        <div class="handle-dot"></div>
+    </div>
+
+    <script>
+        require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' }});
+
+        require(['vs/editor/editor.main'], function() {
+            const editor = monaco.editor.create(document.getElementById('container'), {
+                value: "function dragTest() {\n  // 1. 尝试长按代码\n  // 2. 出现蓝线后，按住圆点拖拽\n  console.log('现在拖拽应该很灵敏了');\n  // " + "Text ".repeat(20) + "\n}",
+                language: 'javascript',
+                theme: 'vs-dark',
+                fontSize: 18,
+                automaticLayout: true,
+                contextmenu: false,
+                readOnly: false,
+                smoothScrolling: true
+            });
+
+            const hStart = document.getElementById('handle-start');
+            const hEnd = document.getElementById('handle-end');
+
+            function updateUI() {
+                const selection = editor.getSelection();
+                if (!selection || selection.isEmpty()) {
+                    hStart.style.display = hEnd.style.display = 'none';
+                    return;
+                }
+
+                const startPos = editor.getScrolledVisiblePosition(selection.getStartPosition());
+                const endPos = editor.getScrolledVisiblePosition(selection.getEndPosition());
+
+                if (startPos && endPos) {
+                    hStart.style.display = hEnd.style.display = 'block';
+                    
+                    // 设置起始拉杆位置（居中对齐坐标点）
+                    hStart.style.left = (startPos.left - 20) + 'px';
+                    hStart.style.top = startPos.top + 'px';
+                    hStart.querySelector('.handle-line').style.height = startPos.height + 'px';
+
+                    // 设置结束拉杆位置
+                    hEnd.style.left = (endPos.left - 20) + 'px';
+                    hEnd.style.top = endPos.top + 'px';
+                    hEnd.querySelector('.handle-line').style.height = endPos.height + 'px';
+                }
+            }
+
+            // 核心改进：拖拽逻辑
+            function bindDrag(dom, isStart) {
+                dom.addEventListener('touchstart', e => e.stopPropagation(), {passive:false});
+                
+                dom.addEventListener('touchmove', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation(); // 防止触发 Monaco 的滚动
+                    
+                    const touch = e.touches[0];
+                    // 获取手指相对于编辑器内容的坐标
+                    const target = editor.getTargetAtClientPoint(touch.clientX, touch.clientY);
+                    
+                    if (target && target.position) {
+                        const sel = editor.getSelection();
+                        let newSel;
+                        if (isStart) {
+                            newSel = new monaco.Selection(
+                                target.position.lineNumber, target.position.column,
+                                sel.endLineNumber, sel.endColumn
+                            );
+                        } else {
+                            newSel = new monaco.Selection(
+                                sel.startLineNumber, sel.startColumn,
+                                target.position.lineNumber, target.position.column
+                            );
+                        }
+                        editor.setSelection(newSel);
+                    }
+                }, { passive: false });
+            }
+
+            bindDrag(hStart, true);
+            bindDrag(hEnd, false);
+
+            // 监听各种变化刷新 UI
+            editor.onDidChangeCursorSelection(updateUI);
+            editor.onDidScrollChange(updateUI);
+            
+            // 初始长按支持：选中单词触发拉杆
+            editor.onMouseDown((e) => {
+                // 如果是长按行为
+                setTimeout(() => {
+                    const sel = editor.getSelection();
+                    if(!sel.isEmpty()) updateUI();
+                }, 150);
+            });
+        });
+    </script>
+</body>
+</html>
