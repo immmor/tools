@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #1e1e1e; }
+        #container { width: 100vw; height: 100vh; }
+
+        /* 模拟选区拉杆样式 */
+        .selection-handle {
+            position: absolute;
+            width: 2px;
+            height: 20px;
+            background-color: #0078d4;
+            z-index: 100;
+            display: none; /* 默认隐藏 */
+        }
+        /* 拉杆下方的圆点 */
+        .selection-handle::after {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            left: -5px;
+            width: 12px;
+            height: 12px;
+            background-color: #0078d4;
+            border-radius: 50%;
+        }
+        /* 增加触摸感应区域 */
+        .selection-handle.start::after { top: -8px; } /* 起始点圆点在上 */
+        .selection-handle.end::after { bottom: -8px; } /* 结束点圆点在下 */
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+    <div id="handle-start" class="selection-handle start"></div>
+    <div id="handle-end" class="selection-handle end"></div>
+
+    <script>
+        require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' }});
+
+        require(['vs/editor/editor.main'], function() {
+            const editor = monaco.editor.create(document.getElementById('container'), {
+                value: "function mobilePro() {\n    // 移动端双竖杠方案\n    const text = '长按单词或滑动试试';\n    console.log(text);\n    // " + "Hello World ".repeat(15) + "\n}",
+                language: 'javascript',
+                theme: 'vs-dark',
+                fontSize: 16,
+                automaticLayout: true,
+                contextmenu: false,
+                fixedOverflowWidgets: true,
+                scrollbar: { verticalScrollbarSize: 10 }
+            });
+
+            const startHandle = document.getElementById('handle-start');
+            const endHandle = document.getElementById('handle-end');
+
+            // 更新拉杆位置的函数
+            function updateHandles() {
+                const selection = editor.getSelection();
+                if (!selection || selection.isEmpty()) {
+                    startHandle.style.display = 'none';
+                    endHandle.style.display = 'none';
+                    return;
+                }
+
+                // 获取选区首尾的像素坐标
+                const startPos = editor.getScrolledVisiblePosition(selection.getStartPosition());
+                const endPos = editor.getScrolledVisiblePosition(selection.getEndPosition());
+
+                if (startPos && endPos) {
+                    const editorRect = document.getElementById('container').getBoundingClientRect();
+                    
+                    startHandle.style.display = 'block';
+                    startHandle.style.left = (editorRect.left + startPos.left) + 'px';
+                    startHandle.style.top = (editorRect.top + startPos.top) + 'px';
+                    startHandle.style.height = startPos.height + 'px';
+
+                    endHandle.style.display = 'block';
+                    endHandle.style.left = (editorRect.left + endPos.left) + 'px';
+                    endHandle.style.top = (editorRect.top + endPos.top) + 'px';
+                    endHandle.style.height = endPos.height + 'px';
+                }
+            }
+
+            // 监听选区变化
+            editor.onDidChangeCursorSelection(() => {
+                updateHandles();
+            });
+
+            // 监听滚动，防止拉杆留在原位
+            editor.onDidScrollChange(() => {
+                updateHandles();
+            });
+
+            // 核心逻辑：实现拉杆的拖拽移动
+            function makeHandleDraggable(handle, isStart) {
+                handle.addEventListener('touchmove', (e) => {
+                    e.preventDefault();
+                    const touch = e.touches[0];
+                    // 将触摸点转换回 Monaco 的行/列位置
+                    const target = editor.getTargetAtClientPoint(touch.clientX, touch.clientY);
+                    
+                    if (target && target.position) {
+                        const currentSel = editor.getSelection();
+                        let newSel;
+                        if (isStart) {
+                            newSel = new monaco.Selection(
+                                target.position.lineNumber, target.position.column,
+                                currentSel.endLineNumber, currentSel.endColumn
+                            );
+                        } else {
+                            newSel = new monaco.Selection(
+                                currentSel.startLineNumber, currentSel.startColumn,
+                                target.position.lineNumber, target.position.column
+                            );
+                        }
+                        editor.setSelection(newSel);
+                    }
+                }, { passive: false });
+            }
+
+            makeHandleDraggable(startHandle, true);
+            makeHandleDraggable(endHandle, false);
+
+            // 辅助：双击或长按选中单词
+            editor.onMouseDown((e) => {
+                // Monaco 内部对长按有部分支持，这里确保 UI 能够及时响应
+                setTimeout(updateHandles, 50);
+            });
+        });
+    </script>
+</body>
+</html>
