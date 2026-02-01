@@ -3,142 +3,151 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>MECHA-YOLO | TACTICAL</title>
+    <title>NEURAL-LINK YOLO | V5.0</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
         :root {
-            --mecha-orange: #ff9d00;
-            --mecha-black: #0d0e10;
-            --mecha-grey: #1c1e22;
-            --mecha-border: #34383e;
+            --plasma: #ffde00;
+            --cyber: #00ff66;
+            --void: #0a0c10;
+            --hull: rgba(20, 25, 35, 0.9);
         }
 
         * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
 
         body {
-            margin: 0; padding: 0; background: var(--mecha-black); color: #fff;
-            font-family: 'Orbitron', 'Segoe UI', sans-serif;
-            height: 100vh; display: flex; flex-direction: column; overflow: hidden;
-        }
-
-        /* 顶部扫描状态栏 */
-        header {
-            padding: 15px 20px; background: var(--mecha-grey);
-            border-bottom: 2px solid var(--mecha-orange);
-            display: flex; justify-content: space-between; align-items: center;
-            clip-path: polygon(0 0, 100% 0, 100% 80%, 95% 100%, 0 100%);
-        }
-
-        .status-tag {
-            font-size: 10px; color: var(--mecha-orange); font-weight: 900;
-            letter-spacing: 2px; text-transform: uppercase;
-        }
-
-        /* 画布交互区：战术网格 */
-        #container {
-            flex: 1; position: relative; padding: 10px;
+            margin: 0; padding: 0; background: var(--void); color: var(--cyber);
+            font-family: 'Share Tech Mono', monospace; height: 100vh;
+            display: flex; flex-direction: column; overflow: hidden;
             background-image: 
-                linear-gradient(rgba(255,157,0,0.05) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(255,157,0,0.05) 1px, transparent 1px);
+                radial-gradient(circle at 2px 2px, rgba(0, 255, 102, 0.05) 1px, transparent 0);
             background-size: 30px 30px;
+        }
+
+        header {
+            padding: 10px 20px;
+            display: flex; justify-content: space-between; align-items: flex-end;
+            background: linear-gradient(180deg, rgba(0,255,102,0.1), transparent);
+            border-bottom: 1px dashed var(--cyber);
+        }
+
+        .system-stat { font-size: 10px; text-transform: uppercase; letter-spacing: 2px; }
+
+        #container {
+            flex: 1; position: relative; overflow: hidden;
             display: flex; align-items: center; justify-content: center;
+            touch-action: none; /* 关键：阻止浏览器默认手势 */
         }
 
         canvas {
-            border: 1px solid var(--mecha-border);
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
-            background: #000; touch-action: none;
+            border: 2px solid rgba(0, 255, 102, 0.2);
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.9), inset 0 0 20px rgba(0, 255, 102, 0.1);
+            background: #000;
+            touch-action: none;
         }
 
-        /* 底部控制中枢 */
-        .mecha-dock {
-            background: var(--mecha-grey); padding: 15px 15px 35px;
-            border-top: 1px solid var(--mecha-border);
-            display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+        .cockpit-controls {
+            background: var(--hull);
+            backdrop-filter: blur(15px);
+            border-top: 2px solid var(--cyber);
+            padding: 15px;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            grid-template-rows: auto auto;
+            gap: 10px;
+            box-shadow: 0 -10px 30px rgba(0,0,0,0.8);
+            clip-path: polygon(0 15%, 5% 0, 95% 0, 100% 15%, 100% 100%, 0 100%);
         }
 
-        /* 战术按钮 */
-        button {
-            background: #25282d; border: 1px solid var(--mecha-border);
-            color: #ccc; padding: 14px 5px; font-size: 11px; font-weight: bold;
-            clip-path: polygon(10% 0, 100% 0, 100% 70%, 90% 100%, 0 100%);
-            transition: all 0.1s;
+        .tactic-btn {
+            background: rgba(0, 255, 102, 0.05);
+            border: 1px solid var(--cyber);
+            color: var(--cyber);
+            padding: 12px 5px;
+            text-align: center;
+            font-size: 12px;
+            font-weight: bold;
+            transition: 0.2s;
+            outline: none;
         }
 
-        button:active {
-            background: var(--mecha-orange); color: #000;
-            transform: scale(0.95);
+        .tactic-btn:active {
+            background: var(--cyber);
+            color: var(--void);
+            box-shadow: 0 0 20px var(--cyber);
         }
 
-        .btn-active {
-            border-color: var(--mecha-orange); color: var(--mecha-orange);
-        }
+        .btn-large { grid-column: span 2; background: rgba(255, 222, 0, 0.05); border-color: var(--plasma); color: var(--plasma); }
+        .btn-large:active { background: var(--plasma); border-color: var(--plasma); }
 
-        .btn-large {
-            grid-column: span 2; background: rgba(255,157,0,0.15);
-            border-color: var(--mecha-orange); color: var(--mecha-orange);
-        }
-
-        /* 核心反应堆（ID输入） */
-        .reactor-core {
-            background: #000; border: 2px solid var(--mecha-orange);
-            display: flex; flex-direction: column; align-items: center;
-            box-shadow: inset 0 0 10px rgba(255,157,0,0.3);
+        .class-selector {
+            grid-column: span 1;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            border: 1px solid var(--cyber); background: rgba(0,0,0,0.5);
         }
 
         #classId {
-            background: transparent; border: none; color: var(--mecha-orange);
-            font-size: 1.8rem; width: 100%; text-align: center;
-            font-weight: 900; outline: none; text-shadow: 0 0 8px var(--mecha-orange);
+            background: transparent; border: none; color: var(--cyber);
+            font-family: 'Share Tech Mono'; font-size: 1.5rem; width: 100%; text-align: center;
+            outline: none;
         }
 
-        .undo-cmd {
-            position: absolute; top: 15px; right: 20px;
-            color: #ff4444; font-size: 10px; font-weight: bold;
-            border: 1px solid #ff4444; padding: 2px 8px;
+        .label-text { font-size: 8px; color: rgba(0, 255, 102, 0.5); }
+
+        .v-line {
+            position: absolute; width: 1px; height: 100%;
+            background: rgba(0, 255, 102, 0.2); left: 50%; pointer-events: none;
         }
+        .h-line {
+            position: absolute; height: 1px; width: 100%;
+            background: rgba(0, 255, 102, 0.2); top: 50%; pointer-events: none;
+        }
+
     </style>
 </head>
 <body>
 
 <header>
     <div>
-        <div class="status-tag">Tactical Interface</div>
-        <div id="imgName" style="font-size: 10px; opacity: 0.6;">AWAIT_INPUT...</div>
+        <div class="system-stat">Target_Aquisition: <span id="imgIndex">00/00</span></div>
+        <div id="imgName" style="font-size: 12px; color: var(--plasma);">NO_SIGNAL</div>
     </div>
-    <div id="imgIndex" style="font-size: 18px; font-weight: 900; color: var(--mecha-orange);">00/00</div>
+    <div class="system-stat" style="text-align: right;">v5.0_Link<br>Status: OK</div>
 </header>
 
 <div id="container">
-    <div class="undo-cmd" onclick="undo()">_UNDO_</div>
+    <div class="v-line"></div><div class="h-line"></div>
     <canvas id="canvas"></canvas>
 </div>
 
-<div class="mecha-dock">
-    <button onclick="document.getElementById('fileInput').click()">[ IMPORT ]</button>
+<div class="cockpit-controls">
+    <button class="tactic-btn" onclick="document.getElementById('fileInput').click()">[ INGEST ]</button>
     <input type="file" id="fileInput" multiple webkitdirectory directory hidden onchange="handleFiles(this.files)">
     
-    <div class="reactor-core">
-        <span style="font-size: 8px; color: var(--mecha-orange);">CORE_ID</span>
+    <button class="tactic-btn btn-large" onclick="exportZip()">>> INITIATE_EXPORT_SEQUENCE <<</button>
+    
+    <button class="tactic-btn" onclick="prevImg()">PREV_TARGET</button>
+    
+    <div class="class-selector">
+        <span class="label-text">CLASS_ID</span>
         <input type="number" id="classId" value="0">
     </div>
 
-    <button onclick="undo()" style="border-color: #ff4444; color: #ff4444;">[ DROP ]</button>
-
-    <button onclick="prevImg()" class="btn-active">< PREV</button>
-    <button class="btn-large" onclick="nextImg()">EXECUTE_NEXT_SCAN ></button>
+    <button class="tactic-btn" onclick="nextImg()">NEXT_TARGET</button>
     
-    <button class="btn-large" style="background: var(--mecha-orange); color: #000; grid-column: span 3;" onclick="exportZip()">OUTPUT_STRATEGIC_DATA.ZIP</button>
+    <button class="tactic-btn" style="grid-column: span 3; border-color: #ff3300; color: #ff3300;" onclick="undo()">CORRECT_LAST_ENTRY (UNDO)</button>
 </div>
 
 <script>
-    // 逻辑部分 100% 原始（其他的都别动）
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     let images = [];
     let currentIndex = -1;
     let isDrawing = false;
     let startX, startY;
+    let lastX, lastY;
     let currentImgObj = new Image();
 
     function handleFiles(fileList) {
@@ -157,14 +166,15 @@
             currentImgObj.src = e.target.result;
         };
         reader.readAsDataURL(images[index].file);
-        document.getElementById('imgName').innerText = `SRC: ${images[index].name.toUpperCase()}`;
+        document.getElementById('imgName').innerText = `ID: ${images[index].name.toUpperCase()}`;
         document.getElementById('imgIndex').innerText = `${index + 1}/${images.length}`;
     }
 
     function render() {
         if (currentIndex === -1) return;
         const container = document.getElementById('container');
-        const ratio = Math.min((container.clientWidth - 20) / currentImgObj.width, (container.clientHeight - 20) / currentImgObj.height);
+        // 保持原始分辨率逻辑，不压缩画质
+        const ratio = Math.min((container.clientWidth - 30) / currentImgObj.width, (container.clientHeight - 30) / currentImgObj.height);
         canvas.width = currentImgObj.width * ratio;
         canvas.height = currentImgObj.height * ratio;
 
@@ -177,13 +187,23 @@
             const x = (cx * canvas.width) - w/2;
             const y = (cy * canvas.height) - h/2;
 
-            ctx.strokeStyle = '#ff9d00';
-            ctx.lineWidth = 2;
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#00ff66';
+            ctx.strokeStyle = '#00ff66';
+            ctx.lineWidth = 1.5;
             ctx.strokeRect(x, y, w, h);
             
-            ctx.fillStyle = '#ff9d00';
-            ctx.font = 'bold 12px monospace';
-            ctx.fillText(`ID:${id}`, x + 2, y - 5);
+            const len = 10;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(x, y+len); ctx.lineTo(x, y); ctx.lineTo(x+len, y);
+            ctx.moveTo(x+w-len, y); ctx.lineTo(x+w, y); ctx.lineTo(x+w, y+len);
+            ctx.stroke();
+
+            ctx.fillStyle = '#00ff66';
+            ctx.shadowBlur = 0;
+            ctx.font = '10px Share Tech Mono';
+            ctx.fillText(`OBJ_DATA_ID:${id}`, x + 5, y - 5);
         });
     }
 
@@ -194,33 +214,73 @@
         return [clientX - rect.left, clientY - rect.top];
     };
 
-    canvas.addEventListener('mousedown', e => { if(currentIndex===-1) return; isDrawing = true; [startX, startY] = getPos(e); });
-    canvas.addEventListener('touchstart', e => { if(currentIndex===-1) return; isDrawing = true; [startX, startY] = getPos(e); });
+    // 开始绘制
+    const startAction = (e) => {
+        if(currentIndex === -1) return;
+        isDrawing = true;
+        [startX, startY] = getPos(e);
+        lastX = startX;
+        lastY = startY;
+    };
 
-    window.addEventListener('mousemove', e => {
+    // 移动过程预览
+    const moveAction = (e) => {
         if (!isDrawing) return;
+        if (e.cancelable) e.preventDefault(); // 阻止手机端滚动
         render();
         const [curX, curY] = getPos(e);
-        ctx.strokeStyle = 'rgba(255, 157, 0, 0.5)';
-        ctx.setLineDash([4, 4]);
+        lastX = curX;
+        lastY = curY;
+        ctx.strokeStyle = 'rgba(255, 222, 0, 0.8)';
+        ctx.setLineDash([2, 2]);
         ctx.strokeRect(startX, startY, curX - startX, curY - startY);
         ctx.setLineDash([]);
-    });
+    };
 
-    window.addEventListener('mouseup', e => {
+    // 结束绘制
+    const endAction = (e) => {
         if (!isDrawing) return;
         isDrawing = false;
-        const [endX, endY] = getPos(e);
-        const w = Math.abs(endX - startX);
-        const h = Math.abs(endY - startY);
-        if (w < 5 || h < 5) return;
-        const x_center = (Math.min(startX, endX) + w / 2) / canvas.width;
-        const y_center = (Math.min(startY, endY) + h / 2) / canvas.height;
-        images[currentIndex].labels.push([document.getElementById('classId').value, x_center, y_center, w/canvas.width, h/canvas.height]);
+        
+        const w = Math.abs(lastX - startX);
+        const h = Math.abs(lastY - startY);
+        
+        if (w < 5 || h < 5) {
+            render(); // 避免误点产生极小框
+            return;
+        }
+
+        const x_center = (Math.min(startX, lastX) + w / 2) / canvas.width;
+        const y_center = (Math.min(startY, lastY) + h / 2) / canvas.height;
+        
+        images[currentIndex].labels.push([
+            document.getElementById('classId').value, 
+            x_center.toFixed(6), 
+            y_center.toFixed(6), 
+            (w/canvas.width).toFixed(6), 
+            (h/canvas.height).toFixed(6)
+        ]);
         render();
+    };
+
+    // 事件绑定 - 覆盖鼠标与触摸
+    canvas.addEventListener('mousedown', startAction);
+    window.addEventListener('mousemove', moveAction);
+    window.addEventListener('mouseup', endAction);
+
+    canvas.addEventListener('touchstart', (e) => {
+        startAction(e);
+    }, { passive: false });
+    
+    window.addEventListener('touchmove', (e) => {
+        moveAction(e);
+    }, { passive: false });
+    
+    window.addEventListener('touchend', (e) => {
+        endAction(e);
     });
 
-    function undo() { images[currentIndex].labels.pop(); render(); }
+    function undo() { if(currentIndex !== -1) { images[currentIndex].labels.pop(); render(); } }
     function nextImg() { if(currentIndex < images.length-1) { currentIndex++; loadImage(currentIndex); } }
     function prevImg() { if(currentIndex > 0) { currentIndex--; loadImage(currentIndex); } }
 
@@ -234,7 +294,7 @@
         const blob = await zip.generateAsync({type: "blob"});
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url; a.download = "MECHA_DATA.zip"; a.click();
+        a.href = url; a.download = "NEURAL_LINK_EXPORT.zip"; a.click();
     }
 </script>
 </body>
