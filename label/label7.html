@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>TITAN-YOLO | DEEP SEA PRO</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        :root {
+            --titan-grey: #2c2f33;
+            --caution-yellow: #f5d300;
+            --metal-border: #4a4e52;
+            --bg-deep: #121417;
+        }
+
+        * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+
+        body {
+            margin: 0; padding: 0; background: var(--bg-deep); color: #e0e0e0;
+            font-family: 'Consolas', 'Monaco', monospace; height: 100vh;
+            display: flex; flex-direction: column; overflow: hidden;
+        }
+
+        /* 顶部精密仪表栏 */
+        header {
+            padding: 15px 20px; background: var(--titan-grey);
+            border-bottom: 4px solid var(--metal-border);
+            display: flex; justify-content: space-between; align-items: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+
+        .sys-title { font-weight: 900; color: var(--caution-yellow); font-size: 14px; letter-spacing: 1px; }
+
+        /* 画布区：声呐网格 */
+        #container {
+            flex: 1; position: relative; padding: 10px;
+            background-image: 
+                linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+            background-size: 20px 20px;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        canvas {
+            border: 2px solid var(--metal-border);
+            box-shadow: 0 0 40px rgba(0,0,0,0.8);
+            background: #000; touch-action: none;
+        }
+
+        /* 底部重型控制舱 */
+        .heavy-dock {
+            background: var(--titan-grey);
+            padding: 20px 15px 35px;
+            border-top: 4px solid var(--caution-yellow);
+            display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;
+        }
+
+        /* 工业级物理按钮 */
+        button {
+            background: #3e4247; border: 1px solid #1a1c1e;
+            color: #fff; padding: 15px 5px; border-radius: 4px;
+            font-family: inherit; font-size: 11px; font-weight: bold;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 3px 0 #1a1c1e;
+            transition: all 0.1s;
+        }
+
+        button:active {
+            transform: translateY(2px);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 1px 0 #1a1c1e;
+        }
+
+        .btn-warning {
+            background: var(--caution-yellow); color: #000;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 3px 0 #a38d00;
+        }
+
+        /* 数值显示器 */
+        .digital-readout {
+            background: #1a1c1e; border: 2px solid var(--metal-border);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
+
+        #classId {
+            background: transparent; border: none; color: var(--caution-yellow);
+            font-size: 1.8rem; width: 100%; text-align: center;
+            font-weight: 900; outline: none;
+        }
+
+        .undo-pill {
+            position: absolute; top: 15px; right: 15px;
+            background: #ff4444; color: #fff; font-size: 10px;
+            padding: 5px 12px; font-weight: bold; clip-path: polygon(10% 0, 100% 0, 90% 100%, 0% 100%);
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="sys-title">TITAN_OP // PROTOCOL</div>
+    <div id="imgIndex" style="background: #1a1c1e; padding: 4px 10px; border-radius: 4px; border: 1px solid #444;">00 / 00</div>
+</header>
+
+<div id="container">
+    <div class="undo-pill" onclick="undo()">REVOKE_CMD</div>
+    <canvas id="canvas"></canvas>
+</div>
+
+<div class="heavy-dock">
+    <button onclick="document.getElementById('fileInput').click()">LOAD_SRCE</button>
+    <input type="file" id="fileInput" multiple webkitdirectory directory hidden onchange="handleFiles(this.files)">
+    
+    <div class="digital-readout">
+        <span style="font-size: 8px; color: #666;">OBJ_CLASS</span>
+        <input type="number" id="classId" value="0">
+    </div>
+
+    <button onclick="undo()" style="color: #ff4444;">CLR_LAST</button>
+
+    <button onclick="prevImg()">BACK_P</button>
+    <button class="btn-warning" style="grid-column: span 2; font-size: 13px;" onclick="nextImg()">COMMIT & NEXT_FRM</button>
+    
+    <button class="btn-warning" style="grid-column: span 3; background: #fff;" onclick="exportZip()">>> GENERATE BATCH DATA (ZIP) <<</button>
+</div>
+
+<script>
+    // 逻辑部分完全不动
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    let images = [];
+    let currentIndex = -1;
+    let isDrawing = false;
+    let startX, startY;
+    let currentImgObj = new Image();
+
+    function handleFiles(fileList) {
+        const filteredFiles = Array.from(fileList).filter(f => f.type.startsWith('image/'));
+        if (filteredFiles.length === 0) return;
+        images = filteredFiles.map(f => ({ file: f, name: f.name, labels: [] }));
+        currentIndex = 0;
+        loadImage(0);
+    }
+
+    function loadImage(index) {
+        if (index < 0 || index >= images.length) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            currentImgObj.onload = () => render();
+            currentImgObj.src = e.target.result;
+        };
+        reader.readAsDataURL(images[index].file);
+        document.getElementById('imgIndex').innerText = `${index + 1} / ${images.length}`;
+    }
+
+    function render() {
+        if (currentIndex === -1) return;
+        const container = document.getElementById('container');
+        const ratio = Math.min((container.clientWidth - 20) / currentImgObj.width, (container.clientHeight - 20) / currentImgObj.height);
+        canvas.width = currentImgObj.width * ratio;
+        canvas.height = currentImgObj.height * ratio;
+
+        ctx.drawImage(currentImgObj, 0, 0, canvas.width, canvas.height);
+
+        images[currentIndex].labels.forEach(box => {
+            const [id, cx, cy, cw, ch] = box;
+            const w = cw * canvas.width;
+            const h = ch * canvas.height;
+            const x = (cx * canvas.width) - w/2;
+            const y = (cy * canvas.height) - h/2;
+
+            ctx.strokeStyle = '#f5d300';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(x, y, w, h);
+            
+            ctx.fillStyle = '#f5d300';
+            ctx.fillRect(x, y - 15, 30, 15);
+            ctx.fillStyle = '#000';
+            ctx.font = 'bold 12px monospace';
+            ctx.fillText(id, x + 5, y - 3);
+        });
+    }
+
+    const getPos = (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return [clientX - rect.left, clientY - rect.top];
+    };
+
+    canvas.addEventListener('mousedown', e => { if(currentIndex===-1) return; isDrawing = true; [startX, startY] = getPos(e); });
+    canvas.addEventListener('touchstart', e => { if(currentIndex===-1) return; isDrawing = true; [startX, startY] = getPos(e); });
+
+    window.addEventListener('mousemove', e => {
+        if (!isDrawing) return;
+        render();
+        const [curX, curY] = getPos(e);
+        ctx.strokeStyle = '#f5d300';
+        ctx.setLineDash([5, 5]);
+        ctx.strokeRect(startX, startY, curX - startX, curY - startY);
+        ctx.setLineDash([]);
+    });
+
+    window.addEventListener('mouseup', e => {
+        if (!isDrawing) return;
+        isDrawing = false;
+        const [endX, endY] = getPos(e);
+        const w = Math.abs(endX - startX);
+        const h = Math.abs(endY - startY);
+        if (w < 5 || h < 5) return;
+        const x_center = (Math.min(startX, endX) + w / 2) / canvas.width;
+        const y_center = (Math.min(startY, endY) + h / 2) / canvas.height;
+        images[currentIndex].labels.push([document.getElementById('classId').value, x_center, y_center, w/canvas.width, h/canvas.height]);
+        render();
+    });
+
+    function undo() { images[currentIndex].labels.pop(); render(); }
+    function nextImg() { if(currentIndex < images.length-1) { currentIndex++; loadImage(currentIndex); } }
+    function prevImg() { if(currentIndex > 0) { currentIndex--; loadImage(currentIndex); } }
+
+    async function exportZip() {
+        if (images.length === 0) return;
+        const zip = new JSZip();
+        images.forEach(img => {
+            const content = img.labels.map(l => l.join(' ')).join('\n');
+            zip.file(img.name.replace(/\.[^/.]+$/, "") + ".txt", content);
+        });
+        const blob = await zip.generateAsync({type: "blob"});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = "TITAN_PROTOCOL_DATA.zip"; a.click();
+    }
+</script>
+</body>
+</html>

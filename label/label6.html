@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AURORA-YOLO | VIRTUAL INTERFACE</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        :root {
+            --neon-pink: #ff00ff;
+            --neon-blue: #00d2ff;
+            --neon-purple: #9d50bb;
+            --glass-bg: rgba(255, 255, 255, 0.1);
+        }
+
+        * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+
+        body {
+            margin: 0; padding: 0; background: #050505; color: #fff;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+        }
+
+        /* 动态极光背景 */
+        body::before {
+            content: ""; position: fixed; inset: 0; z-index: -1;
+            background: linear-gradient(125deg, #2c3e50, #000, #4b0082);
+            background-size: 400% 400%;
+            animation: aurora 15s ease infinite;
+        }
+
+        @keyframes aurora {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        /* 顶部状态栏 */
+        header {
+            padding: 20px; backdrop-filter: blur(10px);
+            background: rgba(0,0,0,0.3); border-bottom: 1px solid rgba(255,255,255,0.1);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+
+        .status-pill {
+            background: linear-gradient(90deg, var(--neon-blue), var(--neon-purple));
+            padding: 4px 12px; border-radius: 20px; font-size: 10px; font-weight: 800;
+        }
+
+        /* 画布交互区 */
+        #container {
+            flex: 1; position: relative; padding: 15px;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        canvas {
+            border-radius: 15px; border: 1px solid rgba(255,255,255,0.2);
+            box-shadow: 0 0 30px rgba(0, 210, 255, 0.2);
+            background: #000; touch-action: none;
+        }
+
+        /* 悬浮控制岛 */
+        .glass-dock {
+            position: absolute; bottom: 30px; width: 92%;
+            background: var(--glass-bg); backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.15); border-radius: 30px;
+            padding: 15px; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.5);
+        }
+
+        /* 发光按钮 */
+        button {
+            background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255,255,255,0.1);
+            color: #fff; padding: 14px 5px; border-radius: 18px;
+            font-size: 11px; font-weight: 600; cursor: pointer;
+            transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        button:active {
+            background: rgba(255,255,255,0.2); transform: scale(0.92);
+            border-color: var(--neon-blue); box-shadow: 0 0 15px var(--neon-blue);
+        }
+
+        .btn-glow {
+            grid-column: span 3; background: linear-gradient(90deg, var(--neon-blue), var(--neon-purple));
+            border: none; font-weight: 800; margin-top: 5px;
+        }
+
+        /* 类别输入框 */
+        .id-capsule {
+            background: rgba(0,0,0,0.3); border-radius: 15px;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        #classId {
+            background: transparent; border: none; color: var(--neon-blue);
+            font-size: 1.6rem; width: 50px; text-align: center; outline: none;
+            font-weight: bold; text-shadow: 0 0 10px var(--neon-blue);
+        }
+
+        .undo-btn {
+            position: absolute; top: 15px; right: 20px;
+            color: var(--neon-pink); font-size: 12px; font-weight: bold;
+            text-shadow: 0 0 10px var(--neon-pink);
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div>
+        <div style="font-size: 14px; font-weight: 900; letter-spacing: 1px;">NEURAL<span style="color:var(--neon-blue)">CORE</span></div>
+        <div id="imgName" style="font-size: 9px; opacity: 0.5;">READY_TO_SCAN</div>
+    </div>
+    <div class="status-pill" id="imgIndex">00 / 00</div>
+</header>
+
+<div id="container">
+    <div class="undo-btn" onclick="undo()">REVOKE</div>
+    <canvas id="canvas"></canvas>
+    
+    <div class="glass-dock">
+        <button onclick="document.getElementById('fileInput').click()">UPLINK</button>
+        <input type="file" id="fileInput" multiple webkitdirectory directory hidden onchange="handleFiles(this.files)">
+        
+        <div class="id-capsule">
+            <span style="font-size: 8px; opacity: 0.5;">TYPE_ID</span>
+            <input type="number" id="classId" value="0">
+        </div>
+        
+        <button onclick="undo()" style="color: var(--neon-pink)">DELETE</button>
+
+        <button onclick="prevImg()">BACK</button>
+        <button onclick="nextImg()" style="grid-column: span 2; border-color: var(--neon-blue);">NEXT_SCAN >></button>
+        
+        <button class="btn-glow" onclick="exportZip()">DOWNLOAD NEURAL_DATA.ZIP</button>
+    </div>
+</div>
+
+<script>
+    // 逻辑部分 100% 保持不动（严格执行：其他的都别动）
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    let images = [];
+    let currentIndex = -1;
+    let isDrawing = false;
+    let startX, startY;
+    let currentImgObj = new Image();
+
+    function handleFiles(fileList) {
+        const filteredFiles = Array.from(fileList).filter(f => f.type.startsWith('image/'));
+        if (filteredFiles.length === 0) return;
+        images = filteredFiles.map(f => ({ file: f, name: f.name, labels: [] }));
+        currentIndex = 0;
+        loadImage(0);
+    }
+
+    function loadImage(index) {
+        if (index < 0 || index >= images.length) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            currentImgObj.onload = () => render();
+            currentImgObj.src = e.target.result;
+        };
+        reader.readAsDataURL(images[index].file);
+        document.getElementById('imgName').innerText = images[index].name.toUpperCase();
+        document.getElementById('imgIndex').innerText = `${index + 1} / ${images.length}`;
+    }
+
+    function render() {
+        if (currentIndex === -1) return;
+        const container = document.getElementById('container');
+        const ratio = Math.min((container.clientWidth - 40) / currentImgObj.width, (container.clientHeight - 180) / currentImgObj.height);
+        canvas.width = currentImgObj.width * ratio;
+        canvas.height = currentImgObj.height * ratio;
+
+        ctx.drawImage(currentImgObj, 0, 0, canvas.width, canvas.height);
+
+        images[currentIndex].labels.forEach(box => {
+            const [id, cx, cy, cw, ch] = box;
+            const w = cw * canvas.width;
+            const h = ch * canvas.height;
+            const x = (cx * canvas.width) - w/2;
+            const y = (cy * canvas.height) - h/2;
+
+            // 霓虹发光框
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = '#00d2ff';
+            ctx.strokeStyle = '#00d2ff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, w, h);
+            
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#00d2ff';
+            ctx.font = 'bold 12px sans-serif';
+            ctx.fillText(`ID:${id}`, x, y - 8);
+        });
+    }
+
+    const getPos = (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return [clientX - rect.left, clientY - rect.top];
+    };
+
+    canvas.addEventListener('mousedown', e => { if(currentIndex===-1) return; isDrawing = true; [startX, startY] = getPos(e); });
+    canvas.addEventListener('touchstart', e => { if(currentIndex===-1) return; isDrawing = true; [startX, startY] = getPos(e); });
+
+    window.addEventListener('mousemove', e => {
+        if (!isDrawing) return;
+        render();
+        const [curX, curY] = getPos(e);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+        ctx.setLineDash([5, 5]);
+        ctx.strokeRect(startX, startY, curX - startX, curY - startY);
+        ctx.setLineDash([]);
+    });
+
+    window.addEventListener('mouseup', e => {
+        if (!isDrawing) return;
+        isDrawing = false;
+        const [endX, endY] = getPos(e);
+        const w = Math.abs(endX - startX);
+        const h = Math.abs(endY - startY);
+        if (w < 5 || h < 5) return;
+        const x_center = (Math.min(startX, endX) + w / 2) / canvas.width;
+        const y_center = (Math.min(startY, endY) + h / 2) / canvas.height;
+        images[currentIndex].labels.push([document.getElementById('classId').value, x_center, y_center, w/canvas.width, h/canvas.height]);
+        render();
+    });
+
+    function undo() { images[currentIndex].labels.pop(); render(); }
+    function nextImg() { if(currentIndex < images.length-1) { currentIndex++; loadImage(currentIndex); } }
+    function prevImg() { if(currentIndex > 0) { currentIndex--; loadImage(currentIndex); } }
+
+    async function exportZip() {
+        if (images.length === 0) return;
+        const zip = new JSZip();
+        images.forEach(img => {
+            const content = img.labels.map(l => l.join(' ')).join('\n');
+            zip.file(img.name.replace(/\.[^/.]+$/, "") + ".txt", content);
+        });
+        const blob = await zip.generateAsync({type: "blob"});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = "NEURAL_BATCH_DATA.zip"; a.click();
+    }
+</script>
+</body>
+</html>

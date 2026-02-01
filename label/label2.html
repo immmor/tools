@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>QUANTUM-YOLO v4.0</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
+
+        :root {
+            --neon-primary: #00ffaa;
+            --neon-second: #0088ff;
+            --bg-black: #020408;
+            --glass: rgba(10, 20, 30, 0.7);
+        }
+
+        * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+
+        body {
+            margin: 0; padding: 0; background: var(--bg-black); color: white;
+            font-family: 'Orbitron', sans-serif; height: 100vh;
+            display: flex; flex-direction: column; overflow: hidden;
+        }
+
+        /* 电子背景网格 */
+        body::before {
+            content: ""; position: fixed; inset: 0;
+            background-image: radial-gradient(var(--neon-second) 1px, transparent 1px);
+            background-size: 40px 40px; opacity: 0.1; z-index: -1;
+        }
+
+        /* 顶部扫描状态栏 */
+        header {
+            padding: 15px; background: linear-gradient(to bottom, rgba(0,255,170,0.1), transparent);
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid rgba(0,255,170,0.2);
+        }
+
+        .status-light {
+            width: 8px; height: 8px; background: var(--neon-primary);
+            border-radius: 50%; display: inline-block; margin-right: 8px;
+            box-shadow: 0 0 10px var(--neon-primary);
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
+
+        /* 画布交互区 */
+        #container {
+            flex: 1; position: relative; overflow: hidden;
+            display: flex; align-items: center; justify-content: center;
+        }
+        
+        canvas {
+            border: 1px solid rgba(255,255,255,0.05);
+            background: rgba(0,0,0,0.4);
+            box-shadow: 0 0 40px rgba(0,0,0,0.8);
+            touch-action: none;
+        }
+
+        /* 手机端悬浮 HUD 按钮 */
+        .hud-overlay {
+            position: absolute; bottom: 20px; width: 95%; left: 2.5%;
+            display: flex; flex-direction: column; gap: 10px; z-index: 100;
+        }
+
+        .main-controls {
+            display: flex; justify-content: space-between; align-items: flex-end;
+        }
+
+        .side-btns { display: flex; flex-direction: column; gap: 12px; }
+
+        /* 极简玻璃按钮 */
+        .btn-glass {
+            background: var(--glass); border: 1px solid rgba(0,255,170,0.3);
+            color: var(--neon-primary); padding: 12px 20px; border-radius: 4px;
+            backdrop-filter: blur(10px); font-size: 12px; letter-spacing: 1px;
+            text-transform: uppercase; transition: 0.3s;
+        }
+        .btn-glass:active { background: var(--neon-primary); color: #000; box-shadow: 0 0 20px var(--neon-primary); }
+
+        .btn-export {
+            border-color: var(--neon-second); color: var(--neon-second);
+            padding: 15px 30px; font-weight: bold; border-radius: 30px;
+        }
+
+        /* 类别选择浮动窗 */
+        .class-badge {
+            background: rgba(0,0,0,0.8); border: 1px solid var(--neon-primary);
+            padding: 5px 15px; border-radius: 20px; display: flex; align-items: center; gap: 10px;
+        }
+        #classId {
+            background: transparent; border: none; color: var(--neon-primary);
+            font-size: 1.2rem; width: 40px; text-align: center; font-family: 'Orbitron';
+        }
+
+        /* 底部信息流 */
+        footer {
+            height: 30px; background: rgba(0,0,0,0.5); font-size: 9px;
+            display: flex; align-items: center; padding: 0 20px;
+            color: rgba(255,255,255,0.4); border-top: 1px solid rgba(255,255,255,0.05);
+        }
+
+    </style>
+</head>
+<body>
+
+<header>
+    <div style="font-size: 0.8rem; letter-spacing: 2px;">
+        <span class="status-light"></span>SYS_ONLINE: <span id="imgIndex">00 / 00</span>
+    </div>
+    <div style="display: flex; gap: 8px;">
+        <button class="btn-glass" style="padding: 5px 10px;" onclick="document.getElementById('fileInput').click()">LOAD</button>
+        <input type="file" id="fileInput" multiple webkitdirectory directory hidden onchange="handleFiles(this.files)">
+    </div>
+</header>
+
+<div id="container">
+    <canvas id="canvas"></canvas>
+    
+    <div class="hud-overlay">
+        <div class="main-controls">
+            <div class="side-btns">
+                <button class="btn-glass" onclick="undo()">UNDO</button>
+                <div class="class-badge">
+                    <span style="font-size: 8px;">TAG:</span>
+                    <input type="number" id="classId" value="0">
+                </div>
+            </div>
+            
+            <button class="btn-glass btn-export" onclick="exportZip()">DATA_EXTRACT</button>
+        </div>
+
+        <div style="display: flex; gap: 10px; width: 100%;">
+            <button class="btn-glass" style="flex:1" onclick="prevImg()">◀ PREV</button>
+            <button class="btn-glass" style="flex:1" onclick="nextImg()">NEXT ▶</button>
+        </div>
+    </div>
+</div>
+
+<footer>
+    <span id="imgName">READY_FOR_IMAGE_INGESTION...</span>
+</footer>
+
+<script>
+    // 逻辑严格保持不动
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    let images = [];
+    let currentIndex = -1;
+    let isDrawing = false;
+    let startX, startY;
+    let currentImgObj = new Image();
+
+    function handleFiles(fileList) {
+        const filteredFiles = Array.from(fileList).filter(f => f.type.startsWith('image/'));
+        if (filteredFiles.length === 0) return;
+        images = filteredFiles.map(f => ({ file: f, name: f.name, labels: [] }));
+        currentIndex = 0;
+        loadImage(0);
+    }
+
+    function loadImage(index) {
+        if (index < 0 || index >= images.length) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            currentImgObj.onload = () => render();
+            currentImgObj.src = e.target.result;
+        };
+        reader.readAsDataURL(images[index].file);
+        document.getElementById('imgName').innerText = `PROCESS_TARGET: ${images[index].name.toUpperCase()}`;
+        document.getElementById('imgIndex').innerText = `${index + 1} / ${images.length}`;
+    }
+
+    function render() {
+        if (currentIndex === -1) return;
+        const container = document.getElementById('container');
+        const ratio = Math.min((container.clientWidth - 20) / currentImgObj.width, (container.clientHeight - 100) / currentImgObj.height);
+        canvas.width = currentImgObj.width * ratio;
+        canvas.height = currentImgObj.height * ratio;
+
+        ctx.drawImage(currentImgObj, 0, 0, canvas.width, canvas.height);
+
+        images[currentIndex].labels.forEach(box => {
+            const [id, cx, cy, cw, ch] = box;
+            const w = cw * canvas.width;
+            const h = ch * canvas.height;
+            const x = (cx * canvas.width) - w/2;
+            const y = (cy * canvas.height) - h/2;
+
+            // 炫酷量子框
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#00ffaa';
+            ctx.strokeStyle = '#00ffaa';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, w, h);
+            
+            // 四角增强
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#00ffaa';
+            ctx.fillRect(x-2, y-2, 8, 2);
+            ctx.fillRect(x-2, y-2, 2, 8);
+            
+            ctx.font = 'bold 10px Orbitron';
+            ctx.fillText(`ID:${id}`, x + 5, y + 12);
+        });
+    }
+
+    const getPos = (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return [clientX - rect.left, clientY - rect.top];
+    };
+
+    canvas.addEventListener('mousedown', e => { if(currentIndex===-1) return; isDrawing = true; [startX, startY] = getPos(e); });
+    canvas.addEventListener('touchstart', e => { if(currentIndex===-1) return; isDrawing = true; [startX, startY] = getPos(e); });
+
+    window.addEventListener('mousemove', e => {
+        if (!isDrawing) return;
+        render();
+        const [curX, curY] = getPos(e);
+        ctx.strokeStyle = 'rgba(0, 255, 170, 0.5)';
+        ctx.setLineDash([4, 2]);
+        ctx.strokeRect(startX, startY, curX - startX, curY - startY);
+        ctx.setLineDash([]);
+    });
+
+    window.addEventListener('mouseup', e => {
+        if (!isDrawing) return;
+        isDrawing = false;
+        const [endX, endY] = getPos(e);
+        const w = Math.abs(endX - startX);
+        const h = Math.abs(endY - startY);
+        if (w < 5 || h < 5) return;
+        const x_center = (Math.min(startX, endX) + w / 2) / canvas.width;
+        const y_center = (Math.min(startY, endY) + h / 2) / canvas.height;
+        images[currentIndex].labels.push([document.getElementById('classId').value, x_center, y_center, w/canvas.width, h/canvas.height]);
+        render();
+    });
+
+    function undo() { images[currentIndex].labels.pop(); render(); }
+    function nextImg() { if(currentIndex < images.length-1) { currentIndex++; loadImage(currentIndex); } }
+    function prevImg() { if(currentIndex > 0) { currentIndex--; loadImage(currentIndex); } }
+
+    async function exportZip() {
+        if (images.length === 0) return;
+        const zip = new JSZip();
+        images.forEach(img => {
+            const content = img.labels.map(l => l.join(' ')).join('\n');
+            zip.file(img.name.replace(/\.[^/.]+$/, "") + ".txt", content);
+        });
+        const blob = await zip.generateAsync({type: "blob"});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = "YOLO_QUANTUM_DATA.zip"; a.click();
+    }
+</script>
+</body>
+</html>

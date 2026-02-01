@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>MATRIX-YOLO | DECODING</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        /* 使用等宽黑客字体 */
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;700&display=swap');
+
+        :root {
+            --matrix-green: #00ff41;
+            --dark-void: #0a0a0a;
+            --scan-line: rgba(0, 255, 65, 0.05);
+        }
+
+        * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+
+        body {
+            margin: 0; padding: 0; background: var(--dark-void); color: var(--matrix-green);
+            font-family: 'Fira Code', monospace; height: 100vh;
+            display: flex; flex-direction: column; overflow: hidden;
+        }
+
+        /* 扫描线特效层 */
+        body::before {
+            content: " "; position: fixed; top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(var(--scan-line) 50%, transparent 50%);
+            background-size: 100% 4px; z-index: 1000; pointer-events: none;
+            animation: scan 10s linear infinite;
+        }
+        @keyframes scan { from { background-position: 0 0; } to { background-position: 0 100%; } }
+
+        header {
+            padding: 15px; border-bottom: 2px solid var(--matrix-green);
+            background: rgba(0, 255, 65, 0.05);
+            display: flex; justify-content: space-between; align-items: center;
+        }
+
+        .sys-info { font-size: 10px; font-weight: bold; text-shadow: 0 0 5px var(--matrix-green); }
+
+        /* 画布区：模拟雷达显示器 */
+        #container {
+            flex: 1; position: relative; overflow: hidden;
+            display: flex; align-items: center; justify-content: center;
+            background: radial-gradient(circle, #102010 0%, #000 100%);
+        }
+
+        canvas {
+            border: 1px solid var(--matrix-green);
+            box-shadow: 0 0 20px rgba(0, 255, 65, 0.2);
+            background: #000; touch-action: none;
+        }
+
+        /* 底部控制台：命令矩阵 */
+        .console-grid {
+            padding: 15px 15px 30px;
+            background: #000;
+            border-top: 2px solid var(--matrix-green);
+            display: grid; grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+
+        /* 模拟终端按钮 */
+        button {
+            background: transparent; border: 1px solid var(--matrix-green);
+            color: var(--matrix-green); padding: 12px 5px;
+            font-family: 'Fira Code', monospace; font-size: 11px;
+            text-transform: uppercase; cursor: pointer;
+            transition: all 0.1s;
+            position: relative;
+        }
+
+        button:active {
+            background: var(--matrix-green); color: #000;
+            box-shadow: 0 0 15px var(--matrix-green);
+        }
+
+        .btn-wide { grid-column: span 3; border-width: 2px; font-weight: bold; }
+
+        /* ID 调节区 */
+        .id-block {
+            border: 1px solid var(--matrix-green);
+            display: flex; flex-direction: column; align-items: center;
+            background: rgba(0, 255, 65, 0.1);
+        }
+
+        #classId {
+            background: transparent; border: none; color: var(--matrix-green);
+            font-size: 1.5rem; width: 100%; text-align: center;
+            font-family: 'Fira Code', monospace; outline: none;
+        }
+
+        .undo-cmd {
+            position: absolute; top: 10px; right: 10px;
+            background: #000; border: 1px solid #ff4444; color: #ff4444;
+            padding: 5px 10px; font-size: 10px; z-index: 1001;
+        }
+
+        footer {
+            padding: 5px 15px; font-size: 9px; opacity: 0.6;
+            border-top: 1px solid rgba(0, 255, 65, 0.2);
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="sys-info">ROOT@TERMINAL:~/DATA/</div>
+    <div id="imgIndex" class="sys-info">[ 00/00 ]</div>
+</header>
+
+<div id="container">
+    <div class="undo-cmd" onclick="undo()">_UNDO_</div>
+    <canvas id="canvas"></canvas>
+</div>
+
+<div class="console-grid">
+    <button onclick="document.getElementById('fileInput').click()">./MOUNT_DIR</button>
+    <input type="file" id="fileInput" multiple webkitdirectory directory hidden onchange="handleFiles(this.files)">
+    
+    <div class="id-block">
+        <span style="font-size: 8px;">TAG_ID</span>
+        <input type="number" id="classId" value="0">
+    </div>
+
+    <button onclick="undo()">_DELETE_</button>
+
+    <button onclick="prevImg()">< PREV</button>
+    <button onclick="nextImg()">NEXT ></button>
+    <button onclick="location.reload()">_RESET_</button>
+    
+    <button class="btn-wide" onclick="exportZip()">>> EXECUTE_EXPORT_BATCH <<</button>
+</div>
+
+<footer>
+    <span id="imgName">Awaiting uplink...</span>
+</footer>
+
+<script>
+    // 逻辑部分保持 100% 原始（应用户要求：其他的都别动）
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    let images = [];
+    let currentIndex = -1;
+    let isDrawing = false;
+    let startX, startY;
+    let currentImgObj = new Image();
+
+    function handleFiles(fileList) {
+        const filteredFiles = Array.from(fileList).filter(f => f.type.startsWith('image/'));
+        if (filteredFiles.length === 0) return;
+        images = filteredFiles.map(f => ({ file: f, name: f.name, labels: [] }));
+        currentIndex = 0;
+        loadImage(0);
+    }
+
+    function loadImage(index) {
+        if (index < 0 || index >= images.length) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            currentImgObj.onload = () => render();
+            currentImgObj.src = e.target.result;
+        };
+        reader.readAsDataURL(images[index].file);
+        document.getElementById('imgName').innerText = `SOURCE: ${images[index].name.toUpperCase()}`;
+        document.getElementById('imgIndex').innerText = `[ ${index + 1}/${images.length} ]`;
+    }
+
+    function render() {
+        if (currentIndex === -1) return;
+        const container = document.getElementById('container');
+        const ratio = Math.min((container.clientWidth - 40) / currentImgObj.width, (container.clientHeight - 40) / currentImgObj.height);
+        canvas.width = currentImgObj.width * ratio;
+        canvas.height = currentImgObj.height * ratio;
+
+        ctx.drawImage(currentImgObj, 0, 0, canvas.width, canvas.height);
+
+        images[currentIndex].labels.forEach(box => {
+            const [id, cx, cy, cw, ch] = box;
+            const w = cw * canvas.width;
+            const h = ch * canvas.height;
+            const x = (cx * canvas.width) - w/2;
+            const y = (cy * canvas.height) - h/2;
+
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#00ff41';
+            ctx.strokeStyle = '#00ff41';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(x, y, w, h);
+            
+            ctx.fillStyle = '#00ff41';
+            ctx.font = '12px "Fira Code"';
+            ctx.fillText(`CLASS:${id}`, x, y - 5);
+        });
+    }
+
+    const getPos = (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return [clientX - rect.left, clientY - rect.top];
+    };
+
+    canvas.addEventListener('mousedown', e => { if(currentIndex===-1) return; isDrawing = true; [startX, startY] = getPos(e); });
+    canvas.addEventListener('touchstart', e => { if(currentIndex===-1) return; isDrawing = true; [startX, startY] = getPos(e); });
+
+    window.addEventListener('mousemove', e => {
+        if (!isDrawing) return;
+        render();
+        const [curX, curY] = getPos(e);
+        ctx.strokeStyle = '#00ff41';
+        ctx.setLineDash([4, 4]);
+        ctx.strokeRect(startX, startY, curX - startX, curY - startY);
+        ctx.setLineDash([]);
+    });
+
+    window.addEventListener('mouseup', e => {
+        if (!isDrawing) return;
+        isDrawing = false;
+        const [endX, endY] = getPos(e);
+        const w = Math.abs(endX - startX);
+        const h = Math.abs(endY - startY);
+        if (w < 5 || h < 5) return;
+        const x_center = (Math.min(startX, endX) + w / 2) / canvas.width;
+        const y_center = (Math.min(startY, endY) + h / 2) / canvas.height;
+        images[currentIndex].labels.push([document.getElementById('classId').value, x_center, y_center, w/canvas.width, h/canvas.height]);
+        render();
+    });
+
+    function undo() { images[currentIndex].labels.pop(); render(); }
+    function nextImg() { if(currentIndex < images.length-1) { currentIndex++; loadImage(currentIndex); } }
+    function prevImg() { if(currentIndex > 0) { currentIndex--; loadImage(currentIndex); } }
+
+    async function exportZip() {
+        if (images.length === 0) return;
+        const zip = new JSZip();
+        images.forEach(img => {
+            const content = img.labels.map(l => l.join(' ')).join('\n');
+            zip.file(img.name.replace(/\.[^/.]+$/, "") + ".txt", content);
+        });
+        const blob = await zip.generateAsync({type: "blob"});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = "ROOT_EXPORT_DATA.zip"; a.click();
+    }
+</script>
+</body>
+</html>

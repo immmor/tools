@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>NEURAL-LINK YOLO | V5.0</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+        :root {
+            --plasma: #ffde00;
+            --cyber: #00ff66;
+            --void: #0a0c10;
+            --hull: rgba(20, 25, 35, 0.9);
+        }
+
+        * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+
+        body {
+            margin: 0; padding: 0; background: var(--void); color: var(--cyber);
+            font-family: 'Share Tech Mono', monospace; height: 100vh;
+            display: flex; flex-direction: column; overflow: hidden;
+            background-image: 
+                radial-gradient(circle at 2px 2px, rgba(0, 255, 102, 0.05) 1px, transparent 0);
+            background-size: 30px 30px;
+        }
+
+        /* 顶部扫描状态 */
+        header {
+            padding: 10px 20px;
+            display: flex; justify-content: space-between; align-items: flex-end;
+            background: linear-gradient(180deg, rgba(0,255,102,0.1), transparent);
+            border-bottom: 1px dashed var(--cyber);
+        }
+
+        .system-stat { font-size: 10px; text-transform: uppercase; letter-spacing: 2px; }
+
+        /* 画布区：战术显示器感 */
+        #container {
+            flex: 1; position: relative; overflow: hidden;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        canvas {
+            border: 2px solid rgba(0, 255, 102, 0.2);
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.9), inset 0 0 20px rgba(0, 255, 102, 0.1);
+            background: #000;
+            touch-action: none;
+        }
+
+        /* 手机端大拇指交互矩阵 */
+        .cockpit-controls {
+            background: var(--hull);
+            backdrop-filter: blur(15px);
+            border-top: 2px solid var(--cyber);
+            padding: 15px;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            grid-template-rows: auto auto;
+            gap: 10px;
+            box-shadow: 0 -10px 30px rgba(0,0,0,0.8);
+            clip-path: polygon(0 15%, 5% 0, 95% 0, 100% 15%, 100% 100%, 0 100%);
+        }
+
+        /* 核心战术按钮 */
+        .tactic-btn {
+            background: rgba(0, 255, 102, 0.05);
+            border: 1px solid var(--cyber);
+            color: var(--cyber);
+            padding: 12px 5px;
+            text-align: center;
+            font-size: 12px;
+            font-weight: bold;
+            transition: 0.2s;
+        }
+
+        .tactic-btn:active {
+            background: var(--cyber);
+            color: var(--void);
+            box-shadow: 0 0 20px var(--cyber);
+        }
+
+
+
+        .btn-large { grid-column: span 2; background: rgba(255, 222, 0, 0.05); border-color: var(--plasma); color: var(--plasma); }
+        .btn-large:active { background: var(--plasma); border-color: var(--plasma); }
+
+        /* 浮动标签 ID */
+        .class-selector {
+            grid-column: span 1;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            border: 1px solid var(--cyber); background: rgba(0,0,0,0.5);
+        }
+
+        #classId {
+            background: transparent; border: none; color: var(--cyber);
+            font-family: 'Share Tech Mono'; font-size: 1.5rem; width: 100%; text-align: center;
+        }
+
+        .label-text { font-size: 8px; color: rgba(0, 255, 102, 0.5); }
+
+        /* 动画：扫描线 */
+        .v-line {
+            position: absolute; width: 1px; height: 100%;
+            background: rgba(0, 255, 102, 0.2); left: 50%; pointer-events: none;
+        }
+        .h-line {
+            position: absolute; height: 1px; width: 100%;
+            background: rgba(0, 255, 102, 0.2); top: 50%; pointer-events: none;
+        }
+
+    </style>
+</head>
+<body>
+
+<header>
+    <div>
+        <div class="system-stat">Target_Aquisition: <span id="imgIndex">00/00</span></div>
+        <div id="imgName" style="font-size: 12px; color: var(--plasma);">NO_SIGNAL</div>
+    </div>
+    <div class="system-stat" style="text-align: right;">v5.0_Link<br>Status: OK</div>
+</header>
+
+<div id="container">
+    <div class="v-line"></div><div class="h-line"></div>
+    <canvas id="canvas"></canvas>
+</div>
+
+<div class="cockpit-controls">
+    <button class="tactic-btn" onclick="document.getElementById('fileInput').click()">[ INGEST ]</button>
+    <input type="file" id="fileInput" multiple webkitdirectory directory hidden onchange="handleFiles(this.files)">
+    
+    <button class="tactic-btn btn-large" onclick="exportZip()">>> INITIATE_EXPORT_SEQUENCE <<</button>
+    
+    <button class="tactic-btn" onclick="prevImg()">PREV_TARGET</button>
+    
+    <div class="class-selector">
+        <span class="label-text">CLASS_ID</span>
+        <input type="number" id="classId" value="0">
+    </div>
+
+    <button class="tactic-btn" onclick="nextImg()">NEXT_TARGET</button>
+    
+    <button class="tactic-btn" style="grid-column: span 3; border-color: #ff3300; color: #ff3300;" onclick="undo()">CORRECT_LAST_ENTRY (UNDO)</button>
+</div>
+
+<script>
+    // 核心逻辑保持不动
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    let images = [];
+    let currentIndex = -1;
+    let isDrawing = false;
+    let startX, startY;
+    let currentImgObj = new Image();
+
+    function handleFiles(fileList) {
+        const filteredFiles = Array.from(fileList).filter(f => f.type.startsWith('image/'));
+        if (filteredFiles.length === 0) return;
+        images = filteredFiles.map(f => ({ file: f, name: f.name, labels: [] }));
+        currentIndex = 0;
+        loadImage(0);
+    }
+
+    function loadImage(index) {
+        if (index < 0 || index >= images.length) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            currentImgObj.onload = () => render();
+            currentImgObj.src = e.target.result;
+        };
+        reader.readAsDataURL(images[index].file);
+        document.getElementById('imgName').innerText = `ID: ${images[index].name.toUpperCase()}`;
+        document.getElementById('imgIndex').innerText = `${index + 1}/${images.length}`;
+    }
+
+    function render() {
+        if (currentIndex === -1) return;
+        const container = document.getElementById('container');
+        const ratio = Math.min((container.clientWidth - 30) / currentImgObj.width, (container.clientHeight - 30) / currentImgObj.height);
+        canvas.width = currentImgObj.width * ratio;
+        canvas.height = currentImgObj.height * ratio;
+
+        ctx.drawImage(currentImgObj, 0, 0, canvas.width, canvas.height);
+
+        images[currentIndex].labels.forEach(box => {
+            const [id, cx, cy, cw, ch] = box;
+            const w = cw * canvas.width;
+            const h = ch * canvas.height;
+            const x = (cx * canvas.width) - w/2;
+            const y = (cy * canvas.height) - h/2;
+
+            // 战术框：带角度的四角定位
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#00ff66';
+            ctx.strokeStyle = '#00ff66';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(x, y, w, h);
+            
+            // 四角增强
+            const len = 10;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(x, y+len); ctx.lineTo(x, y); ctx.lineTo(x+len, y);
+            ctx.moveTo(x+w-len, y); ctx.lineTo(x+w, y); ctx.lineTo(x+w, y+len);
+            ctx.stroke();
+
+            ctx.fillStyle = '#00ff66';
+            ctx.font = '10px Share Tech Mono';
+            ctx.fillText(`OBJ_DATA_ID:${id}`, x + 5, y - 5);
+        });
+    }
+
+    const getPos = (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return [clientX - rect.left, clientY - rect.top];
+    };
+
+    canvas.addEventListener('mousedown', e => { if(currentIndex===-1) return; isDrawing = true; [startX, startY] = getPos(e); });
+    canvas.addEventListener('touchstart', e => { if(currentIndex===-1) return; isDrawing = true; [startX, startY] = getPos(e); });
+
+    window.addEventListener('mousemove', e => {
+        if (!isDrawing) return;
+        render();
+        const [curX, curY] = getPos(e);
+        ctx.strokeStyle = 'rgba(255, 222, 0, 0.8)';
+        ctx.setLineDash([2, 2]);
+        ctx.strokeRect(startX, startY, curX - startX, curY - startY);
+        ctx.setLineDash([]);
+    });
+
+    window.addEventListener('mouseup', e => {
+        if (!isDrawing) return;
+        isDrawing = false;
+        const [endX, endY] = getPos(e);
+        const w = Math.abs(endX - startX);
+        const h = Math.abs(endY - startY);
+        if (w < 5 || h < 5) return;
+        const x_center = (Math.min(startX, endX) + w / 2) / canvas.width;
+        const y_center = (Math.min(startY, endY) + h / 2) / canvas.height;
+        images[currentIndex].labels.push([document.getElementById('classId').value, x_center, y_center, w/canvas.width, h/canvas.height]);
+        render();
+    });
+
+    function undo() { images[currentIndex].labels.pop(); render(); }
+    function nextImg() { if(currentIndex < images.length-1) { currentIndex++; loadImage(currentIndex); } }
+    function prevImg() { if(currentIndex > 0) { currentIndex--; loadImage(currentIndex); } }
+
+    async function exportZip() {
+        if (images.length === 0) return;
+        const zip = new JSZip();
+        images.forEach(img => {
+            const content = img.labels.map(l => l.join(' ')).join('\n');
+            zip.file(img.name.replace(/\.[^/.]+$/, "") + ".txt", content);
+        });
+        const blob = await zip.generateAsync({type: "blob"});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = "NEURAL_LINK_EXPORT.zip"; a.click();
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PocketLabel - 极简YOLO标注工具</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        :root {
+            --primary: #007AFF;
+            --dark: #1C1C1E;
+            --accent: #FF9500;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0; padding: 0;
+            background: var(--dark); color: white;
+            display: flex; flex-direction: column; height: 100vh; overflow: hidden;
+        }
+        /* Header */
+        header {
+            padding: 10px; background: #2C2C2E;
+            display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid #3A3A3C;
+        }
+        .btn-group { display: flex; gap: 8px; }
+        button {
+            background: var(--primary); color: white; border: none;
+            padding: 8px 15px; border-radius: 6px; cursor: pointer; font-weight: bold;
+        }
+        button.secondary { background: #3A3A3C; }
+        button.export { background: #34C759; }
+
+        /* Canvas Area */
+        #container {
+            flex: 1; position: relative; overflow: hidden;
+            display: flex; align-items: center; justify-content: center;
+            touch-action: none; /* 禁用系统手势 */
+        }
+        canvas {
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            max-width: 100%; max-height: 100%;
+        }
+
+        /* Footer Info */
+        footer {
+            padding: 10px; background: #2C2C2E; font-size: 12px;
+            display: flex; justify-content: space-between;
+        }
+
+        /* Sidebar/Overlay */
+        #class-tag {
+            position: absolute; top: 10px; right: 10px;
+            background: rgba(0,0,0,0.7); padding: 5px; border-radius: 5px;
+        }
+        input[type="number"] { width: 40px; background: #3A3A3C; color: white; border: none; padding: 5px; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="btn-group">
+        <button onclick="document.getElementById('fileInput').click()">导入图片/文件夹</button>
+        <input type="file" id="fileInput" multiple webkitdirectory directory hidden onchange="handleFiles(this.files)">
+        <button class="secondary" onclick="prevImg()">◀</button>
+        <button class="secondary" onclick="nextImg()">▶</button>
+    </div>
+    <button class="export" onclick="exportZip()">导出 ZIP</button>
+</header>
+
+<div id="container">
+    <div id="class-tag">类别ID: <input type="number" id="classId" value="0"></div>
+    <canvas id="canvas"></canvas>
+</div>
+
+<footer>
+    <span id="imgName">等待导入...</span>
+    <span id="imgIndex">0/0</span>
+</footer>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    let images = []; // {file, name, width, height, labels: [[id, x, y, w, h]]}
+    let currentIndex = -1;
+    let isDrawing = false;
+    let startX, startY;
+    let currentImgObj = new Image();
+
+    // 初始化：监听窗口大小
+    window.addEventListener('resize', render);
+
+    function handleFiles(fileList) {
+        const filteredFiles = Array.from(fileList).filter(f => f.type.startsWith('image/'));
+        if (filteredFiles.length === 0) return;
+
+        images = filteredFiles.map(f => ({
+            file: f,
+            name: f.name,
+            labels: []
+        }));
+        
+        currentIndex = 0;
+        loadImage(0);
+    }
+
+    function loadImage(index) {
+        if (index < 0 || index >= images.length) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            currentImgObj.onload = () => {
+                images[index].width = currentImgObj.width;
+                images[index].height = currentImgObj.height;
+                render();
+            };
+            currentImgObj.src = e.target.result;
+        };
+        reader.readAsDataURL(images[index].file);
+        
+        document.getElementById('imgName').innerText = images[index].name;
+        document.getElementById('imgIndex').innerText = `${index + 1}/${images.length}`;
+    }
+
+    function render() {
+        if (currentIndex === -1) return;
+
+        // 适配屏幕
+        const container = document.getElementById('container');
+        const ratio = Math.min(container.clientWidth / currentImgObj.width, container.clientHeight / currentImgObj.height);
+        canvas.width = currentImgObj.width * ratio;
+        canvas.height = currentImgObj.height * ratio;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(currentImgObj, 0, 0, canvas.width, canvas.height);
+
+        // 绘制已有框
+        images[currentIndex].labels.forEach(box => {
+            const [id, cx, cy, cw, ch] = box;
+            // YOLO 归一化转像素
+            const w = cw * canvas.width;
+            const h = ch * canvas.height;
+            const x = (cx * canvas.width) - w/2;
+            const y = (cy * canvas.height) - h/2;
+
+            ctx.strokeStyle = '#00FF00';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(x, y, w, h);
+            ctx.fillStyle = '#00FF00';
+            ctx.fillText(`ID:${id}`, x, y - 5);
+        });
+    }
+
+    // 交互逻辑 (支持鼠标和触摸)
+    const startAction = (e) => {
+        if (currentIndex === -1) return;
+        isDrawing = true;
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        startX = clientX - rect.left;
+        startY = clientY - rect.top;
+    };
+
+    const moveAction = (e) => {
+        if (!isDrawing) return;
+        render();
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        const curX = clientX - rect.left;
+        const curY = clientY - rect.top;
+
+        ctx.strokeStyle = 'rgba(255, 149, 0, 0.8)';
+        ctx.setLineDash([5, 5]);
+        ctx.strokeRect(startX, startY, curX - startX, curY - startY);
+        ctx.setLineDash([]);
+    };
+
+    const endAction = (e) => {
+        if (!isDrawing) return;
+        isDrawing = false;
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.changedTouches ? e.changedTouches[0].clientX : e.clientX;
+        const clientY = e.changedTouches ? e.changedTouches[0].clientY : e.clientY;
+        const endX = clientX - rect.left;
+        const endY = clientY - rect.top;
+
+        // 计算 YOLO 格式: [class, x_center, y_center, width, height] 归一化
+        const w = Math.abs(endX - startX);
+        const h = Math.abs(endY - startY);
+        if (w < 5 || h < 5) return; // 过滤太小的点击
+
+        const x_center = (Math.min(startX, endX) + w / 2) / canvas.width;
+        const y_center = (Math.min(startY, endY) + h / 2) / canvas.height;
+        const norm_w = w / canvas.width;
+        const norm_h = h / canvas.height;
+        const classId = document.getElementById('classId').value;
+
+        images[currentIndex].labels.push([classId, x_center, y_center, norm_w, norm_h]);
+        render();
+    };
+
+    canvas.addEventListener('mousedown', startAction);
+    window.addEventListener('mousemove', moveAction);
+    window.addEventListener('mouseup', endAction);
+    canvas.addEventListener('touchstart', startAction);
+    canvas.addEventListener('touchmove', moveAction);
+    canvas.addEventListener('touchend', endAction);
+
+    // 翻页
+    function nextImg() { if(currentIndex < images.length-1) { currentIndex++; loadImage(currentIndex); } }
+    function prevImg() { if(currentIndex > 0) { currentIndex--; loadImage(currentIndex); } }
+
+    // 导出 ZIP
+    async function exportZip() {
+        if (images.length === 0) return alert("没有可导出的数据");
+        const zip = new JSZip();
+        
+        images.forEach(img => {
+            const content = img.labels.map(l => l.join(' ')).join('\n');
+            const fileName = img.name.substring(0, img.name.lastIndexOf('.')) + ".txt";
+            zip.file(fileName, content);
+        });
+
+        const blob = await zip.generateAsync({type: "blob"});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = "labels_yolo.zip";
+        a.click();
+    }
+
+    // 快捷键
+    window.addEventListener('keydown', (e) => {
+        if(e.key === 'd' || e.key === 'ArrowRight') nextImg();
+        if(e.key === 'a' || e.key === 'ArrowLeft') prevImg();
+        if(e.key === 'z') { images[currentIndex].labels.pop(); render(); } // 撤销
+    });
+</script>
+
+</body>
+</html>
