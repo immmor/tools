@@ -16,9 +16,29 @@ jobs:
         run: |
           npm init -y
           npm i @capacitor/core @capacitor/cli @capacitor/android
-          npx cap init "MyCloudflareApp" "com.example.cfapp" --web-dir editor
+          npx cap init "IME" "com.immmor.ime" --web-dir editor
           npx cap add android
           npx cap copy
+
+      - name: Fix Kotlin versions to avoid duplicate stdlib
+        run: |
+          BUILD_FILE=android/build.gradle
+          if [ -f "$BUILD_FILE" ]; then
+            cat >> "$BUILD_FILE" <<'EOF'
+            subprojects {
+              configurations.all {
+                resolutionStrategy {
+                  force 'org.jetbrains.kotlin:kotlin-stdlib:1.8.22', 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22'
+                  eachDependency { details ->
+                    if (details.requested.group == 'org.jetbrains.kotlin' && details.requested.name.startsWith('kotlin-stdlib')) {
+                      details.useVersion '1.8.22'
+                    }
+                  }
+                }
+              }
+            }
+            EOF
+          fi
           
       # 真正打包成 APK (需要 Java 环境)
       - name: set up JDK 21
@@ -35,5 +55,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: my-app-apk
+          name: ime-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
