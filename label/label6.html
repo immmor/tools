@@ -56,7 +56,7 @@
             padding: 15px;
             display: grid;
             grid-template-columns: 1fr 1fr 1fr;
-            grid-template-rows: auto auto;
+            grid-template-rows: auto auto auto;
             gap: 10px;
             box-shadow: 0 -10px 30px rgba(0,0,0,0.8);
             clip-path: polygon(0 15%, 5% 0, 95% 0, 100% 15%, 100% 100%, 0 100%);
@@ -73,6 +73,7 @@
             font-weight: bold;
             transition: 0.2s;
             outline: none;
+            cursor: pointer;
         }
 
         .tactic-btn:active {
@@ -138,8 +139,9 @@
     </div>
 
     <button class="tactic-btn" onclick="nextImg()">NEXT_TARGET</button>
-    
-    <button class="tactic-btn" style="grid-column: span 3; border-color: #ff3300; color: #ff3300;" onclick="undo()">CORRECT_LAST_ENTRY (UNDO)</button>
+
+    <button id="modeBtn" class="tactic-btn" style="grid-column: span 1; border-color: #00ccff; color: #00ccff;" onclick="toggleMode()">[ MODE: DRAW ]</button>
+    <button class="tactic-btn" style="grid-column: span 2; border-color: #ff3300; color: #ff3300;" onclick="undo()">CORRECT_LAST_ENTRY (UNDO)</button>
 </div>
 
 <script>
@@ -157,10 +159,18 @@
     // 交互状态
     let isDrawing = false;
     let isDragging = false;
+    let isMoveMode = false; // 切换模式
     let startX, startY; // 屏幕坐标
     let lastX, lastY;   // 屏幕坐标
     let initialPinchDist = 0;
     let initialScale = 1;
+
+    function toggleMode() {
+        isMoveMode = !isMoveMode;
+        const btn = document.getElementById('modeBtn');
+        btn.innerText = isMoveMode ? "[ MODE: MOVE ]" : "[ MODE: DRAW ]";
+        canvas.style.cursor = isMoveMode ? "move" : "crosshair";
+    }
 
     function handleFiles(fileList) {
         const filteredFiles = Array.from(fileList).filter(f => f.type.startsWith('image/'));
@@ -241,7 +251,7 @@
         });
 
         // 绘制正在拉取的临时框
-        if (isDrawing && !isDragging) {
+        if (isDrawing && !isMoveMode && !isDragging) {
             const sPos = screenToCanvas(startX, startY);
             const cPos = screenToCanvas(lastX, lastY);
             ctx.strokeStyle = 'rgba(255, 222, 0, 0.8)';
@@ -282,9 +292,13 @@
         lastX = startX;
         lastY = startY;
 
-        // 如果是单指拖动（比如按住某键或特定逻辑可改为拖动，这里设定单指默认画框，若需拖动可增加切换逻辑）
-        // 目前逻辑：单指画框
-        isDrawing = true;
+        if (isMoveMode) {
+            isDragging = true;
+            isDrawing = false;
+        } else {
+            isDrawing = true;
+            isDragging = false;
+        }
     };
 
     const moveAction = (e) => {
@@ -292,7 +306,6 @@
         if (e.cancelable) e.preventDefault();
 
         if (e.touches && e.touches.length === 2) {
-            // 处理缩放
             const currentDist = getDist(e.touches[0], e.touches[1]);
             scale = initialScale * (currentDist / initialPinchDist);
             scale = Math.max(0.5, Math.min(10, scale));
@@ -300,18 +313,28 @@
             return;
         }
 
-        if (isDrawing) {
-            const touch = e.touches ? e.touches[0] : e;
+        const touch = e.touches ? e.touches[0] : e;
+
+        if (isMoveMode && isDragging) {
+            const dx = touch.clientX - lastX;
+            const dy = touch.clientY - lastY;
+            offsetX += dx;
+            offsetY += dy;
             lastX = touch.clientX;
             lastY = touch.clientY;
-            
-            // 如果缩放倍数很大，且用户在移动，可以根据位移判断是画框还是平移
-            // 这里为了简洁，单指统一为画框
+            render();
+        } else if (isDrawing) {
+            lastX = touch.clientX;
+            lastY = touch.clientY;
             render();
         }
     };
 
     const endAction = (e) => {
+        if (isMoveMode) {
+            isDragging = false;
+            return;
+        }
         if (!isDrawing) {
             isDragging = false;
             return;
@@ -331,22 +354,15 @@
         const w = Math.abs(p2.x - p1.x);
         const h = Math.abs(p2.y - p1.y);
 
-        // 判定有效框（需在图片区域内）
         if (w * scale < 5 || h * scale < 5) {
             render();
             return;
         }
 
-        // 转换为 YOLO 归一化坐标 (0-1)
-        // 图片中心在 Canvas 变换后的 (0,0)
         const normX = (xmin + w/2 + drawW/2) / drawW;
         const normY = (ymin + h/2 + drawH/2) / drawH;
         const normW = w / drawW;
         const normH = h / drawH;
-
-        if (normX < 0 || normX > 1 || normY < 0 || normY > 1) {
-             // 允许画到外面，但 YOLO 通常限制在 0-1
-        }
 
         images[currentIndex].labels.push([
             document.getElementById('classId').value,
@@ -358,7 +374,6 @@
         render();
     };
 
-    // 滚轮缩放支持 (PC)
     canvas.addEventListener('wheel', (e) => {
         e.preventDefault();
         const delta = e.deltaY > 0 ? 0.9 : 1.1;
@@ -367,7 +382,6 @@
         render();
     }, { passive: false });
 
-    // 事件绑定
     canvas.addEventListener('mousedown', startAction);
     window.addEventListener('mousemove', moveAction);
     window.addEventListener('mouseup', endAction);
