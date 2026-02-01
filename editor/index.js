@@ -1,685 +1,3 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>immmor code</title>
-    <link rel="icon" type="image/png" href="iwe.png">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
-    <style>
-        :root {
-            --amber: #ffb000;
-            --amber-dim: #714e00;
-            --bg: #12100b;
-            --panel-bg: #1c1912;
-            --border-w: 2px;
-            --term-red: #ff3e3e;
-            --term-green: #00ff41;
-        }
-
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; cursor: default; }
-        
-        body, html {
-            margin: 0; padding: 0; height: 100vh; width: 100vw;
-            background: var(--bg); color: var(--amber);
-            font-family: 'Courier New', Courier, monospace; overflow: hidden;
-            background-image: linear-gradient(rgba(18, 16, 11, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 255, 0, 0.06));
-            background-size: 100% 4px, 3px 100%;
-        }
-
-        .header {
-            height: 40px; border-bottom: var(--border-w) solid var(--amber);
-            display: flex; align-items: center; padding: 0 15px;
-            font-size: 14px; font-weight: bold; background: var(--panel-bg);
-            text-shadow: 0 0 5px var(--amber); gap: 20px;
-        }
-
-        .menu-btn { cursor: pointer !important; padding: 5px 10px; border: 1px solid transparent; }
-        .menu-btn:hover { border-color: var(--amber); background: rgba(255, 176, 0, 0.1); }
-
-        .workspace { display: flex; flex-direction: row; height: calc(100vh - 40px); width: 100%; position: relative; }
-
-        .panel { 
-            background: var(--panel-bg); display: flex; flex-direction: column; 
-            overflow: hidden; position: relative; height: 100%;
-        }
-
-        .panel.maximized {
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;   /* 必须设为0，确保从屏幕最左边开始 */
-            width: 100vw !important; /* 占据整个屏幕宽度 */
-            height: 100vh !important; /* 占据整个屏幕高度 */
-            z-index: 999 !important; /* 确保层级高于一切 */
-            background: var(--bg) !important; /* 背景不透明，遮住底下的编辑器 */
-            display: flex !important;
-            flex-direction: column !important;
-            margin: 0 !important;
-            padding: 0 !important;
-        }
-        
-        .panel.maximized .p-head {
-            height: 40px !important;
-            flex-shrink: 0 !important;
-        }
-        
-        .panel.maximized .term-tabs {
-            height: 30px !important;
-            flex-shrink: 0 !important;
-        }
-        
-        .panel.maximized #editor-container,
-        .panel.maximized #ai-container,
-        .panel.maximized #term-container {
-            flex: 1 !important;
-            overflow: auto !important;
-        }
-        
-        .panel.maximized {
-            border-left: none !important;
-            border-right: none !important;
-        }
-        
-        .panel.maximized .p-head {
-            position: relative;
-            height: 40px !important;
-        }
-        
-        .panel-tabs {
-            position: absolute;
-            top: 40px;
-            left: 0;
-            right: 0;
-            display: flex;
-            background: var(--panel-bg);
-            border-bottom: 1px solid var(--amber-dim);
-            height: 30px;
-            z-index: 0;
-        }
-        
-        .panel-tab {
-            flex: 1;
-            padding: 6px 12px;
-            text-align: center;
-            cursor: pointer;
-            border-right: 1px solid var(--amber-dim);
-            transition: background 0.2s;
-            font-size: 11px;
-            line-height: 18px;
-        }
-        
-        .panel-tab:last-child {
-            border-right: none;
-        }
-        
-        .panel-tab:hover {
-            background: var(--amber-dim);
-        }
-        
-        .panel-tab.active {
-            background: var(--amber);
-            color: #000;
-        }
-        
-        /* 为面板切换tab栏留出空间 */
-        .panel.maximized .term-tabs {
-            margin-top: 30px !important;
-        }
-        
-        /* 确保快捷键按钮在终端标签下方 */
-        .panel.maximized .editor-tools {
-            margin-top: 0 !important;
-            z-index: 1 !important;
-            position: relative !important;
-        }
-        
-        .panel.maximized #file-list {
-            margin-top: 30px !important;
-            height: calc(100% - 70px) !important;
-        }
-        
-        .panel.maximized #search-container {
-            margin-top: 30px !important;
-            position: relative !important;
-            z-index: 2 !important;
-        }
-        
-        .panel.maximized #search-results {
-            margin-top: 0px !important; /* 修复全屏模式下的顶部空白 */
-            height: calc(100% - 110px) !important;
-        }
-
-        .divider-h { width: 6px; background: var(--amber-dim); cursor: col-resize !important; flex-shrink: 0; }
-        .divider-h:hover, .divider-h.active { background: var(--amber); box-shadow: 0 0 10px var(--amber); }
-
-        .divider-v { height: 6px; background: var(--amber-dim); cursor: row-resize !important; flex-shrink: 0; }
-        .divider-v:hover, .divider-v.active { background: var(--amber); box-shadow: 0 0 10px var(--amber); }
-
-        .p-head {
-            height: 30px; border-bottom: 1px solid var(--amber-dim);
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 0 10px; font-size: 11px; background: rgba(113, 78, 0, 0.1);
-        }
-        .ctrl-group { display: flex; gap: 5px; }
-        .ctrl { 
-            cursor: pointer !important; 
-            width: 18px; height: 18px;
-            display: flex; align-items: center; justify-content: center;
-            border: 1px solid var(--amber-dim); 
-            font-size: 10px;
-            line-height: 1;
-        }
-        .ctrl:hover { background: var(--amber); color: var(--bg); }
-
-        #explorer { 
-            width: 200px; 
-            border-right: 1px solid var(--amber-dim); 
-            display: flex; 
-            flex-direction: column; 
-            overflow: hidden;
-        }
-        #file-section, #plugin-section {
-            min-height: 0;
-            overflow: hidden;
-        }
-        #file-list, #plugin-list { overflow-y: auto; flex: 1; }
-        #plugin-section { 
-            flex: 1; 
-            display: flex; 
-            flex-direction: column; 
-            min-height: 50px;
-        }
-        .file-item, .plugin-item { 
-            padding: 8px 15px; font-size: 13px; cursor: pointer !important; 
-            border-bottom: 1px solid rgba(113, 78, 0, 0.05); 
-            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-            display: flex; align-items: center; 
-            color: var(--amber); opacity: 0.7; 
-        }
-        .file-item:hover, .plugin-item:hover { background: rgba(255, 176, 0, 0.05); opacity: 0.9; }
-        .file-item.active { background: var(--amber); color: var(--bg) !important; font-weight: bold; opacity: 1; }
-        .file-item.folder { color: var(--amber); font-weight: bold; opacity: 1; border-left: 2px solid var(--amber-dim); }
-
-        .plugin-item { justify-content: space-between; font-size: 11px; }
-        .plugin-status { width: 8px; height: 8px; border-radius: 50%; background: var(--amber-dim); }
-        .plugin-status.active { background: var(--term-green); box-shadow: 0 0 5px var(--term-green); }
-
-        .file-rename-input {
-            background: var(--amber); color: var(--bg); border: none; outline: none;
-            font-family: inherit; font-size: 13px; width: 100%; padding: 0; margin: 0; font-weight: bold;
-        }
-
-        #main-stack { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-        #editor {
-            flex: 1; background: transparent; border: none; outline: none;
-            padding: 20px; color: var(--amber); font-size: 16px;
-            line-height: 1.5; resize: none; font-family: inherit; cursor: text !important;
-        }
-
-        #terminal { height: 220px; }
-        .term-tabs { display: flex; background: #000; border-bottom: 1px solid var(--amber-dim); overflow-x: auto; scrollbar-width: none; }
-        .term-tabs::-webkit-scrollbar { display: none; }
-        .term-tab { 
-            padding: 5px 12px; font-size: 10px; border-right: 1px solid var(--amber-dim); 
-            cursor: pointer !important; opacity: 0.6; display: flex; align-items: center; gap: 8px; 
-            white-space: nowrap;
-        }
-        #term-tabs .term-tab:only-child .term-close,
-        #ai-tabs .term-tab:only-child .term-close {
-            display: none !important;
-        }
-        .term-tab.active { background: var(--amber-dim); color: #fff; opacity: 1; }
-        .term-close { font-size: 12px; font-weight: bold; cursor: pointer !important; color: var(--term-red); }
-        .term-close:hover { color: #fff; }
-        
-        .term-body { flex: 1; display: none; flex-direction: column; overflow: hidden; }
-        .term-body.active { display: flex; }
-        .term-out { flex: 1; padding: 10px; overflow-y: auto; font-size: 12px; color: rgba(255, 176, 0, 0.8); white-space: pre-wrap; word-break: break-all; }
-        .term-input-wrap { display: flex; padding: 8px 10px; background: #000; border-top: 1px solid var(--amber-dim); gap: 10px; align-items: center; }
-        .cmd-in { background: transparent; border: none; outline: none; flex: 1; color: #fff; font-family: inherit; cursor: text !important; }
-
-        #ai-panel { width: 600px; border-left: 1px solid var(--amber-dim); }
-        #ai-chat { flex: 1; padding: 15px; overflow-y: auto; font-size: 13px; scroll-behavior: smooth; }
-        
-        .msg { margin-bottom: 15px; line-height: 1.4; border-left: 2px solid var(--amber-dim); padding-left: 10px; word-wrap: break-word; overflow-wrap: break-word; white-space: pre-wrap; }
-        .msg.ai { border-left-color: var(--amber); }
-        .msg.user { color: #fff; opacity: 0.8; position: relative; margin-top: 20px; }
-        .undo-btn { 
-            position: absolute; top: -18px; left: 0; 
-            color: #ff6b6b; font-size: 9px; cursor: pointer;
-            background: rgba(0,0,0,0.8); padding: 2px 6px; border-radius: 3px;
-        }
-        
-        .copy-ai-btn { 
-            position: absolute; bottom: -12px; right: 0; 
-            color: var(--amber); font-size: 9px; cursor: pointer;
-            background: rgba(0,0,0,0.8); padding: 2px 6px; border-radius: 3px;
-        }
-        
-        .scroll-top-btn { 
-            position: absolute; bottom: -12px; right: 40px; 
-            color: var(--amber); font-size: 9px; cursor: pointer;
-            background: rgba(0,0,0,0.8); padding: 2px 6px; border-radius: 3px;
-        }
-        
-        .ai-tools { padding: 8px 10px; background: rgba(113, 78, 0, 0.1); border-top: 1px solid var(--amber-dim); font-size: 10px; position: relative; }
-        
-        .custom-select-trigger { 
-            background: #000; color: var(--amber); border: 1px solid var(--amber-dim); 
-            font-size: 10px; width: 100%; padding: 6px; cursor: pointer !important;
-            display: flex; justify-content: space-between; align-items: center; white-space: nowrap;
-        }
-        .custom-select-trigger.active span:last-child {
-            transform: rotate(180deg);
-        }
-        .custom-select-options {
-            position: absolute; bottom: 100%; left: 10px; right: 10px; background: var(--panel-bg);
-            border: 1px solid var(--amber); display: none; z-index: 600; max-height: 200px; overflow-y: auto;
-        }
-        .custom-select-options div { padding: 8px; border-bottom: 1px solid var(--amber-dim); cursor: pointer !important; }
-        .custom-select-options div:hover { background: var(--amber); color: #000; }
-
-        .ai-input-area { padding: 10px; background: rgba(0,0,0,0.3); border-top: 1px solid var(--amber-dim); display: flex; gap: 5px; }
-        #ai-in { background: transparent; border: 1px solid var(--amber-dim); color: #fff; flex: 1; padding: 5px; outline: none; cursor: text !important; }
-        .ai-btn { background: var(--amber-dim); color: #fff; border: none; padding: 5px 10px; cursor: pointer !important; font-size: 10px; }
-        .ai-btn:hover { background: var(--amber); color: var(--bg); }
-        
-        .template-dropdown {
-            position: absolute;
-            bottom: 100%;
-            left: 10px;
-            right: 10px;
-            background: var(--panel-bg);
-            border: 1px solid var(--amber);
-            display: none;
-            z-index: 600;
-            max-height: 200px;
-            overflow-y: auto;
-        }
-        .template-option {
-            padding: 8px;
-            border-bottom: 1px solid var(--amber-dim);
-            cursor: pointer !important;
-            font-size: 11px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .template-option:hover {
-            background: var(--amber);
-            color: #000;
-        }
-        .template-actions {
-            display: flex;
-            gap: 5px;
-        }
-        .template-action {
-            background: transparent;
-            border: 1px solid currentColor;
-            color: inherit;
-            padding: 1px 4px;
-            font-size: 9px;
-            cursor: pointer;
-            border-radius: 2px;
-        }
-        .template-action:hover {
-            background: rgba(0,0,0,0.2);
-        }
-        .template-header {
-            padding: 8px;
-            background: var(--amber-dim);
-            color: #fff;
-            font-size: 10px;
-            font-weight: bold;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid var(--amber-dim);
-        }
-        .template-add-btn {
-            background: var(--amber);
-            color: #000;
-            border: none;
-            padding: 2px 6px;
-            font-size: 9px;
-            cursor: pointer;
-            border-radius: 2px;
-        }
-
-        #ai-container .msg {
-            font-size: 12px;
-            margin-bottom: 10px;
-        }
-
-        .search-res-item {
-            padding: 5px 10px; font-size: 11px;
-            border-bottom: 1px solid rgba(113, 78, 0, 0.1);
-            cursor: pointer !important;
-        }
-        .search-res-item:hover { background: rgba(255, 176, 0, 0.1); }
-        .search-match { color: #fff; background: var(--amber-dim); padding: 0 2px; }
-        .search-path { font-size: 9px; opacity: 0.5; display: block; margin-bottom: 2px; }
-
-        .inject-btn { display: inline-block; margin-top: 8px; font-size: 9px; padding: 2px 6px; border: 1px solid var(--amber); cursor: pointer !important; color: var(--amber); }
-        .inject-btn:hover { background: var(--amber); color: #000; }
-        
-        .ai-typing { animation: pulse 1.5s ease-in-out infinite; }
-        
-        @keyframes pulse {
-            0%, 100% { opacity: 0.6; }
-            50% { opacity: 1; }
-        }
-        @keyframes blink {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0; }
-        }
-        
-        .code-block {
-            background: rgba(255, 176, 0, 0.05);
-            border: 1px solid var(--amber-dim);
-            border-radius: 4px;
-            margin: 8px 0;
-            padding: 12px;
-            position: relative;
-        }
-        .code-lang {
-            position: absolute;
-            top: -10px;
-            left: 10px;
-            background: var(--amber);
-            color: #000;
-            padding: 2px 8px;
-            border-radius: 3px;
-            font-size: 10px;
-            font-weight: bold;
-        }
-        .code-block .inject-btn, .code-block .run-btn {
-            position: absolute;
-            top: -10px;
-            right: 55px;
-            background: var(--amber);
-            color: #000;
-            padding: 2px 8px;
-            border-radius: 3px;
-            font-size: 10px;
-            font-weight: bold;
-            border: none;
-            cursor: pointer;
-            margin: 0;
-            height: 18px;
-            line-height: 14px;
-            box-sizing: border-box;
-        }
-        .code-block .inject-btn:hover, .code-block .run-btn:hover {
-            background: #fff;
-            color: #000;
-        }
-        .code-block .copy-btn {
-            position: absolute;
-            top: -10px;
-            right: 10px;
-            background: var(--amber-dim);
-            color: var(--amber);
-            padding: 2px 8px;
-            border-radius: 3px;
-            font-size: 10px;
-            font-weight: bold;
-            border: none;
-            cursor: pointer;
-            margin: 0;
-            height: 18px;
-            line-height: 14px;
-            box-sizing: border-box;
-        }
-        .code-block .copy-btn:hover {
-            background: var(--amber);
-            color: #000;
-        }
-        .code-block pre {
-            margin: 0;
-            overflow-x: auto;
-        }
-        .code-block code {
-            font-family: 'Courier New', monospace;
-            font-size: 13px;
-            color: var(--amber);
-            white-space: pre-wrap;
-        }
-        .inline-code {
-            background: rgba(255, 176, 0, 0.1);
-            padding: 1px 4px;
-            border-radius: 2px;
-            font-family: 'Courier New', monospace;
-            font-size: 12px;
-            color: var(--amber);
-        }
-        strong { color: #fff; font-weight: bold; }
-        em { color: var(--amber); font-style: italic; }
-
-        #ctx, #plugin-ctx, .custom-modal {
-            position: fixed; display: none; background: var(--panel-bg);
-            border: 2px solid var(--amber); z-index: 1000; min-width: 200px;
-        }
-        .opt { padding: 12px 15px; font-size: 12px; font-weight: bold; cursor: pointer !important; }
-        .opt:hover { background: var(--amber); color: var(--bg); }
-        .opt.disabled { opacity: 0.5; pointer-events: none; }
-
-        .modal-overlay {
-            position: fixed; top:0; left:0; width:100%; height:100%;
-            background: rgba(0,0,0,0.8); z-index: 2000; display: none;
-            align-items: center; justify-content: center;
-        }
-        .custom-modal { display: block; position: relative; width: 320px; }
-        .modal-body { padding: 20px; }
-        .modal-input { width: 100%; background: #000; border: 1px solid var(--amber); color: #fff; padding: 8px; outline: none; font-family: inherit; margin-top: 10px; margin-bottom: 15px; }
-        .modal-btns { display: flex; justify-content: flex-end; gap: 10px; margin-top: 5px; }
-        
-        .type-selector { display: flex; gap: 15px; margin-bottom: 10px; font-size: 11px; }
-        .type-opt { cursor: pointer !important; display: flex; align-items: center; gap: 5px; }
-        .type-opt input { cursor: pointer !important; accent-color: var(--amber); }
-
-        .editor-tools {
-            display: flex; gap: 2px; padding: 5px;
-            background: rgba(28, 25, 18, 0.8);
-            border-bottom: 1px solid var(--amber-dim);
-            overflow-x: auto; white-space: nowrap;
-            scrollbar-width: none;
-        }
-        .editor-tools::-webkit-scrollbar { display: none; }
-        .key-btn {
-            padding: 4px 12px;
-            background: var(--bg);
-            border: 1px solid var(--amber-dim);
-            color: var(--amber);
-            font-size: 11px;
-            cursor: pointer !important;
-            text-transform: uppercase;
-        }
-        .key-btn:active {
-            background: var(--amber);
-            color: var(--bg);
-        }
-    </style>
-</head>
-     <body>
-
-<div class="header">
-    <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-        <div style="display: flex; gap: 0px;">
-            <div class="menu-btn" onclick="handleCtx(event, 10, 40)">FILE</div>
-            <div class="menu-btn" onclick="saveZip()">ARCHIVE</div>
-            <div class="menu-btn" onclick="clearTerm()">RESET</div>
-        </div>
-        <div style="text-shadow: 0 0 10px var(--amber); padding-right:10px;">IMMMOR</div>
-    </div>
-</div>
-
-<div class="workspace">
-    <aside class="panel" id="explorer">
-        <div id="file-section" style="height: 50%; display:flex; flex-direction:column; overflow:hidden;">  
-            <div class="p-head">
-                <span>FILESYSTEM</span>
-                <div class="ctrl-group">
-                    <span class="ctrl" onclick="toggleSearch()" title="SEARCH_ALL">⌕</span>
-                    <span class="ctrl" onclick="openModal()" title="NEW NODE">+</span>
-                    <span class="ctrl" onclick="toggleExplorerMax('file-section')">◰</span>
-                </div>
-            </div>
-            <div id="search-container" style="display:none; padding: 10px; border-bottom: 1px solid var(--amber-dim);">
-                <input type="text" id="global-search-in" class="modal-input" placeholder="Search all content (files/plugins/terminal/ai)..." style="margin:0; font-size:11px;" oninput="executeGlobalSearch()">
-            </div>
-            <div id="file-list" oncontextmenu="handleCtx(event)"></div>
-            <div id="search-results" style="display:none; overflow-y:auto; flex:1;"></div>
-        </div>
-
-        <div class="divider-v" id="v-drag-explorer"></div>
-
-        <div id="plugin-section" style="flex: 1; display:flex; flex-direction:column; overflow:hidden;">
-            <div class="p-head">
-                <span>PLUGINS</span>
-                <div class="ctrl-group">
-                    <span class="ctrl" onclick="openPluginModal()" title="ADD PLUGIN">+</span>
-                    <span class="ctrl" onclick="toggleExplorerMax('plugin-section')">◰</span>
-                </div>
-            </div>
-            <div id="plugin-list"></div>
-        </div>
-    </aside>
-
-    <div class="divider-h" id="h-drag-left"></div>
-
-    <div id="main-stack">
-        <main class="panel" id="editor-p" style="flex:1">
-            <div class="p-head">
-                <span>EDITOR</span>
-                <div class="ctrl-group">
-                    <span class="ctrl" onclick="runCurrentFile()" title="RUN_NODE" style="color:var(--amber)">▶</span>
-                    <span class="ctrl" onclick="toggleMax('editor-p')">◰</span>
-                </div>
-            </div>
-            <div class="term-tabs" id="editor-tabs"></div>
-            <div class="editor-tools">
-                <div class="key-btn" onclick="saveCurrentFile()">SAVE</div>
-                <div class="key-btn" onclick="insertAtCursor('\t')">TAB</div>
-                <div class="key-btn" onclick="execEditorCmd('undo')">UNDO</div>
-                
-                <div class="key-btn" onclick="editorAction('selectAll')"">ALL</div>
-                <div class="key-btn" onclick="editorAction('cut')">CUT</div>
-                <div class="key-btn" onclick="editorAction('copy')">COPY</div>
-                <div class="key-btn" onclick="editorAction('paste')">PASTE</div>
-
-                <div class="key-btn" onclick="insertAtCursor('{}', 1)">{ }</div>
-                <div class="key-btn" onclick="insertAtCursor('()', 1)">( )</div>
-                <div class="key-btn" onclick="insertAtCursor('[]', 1)">[ ]</div>
-                <div class="key-btn" onclick="insertAtCursor('\'\'', 1)">' '</div>
-            </div>
-            <div id="editor-container" style="flex:1; display:flex; flex-direction:column; overflow:hidden;"></div>
-        </main>
-        
-        <div class="divider-v" id="v-drag"></div>
-
-        <footer class="panel" id="terminal">
-    <div class="p-head">
-        <span>TERMINAL</span>
-        <div class="ctrl-group">
-            <span class="ctrl" onclick="addTerminal()">+</span>
-            <span class="ctrl" onclick="toggleMax('terminal')">◰</span>
-        </div>
-    </div>
-    <div class="term-tabs" id="term-tabs"></div>
-    <div class="editor-tools">
-        <div class="key-btn" onclick="insertAtTerm('\t')">TAB</div>
-        <div class="key-btn" onclick="execTermUndo()">UNDO</div>
-        
-        <div class="key-btn" onclick="termAction('selectAll')">ALL</div>
-        <div class="key-btn" onclick="termAction('cut')">CUT</div>
-        <div class="key-btn" onclick="termAction('copy')">COPY</div>
-        <div class="key-btn" onclick="termAction('paste')">PASTE</div>
-
-        <div class="key-btn" onclick="insertAtTerm('{}', 1)">{ }</div>
-        <div class="key-btn" onclick="insertAtTerm('()', 1)">( )</div>
-        <div class="key-btn" onclick="insertAtTerm('[]', 1)">[ ]</div>
-        <div class="key-btn" onclick="insertAtTerm('\'\'', 1)">' '</div>
-    </div>
-    <div id="term-container" style="flex:1; display:flex; flex-direction:column; overflow:hidden;"></div>
-</footer>
-    </div>
-
-    <div class="divider-h" id="h-drag-right"></div>
-
-    <aside class="panel" id="ai-panel">
-    <div class="p-head">
-        <span>AI</span>
-        <div class="ctrl-group">
-            <span class="ctrl" onclick="addAiTab(true)" title="NEW CHAT">+</span>
-            <span class="ctrl" onclick="openHistoryManager()" title="MANAGE HISTORY">≡</span>
-            <span class="ctrl" onclick="openSettings()" title="CONFIG">⚙</span>
-            <span class="ctrl" onclick="toggleMax('ai-panel')">◰</span>
-        </div>
-    </div>
-    <div class="term-tabs" id="ai-tabs"></div>
-    
-    <div id="ai-container" style="flex:1; display:flex; flex-direction:column; overflow:hidden;">
-        </div>
-
-    <div class="ai-tools">
-    <div style="margin-bottom: 10px;">
-        <label style="display:block; margin-bottom:5px">AI_PROVIDER:</label>
-        <div class="custom-select-trigger" id="ai-provider-trigger" onclick="toggleProviderSelect()">
-            <span id="active-provider-name">---</span>
-            <span>▼</span>
-        </div>
-        <div class="custom-select-options" id="ai-provider-options"></div>
-    </div>
-
-    <label style="display:block; margin-bottom:5px">CONTEXT_NODE:</label>
-    <div class="custom-select-trigger" id="ai-ctx-trigger" onclick="toggleAiSelect()">
-        <span id="ai-ctx-val">-- NO_CONTEXT --</span>
-        <span>▼</span>
-    </div>
-    <div class="custom-select-options" id="ai-ctx-options"></div>
-</div>
-    <div class="ai-input-area" style="position:relative;">
-        <button class="ai-btn" id="template-btn" onclick="toggleTemplateDropdown()">TEMP</button>
-        <div class="template-dropdown" id="template-dropdown">
-            <div class="template-header">
-                <span>提示词模板</span>
-                <button class="template-add-btn" onclick="addTemplate()">+ 添加</button>
-            </div>
-            <div id="template-options"></div>
-        </div>
-        <input type="text" id="ai-in" placeholder="Query..." autocomplete="off">
-        <button class="ai-btn" id="ai-send-btn" onclick="handleAiSend()">SEND</button>
-    </div>
-</aside>
-</div>
-
-<div id="ctx">
-    <div class="opt" id="ctx-new-node" onclick="openModal()">[+] NEW_FILE</div>
-    <div class="opt" id="ctx-rename" onclick="startRenameFromCtx()">[R] RENAME_FILE</div>
-    <div class="opt" id="ctx-delete" onclick="deleteNodeFromCtx()" style="color:var(--term-red)">[X] DELETE_NODE</div>
-    <div class="opt" id="ctx-copy-path" onclick="copyPathFromCtx()">[C] COPY_PATH</div>
-    <div style="border-top:1px solid var(--amber-dim); margin:4px 0;"></div>
-    <div class="opt" onclick="saveFile()">DOWNLOAD_FILE</div>
-    <div class="opt" onclick="saveZip()">DOWNLOAD_DIR</div>
-    <div class="opt" onclick="clearTerm()">RESET_CONSOLE</div>
-</div>
-
-<div id="plugin-ctx">
-    <div class="opt" onclick="renamePlugin()">[R] RENAME_PLUGIN</div>
-    <div class="opt" onclick="startEditPlugin()">[E] EDIT_PLUGIN</div>
-    <div class="opt" onclick="confirmDeletePlugin()" style="color:var(--term-red)">[X] UNINSTALL_PLUGIN</div>
-</div>
-
-<div id="modal-overlay" class="modal-overlay">
-    <div class="custom-modal">
-        <div class="p-head"><span id="modal-title">SYSTEM_PROMPT</span></div>
-        <div class="modal-body" id="modal-content"></div>
-    </div>
-</div>
-
-<script>
     let storage = JSON.parse(localStorage.getItem('ind_console_storage')) || {
         'PROTOCOL.txt': 'SYSTEM OVERRIDE: ACTIVE\nENCRYPTION: ENABLED',
         'script.js': 'console.log("Node WASM active");',
@@ -688,7 +6,7 @@
     let plugins = JSON.parse(localStorage.getItem('ind_console_plugins')) || [
         { 
             name: 'Matrix_Rain', 
-            code: 'const canvas = document.createElement(\'canvas\');const ctx = canvas.getContext(\'2d\');canvas.id = \'matrix-canvas\';canvas.style.cssText = \'position:fixed;top:0;left:0;width:100%;height:100%;z-index:22;opacity:0.4;pointer-events:none;\';document.body.appendChild(canvas);let w = canvas.width = window.innerWidth;let h = canvas.height = window.innerHeight;const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ$+-*/=<>!%";const fontSize = 14;const columns = Math.floor(w / fontSize);const drops = new Array(columns).fill(1);function draw() { ctx.fillStyle = \'rgba(18, 16, 11, 0.05)\'; ctx.fillRect(0, 0, w, h); ctx.fillStyle = \'#ffb000\'; ctx.font = fontSize + \'px "Courier New"\'; for (let i = 0; i < drops.length; i++) { const text = chars[Math.floor(Math.random() * chars.length)]; ctx.fillText(text, i * fontSize, drops[i] * fontSize); if (drops[i] * fontSize > h && Math.random() > 0.975) drops[i] = 0; drops[i]++; } }const interval = setInterval(draw, 33);const resizeHandler = () => { w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight; };window.addEventListener(\'resize\', resizeHandler);return () => { clearInterval(interval); window.removeEventListener(\'resize\', resizeHandler); if (canvas.parentNode) canvas.parentNode.removeChild(canvas); };', 
+            code: 'const canvas = document.createElement(\'canvas\');const ctx = canvas.getContext(\'2d\');canvas.id = \'matrix-canvas\';canvas.style.cssText = \'position:fixed;top:0;left:0;width:100%;height:100%;z-index:2222;opacity:0.4;pointer-events:none;\';document.body.appendChild(canvas);let w = canvas.width = window.innerWidth;let h = canvas.height = window.innerHeight;const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ$+-*/=<>!%";const fontSize = 14;const columns = Math.floor(w / fontSize);const drops = new Array(columns).fill(1);function draw() { ctx.fillStyle = \'rgba(18, 16, 11, 0.05)\'; ctx.fillRect(0, 0, w, h); ctx.fillStyle = \'#ffb000\'; ctx.font = fontSize + \'px "Courier New"\'; for (let i = 0; i < drops.length; i++) { const text = chars[Math.floor(Math.random() * chars.length)]; ctx.fillText(text, i * fontSize, drops[i] * fontSize); if (drops[i] * fontSize > h && Math.random() > 0.975) drops[i] = 0; drops[i]++; } }const interval = setInterval(draw, 33);const resizeHandler = () => { w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight; };window.addEventListener(\'resize\', resizeHandler);return () => { clearInterval(interval); window.removeEventListener(\'resize\', resizeHandler); if (canvas.parentNode) canvas.parentNode.removeChild(canvas); };', 
             active: false 
         }
     ];
@@ -725,9 +43,57 @@
     let pluginCtxTarget = null;
     let currentAiRequest = null;
     
+    // 音效函数
+    function playTone(type) {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        
+        switch(type) {
+            case 'send':
+                // 发送消息音效 - 柔和电子音
+                playBeep(audioContext, 330, 0.1, 'sine', 0, 0.08);
+                playBeep(audioContext, 440, 0.08, 'sine', 0.1, 0.06);
+                break;
+            case 'success':
+                // 成功音效 - 上升音调
+                playBeep(audioContext, 440, 0.3, 'sine');
+                playBeep(audioContext, 880, 0.2, 'sine', 0.3);
+                break;
+            case 'error':
+                // 错误音效 - 下降音调
+                playBeep(audioContext, 880, 0.2, 'square');
+                playBeep(audioContext, 220, 0.3, 'square', 0.2);
+                break;
+            case 'typing':
+                // 打字音效 - 轻快短促
+                playBeep(audioContext, 660, 0.05, 'triangle', 0, 0.1);
+                break;
+        }
+    }
+    
+    function playBeep(audioContext, frequency, duration, type = 'sine', delay = 0, volume = 0.1) {
+        setTimeout(() => {
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.frequency.value = frequency;
+            oscillator.type = type;
+            
+            gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+            gainNode.gain.linearRampToValueAtTime(volume, audioContext.currentTime + 0.01);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + duration);
+            
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + duration);
+        }, delay * 1000);
+    }
+    
     let editorTabs = {};
-    let activeEditorTab = null;
-    let fileModifiedState = {};
+        let activeEditorTab = null;
+        let fileModifiedState = {};
+        let openedTabs = JSON.parse(localStorage.getItem('ind_console_opened_tabs')) || []; // 记住打开的标签
 
     let isSearching = false;
     function toggleSearch() {
@@ -907,29 +273,55 @@ function insertAtTerm(text, offset = 0) {
 async function editorAction(action) {
     if (!activeEditorTab || !editorTabs[activeEditorTab]) return;
     const editor = editorTabs[activeEditorTab].editor;
-    editor.focus();
-    if (action === 'selectAll') {
-        editor.select();
-    } else if (action === 'copy') {
-        const selectedText = editor.value.substring(editor.selectionStart, editor.selectionEnd);
-        await navigator.clipboard.writeText(selectedText);
-    } else if (action === 'cut') {
-        const selectedText = editor.value.substring(editor.selectionStart, editor.selectionEnd);
-        await navigator.clipboard.writeText(selectedText);
-        const before = editor.value.substring(0, editor.selectionStart);
-        const after = editor.value.substring(editor.selectionEnd);
-        editor.value = before + after;
-        editor.selectionStart = editor.selectionEnd = before.length;
-    } else if (action === 'paste') {
-        try {
-            const text = await navigator.clipboard.readText();
+    
+    // Monaco Editor
+        if (editor.getValue) {
+            if (action === 'selectAll') {
+                const fullRange = editor.getModel().getFullModelRange();
+                editor.setSelection(fullRange);
+            } else if (action === 'copy') {
+            const selection = editor.getSelection();
+            const selectedText = editor.getModel().getValueInRange(selection);
+            await navigator.clipboard.writeText(selectedText);
+        } else if (action === 'cut') {
+            const selection = editor.getSelection();
+            const selectedText = editor.getModel().getValueInRange(selection);
+            await navigator.clipboard.writeText(selectedText);
+            editor.executeEdits('', [{ range: selection, text: '' }]);
+        } else if (action === 'paste') {
+            try {
+                const text = await navigator.clipboard.readText();
+                editor.trigger('keyboard', 'paste', { text: text });
+            } catch (err) {
+                addLog("PASTE_ERROR: Permission denied", "var(--term-red)");
+            }
+        }
+    } else {
+        // Textarea
+        editor.focus();
+        if (action === 'selectAll') {
+            editor.select();
+        } else if (action === 'copy') {
+            const selectedText = editor.value.substring(editor.selectionStart, editor.selectionEnd);
+            await navigator.clipboard.writeText(selectedText);
+        } else if (action === 'cut') {
+            const selectedText = editor.value.substring(editor.selectionStart, editor.selectionEnd);
+            await navigator.clipboard.writeText(selectedText);
             const before = editor.value.substring(0, editor.selectionStart);
             const after = editor.value.substring(editor.selectionEnd);
-            editor.value = before + text + after;
-            const newPos = before.length + text.length;
-            editor.selectionStart = editor.selectionEnd = newPos;
-        } catch (err) {
-            addLog("PASTE_ERROR: Permission denied", "var(--term-red)");
+            editor.value = before + after;
+            editor.selectionStart = editor.selectionEnd = before.length;
+        } else if (action === 'paste') {
+            try {
+                const text = await navigator.clipboard.readText();
+                const before = editor.value.substring(0, editor.selectionStart);
+                const after = editor.value.substring(editor.selectionEnd);
+                editor.value = before + text + after;
+                const newPos = before.length + text.length;
+                editor.selectionStart = editor.selectionEnd = newPos;
+            } catch (err) {
+                addLog("PASTE_ERROR: Permission denied", "var(--term-red)");
+            }
         }
     }
 }
@@ -969,26 +361,47 @@ function execTermUndo() {
 }
 function insertAtCursor(text, offset = 0, isReturn = false) {
     if (activeEditorTab && editorTabs[activeEditorTab]) {
-        const el = editorTabs[activeEditorTab].editor;
-        const start = el.selectionStart;
-        const end = el.selectionEnd;
-        const val = el.value;
-
-        let contentToInsert = text;
+        const editor = editorTabs[activeEditorTab].editor;
         
-        // 如果是回车键，尝试模拟简单自动缩进
-        if (isReturn) {
-            const line = val.substring(0, start).split('\n').pop();
-            const trimStart = line.search(/\S/);
-            const indent = trimStart > 0 ? line.substring(0, trimStart) : "";
-            contentToInsert = '\n' + indent;
+        // Monaco Editor
+        if (editor.getValue) {
+            const position = editor.getPosition();
+            const currentLine = editor.getModel().getLineContent(position.lineNumber);
+            
+            let contentToInsert = text;
+            if (isReturn) {
+                const trimStart = currentLine.search(/\S/);
+                const indent = trimStart > 0 ? currentLine.substring(0, trimStart) : "";
+                contentToInsert = '\n' + indent;
+            }
+            
+            editor.trigger('keyboard', 'type', { text: contentToInsert });
+            
+            // 处理偏移
+            if (offset > 0) {
+                const newPos = editor.getPosition();
+                editor.setPosition({ lineNumber: newPos.lineNumber, column: newPos.column - offset });
+            }
+        } else {
+            // Textarea
+            const el = editor;
+            const start = el.selectionStart;
+            const end = el.selectionEnd;
+            const val = el.value;
+            
+            let contentToInsert = text;
+            if (isReturn) {
+                const line = val.substring(0, start).split('\n').pop();
+                const trimStart = line.search(/\S/);
+                const indent = trimStart > 0 ? line.substring(0, trimStart) : "";
+                contentToInsert = '\n' + indent;
+            }
+            
+            el.value = val.substring(0, start) + contentToInsert + val.substring(end);
+            const newPos = start + contentToInsert.length - offset;
+            el.focus();
+            el.setSelectionRange(newPos, newPos);
         }
-
-        el.value = val.substring(0, start) + contentToInsert + val.substring(end);
-        
-        const newPos = start + contentToInsert.length - offset;
-        el.focus();
-        el.setSelectionRange(newPos, newPos);
         
         autoSave();
     }
@@ -1006,23 +419,63 @@ function handleModifier(type) {
 function execEditorCmd(cmd) {
     if (activeEditorTab && editorTabs[activeEditorTab]) {
         const editor = editorTabs[activeEditorTab].editor;
-        editor.focus();
-        document.execCommand(cmd, false, null);
+        
+        // Monaco Editor
+        if (editor.trigger) {
+            if (cmd === 'undo') {
+                editor.trigger('keyboard', 'undo', null);
+            } else if (cmd === 'redo') {
+                editor.trigger('keyboard', 'redo', null);
+            } else if (cmd === 'selectAll') {
+                editor.trigger('keyboard', 'selectAll', null);
+            }
+        } else {
+            // Textarea
+            editor.focus();
+            document.execCommand(cmd, false, null);
+        }
+        
         autoSave();
     }
 }
 
 // 拦截物理 Tab 键 (如果是外接键盘)
 function initEditorTabEvents() {
-    if (activeEditorTab && editorTabs[activeEditorTab]) {
-        const editor = editorTabs[activeEditorTab].editor;
-        editor.addEventListener('keydown', function(e) {
-            if (e.key === 'Tab') {
-                e.preventDefault();
-                insertAtCursor('    ');
+    const tabs = document.querySelectorAll('#editor-tabs .term-tab');
+    tabs.forEach(tab => {
+        const fileName = tab.id.replace('editor-tab-', '');
+        tab.onclick = (e) => {
+            // 避免点击关闭按钮时切换标签
+            if (!e.target.closest('.term-close')) {
+                switchEditorTab(fileName);
             }
-        });
-    }
+        };
+    });
+}
+
+function getLanguageFromFileName(fileName) {
+    const ext = fileName.split('.').pop().toLowerCase();
+    const langMap = {
+        'js': 'javascript',
+        'py': 'python',
+        'html': 'html',
+        'css': 'css',
+        'json': 'json',
+        'txt': 'plaintext',
+        'md': 'markdown',
+        'xml': 'xml',
+        'sql': 'sql',
+        'java': 'java',
+        'c': 'c',
+        'cpp': 'cpp',
+        'cs': 'csharp',
+        'php': 'php',
+        'rb': 'ruby',
+        'go': 'go',
+        'rs': 'rust',
+        'sh': 'shell'
+    };
+    return langMap[ext] || 'plaintext';
 }
 
     // --- Plugins Logic ---
@@ -1222,7 +675,8 @@ function initEditorTabEvents() {
     function saveCurrentFile() {
         if (activeEditorTab && editorTabs[activeEditorTab]) {
             const editor = editorTabs[activeEditorTab].editor;
-            const content = editor.value;
+            // 兼容Monaco Editor和textarea
+            const content = editor.getValue ? editor.getValue() : editor.value;
             
             // 清除修改标记
             clearFileModified(activeEditorTab);
@@ -1340,96 +794,231 @@ function initEditorTabEvents() {
         
         document.getElementById('editor-tabs').appendChild(tab);
         
-        // 创建编辑器内容区
-        const editorArea = document.createElement('textarea');
-        editorArea.className = 'editor-body';
-        editorArea.id = 'editor-' + fileName;
-        editorArea.spellcheck = false;
-        
-        // 判断是普通文件还是插件
-        if (plugins.find(p => p.name === fileName)) {
-            // 插件标签（直接使用插件名）
-            const plugin = plugins.find(p => p.name === fileName);
-            editorArea.value = plugin ? plugin.code : '';
-        } else {
-            // 普通文件
-            editorArea.value = storage[fileName] || '';
+        // 记住打开的标签
+        if (!openedTabs.includes(fileName)) {
+            openedTabs.push(fileName);
+            localStorage.setItem('ind_console_opened_tabs', JSON.stringify(openedTabs));
         }
         
-        // 监听编辑器变化
-        editorArea.addEventListener('input', () => {
-            markFileModified(fileName);
+        // 创建Monaco Editor容器
+        const editorContainer = document.createElement('div');
+        editorContainer.className = 'monaco-editor-container';
+        editorContainer.id = 'editor-' + fileName;
+        editorContainer.style.display = 'none';
+        editorContainer.style.flex = '1';
+        editorContainer.style.height = '100%';
+        editorContainer.style.width = '100%';
+        
+        document.getElementById('editor-container').appendChild(editorContainer);
+        
+        // 获取文件内容
+        const fileContent = plugins.find(p => p.name === fileName) ? 
+            (plugins.find(p => p.name === fileName).code || '') : 
+            (storage[fileName] || '');
+        
+        // 初始化Monaco Editor
+        require.config({ paths: { 'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.47.0/min/vs' }});
+        require(['vs/editor/editor.main'], function() {
+            // 配置Monaco主题 - 使用CSS变量
+        const style = getComputedStyle(document.documentElement);
+        monaco.editor.defineTheme('console-theme', {
+            base: 'vs-dark',
+            inherit: true,
+            rules: [
+                { token: '', foreground: style.getPropertyValue('--amber').trim() || '#00ff9d' },
+            ],
+            colors: {
+                'editor.background': style.getPropertyValue('--bg').trim() || '#050505',
+                'editor.foreground': style.getPropertyValue('--amber').trim() || '#00ff9d',
+                'editor.lineHighlightBackground': style.getPropertyValue('--panel-bg').trim() || '#0d0d0d',
+                'editor.selectionBackground': style.getPropertyValue('--amber-dim').trim() || '#003320',
+                'editor.inactiveSelectionBackground': style.getPropertyValue('--amber-dim').trim() || '#003320',
+                'editorCursor.foreground': style.getPropertyValue('--amber').trim() || '#00ff9d',
+                'editor.lineNumbers.foreground': style.getPropertyValue('--term-red').trim() || '#555',
+                'editorGutter.background': style.getPropertyValue('--bg').trim() || '#050505',
+                'editorIndentGuide.background': style.getPropertyValue('--panel-bg').trim() || '#0d0d0d',
+                'editorIndentGuide.activeBackground': style.getPropertyValue('--amber').trim() || '#00ff9d',
+            }
         });
-        
-        editorArea.style.display = 'none';
-        editorArea.style.flex = '1';
-        editorArea.style.resize = 'none';
-        editorArea.style.border = 'none';
-        editorArea.style.background = 'transparent';
-        editorArea.style.color = 'inherit';
-        editorArea.style.fontFamily = 'inherit';
-        editorArea.style.fontSize = 'inherit';
-        editorArea.style.padding = '10px';
-        editorArea.style.outline = 'none';
-        
-        // 添加快捷键支持
-        editorArea.onkeydown = function(e) {
-            if (e.ctrlKey || e.metaKey) {
-                switch(e.key) {
-                    case 's':
-                        e.preventDefault();
-                        saveCurrentFile();
-                        break;
-                    case 'z':
-                        e.preventDefault();
-                        document.execCommand('undo');
-                        break;
-                    case 'y':
-                        e.preventDefault();
-                        document.execCommand('redo');
-                        break;
+            
+            const editor = monaco.editor.create(editorContainer, {
+                value: fileContent,
+                language: getLanguageFromFileName(fileName),
+                theme: 'console-theme',
+                fontSize: 13,
+                fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
+                automaticLayout: true,
+                minimap: { enabled: true },
+                scrollBeyondLastLine: false,
+                wordWrap: 'off',
+                lineNumbers: 'on',
+                folding: true,
+                renderWhitespace: 'selection',
+                renderControlCharacters: true,
+                scrollbar: {
+                    verticalScrollbarSize: 6,
+                    horizontalScrollbarSize: 6
+                },
+                contextmenu: false, // 必须禁用，否则长按弹出系统菜单会冲突
+                quickSuggestions: false // 移动端建议框有时会遮挡选区
+            });
+            
+            // 监听内容变化
+            editor.onDidChangeModelContent(() => {
+                markFileModified(fileName);
+            });
+            
+            // 双竖杠移动端文本选中支持
+            const startHandle = document.getElementById('handle-start');
+            const endHandle = document.getElementById('handle-end');
+
+            // 更新拉杆位置的函数
+            function updateHandles() {
+                const selection = editor.getSelection();
+                if (!selection || selection.isEmpty()) {
+                    startHandle.style.display = 'none';
+                    endHandle.style.display = 'none';
+                    return;
+                }
+
+                // 获取选区首尾的像素坐标
+                const startPos = editor.getScrolledVisiblePosition(selection.getStartPosition());
+                const endPos = editor.getScrolledVisiblePosition(selection.getEndPosition());
+
+                if (startPos && endPos) {
+                    const editorRect = editorContainer.getBoundingClientRect();
+                    
+                    startHandle.style.display = 'block';
+                    startHandle.style.left = (editorRect.left + startPos.left) + 'px';
+                    startHandle.style.top = (editorRect.top + startPos.top) + 'px';
+                    startHandle.style.height = startPos.height + 'px';
+
+                    endHandle.style.display = 'block';
+                    endHandle.style.left = (editorRect.left + endPos.left) + 'px';
+                    endHandle.style.top = (editorRect.top + endPos.top) + 'px';
+                    endHandle.style.height = endPos.height + 'px';
                 }
             }
-        };
-        
-        document.getElementById('editor-container').appendChild(editorArea);
-        
-        // 保存标签信息
-        editorTabs[fileName] = {
-            tab: tab,
-            editor: editorArea
-        };
+
+            // 监听选区变化
+            editor.onDidChangeCursorSelection(() => {
+                updateHandles();
+            });
+
+            // 监听滚动，防止拉杆留在原位
+            editor.onDidScrollChange(() => {
+                updateHandles();
+            });
+
+            // 核心逻辑：实现拉杆的拖拽移动
+            function makeHandleDraggable(handle, isStart) {
+                handle.addEventListener('touchmove', (e) => {
+                    e.preventDefault();
+                    const touch = e.touches[0];
+                    // 将触摸点转换回 Monaco 的行/列位置
+                    const target = editor.getTargetAtClientPoint(touch.clientX, touch.clientY);
+                    
+                    if (target && target.position) {
+                        const currentSel = editor.getSelection();
+                        let newSel;
+                        if (isStart) {
+                            newSel = new monaco.Selection(
+                                target.position.lineNumber, target.position.column,
+                                currentSel.endLineNumber, currentSel.endColumn
+                            );
+                        } else {
+                            newSel = new monaco.Selection(
+                                currentSel.startLineNumber, currentSel.startColumn,
+                                target.position.lineNumber, target.position.column
+                            );
+                        }
+                        editor.setSelection(newSel);
+                    }
+                }, { passive: false });
+            }
+
+            makeHandleDraggable(startHandle, true);
+            makeHandleDraggable(endHandle, false);
+
+            // 辅助：双击或长按选中单词
+            editor.onMouseDown((e) => {
+                // Monaco 内部对长按有部分支持，这里确保 UI 能够及时响应
+                setTimeout(updateHandles, 50);
+            });
+
+            // 解决 iOS 软键盘遮挡问题
+            window.addEventListener('resize', () => {
+                editor.layout();
+                updateHandles();
+            });
+
+            // 添加快捷键支持
+            editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, function() {
+                saveCurrentFile();
+            });
+            
+            // 保存编辑器实例
+            editorTabs[fileName] = {
+                tab: tab,
+                editor: editor,
+                container: editorContainer
+            };
+            
+            // 检查初始状态是否已修改
+            const originalContent = plugins.find(p => p.name === fileName) ? 
+                plugins.find(p => p.name === fileName).code : 
+                storage[fileName] || '';
+            if (editor.getValue() !== originalContent) {
+                markFileModified(fileName);
+            }
+        });
         
         // 切换到新标签
         switchEditorTab(fileName);
         
-        // 检查初始状态是否已修改
-        const originalContent = plugins.find(p => p.name === fileName) ? 
-            plugins.find(p => p.name === fileName).code : 
-            storage[fileName] || '';
-        if (editorArea.value !== originalContent) {
-            markFileModified(fileName);
-        }
+        // 检查初始状态是否已修改（在Monaco Editor初始化回调中处理）
         
         initEditorTabEvents();
     }
     
     function switchEditorTab(fileName) {
         Object.keys(editorTabs).forEach(tabName => {
-            const editor = editorTabs[tabName].editor;
-            editor.style.display = 'none';
-            editorTabs[tabName].tab.classList.remove('active');
+            const editorTab = editorTabs[tabName];
+            if (editorTab.container) {
+                editorTab.container.style.display = 'none';
+            }
+            editorTab.tab.classList.remove('active');
         });
         
         if (editorTabs[fileName]) {
-            editorTabs[fileName].editor.style.display = 'block';
+            // 确保容器存在
+            if (!editorTabs[fileName].container) {
+                console.error('Editor container not found for', fileName);
+                return;
+            }
+            
+            editorTabs[fileName].container.style.display = 'block';
             editorTabs[fileName].tab.classList.add('active');
-            editorTabs[fileName].editor.focus();
+            if (editorTabs[fileName].editor) {
+                editorTabs[fileName].editor.focus();
+            }
             activeEditorTab = fileName;
             activeFile = fileName;
             localStorage.setItem('ind_console_active', fileName);
+            
+            // 显示/隐藏预览按钮
+            const previewBtn = document.getElementById('preview-btn');
+            if (previewBtn) {
+                if (fileName.endsWith('.html') && !fileName.startsWith('[PREVIEW]')) {
+                    previewBtn.style.display = 'flex';
+                } else {
+                    previewBtn.style.display = 'none';
+                }
+            }
         }
     }
+    
+
     
     function markFileModified(fileName) {
         if (!fileModifiedState[fileName]) {
@@ -1455,19 +1044,50 @@ function initEditorTabEvents() {
     
     function closeEditorTab(fileName) {
     const tabs = Object.keys(editorTabs);
-    if (tabs.length <= 1) return; // 至少保留一个标签
     
     const tabInfo = editorTabs[fileName];
     const wasActive = tabInfo.tab.classList.contains('active');
     
     // 删除DOM元素
     tabInfo.tab.remove();
-    tabInfo.editor.remove();
     
-    // 从标签管理中删除
+    // 正确销毁编辑器
+    if (tabInfo.editor.dispose) {
+        // Monaco编辑器
+        tabInfo.editor.dispose();
+    } else if (tabInfo.editor.parentNode) {
+        // iframe或其他DOM元素
+        tabInfo.editor.parentNode.removeChild(tabInfo.editor);
+    }
+    
+    // 清理检查按钮
+    if (tabInfo.inspectBtn && tabInfo.inspectBtn.parentNode) {
+        tabInfo.inspectBtn.parentNode.removeChild(tabInfo.inspectBtn);
+    }
+    
+    // 清理全屏按钮
+    if (tabInfo.fullscreenBtn && tabInfo.fullscreenBtn.parentNode) {
+        tabInfo.fullscreenBtn.parentNode.removeChild(tabInfo.fullscreenBtn);
+    }
+    
+    // 恢复快捷键栏显示
+    const editorTools = document.querySelector('.editor-tools');
+    if (editorTools) {
+        editorTools.style.display = 'flex';
+    }
+    
+    document.body.classList.remove('preview-fullscreen');
+    if (tabInfo.container.parentNode) {
+        tabInfo.container.parentNode.removeChild(tabInfo.container);
+    }
     delete editorTabs[fileName];
-    
-    // 如果关闭的是当前活动标签，切换到其他标签
+    if (!fileName.startsWith('[PREVIEW]')) {
+        const index = openedTabs.indexOf(fileName);
+        if (index !== -1) {
+            openedTabs.splice(index, 1);
+            localStorage.setItem('ind_console_opened_tabs', JSON.stringify(openedTabs));
+        }
+    }
     if (wasActive) {
         const remainingTabs = Object.keys(editorTabs);
         if (remainingTabs.length > 0) {
@@ -1477,7 +1097,6 @@ function initEditorTabEvents() {
     }
 }
 
-// 标签拖拽功能
 let draggedTab = null;
 
 function handleTabDragStart(e) {
@@ -1498,20 +1117,15 @@ function handleTabDrop(e) {
     e.preventDefault();
     
     if (draggedTab !== this) {
-        // 获取标签容器
         const tabsContainer = this.parentNode;
         const tabs = Array.from(tabsContainer.children);
         const fromIndex = tabs.indexOf(draggedTab);
         const toIndex = tabs.indexOf(this);
-        
-        // 移动标签
         if (fromIndex < toIndex) {
             tabsContainer.insertBefore(draggedTab, this.nextSibling);
         } else {
             tabsContainer.insertBefore(draggedTab, this);
         }
-        
-        // 根据标签类型重新排序对应的内容
         const tabType = tabsContainer.id;
         if (tabType === 'editor-tabs') {
             reorderEditorTabs();
@@ -1742,7 +1356,387 @@ function smartSwitch(targetPanelId) {
     }
 }
 
-    function toggleExplorerMax(sectionId) {
+    // workspace管理
+function toggleWorkspace() {
+    const modal = document.getElementById('modal-overlay');
+    const content = document.getElementById('modal-content');
+    
+    content.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h3 style="margin: 0; color: var(--amber);">Workspace管理</h3>
+            <span onclick="document.getElementById('modal-overlay').style.display = 'none'" 
+                  style="cursor: pointer; color: var(--amber); font-size: 18px; padding: 5px;" 
+                  title="关闭">×</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto;">
+            ${workspaces.map(ws => `
+                <div class="workspace-item ${ws.id === currentWorkspaceId ? 'active' : ''}" 
+                     style="padding: 10px; border: 1px solid ${ws.id === currentWorkspaceId ? 'var(--amber)' : 'var(--amber-dim)'}; border-radius: 3px; display: flex; align-items: center; background: ${ws.id === currentWorkspaceId ? 'rgba(255, 176, 0, 0.1)' : 'transparent'};">
+                    <div onclick="switchWorkspace('${ws.id}')" style="flex: 1; cursor: pointer;">
+                        <div style="font-weight: bold; color: var(--amber);">${ws.name}</div>
+                        <div style="font-size: 11px; color: var(--amber-dim);">${ws.path}</div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 5px; margin-left: 10px;">
+                        ${ws.id !== 'default' ? `<span onclick="deleteWorkspace('${ws.id}'); event.stopPropagation();" style="color: #ff3e3e; cursor: pointer;" title="删除">×</span>` : ''}
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+        
+        <div style="margin-top: 15px;">
+            <div style="display: flex; border-bottom: 1px solid var(--amber-dim); margin-bottom: 15px;">
+                <button id="tab-local" class="tab-btn active" onclick="switchTab('local')" style="flex: 1; padding: 8px; background: var(--amber); color: #000; border: none; cursor: pointer;">添加Workspace</button>
+                <button id="tab-github" class="tab-btn" onclick="switchTab('github')" style="flex: 1; padding: 8px; background: var(--amber-dim); color: var(--amber); border: none; cursor: pointer;">GitHub仓库</button>
+            </div>
+            
+            <div id="tab-content-local" class="tab-content" style="display: block;">
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <input type="text" id="workspace-name" class="modal-input" placeholder="Workspace名称" style="margin: 0;">
+                    <input type="text" id="workspace-path" class="modal-input" placeholder="路径 (如: /path/to/project)" style="margin: 0;">
+                    <button class="ai-btn" onclick="addWorkspace()" style="margin-top: 5px;">添加</button>
+                </div>
+            </div>
+            
+            <div id="tab-content-github" class="tab-content" style="display: none;">
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+                <input type="text" id="github-repo" class="modal-input" placeholder="GitHub仓库 (如: username/repo)" style="margin: 0;">
+                <input type="text" id="github-branch" class="modal-input" placeholder="分支 (默认: main)" style="margin: 0;">
+                <input type="password" id="github-token" class="modal-input" placeholder="GitHub Token (推送时使用)" value="${githubToken}" style="margin: 0;">
+                <div style="display: flex; gap: 8px;">
+                    <button class="ai-btn" onclick="addGitHubWorkspace()" style="flex: 1;">导入</button>
+                    <button class="ai-btn" onclick="pushToGitHub()" style="flex: 1; background: var(--amber); color: #000;">推送</button>
+                </div>
+            </div>
+        </div>
+        </div>
+    `;
+    
+    modal.style.display = 'flex';
+}
+
+// 切换选项卡
+function switchTab(tabName) {
+    // 更新按钮状态
+    document.getElementById('tab-local').classList.toggle('active', tabName === 'local');
+    document.getElementById('tab-github').classList.toggle('active', tabName === 'github');
+    
+    // 更新按钮样式
+    document.getElementById('tab-local').style.background = tabName === 'local' ? 'var(--amber)' : 'var(--amber-dim)';
+    document.getElementById('tab-local').style.color = tabName === 'local' ? '#000' : 'var(--amber)';
+    document.getElementById('tab-github').style.background = tabName === 'github' ? 'var(--amber)' : 'var(--amber-dim)';
+    document.getElementById('tab-github').style.color = tabName === 'github' ? '#000' : 'var(--amber)';
+    
+    // 显示/隐藏内容区域
+    document.getElementById('tab-content-local').style.display = tabName === 'local' ? 'block' : 'none';
+    document.getElementById('tab-content-github').style.display = tabName === 'github' ? 'block' : 'none';
+}
+
+// 删除workspace
+function deleteWorkspace(workspaceId) {
+    if (workspaceId === 'default') {
+        alert('不能删除默认工作区');
+        return;
+    }
+    
+    if (confirm('确定要删除这个workspace吗？')) {
+        workspaces = workspaces.filter(ws => ws.id !== workspaceId);
+        
+        if (currentWorkspaceId === workspaceId) {
+            currentWorkspaceId = 'default';
+            switchWorkspace('default');
+        }
+        
+        saveWorkspaces();
+        toggleWorkspace();
+        alert('Workspace已删除');
+    }
+}
+
+// 推送到GitHub
+async function pushToGitHub() {
+    const repoInput = document.getElementById('github-repo');
+    const branchInput = document.getElementById('github-branch');
+    const tokenInput = document.getElementById('github-token');
+    const repo = repoInput.value.trim();
+    const branch = branchInput.value.trim() || 'main';
+    const token = tokenInput.value.trim();
+    
+    if (!repo) {
+        alert('请输入仓库地址');
+        return;
+    }
+    
+    if (token) {
+        // 自动保存token
+                githubToken = token;
+                localStorage.setItem('ind_console_github_token', token);
+    } else if (!githubToken) {
+        alert('请输入GitHub Token');
+        return;
+    }
+    
+    const effectiveToken = token || githubToken;
+    
+    if (!repo.includes('/')) {
+        alert('请输入完整的仓库地址 (如: username/repo)');
+        return;
+    }
+    
+    try {
+        alert('开始推送文件到GitHub...');
+        
+        // 获取当前workspace的文件
+        const currentWorkspace = workspaces.find(ws => ws.id === currentWorkspaceId);
+        if (!currentWorkspace) {
+            alert('没有找到当前workspace');
+            return;
+        }
+        
+        // 获取仓库的当前提交信息
+        const commitsResponse = await fetch(`https://api.github.com/repos/${repo}/commits?sha=${branch}`, {
+            headers: { 'Authorization': `token ${effectiveToken}` }
+        });
+        
+        if (!commitsResponse.ok) {
+            throw new Error('无法访问仓库，请检查Token权限');
+        }
+        
+        const commits = await commitsResponse.json();
+        const latestCommit = commits[0];
+        
+        // 使用Contents API逐个推送文件（更可靠）
+        let pushedCount = 0;
+        let failedFiles = [];
+        
+        for (const [path, content] of Object.entries(storage)) {
+            if (!path.endsWith('/')) { // 只处理文件
+                try {
+                    // 检查文件是否存在
+                    const checkResponse = await fetch(`https://api.github.com/repos/${repo}/contents/${path}?ref=${branch}`, {
+                        headers: { 'Authorization': `token ${effectiveToken}` }
+                    });
+                    
+                    let sha = null;
+                    if (checkResponse.status === 200) {
+                        const fileData = await checkResponse.json();
+                        sha = fileData.sha; // 更新现有文件
+                    }
+                    
+                    // 创建或更新文件
+                    const pushResponse = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Authorization': `token ${effectiveToken}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            message: `Update ${path}`,
+                            content: btoa(unescape(encodeURIComponent(content))),
+                            branch: branch,
+                            sha: sha
+                        })
+                    });
+                    
+                    if (pushResponse.ok) {
+                        pushedCount++;
+                    }
+                } catch (error) {
+                    failedFiles.push({ path, error: error.message });
+                }
+            }
+        }
+        
+        alert(`成功推送到 ${repo}:${branch} (${pushedCount}个文件)`);
+        
+    } catch (error) {
+        console.error('GitHub推送失败:', error);
+        alert(`推送失败: ${error.message}`);
+    }
+}
+
+// 切换workspace
+function switchWorkspace(workspaceId) {
+    const targetWorkspace = workspaces.find(ws => ws.id === workspaceId);
+    if (!targetWorkspace) return;
+    
+    // 保存当前workspace的文件状态
+    const currentWorkspace = workspaces.find(ws => ws.id === currentWorkspaceId);
+    if (currentWorkspace) {
+        currentWorkspace.files = {...storage};
+    }
+    
+    // 确保默认工作区的文件存在
+    const defaultWorkspace = workspaces.find(ws => ws.id === 'default');
+    if (defaultWorkspace && !defaultWorkspace.files) {
+        defaultWorkspace.files = {};
+    }
+    
+    // 切换到目标workspace
+    currentWorkspaceId = workspaceId;
+    
+    // 更新文件系统
+    Object.keys(storage).forEach(key => {
+        delete storage[key];
+    });
+    Object.assign(storage, targetWorkspace.files || {});
+    
+    saveWorkspaces();
+    saveSetting('currentWorkspaceId', currentWorkspaceId);
+    
+    const tabContainer = document.getElementById('editor-tabs');
+    while (tabContainer.firstChild) {
+        tabContainer.removeChild(tabContainer.firstChild);
+    }
+    renderFiles();
+    document.getElementById('modal-overlay').style.display = 'none';
+    addLog(`[SYSTEM]: SWITCHED_TO_WORKSPACE >> ${targetWorkspace.name}`, 'var(--term-green)');
+}
+
+// 添加workspace
+function addWorkspace() {
+    const nameInput = document.getElementById('workspace-name');
+    const pathInput = document.getElementById('workspace-path');
+    const name = nameInput.value.trim();
+    const path = pathInput.value.trim();
+    
+    if (!name || !path) {
+        alert('请输入名称和路径');
+        return;
+    }
+    
+    // 创建新workspace
+    const newWorkspace = {
+        id: 'workspace_' + Date.now(),
+        name: name,
+        path: path,
+        files: {
+            'README.md': `# ${name}\n\nWorkspace路径: ${path}\n\n创建时间: ${new Date().toLocaleString()}`,
+            'main.js': 'console.log("Hello from new workspace");',
+            'style.css': '/* 新的样式文件 */',
+            'utils/helper.js': '// 工具函数文件'
+        }
+    };
+    
+    // 添加到workspaces列表
+    workspaces.push(newWorkspace);
+    
+    // 保存到localStorage
+    // localStorage.setItem('ind_console_workspaces', JSON.stringify(workspaces));
+    
+    // 清空输入框
+    nameInput.value = '';
+    pathInput.value = '';
+    
+    // 重新打开workspace管理界面
+    toggleWorkspace();
+    
+    addLog(`[SYSTEM]: ADDED_WORKSPACE >> ${name}`, 'var(--term-green)');
+}
+
+// 从GitHub导入workspace
+async function addGitHubWorkspace() {
+    const repoInput = document.getElementById('github-repo');
+    const branchInput = document.getElementById('github-branch');
+    const repo = repoInput.value.trim();
+    const branch = branchInput.value.trim() || 'main';
+    
+    if (!repo) {
+        alert('请输入GitHub仓库地址');
+        return;
+    }
+    
+    if (!repo.includes('/')) {
+        alert('请输入完整的仓库地址 (如: username/repo)');
+        return;
+    }
+    
+    try {
+        addLog('[SYSTEM]: 正在从GitHub下载仓库内容...', 'var(--amber)');
+        
+        // 获取仓库信息
+        const repoInfoResponse = await fetch(`https://api.github.com/repos/${repo}`);
+        if (!repoInfoResponse.ok) {
+            throw new Error('仓库不存在或无法访问');
+        }
+        const repoInfo = await repoInfoResponse.json();
+        
+        // 获取仓库文件树
+        const treeResponse = await fetch(`https://api.github.com/repos/${repo}/git/trees/${branch}?recursive=1`);
+        if (!treeResponse.ok) {
+            throw new Error('无法获取仓库文件树');
+        }
+        const treeData = await treeResponse.json();
+        
+        // 分离文件和文件夹
+        const allItems = treeData.tree || [];
+        const files = allItems.filter(item => item.type === 'blob');
+        const folders = allItems.filter(item => item.type === 'tree');
+        
+        // 只排除.git目录，其他文件由.gitignore管理
+        const codeFiles = files.filter(file => !file.path.includes('.git/'));
+        
+        // 检查是否已存在同名仓库
+        const existingWorkspace = workspaces.find(ws => ws.path === `github:${repo}/${branch}`);
+        let targetWorkspace;
+        if (existingWorkspace) {
+            // 更新已有仓库
+            existingWorkspace.name = repoInfo.name || repo.split('/')[1];
+            existingWorkspace.files = {};
+            targetWorkspace = existingWorkspace;
+        } else {
+            // 创建新workspace
+            const newWorkspace = {
+                id: 'github_' + Date.now(),
+                name: repoInfo.name || repo.split('/')[1],
+                path: `github:${repo}/${branch}`,
+                files: {}
+            };
+            workspaces.push(newWorkspace);
+            targetWorkspace = newWorkspace;
+        }
+        
+        // 首先创建所有文件夹
+        folders.forEach(folder => {
+            targetWorkspace.files[folder.path + '/'] = ''; // 空字符串表示文件夹
+        });
+        
+        // 下载文件内容
+        let downloadedCount = 0;
+        for (const file of codeFiles) {
+            try {
+                const fileResponse = await fetch(`https://raw.githubusercontent.com/${repo}/${branch}/${file.path}`);
+                if (fileResponse.ok) {
+                    const content = await fileResponse.text();
+                    targetWorkspace.files[file.path] = content;
+                    downloadedCount++;
+                }
+            } catch (error) {
+                console.warn(`无法下载文件: ${file.path}`, error);
+            }
+        }
+        
+        // 添加README文件说明
+        targetWorkspace.files['README.md'] = `# ${repoInfo.name}\n\n从GitHub导入的仓库: ${repo}\n\n分支: ${branch}\n导入时间: ${new Date().toLocaleString()}\n\n文件数: ${downloadedCount}`;
+        
+        // 保存到localStorage
+        saveWorkspaces();
+        
+        // 清空输入框
+        repoInput.value = '';
+        branchInput.value = '';
+        
+        // 重新打开workspace管理界面
+        toggleWorkspace();
+        
+        addLog(`[SYSTEM]: 成功${existingWorkspace ? '更新' : '导入'}GitHub仓库: ${repoInfo.name} (${downloadedCount}个文件)`, 'var(--term-green)');
+        
+    } catch (error) {
+        console.error('GitHub导入失败:', error);
+        addLog(`[SYSTEM]: 导入失败: ${error.message}`, 'var(--term-red)');
+    }
+}
+
+function toggleExplorerMax(sectionId) {
         const explorer = document.getElementById('explorer');
         const fileSection = document.getElementById('file-section');
         const pluginSection = document.getElementById('plugin-section');
@@ -1806,6 +1800,7 @@ function smartSwitch(targetPanelId) {
     function renderFiles() {
         const list = document.getElementById('file-list');
         list.innerHTML = '';
+        
         const sortedKeys = Object.keys(storage).sort((a,b) => {
             const aDir = a.includes('/') ? 0 : 1;
             const bDir = b.includes('/') ? 0 : 1;
@@ -1850,6 +1845,8 @@ function smartSwitch(targetPanelId) {
             };
             
             div.oncontextmenu = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 ctxTarget = { path: k, el: nameSpan, isFolder: isFolder };
                 handleCtx(e);
             };
@@ -1916,25 +1913,40 @@ function smartSwitch(targetPanelId) {
     function deleteNodeFromCtx() {
         if (!ctxTarget) return;
         const { path, isFolder } = ctxTarget;
+        
+        // 检查文件是否存在
+        if (!isFolder && !storage[path]) {
+            alert(`ERROR: File ${path} not found`);
+            return;
+        }
+        
         if (confirm(`PURGE NODE: ${path}?`)) {
             if (isFolder) {
                 Object.keys(storage).forEach(k => {
                     if (k.startsWith(path)) delete storage[k];
                 });
+                expandedDirs = expandedDirs.filter(dir => !dir.startsWith(path));
             } else {
                 delete storage[path];
             }
             
-            // 更新多标签编辑器系统
             if (editorTabs[path]) {
                 closeEditorTab(path);
             }
             
-            // 保存到localStorage
+            if (activeFile === path) {
+                activeFile = null;
+                localStorage.removeItem('ind_console_active');
+            }
+            
             localStorage.setItem('ind_console_storage', JSON.stringify(storage));
+            localStorage.setItem('ind_console_expanded', JSON.stringify(expandedDirs));
+            
+            ctxTarget = null;
+            
             renderFiles();
+            document.getElementById('ctx').style.display = 'none';
         }
-        document.getElementById('ctx').style.display = 'none';
     }
 
     function copyPathFromCtx() {
@@ -1948,6 +1960,95 @@ function smartSwitch(targetPanelId) {
     
     // 对话历史记忆
     let chatHistory = JSON.parse(localStorage.getItem('ind_console_chat_history')) || {}; // 存储每个聊天窗口的对话历史
+    
+    // 每个聊天的请求状态
+    let chatRequestStates = {}; // 存储每个聊天窗口的请求状态
+    
+    // workspace管理 - 使用IndexedDB存储
+    let workspaces = [{ id: 'default', name: '默认工作区', path: '/Users/mrok/Documents/Coding/Web/tools', files: {...storage} }];
+    let currentWorkspaceId = 'default';
+    let githubToken = localStorage.getItem('ind_console_github_token') || '';
+    
+    // 初始化IndexedDB
+    const dbName = 'WorkspaceDB';
+    const dbVersion = 1;
+    let db;
+    
+    const request = indexedDB.open(dbName, dbVersion);
+    
+    request.onupgradeneeded = (event) => {
+        db = event.target.result;
+        if (!db.objectStoreNames.contains('workspaces')) {
+            db.createObjectStore('workspaces', { keyPath: 'id' });
+        }
+        if (!db.objectStoreNames.contains('settings')) {
+            db.createObjectStore('settings', { keyPath: 'key' });
+        }
+    };
+    
+    request.onsuccess = (event) => {
+        db = event.target.result;
+        loadWorkspaces();
+        loadSettings();
+    };
+    
+    // 加载workspaces
+    function loadWorkspaces() {
+        if (!db.objectStoreNames.contains('workspaces')) {
+            return;
+        }
+        
+        const transaction = db.transaction('workspaces', 'readonly');
+        const store = transaction.objectStore('workspaces');
+        const request = store.getAll();
+        
+        request.onsuccess = (event) => {
+            workspaces = event.target.result.length > 0 ? event.target.result : [{ id: 'default', name: '默认工作区', path: '/Users/mrok/Documents/Coding/Web/tools', files: {...storage} }];
+        };
+    }
+    
+    // 保存workspaces
+    function saveWorkspaces() {
+        if (!db.objectStoreNames.contains('workspaces')) {
+            return;
+        }
+        
+        const transaction = db.transaction('workspaces', 'readwrite');
+        const store = transaction.objectStore('workspaces');
+        
+        workspaces.forEach(workspace => {
+            store.put(workspace);
+        });
+    }
+    
+    // 加载设置
+    function loadSettings() {
+        if (!db.objectStoreNames.contains('settings')) {
+            return;
+        }
+        
+        const transaction = db.transaction('settings', 'readonly');
+        const store = transaction.objectStore('settings');
+        
+        const currentWorkspaceRequest = store.get('currentWorkspaceId');
+        
+        currentWorkspaceRequest.onsuccess = (event) => {
+            if (event.target.result) {
+                currentWorkspaceId = event.target.result.value;
+            }
+        };
+    }
+    
+    // 保存设置
+    function saveSetting(key, value) {
+        if (!db.objectStoreNames.contains('settings')) {
+            return;
+        }
+        
+        const transaction = db.transaction('settings', 'readwrite');
+        const store = transaction.objectStore('settings');
+        store.put({ key, value });
+    }
 
     function updateAiCtxOptions() {
         const container = document.getElementById('ai-ctx-options');
@@ -1957,7 +2058,6 @@ function smartSwitch(targetPanelId) {
                 const div = document.createElement('div');
                 div.innerText = k;
                 div.style.cursor = 'pointer';
-                // 添加选中状态的高亮样式
                 if (selectedAiCtxs.includes(k)) {
                     div.style.background = 'var(--amber)';
                     div.style.color = 'var(--bg)';
@@ -2050,6 +2150,16 @@ function smartSwitch(targetPanelId) {
         if(input) input.focus();
     }
 
+    // 终端模式切换
+    let terminalMode = 'custom'; // 'custom' (默认) 或 'local'
+    
+    function toggleTerminalMode() {
+        terminalMode = terminalMode === 'local' ? 'custom' : 'local';
+        const btn = document.getElementById('terminal-mode-btn');
+        btn.textContent = terminalMode === 'local' ? 'C' : 'L';
+        addLog(`SWITCHED_TO_${terminalMode.toUpperCase()}_MODE`, 'var(--amber)');
+    }
+    
     async function handleCommand(id) {
         const body = document.getElementById(id);
         const input = body.querySelector('.cmd-in');
@@ -2061,6 +2171,27 @@ function smartSwitch(targetPanelId) {
             output.appendChild(d); output.scrollTop = output.scrollHeight;
         };
         log(`>> ${val}`, '#fff');
+        
+        // 本地终端模式
+        if (terminalMode === 'local') {
+            try {
+                // 调用本地终端服务
+                const response = await fetch('http://localhost:5001/api/terminal/execute', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ command: val, mode: 'local' })
+                });
+                const data = await response.json();
+                if (data.output) log(data.output, 'var(--term-green)');
+                if (data.error) log(data.error, 'var(--term-red)');
+            } catch (e) {
+                log(`ERR: ${e.message}`, 'var(--term-red)');
+            }
+            input.value = '';
+            return;
+        }
+        
+        // 默认前端执行模式
         const args = val.split(' '), cmd = args[0].toLowerCase(), fileName = args[1];
         switch(cmd) {
             case 'help':
@@ -2288,20 +2419,63 @@ function smartSwitch(targetPanelId) {
         const isFolder = activeFile && activeFile.endsWith('/');
         const parentDir = activeFile ? (isFolder ? activeFile : (activeFile.includes('/') ? activeFile.substring(0, activeFile.lastIndexOf('/') + 1) : '')) : '';
         
-        document.getElementById('modal-title').innerText = "NEW_NODE_CREATION";
+        document.getElementById('modal-title').innerText = "CREATE_NEW";
         document.getElementById('modal-content').innerHTML = `
             <div style="font-size:9px; color:var(--amber-dim); margin-bottom:10px;">TARGET_PATH: ${parentDir || 'ROOT/'}</div>
-            <div class="type-selector">
+            <div class="type-selector" style="margin-bottom:15px;">
                 <label class="type-opt"><input type="radio" name="ntype" value="file" checked> FILE</label>
                 <label class="type-opt"><input type="radio" name="ntype" value="folder"> DIR</label>
+                <label class="type-opt"><input type="radio" name="ntype" value="github"> GITHUB</label>
             </div>
-            <input type="text" id="modal-input" class="modal-input" placeholder="NAME" autocomplete="off">
+            <div id="modal-content-area">
+                <input type="text" id="modal-input" class="modal-input" placeholder="NAME" autocomplete="off">
+            </div>
             <div class="modal-btns">
                 <button class="ai-btn" onclick="closeModal()">CANCEL</button>
-                <button class="ai-btn" style="background:var(--amber); color:#000" onclick="confirmModal('${parentDir}')">CONFIRM</button>
+                <button class="ai-btn" style="background:var(--amber); color:#000" onclick="handleModalConfirm('${parentDir}')">CONFIRM</button>
             </div>`;
+        
+        // 监听类型切换
+        document.querySelectorAll('input[name="ntype"]').forEach(radio => {
+            radio.addEventListener('change', updateModalContent);
+        });
+        
         document.getElementById('modal-overlay').style.display = 'flex';
         document.getElementById('modal-input').focus();
+        updateModalContent();
+    }
+    
+    function updateModalContent() {
+        const type = document.querySelector('input[name="ntype"]:checked').value;
+        const contentArea = document.getElementById('modal-content-area');
+        
+        if (type === 'github') {
+            contentArea.innerHTML = `
+                <input type="text" id="github-url" class="modal-input" placeholder="GitHub URL" style="margin-bottom:5px;">
+                <input type="text" id="save-filename" class="modal-input" placeholder="Save as filename">
+            `;
+            
+            // 自动填充文件名
+            document.getElementById('github-url').addEventListener('input', function() {
+                const url = this.value.trim();
+                if (url) {
+                    const filename = url.split('/').pop();
+                    document.getElementById('save-filename').value = filename;
+                }
+            });
+        } else {
+            contentArea.innerHTML = '<input type="text" id="modal-input" class="modal-input" placeholder="NAME" autocomplete="off">';
+        }
+    }
+    
+    function handleModalConfirm(parentDir) {
+        const type = document.querySelector('input[name="ntype"]:checked').value;
+        
+        if (type === 'github') {
+            importFromGithub();
+        } else {
+            confirmModal(parentDir);
+        }
     }
 
     function confirmModal(parentDir) {
@@ -2504,17 +2678,11 @@ function bindAiMessageButtons(container) {
                 smartSwitch('editor-p');
                 // 等待面板切换完成后再注入代码
                 setTimeout(() => {
-                    if (activeEditorTab && editorTabs[activeEditorTab]) {
-                        editorTabs[activeEditorTab].editor.value += "\n" + code;
-                        markFileModified(activeEditorTab);
-                    }
+                    injectCodeToEditor(code);
                 }, 100);
             } else {
                 // 非全屏模式下直接注入代码
-                if (activeEditorTab && editorTabs[activeEditorTab]) {
-                    editorTabs[activeEditorTab].editor.value += "\n" + code;
-                    markFileModified(activeEditorTab);
-                }
+                injectCodeToEditor(code);
             }
         } else if (btn.classList.contains('run-btn')) {
             // 执行bash命令
@@ -2544,6 +2712,209 @@ function executeBashCommands(code) {
         // 非全屏模式下直接执行命令
         executeCommands(code);
     }
+}
+
+// 将代码插入到编辑器的函数
+function injectCodeToEditor(code) {
+    if (!activeEditorTab || !editorTabs[activeEditorTab]) {
+        console.warn('No active editor tab found');
+        return;
+    }
+    
+    const editor = editorTabs[activeEditorTab].editor;
+    
+    // 检查编辑器类型并正确插入代码
+    if (editor.getValue) {
+        // Monaco编辑器
+        const selection = editor.getSelection();
+        const range = new monaco.Range(
+            selection.positionLineNumber,
+            selection.positionColumn,
+            selection.positionLineNumber,
+            selection.positionColumn
+        );
+        
+        // 在光标位置插入代码
+        editor.executeEdits("ai-inject", [{
+            range: range,
+            text: "\n" + code,
+            forceMoveMarkers: true
+        }]);
+    } else if (editor.setValue) {
+        // 其他编辑器类型，使用setValue
+        const currentValue = editor.getValue();
+        editor.setValue(currentValue + "\n" + code);
+    } else if (typeof editor === 'string') {
+        // 简单的textarea
+        editor.value += "\n" + code;
+    }
+    
+    markFileModified(activeEditorTab);
+    addLog(`[AI]: Code injected into ${activeEditorTab}`, 'var(--term-green)');
+}
+
+// HTML预览功能
+function previewHtmlFile() {
+    if (!activeEditorTab || !editorTabs[activeEditorTab]) return;
+    
+    const htmlContent = editorTabs[activeEditorTab].editor.getValue();
+    const previewFileName = `[P] ${activeEditorTab}`;
+    
+    if (editorTabs[previewFileName]) {
+        switchEditorTab(previewFileName);
+        return;
+    }
+    
+    const previewTab = document.createElement('div');
+    previewTab.className = 'term-tab';
+    previewTab.id = `editor-tab-${previewFileName}`;
+    previewTab.innerHTML = `<span>${previewFileName}</span><span class="term-close" onclick="closeEditorTab('${previewFileName}')">×</span>`;
+    
+    const previewContainer = document.createElement('div');
+    previewContainer.className = 'term-body';
+    previewContainer.style.position = 'relative';
+    
+    const iframe = document.createElement('iframe');
+    iframe.style.width = '100%';
+    iframe.style.height = '100%';
+    iframe.style.border = 'none';
+    iframe.style.background = '#fff'; // 确保背景为白色
+    
+    // 为移动端添加视口meta标签
+    const mobileViewport = '<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">';
+    const enhancedHtml = htmlContent.replace('<head>', '<head>' + mobileViewport);
+    
+    iframe.srcdoc = enhancedHtml;
+    
+    // 创建检查按钮
+    const inspectBtn = document.createElement('div');
+    inspectBtn.className = 'ctrl';
+    inspectBtn.style.position = 'absolute';
+    inspectBtn.style.top = '10px';
+    inspectBtn.style.right = '50px';
+    inspectBtn.style.zIndex = '1000';
+    inspectBtn.innerText = '⌕';
+    inspectBtn.title = 'INSPECT ELEMENTS';
+    
+    inspectBtn.onclick = () => {
+        if (iframe.contentWindow) {
+            // 尝试打开开发者工具
+            iframe.contentWindow.document.body.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                // 获取点击的元素
+                const element = e.target;
+                const tagName = element.tagName.toLowerCase();
+                const className = element.className;
+                const id = element.id;
+                
+                // 显示元素信息
+                const info = document.createElement('div');
+                info.style.position = 'absolute';
+                info.style.top = '50px';
+                info.style.right = '10px';
+                info.style.zIndex = '1001';
+                info.style.background = 'var(--amber)';
+                info.style.color = '#000';
+                info.style.padding = '10px';
+                info.style.borderRadius = '3px';
+                info.style.fontSize = '12px';
+                info.style.maxWidth = '300px';
+                info.innerHTML = `
+                    <strong>Element:</strong> &lt;${tagName}&gt;<br>
+                    <strong>Class:</strong> ${className || 'none'}<br>
+                    <strong>ID:</strong> ${id || 'none'}
+                `;
+                
+                // 移除之前的信息
+                const oldInfo = previewContainer.querySelector('.element-info');
+                if (oldInfo) oldInfo.remove();
+                
+                // 添加新信息
+                info.className = 'element-info';
+                previewContainer.appendChild(info);
+            }, { once: true });
+        }
+    };
+    
+    // 创建全屏按钮
+    const fullscreenBtn = document.createElement('div');
+    fullscreenBtn.className = 'ctrl';
+    fullscreenBtn.style.position = 'absolute';
+    fullscreenBtn.style.top = '10px';
+    fullscreenBtn.style.right = '10px';
+    fullscreenBtn.style.zIndex = '1000';
+    fullscreenBtn.innerText = '◰';
+    fullscreenBtn.title = 'FULLSCREEN';
+    
+    // 全屏切换函数
+    function togglePreviewFullscreen() {
+        const isFullscreen = document.body.classList.contains('preview-fullscreen');
+        const displayValue = isFullscreen ? '' : 'none';
+        
+        document.body.classList.toggle('preview-fullscreen', !isFullscreen);
+        fullscreenBtn.innerText = isFullscreen ? '◰' : '◱';
+        fullscreenBtn.title = isFullscreen ? 'FULLSCREEN' : 'EXIT FULLSCREEN';
+        
+        // 切换除预览界面外的所有内容显示
+        document.querySelectorAll('.panel').forEach(panel => {
+            if (panel.id !== 'editor-p') {
+                panel.style.display = displayValue;
+            }
+        });
+        document.querySelectorAll('.divider-v, .divider-h').forEach(divider => {
+            divider.style.display = displayValue;
+        });
+        document.querySelector('.header').style.display = displayValue;
+        
+        // 切换编辑器的标题栏、tab栏和快捷键显示
+    const pHead = document.querySelector('#editor-p .p-head');
+    const editorTabsEl = document.querySelector('#editor-tabs');
+    const panelTabs = document.querySelector('#panel-tabs');
+    const editorTools = document.querySelector('.editor-tools');
+    
+    if (pHead) pHead.style.display = displayValue;
+    if (editorTabsEl) editorTabsEl.style.display = displayValue;
+    if (panelTabs) panelTabs.style.display = displayValue;
+    if (editorTools) editorTools.style.display = displayValue;
+    }
+    
+    fullscreenBtn.onclick = togglePreviewFullscreen;
+    
+    previewContainer.appendChild(iframe);
+    previewContainer.appendChild(inspectBtn);
+    previewContainer.appendChild(fullscreenBtn);
+    
+    // 添加到编辑器
+    document.getElementById('editor-tabs').appendChild(previewTab);
+    document.getElementById('editor-container').appendChild(previewContainer);
+    
+    // 保存到编辑器标签
+    editorTabs[previewFileName] = {
+        tab: previewTab,
+        container: previewContainer,
+        editor: iframe,
+        inspectBtn: inspectBtn,
+        fullscreenBtn: fullscreenBtn
+    };
+    
+    // 隐藏快捷键栏
+    const editorTools = document.querySelector('.editor-tools');
+    if (editorTools) {
+        editorTools.style.display = 'none';
+    }
+    
+    // 手动绑定点击事件
+    previewTab.onclick = (e) => {
+        if (!e.target.closest('.term-close')) {
+            switchEditorTab(previewFileName);
+        }
+    };
+    
+    // 切换到预览标签页
+    switchEditorTab(previewFileName);
+    initEditorTabEvents();
 }
 
 // 执行命令的实际逻辑
@@ -2589,15 +2960,41 @@ function cancelAiRequest() {
         currentAiRequest.abort();
         currentAiRequest = null;
     }
-    resetSendButton();
+    resetSendButton(activeAiId);
 }
 
 // 重置发送按钮状态
-function resetSendButton() {
+function resetSendButton(chatId = null) {
     const sendBtn = document.getElementById('ai-send-btn');
     if (sendBtn) {
+        const targetChatId = chatId || activeAiId;
+        if (targetChatId && chatRequestStates[targetChatId]) {
+            chatRequestStates[targetChatId] = null;
+            
+            // 移除对应tab的加载效果
+            const tab = document.getElementById('tab-' + targetChatId);
+            if (tab && tab.classList.contains('loading')) {
+                tab.classList.remove('loading');
+                const idNum = targetChatId.replace('ai-chat-', '');
+                tab.innerHTML = `<span>CHAT_${idNum}</span><span class="term-close" onclick="removeAiTab(event, '${targetChatId}')">×</span>`;
+            }
+        }
         sendBtn.textContent = 'SEND';
         sendBtn.style.background = ''; // 恢复默认样式
+    }
+}
+
+// 更新发送按钮状态
+function updateSendButton() {
+    const sendBtn = document.getElementById('ai-send-btn');
+    if (sendBtn && activeAiId) {
+        if (chatRequestStates[activeAiId]) {
+            sendBtn.textContent = 'CANC';
+            sendBtn.style.background = '#ff3e3e';
+        } else {
+            sendBtn.textContent = 'SEND';
+            sendBtn.style.background = '';
+        }
     }
 }
 
@@ -2642,6 +3039,14 @@ function restoreAiTabs() {
             if (aiChatHistory[chatId] && aiChatHistory[chatId].length > 0) {
                 body.innerHTML = aiChatHistory[chatId].join('');
                 bindAiMessageButtons(body);
+                
+                // 重新绑定Copy按钮事件
+                body.querySelectorAll('.copy-ai-btn').forEach(btn => {
+                    btn.addEventListener('click', function() {
+                        const content = this.getAttribute('data-content') || '';
+                        copyAiResponse(this, content);
+                    });
+                });
             }
             
             document.getElementById('ai-container').appendChild(body);
@@ -2714,6 +3119,7 @@ function switchAiTab(id) {
     body.classList.add('active');
     
     activeAiId = id;
+    updateSendButton(); // 更新发送按钮状态
     document.getElementById('ai-in').focus();
 }
 
@@ -2747,6 +3153,17 @@ function openHistoryManager() {
     // 清空内容
     modalContent.innerHTML = '';
     
+    // 创建多选操作栏
+    const actionBar = document.createElement('div');
+    actionBar.innerHTML = `
+        <div style="display:flex; gap:10px; margin-bottom:15px; align-items:center;">
+            <button class="ai-btn" style="font-size:10px" onclick="toggleSelectAllChats()">SELECT_ALL</button>
+            <button class="ai-btn" style="font-size:10px; background:var(--term-red)" onclick="deleteSelectedChats()">DELETE</button>
+            <span id="selected-count" style="font-size:10px; opacity:0.7">0 selected</span>
+        </div>
+    `;
+    modalContent.appendChild(actionBar);
+    
     // 创建滚动容器
     const scrollContainer = document.createElement('div');
     scrollContainer.style.maxHeight = '400px';
@@ -2770,9 +3187,25 @@ function openHistoryManager() {
             
             // 创建对话条目容器
             const chatItem = document.createElement('div');
+            chatItem.className = 'chat-history-item';
             chatItem.style.border = '1px solid var(--amber-dim)';
             chatItem.style.marginBottom = '10px';
             chatItem.style.padding = '10px';
+            chatItem.style.display = 'flex';
+            chatItem.style.alignItems = 'center';
+            chatItem.style.gap = '10px';
+            
+            // 创建复选框
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'chat-checkbox';
+            checkbox.dataset.chatId = chatId;
+            checkbox.onchange = updateSelectedCount;
+            chatItem.appendChild(checkbox);
+            
+            // 创建内容容器
+            const contentContainer = document.createElement('div');
+            contentContainer.style.flex = '1';
             
             // 创建标题行
             const header = document.createElement('div');
@@ -2819,9 +3252,11 @@ function openHistoryManager() {
             countDiv.style.opacity = '0.5';
             countDiv.textContent = `Messages: ${messages.length}`;
             
-            chatItem.appendChild(header);
-            chatItem.appendChild(previewDiv);
-            chatItem.appendChild(countDiv);
+            contentContainer.appendChild(header);
+            contentContainer.appendChild(previewDiv);
+            contentContainer.appendChild(countDiv);
+            
+            chatItem.appendChild(contentContainer);
             
             scrollContainer.appendChild(chatItem);
         });
@@ -2843,6 +3278,32 @@ function openHistoryManager() {
     closeContainer.appendChild(closeBtn);
     modalContent.appendChild(closeContainer);
 }
+
+// 多选删除相关函数
+function toggleSelectAllChats() {
+    const checkboxes = document.querySelectorAll('.chat-checkbox');
+    const allChecked = checkboxes.length > 0 && Array.from(checkboxes).every(cb => cb.checked);
+    
+    checkboxes.forEach(cb => cb.checked = !allChecked);
+    updateSelectedCount();
+}
+
+function deleteSelectedChats() {
+    const selected = document.querySelectorAll('.chat-checkbox:checked');
+    if (selected.length === 0 || !confirm(`Delete ${selected.length} conversations?`)) return;
+    
+    selected.forEach(cb => delete aiChatHistory[cb.dataset.chatId]);
+    localStorage.setItem('ind_console_ai_history', JSON.stringify(aiChatHistory));
+    openHistoryManager();
+}
+
+function updateSelectedCount() {
+    const count = document.querySelectorAll('.chat-checkbox:checked').length;
+    const element = document.getElementById('selected-count');
+    if (element) element.textContent = `${count} selected`;
+}
+
+
 
 function toggleTemplateDropdown() {
     const dropdown = document.getElementById('template-dropdown');
@@ -3015,6 +3476,9 @@ async function handleAiSend() {
     
     if (!query) return;
 
+    // 播放发送音效
+    playTone('send');
+
     // 开始生成
     startGenerating();
     
@@ -3032,9 +3496,10 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
     const provider = config.providers[config.activeProviderIndex];
     if (!query || !provider || !provider.apiKey || !currentChatId) return;
 
-    // 只在单模型模式下清空输入框
+    // 只在单模型模式下清空输入框并重置高度
     if (overrideQuery === null) {
         input.value = '';
+        input.style.height = '30px';
     }
 
     const chat = document.getElementById(currentChatId);
@@ -3082,7 +3547,20 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
         localStorage.setItem('ind_console_chat_history', JSON.stringify(chatHistory));
         
         const controller = new AbortController();
-        currentAiRequest = controller;
+    currentAiRequest = controller;
+    
+    // 设置当前聊天的请求状态
+    if (currentChatId) {
+        chatRequestStates[currentChatId] = controller;
+        updateSendButton();
+        
+        // 为当前tab添加炫酷加载效果
+        const currentTab = document.getElementById('tab-' + currentChatId);
+        if (currentTab) {
+            currentTab.classList.add('loading');
+            currentTab.innerHTML = `<span class="pulse-dot"></span><span class="thinking-text">Thinking</span><span class="term-close" onclick="removeAiTab(event, '${currentChatId}')">×</span>`;
+        }
+    }
         
         const response = await fetch(`${provider.apiBaseUrl}/chat/completions`, {
             method: 'POST',
@@ -3105,6 +3583,19 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
         // 请求完成，清除控制器
         currentAiRequest = null;
         
+        // 移除tab的加载效果
+        if (currentChatId) {
+            const currentTab = document.getElementById('tab-' + currentChatId);
+            if (currentTab) {
+                currentTab.classList.remove('loading');
+                const idNum = currentChatId.replace('ai-chat-', '');
+                currentTab.innerHTML = `<span>CHAT_${idNum}</span><span class="term-close" onclick="removeAiTab(event, '${currentChatId}')">×</span>`;
+            }
+        }
+        
+        // 播放成功音效
+        playTone('success');
+        
         // 将AI回复添加到对话历史并保存
         chatHistory[currentChatId].push({
             role: 'assistant',
@@ -3113,7 +3604,7 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
         localStorage.setItem('ind_console_chat_history', JSON.stringify(chatHistory));
         
         // 恢复按钮状态
-        resetSendButton();
+    resetSendButton(currentChatId);
         
         // Markdown渲染函数
         const renderMarkdown = (text) => {
@@ -3171,7 +3662,17 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#x27;');
-        aiMsg.innerHTML = `<div style="position: relative;">AI: ${renderedContent}<span class="scroll-top-btn" onclick="scrollToAiTop(this)">▲</span><span class="copy-ai-btn" onclick="copyAiResponse(this, \`${safeContent.replace(/`/g, '\\\\`')}\`)">Copy</span></div>`;
+        // 使用更安全的方式绑定Copy按钮事件
+        aiMsg.innerHTML = `<div style="position: relative;">AI: ${renderedContent}<span class="scroll-top-btn" onclick="scrollToAiTop(this)">▲</span><span class="copy-ai-btn" data-content="${safeContent}">Copy</span></div>`;
+        
+        // 手动绑定Copy按钮事件
+        const copyBtn = aiMsg.querySelector('.copy-ai-btn');
+        if (copyBtn) {
+            copyBtn.addEventListener('click', function() {
+                const content = this.getAttribute('data-content') || '';
+                copyAiResponse(this, content);
+            });
+        }
         
         bindAiMessageButtons(aiMsg);
         scrollChat();
@@ -3181,6 +3682,9 @@ async function sendAi(overrideQuery = null, targetTabId = null) {
     } catch (err) { 
         const errorMessage = `[ERR]: ${err.message}`;
         aiMsg.innerText = `AI: ${errorMessage}`; 
+        
+        // 播放错误音效
+        playTone('error');
         
         // 恢复按钮状态
         resetSendButton();
@@ -3216,6 +3720,7 @@ function handleExtractButton(container) {
 }
     function handleCtx(e, x, y) {
         e.preventDefault();
+        e.stopPropagation();
         const ctxMenu = document.getElementById('ctx');
         const isItem = e.target.closest('.file-item');
         
@@ -3293,66 +3798,71 @@ function scrollToAiTop(button) {
     }
 }
 
-function copyAiResponse(button, content) {
-    // 解码转义字符
-    const decodedContent = content.replace(/\\`/g, '`');
-    navigator.clipboard.writeText(decodedContent).then(() => {
-        const originalText = button.textContent;
-        button.textContent = 'Done';
-        button.style.color = '#ffa500';
-        setTimeout(() => {
-            button.textContent = originalText;
-            button.style.color = 'var(--amber)';
-        }, 1000);
-    }).catch(err => {
-        console.error('复制失败:', err);
-        // 备用复制方法
-        const textArea = document.createElement('textarea');
-        textArea.value = decodedContent;
-        document.body.appendChild(textArea);
-        textArea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textArea);
+    function copyAiResponse(button, content) {
+        // 确保content参数正确传递
+        const decodedContent = content ? content.replace(/\\`/g, '`') : '';
         
-        const originalText = button.textContent;
-        button.textContent = 'Done';
-        button.style.color = 'var(--amber)';
-        setTimeout(() => {
-            button.textContent = originalText;
-            button.style.color = 'var(--amber-dim)';
-        }, 1000);
-    });
-}
+        if (!decodedContent) {
+            console.error('复制内容为空');
+            return;
+        }
+        
+        navigator.clipboard.writeText(decodedContent).then(() => {
+            const originalText = button.textContent;
+            button.textContent = 'Done';
+            button.style.color = '#00ff00';
+            setTimeout(() => {
+                button.textContent = originalText;
+                button.style.color = 'var(--amber)';
+            }, 1000);
+        }).catch(err => {
+            console.error('复制失败:', err);
+            // 备用复制方法
+            const textArea = document.createElement('textarea');
+            textArea.value = decodedContent;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            
+            const originalText = button.textContent;
+            button.textContent = 'Done';
+            button.style.color = '#00ff00';
+            setTimeout(() => {
+                button.textContent = originalText;
+                button.style.color = 'var(--amber)';
+            }, 1000);
+        });
+    }
 
-function undoToPrompt(event, chatId, messageIndex, originalQuery) {
-    event.stopPropagation(); // 阻止冒泡
-    
-    if (confirm('确定要回退到此对话吗？此操作将删除此prompt及其之后的所有对话记录。')) {
-        if (chatHistory[chatId] && chatHistory[chatId].length > messageIndex) {
-            chatHistory[chatId] = chatHistory[chatId].slice(0, messageIndex);
-            localStorage.setItem('ind_console_chat_history', JSON.stringify(chatHistory));
-        }
+    function undoToPrompt(event, chatId, messageIndex, originalQuery) {
+        event.stopPropagation();
         
-        if (aiChatHistory[chatId] && aiChatHistory[chatId].length > messageIndex) {
-            aiChatHistory[chatId] = aiChatHistory[chatId].slice(0, messageIndex);
-            localStorage.setItem('ind_console_ai_history', JSON.stringify(aiChatHistory));
-        }
-        
-        const chat = document.getElementById(chatId);
-        if (chat) {
-            chat.innerHTML = aiChatHistory[chatId].join('');
-            chat.scrollTo({ top: chat.scrollHeight, behavior: 'smooth' });
-        }
-        
-        const input = document.getElementById('ai-in');
-        if (input) {
-            input.value = originalQuery;
-            input.focus();
+        if (confirm('确定要回退到此对话吗？此操作将删除此prompt及其之后的所有对话记录。')) {
+            if (chatHistory[chatId] && chatHistory[chatId].length > messageIndex) {
+                chatHistory[chatId] = chatHistory[chatId].slice(0, messageIndex);
+                localStorage.setItem('ind_console_chat_history', JSON.stringify(chatHistory));
+            }
+            
+            if (aiChatHistory[chatId] && aiChatHistory[chatId].length > messageIndex) {
+                aiChatHistory[chatId] = aiChatHistory[chatId].slice(0, messageIndex);
+                localStorage.setItem('ind_console_ai_history', JSON.stringify(aiChatHistory));
+            }
+            
+            const chat = document.getElementById(chatId);
+            if (chat) {
+                chat.innerHTML = aiChatHistory[chatId].join('');
+                chat.scrollTo({ top: chat.scrollHeight, behavior: 'smooth' });
+            }
+            
+            const input = document.getElementById('ai-in');
+            if (input) {
+                input.value = originalQuery;
+                input.focus();
+            }
         }
     }
-}
-   
-
+    
     initResizer(document.getElementById('h-drag-left'), document.getElementById('explorer'), true, false);
     initResizer(document.getElementById('v-drag-explorer'), document.getElementById('file-section'), false, false);
     
@@ -3363,7 +3873,13 @@ function undoToPrompt(event, chatId, messageIndex, originalQuery) {
     initResizer(document.getElementById('v-drag'), document.getElementById('terminal'), false, true);
     
     document.addEventListener('click', (e) => {
-        if (!document.getElementById('ctx').contains(e.target)) document.getElementById('ctx').style.display = 'none';
+        // 关闭右键菜单
+        const ctxMenu = document.getElementById('ctx');
+        if (!ctxMenu.contains(e.target)) {
+            ctxMenu.style.display = 'none';
+            ctxTarget = null; // 重置上下文目标
+        }
+        
         if (!document.getElementById('plugin-ctx').contains(e.target)) document.getElementById('plugin-ctx').style.display = 'none';
         if (!document.getElementById('ai-ctx-trigger').contains(e.target)) {
             document.getElementById('ai-ctx-options').style.display = 'none';
@@ -3372,25 +3888,226 @@ function undoToPrompt(event, chatId, messageIndex, originalQuery) {
             document.getElementById('ai-provider-options').style.display = 'none';
         }
     });
-    document.getElementById('ai-in').onkeydown = (e) => { 
-        if(e.key === 'Enter') {
+    // 输入框自适应高度
+    const aiInput = document.getElementById('ai-in');
+    aiInput.addEventListener('input', function() {
+        const singleLineHeight = 30; // 单行高度
+        if (this.value.trim() === '' || this.scrollHeight <= singleLineHeight) {
+            this.style.height = singleLineHeight + 'px';
+        } else {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+        }
+    });
+    
+    aiInput.onkeydown = (e) => { 
+        if(e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
             if (isGenerating()) {
                 cancelAiRequest();
                 return;
             }
-            
             const query = e.target.value.trim();
             if (!query) return;
-            
+            // 播放发送音效
+            playTone('send');
             startGenerating();
-            
             sendAi();
         }
     };
 
- 
+    // 拖拽上传功能
+    const fileList = document.getElementById('file-list');
+    fileList.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        fileList.style.background = 'rgba(255, 176, 0, 0.1)';
+    });
+    fileList.addEventListener('dragleave', () => {
+        fileList.style.background = 'transparent';
+    });
+    fileList.addEventListener('drop', (e) => {
+        e.preventDefault();
+        fileList.style.background = 'transparent';
+        
+        const files = e.dataTransfer.files;
+        Array.from(files).forEach(file => {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                storage[file.name] = event.target.result;
+                localStorage.setItem('ind_console_storage', JSON.stringify(storage));
+                renderFiles();
+            };
+            reader.readAsText(file);
+        });
+    });
+    
     renderFiles(); renderPlugins(); addTerminal(); restoreAiTabs(); updateProviderDisplay();
-    createEditorTab(activeFile);
-</script>
-</body>
-</html>
+    
+    if (openedTabs.length > 0) {
+        const activeTabName = localStorage.getItem('ind_console_active') || openedTabs[0];
+        openedTabs.forEach(fileName => {
+            createEditorTab(fileName);
+        });
+        setTimeout(() => {
+            if (activeTabName && editorTabs[activeTabName]) {
+                switchEditorTab(activeTabName);
+            }
+        }, 60);
+    } else {
+        activeFile = localStorage.getItem('ind_console_active');
+        if (activeFile) {
+            createEditorTab(activeFile);
+        }
+    }
+
+    function toggleFileSearch() {
+        if (!activeEditorTab || !editorTabs[activeEditorTab]) {
+            return;
+        }
+        const editor = editorTabs[activeEditorTab].editor;
+        editor.getAction('actions.find').run();
+    }
+
+    // 语音识别功能
+    let recognition = null;
+    let isListening = false;
+    
+    // 检测是否为手机屏幕
+    function isMobileScreen() {
+        return window.innerWidth <= 768;
+    }
+    
+    // 更新语音按钮显示状态
+    function updateVoiceButtonVisibility() {
+        const voiceBtn = document.getElementById('voice-btn');
+        if (voiceBtn) {
+            voiceBtn.style.display = isMobileScreen() ? 'none' : 'block';
+        }
+    }
+    
+    // 监听窗口大小变化
+    window.addEventListener('resize', updateVoiceButtonVisibility);
+    
+    // 页面加载时初始化
+    document.addEventListener('DOMContentLoaded', updateVoiceButtonVisibility);
+
+    function toggleVoiceRecognition() {
+        if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+            alert('您的浏览器不支持语音识别功能');
+            return;
+        }
+
+        if (!recognition) {
+            recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+            recognition.continuous = true; // 连续识别模式
+            recognition.interimResults = true;
+            recognition.lang = 'zh-CN';
+            recognition.maxAlternatives = 1;
+            
+            if (recognition.continuous !== undefined) {
+                recognition.continuous = true;
+            }
+            
+            if (recognition.onend) {
+                recognition.onend = null;
+            }
+
+            recognition.onstart = function() {
+                isListening = true;
+                updateVoiceButton();
+            };
+
+            recognition.onresult = function(event) {
+                const transcript = Array.from(event.results)
+                    .map(result => result[0].transcript)
+                    .join('');
+                
+                const aiInput = document.getElementById('ai-in');
+                aiInput.value = transcript;
+                
+                // 触发输入事件以调整高度
+                aiInput.dispatchEvent(new Event('input'));
+            };
+
+            recognition.onend = function() {
+                isListening = false;
+                updateVoiceButton();
+            };
+
+            recognition.onerror = function(event) {
+                isListening = false;
+                updateVoiceButton();
+                console.error('语音识别错误:', event.error);
+            };
+        }
+
+        if (isListening) {
+            recognition.stop();
+        } else {
+            recognition.start();
+        }
+    }
+
+    function updateVoiceButton() {
+        const voiceBtn = document.getElementById('voice-btn');
+        if (isListening) {
+            voiceBtn.innerHTML = '🔴';
+            voiceBtn.style.background = 'var(--term-red)';
+        } else {
+            voiceBtn.innerHTML = '🎤';
+            voiceBtn.style.background = 'var(--amber)';
+        }
+    }
+
+    async function importFromGithub() {
+        const url = document.getElementById('github-url').value.trim();
+        const filename = document.getElementById('save-filename').value.trim();
+        
+        if (!url || !filename) {
+            alert('Please enter both GitHub URL and filename');
+            return;
+        }
+        
+        let rawUrl = url;
+        if (url.startsWith('https://github.com/')) {
+            rawUrl = url.replace('https://github.com/', 'https://raw.githubusercontent.com/').replace('/blob/', '/');
+        }
+        
+        if (!rawUrl.startsWith('https://raw.githubusercontent.com/')) {
+            alert('Please enter a valid GitHub URL');
+            return;
+        }
+        
+        try {
+            const confirmBtn = document.querySelector('.modal-btns .ai-btn[style*="background: var(--amber)"]');
+            if (confirmBtn) {
+                confirmBtn.textContent = 'LOADING...';
+                confirmBtn.disabled = true;
+            }
+            
+            const response = await fetch(rawUrl);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const content = await response.text();
+            
+            storage[filename] = content;
+            localStorage.setItem('ind_console_storage', JSON.stringify(storage));
+            
+            closeModal();
+            renderFiles();
+            
+            createEditorTab(filename);
+            
+        } catch (error) {
+            alert(`Import failed: ${error.message}`);
+            console.error('GitHub import error:', error);
+            
+            const confirmBtn = document.querySelector('.modal-btns .ai-btn[style*="background: var(--amber)"]');
+            if (confirmBtn) {
+                confirmBtn.textContent = 'CONFIRM';
+                confirmBtn.disabled = false;
+            }
+        }
+    }
