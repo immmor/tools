@@ -1,0 +1,39 @@
+name: Build Android APK
+on: [push] # 每次你推代码到 Cloudflare，这里也会同步打包
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      # 使用 Capacitor 将 HTML 转换为安卓工程
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with: { node-version: '20' }
+        
+      - name: Install Dependencies
+        run: |
+          npm init -y
+          npm i @capacitor/core @capacitor/cli @capacitor/android
+          npx cap init "MyCloudflareApp" "com.example.cfapp" --web-dir editor
+          npx cap add android
+          npx cap copy
+          
+      # 真正打包成 APK (需要 Java 环境)
+      - name: set up JDK 17
+        uses: actions/setup-java@v4
+        with: { java-version: '17', distribution: 'temurin' }
+        
+      - name: Build with Gradle
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+          
+      # 将打包好的 APK 变成可下载的“工件”
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: my-app-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
