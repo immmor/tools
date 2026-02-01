@@ -56,7 +56,7 @@
             padding: 15px;
             display: grid;
             grid-template-columns: 1fr 1fr 1fr;
-            grid-template-rows: auto auto auto;
+            grid-template-rows: auto auto auto auto;
             gap: 10px;
             box-shadow: 0 -10px 30px rgba(0,0,0,0.8);
             clip-path: polygon(0 15%, 5% 0, 95% 0, 100% 15%, 100% 100%, 0 100%);
@@ -82,8 +82,14 @@
             box-shadow: 0 0 20px var(--cyber);
         }
 
-        .btn-large { grid-column: span 2; background: rgba(255, 222, 0, 0.05); border-color: var(--plasma); color: var(--plasma); }
-        .btn-large:active { background: var(--plasma); border-color: var(--plasma); }
+        /* 统一 Import 和 Export 的样式 */
+        .btn-io { 
+            grid-column: span 1.5; /* 逻辑占用，通过flex或grid子项对齐 */
+            background: rgba(255, 222, 0, 0.05); 
+            border-color: var(--plasma); 
+            color: var(--plasma); 
+        }
+        .btn-io:active { background: var(--plasma); border-color: var(--plasma); }
 
         .class-selector {
             grid-column: span 1;
@@ -108,6 +114,14 @@
             background: rgba(0, 255, 102, 0.2); top: 50%; pointer-events: none;
         }
 
+        /* 用于让两个按钮平分空间的容器 */
+        .io-group {
+            grid-column: span 3;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
     </style>
 </head>
 <body>
@@ -126,22 +140,24 @@
 </div>
 
 <div class="cockpit-controls">
-    <button class="tactic-btn" onclick="document.getElementById('fileInput').click()">[ INGEST ]</button>
+    <div class="io-group">
+        <button class="tactic-btn btn-io" onclick="document.getElementById('fileInput').click()">IMPORT</button>
+        <button class="tactic-btn btn-io" onclick="exportZip()">EXPORT</button>
+    </div>
     <input type="file" id="fileInput" multiple webkitdirectory directory hidden onchange="handleFiles(this.files)">
     
-    <button class="tactic-btn btn-large" onclick="exportZip()">>> INITIATE_EXPORT_SEQUENCE <<</button>
-    
-    <button class="tactic-btn" onclick="prevImg()">PREV_TARGET</button>
+    <button class="tactic-btn" onclick="prevImg()">LAST</button>
     
     <div class="class-selector">
         <span class="label-text">CLASS_ID</span>
         <input type="number" id="classId" value="0">
     </div>
 
-    <button class="tactic-btn" onclick="nextImg()">NEXT_TARGET</button>
+    <button class="tactic-btn" onclick="nextImg()">NEXT</button>
 
-    <button id="modeBtn" class="tactic-btn" style="grid-column: span 1; border-color: #00ccff; color: #00ccff;" onclick="toggleMode()">[ MODE: DRAW ]</button>
-    <button class="tactic-btn" style="grid-column: span 2; border-color: #ff3300; color: #ff3300;" onclick="undo()">CORRECT_LAST_ENTRY (UNDO)</button>
+    <button id="modeBtn" class="tactic-btn" style="grid-column: span 1; border-color: #00ccff; color: #00ccff;" onclick="toggleMode()">MODE: DRAW</button>
+    <button class="tactic-btn" style="grid-column: span 1; border-color: #ff9900; color: #ff9900;" onclick="resetProject()">RESET</button>
+    <button class="tactic-btn" style="grid-column: span 1; border-color: #ff3300; color: #ff3300;" onclick="undo()">UNDO</button>
 </div>
 
 <script>
@@ -168,7 +184,7 @@
     function toggleMode() {
         isMoveMode = !isMoveMode;
         const btn = document.getElementById('modeBtn');
-        btn.innerText = isMoveMode ? "[ MODE: MOVE ]" : "[ MODE: DRAW ]";
+        btn.innerText = isMoveMode ? "MODE: MOVE" : "MODE: DRAW";
         canvas.style.cursor = isMoveMode ? "move" : "crosshair";
     }
 
@@ -185,6 +201,19 @@
         scale = 1;
         offsetX = 0;
         offsetY = 0;
+    }
+
+    function resetProject() {
+        if (confirm("REBOOT SYSTEM? ALL UNSAVED DATA WILL BE PURGED.")) {
+            images = [];
+            currentIndex = -1;
+            currentImgObj = new Image();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            document.getElementById('imgName').innerText = "NO_SIGNAL";
+            document.getElementById('imgIndex').innerText = "00/00";
+            document.getElementById('fileInput').value = "";
+            resetTransform();
+        }
     }
 
     function loadImage(index) {
@@ -213,17 +242,14 @@
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
         ctx.save();
-        // 应用缩放和位移（平移到中心点缩放）
         ctx.translate(canvas.width/2 + offsetX, canvas.height/2 + offsetY);
         ctx.scale(scale, scale);
         
         const drawW = currentImgObj.width * baseRatio;
         const drawH = currentImgObj.height * baseRatio;
         
-        // 绘制图片
         ctx.drawImage(currentImgObj, -drawW/2, -drawH/2, drawW, drawH);
 
-        // 绘制已有的 YOLO 框
         images[currentIndex].labels.forEach(box => {
             const [id, cx, cy, cw, ch] = box.map(Number);
             const w = cw * drawW;
@@ -250,7 +276,6 @@
             ctx.fillText(`OBJ_DATA_ID:${id}`, x + 5/scale, y - 5/scale);
         });
 
-        // 绘制正在拉取的临时框
         if (isDrawing && !isMoveMode && !isDragging) {
             const sPos = screenToCanvas(startX, startY);
             const cPos = screenToCanvas(lastX, lastY);
@@ -264,7 +289,6 @@
         ctx.restore();
     }
 
-    // 坐标转换：屏幕像素 -> Canvas 内部坐标系
     function screenToCanvas(sx, sy) {
         const rect = canvas.getBoundingClientRect();
         return {
