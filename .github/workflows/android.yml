@@ -18,6 +18,19 @@ jobs:
           npm i @capacitor/core @capacitor/cli @capacitor/android
           npx cap init "IME" "com.immmor.ime" --web-dir editor
           npx cap add android
+          
+          # 配置应用图标和启动画面
+          mkdir -p android/app/src/main/res/drawable
+          cp editor/iwe.png android/app/src/main/res/drawable/icon.png
+          
+          # 更新Android配置以使用自定义图标
+          cat > android/app/src/main/res/values/strings.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <string name="app_name">Immmor Editor</string>
+          </resources>
+          EOF
+          
           npx cap copy
 
       - name: Fix Kotlin versions to avoid duplicate stdlib
@@ -51,9 +64,30 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug
           
-      # 将打包好的 APK 变成可下载的“工件”
+      # 将打包好的 APK 变成可下载的"工件"
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: ime-apk
+          name: immmor-editor-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
+          
+      # 发布到 GitHub Releases
+      - name: Create Release
+        if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: android/app/build/outputs/apk/debug/app-debug.apk
+          body: |
+            Immmor Editor Android APK
+            
+            - Built from commit ${{ github.sha }}
+            - Version: ${{ github.ref_name }}
+            - Date: ${{ github.event.head_commit.timestamp }}
+            
+            Features:
+            - Full-featured code editor with Monaco
+            - AI assistant integration
+            - Terminal support
+            - File system management
+          draft: false
+          prerelease: false
