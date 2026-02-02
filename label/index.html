@@ -108,10 +108,17 @@
             border: 1px solid var(--cyber); background: rgba(0,0,0,0.5);
         }
 
-        #classId {
+        #classId, #modelSelect {
             background: transparent; border: none; color: var(--cyber);
-            font-family: 'Share Tech Mono'; font-size: 1.5rem; width: 100%; text-align: center;
+            font-family: 'Share Tech Mono'; font-size: 1rem; width: 100%; text-align: center;
             outline: none;
+        }
+        #classId { font-size: 1.5rem; }
+        
+        /* 下拉菜单样式定制 */
+        #modelSelect option {
+            background: var(--void);
+            color: var(--cyber);
         }
 
         .label-text { font-size: 8px; color: rgba(0, 255, 102, 0.5); }
@@ -152,17 +159,25 @@
     <div class="io-group">
         <button class="tactic-btn btn-io" onclick="document.getElementById('fileInput').click()">IMPORT</button>
         <button id="trainBtn" class="tactic-btn" onclick="trainModel()">TRAIN</button>
-        <button id="predictBtn" class="tactic-btn" style="border-color: #00ff66; color: #00ff66;" onclick="predict()">PREDICT</button>
+        <div class="class-selector">
+            <span class="label-text">CLASS_ID</span>
+            <input type="number" id="classId" value="0">
+        </div>
         <button class="tactic-btn btn-io" onclick="exportZip()">EXPORT</button>
     </div>
     <input type="file" id="fileInput" multiple webkitdirectory directory hidden onchange="handleFiles(this.files)">
     
-    <button class="tactic-btn" onclick="prevImg()">LAST</button>
-    <div class="class-selector">
-        <span class="label-text">CLASS_ID</span>
-        <input type="number" id="classId" value="0">
+    <div class="io-group">
+        <button class="tactic-btn" onclick="prevImg()">LAST</button>
+        <div class="class-selector">
+            <span class="label-text">MODEL</span>
+            <select id="modelSelect">
+                <option value="default">CORE_ALPHA</option>
+            </select>
+        </div>
+        <button id="predictBtn" class="tactic-btn" style="border-color: #00ff66; color: #00ff66;" onclick="predict()">PREDICT</button>
+        <button class="tactic-btn" onclick="nextImg()">NEXT</button>
     </div>
-    <button class="tactic-btn" onclick="nextImg()">NEXT</button>
     
     <button class="tactic-btn" style="grid-column: span 1; border-color: #ff9900; color: #ff9900;" onclick="resetProject()">RESET</button>
     <button id="modeBtn" class="tactic-btn" style="grid-column: span 1; border-color: #00ccff; color: #00ccff;" onclick="toggleMode()">MODE: DRAW</button>
@@ -191,104 +206,114 @@
 
     // AI 核心变量
     let model = null;
-    const IMG_SIZE = 224; // 训练基准尺寸
+    let trainedModels = {}; // 存储训练出的模型 { 'model_timestamp': modelInstance }
+    const IMG_SIZE = 224; 
 
     async function initModel() {
-        // 构建一个简单的轻量级目标检测回归模型 (MobileNet-style YOLO Head)
         const base = await tf.loadLayersModel('https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v1_0.25_224/model.json');
         const layer = base.getLayer('conv_pw_13_relu');
         const truncated = tf.model({inputs: base.inputs, outputs: layer.output});
         
         const x = tf.layers.flatten().apply(truncated.output);
-        const output = tf.layers.dense({units: 5, activation: 'sigmoid'}).apply(x); // class, x, y, w, h
+        const output = tf.layers.dense({units: 5, activation: 'sigmoid'}).apply(x);
         
         model = tf.model({inputs: truncated.input, outputs: output});
         model.compile({optimizer: tf.train.adam(0.001), loss: 'meanSquaredError'});
+        
+        // 初始模型存入仓库
+        trainedModels['default'] = model;
         console.log("AI_CORE_READY");
     }
 
     async function trainModel() {
-    // 1. 筛选出所有带有标签的图片
-    const labeledImages = images.filter(img => img.labels && img.labels.length > 0);
-
-    if (labeledImages.length === 0) {
-        alert("CRITICAL ERROR: NO LABELED DATA FOUND. PLEASE MARK TARGETS FIRST.");
-        return;
-    }
-
-    const trainBtn = document.getElementById('trainBtn');
-    const lossDisplay = document.getElementById('loss-val');
-    lossDisplay.innerText = "PREPARING DATA...";
-
-    try {
-        // 2. 准备训练张量
-        const imageTensors = [];
-        const labelTensors = [];
-
-        for (const imgData of labeledImages) {
-            // 加载图片并处理为张量
-            const imgElement = await new Promise((resolve) => {
-                const img = new Image();
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    img.onload = () => resolve(img);
-                    img.src = e.target.result;
-                };
-                reader.readAsDataURL(imgData.file);
-            });
-
-            const t = tf.browser.fromPixels(imgElement)
-                .resizeBilinear([IMG_SIZE, IMG_SIZE])
-                .div(255.0);
-            
-            imageTensors.push(t);
-
-            // 取每张图的第一个标签 [class, cx, cy, cw, ch]
-            const label = imgData.labels[0];
-            labelTensors.push([
-                parseFloat(label[0]) / 10, // Class ID 归一化
-                parseFloat(label[1]),
-                parseFloat(label[2]),
-                parseFloat(label[3]),
-                parseFloat(label[4])
-            ]);
+        const labeledImages = images.filter(img => img.labels && img.labels.length > 0);
+        if (labeledImages.length === 0) {
+            alert("CRITICAL ERROR: NO LABELED DATA FOUND. PLEASE MARK TARGETS FIRST.");
+            return;
         }
 
-        // 合并为 Batch
-        const xs = tf.stack(imageTensors);
-        const ys = tf.tensor2d(labelTensors);
+        const trainBtn = document.getElementById('trainBtn');
+        const lossDisplay = document.getElementById('loss-val');
+        lossDisplay.innerText = "PREPARING DATA...";
 
-        // 3. 开始全量训练
-        const epochs = 50; // 增加训练轮数以适应多图
-        await model.fit(xs, ys, {
-            epochs: epochs,
-            shuffle: true, // 打乱顺序，防止模型产生顺序记忆
-            callbacks: {
-                onEpochEnd: (epoch, logs) => {
-                    const progress = ((epoch + 1) / epochs) * 100;
-                    trainBtn.style.background = `linear-gradient(to right, rgba(255, 0, 255, 0.4) ${progress}%, transparent ${progress}%)`;
-                    lossDisplay.innerText = `BATCH_LOSS: ${logs.loss.toFixed(5)}`;
-                }
+        try {
+            const imageTensors = [];
+            const labelTensors = [];
+
+            for (const imgData of labeledImages) {
+                const imgElement = await new Promise((resolve) => {
+                    const img = new Image();
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        img.onload = () => resolve(img);
+                        img.src = e.target.result;
+                    };
+                    reader.readAsDataURL(imgData.file);
+                });
+
+                const t = tf.browser.fromPixels(imgElement)
+                    .resizeBilinear([IMG_SIZE, IMG_SIZE])
+                    .div(255.0);
+                imageTensors.push(t);
+
+                const label = imgData.labels[0];
+                labelTensors.push([
+                    parseFloat(label[0]) / 10,
+                    parseFloat(label[1]),
+                    parseFloat(label[2]),
+                    parseFloat(label[3]),
+                    parseFloat(label[4])
+                ]);
             }
-        });
 
-        // 释放显存
-        tf.dispose([xs, ys, ...imageTensors]);
-        
-        setTimeout(() => {
-            trainBtn.style.background = "rgba(0, 255, 102, 0.05)";
-            alert(`TRAINING COMPLETE: ${labeledImages.length} SAMPLES PROCESSED.`);
-        }, 500);
+            const xs = tf.stack(imageTensors);
+            const ys = tf.tensor2d(labelTensors);
 
-    } catch (e) {
-        console.error(e);
-        alert("CORE CRITICAL ERROR DURING BATCH TRAINING.");
+            const epochs = 50;
+            await model.fit(xs, ys, {
+                epochs: epochs,
+                shuffle: true,
+                callbacks: {
+                    onEpochEnd: (epoch, logs) => {
+                        const progress = ((epoch + 1) / epochs) * 100;
+                        trainBtn.style.background = `linear-gradient(to right, rgba(255, 0, 255, 0.4) ${progress}%, transparent ${progress}%)`;
+                        lossDisplay.innerText = `BATCH_LOSS: ${logs.loss.toFixed(5)}`;
+                    }
+                }
+            });
+
+            // 训练完成后，克隆/保存当前模型为一个新版本
+            const timestamp = new Date().toTimeString().split(' ')[0].replace(/:/g, '');
+            const modelKey = `CORE_v${timestamp}`;
+            
+            // 将当前训练好的模型存入选择器
+            trainedModels[modelKey] = model; 
+            const select = document.getElementById('modelSelect');
+            const opt = document.createElement('option');
+            opt.value = modelKey;
+            opt.innerText = modelKey;
+            select.appendChild(opt);
+            select.value = modelKey; // 默认选中最新
+
+            tf.dispose([xs, ys, ...imageTensors]);
+            
+            setTimeout(() => {
+                trainBtn.style.background = "rgba(0, 255, 102, 0.05)";
+                alert(`TRAINING COMPLETE. NEW MODEL SAVED: ${modelKey}`);
+            }, 500);
+
+        } catch (e) {
+            console.error(e);
+            alert("CORE CRITICAL ERROR DURING BATCH TRAINING.");
+        }
     }
-}
 
     async function predict() {
-        if (!model || currentIndex === -1) {
-            alert("AI_CORE_NOT_INITIALIZED");
+        const selectedKey = document.getElementById('modelSelect').value;
+        const activeModel = trainedModels[selectedKey];
+
+        if (!activeModel || currentIndex === -1) {
+            alert("AI_CORE_OR_IMAGE_NOT_READY");
             return;
         }
 
@@ -297,9 +322,8 @@
             .expandDims(0)
             .div(255.0);
 
-        const prediction = await model.predict(imgTensor).data();
+        const prediction = await activeModel.predict(imgTensor).data();
         
-        // 转换预测结果并添加到当前图像标签中
         const [cls, cx, cy, cw, ch] = prediction;
         images[currentIndex].labels.push([
             Math.round(cls * 10),
@@ -344,6 +368,11 @@
             document.getElementById('fileInput').value = "";
             document.getElementById('loss-val').innerText = "OFFLINE";
             document.getElementById('trainBtn').style.background = "rgba(0, 255, 102, 0.05)";
+            
+            // 重置模型选择
+            document.getElementById('modelSelect').innerHTML = '<option value="default">CORE_ALPHA</option>';
+            trainedModels = { 'default': model };
+            
             resetTransform();
         }
     }
@@ -513,7 +542,7 @@
         const blob = await zip.generateAsync({type: "blob"});
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url; a.download = "NEURAL_LINK_EXPORT.zip"; a.click();
+        a.href = url; a.download = `YOLO_EXPORT_${Date.now()}.zip`; a.click();
     }
 </script>
 </body>
