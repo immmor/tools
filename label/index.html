@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>NEURAL-LINK YOLO | V5.0</title>
+    <title>NEURAL-LINK YOLO | V5.0 AI_CORE</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
 
@@ -13,6 +14,9 @@
             --cyber: #00ff66;
             --void: #0a0c10;
             --hull: rgba(20, 25, 35, 0.9);
+            --warn: #ff3300;
+            --neon-pink: #ff00ff;
+            --neon-blue: #00ccff;
         }
 
         * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
@@ -74,6 +78,8 @@
             transition: 0.2s;
             outline: none;
             cursor: pointer;
+            position: relative;
+            overflow: hidden;
         }
 
         .tactic-btn:active {
@@ -82,9 +88,14 @@
             box-shadow: 0 0 20px var(--cyber);
         }
 
-        /* 统一 Import 和 Export 的样式 */
+        /* 进度条按钮样式 */
+        #trainBtn {
+            border-color: var(--neon-pink);
+            color: var(--neon-pink);
+            background: linear-gradient(to right, rgba(255, 0, 255, 0.2) 0%, transparent 0%);
+        }
+
         .btn-io { 
-            grid-column: span 1.5; /* 逻辑占用，通过flex或grid子项对齐 */
             background: rgba(255, 222, 0, 0.05); 
             border-color: var(--plasma); 
             color: var(--plasma); 
@@ -114,14 +125,12 @@
             background: rgba(0, 255, 102, 0.2); top: 50%; pointer-events: none;
         }
 
-        /* 用于让两个按钮平分空间的容器 */
         .io-group {
             grid-column: span 3;
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
             gap: 10px;
         }
-
     </style>
 </head>
 <body>
@@ -131,7 +140,7 @@
         <div class="system-stat">Target_Aquisition: <span id="imgIndex">00/00</span></div>
         <div id="imgName" style="font-size: 12px; color: var(--plasma);">NO_SIGNAL</div>
     </div>
-    <div class="system-stat" style="text-align: right;">v5.0_Link<br>Status: OK</div>
+    <div class="system-stat" style="text-align: right;">AI_CORE: <span id="loss-val">OFFLINE</span><br>Status: OK</div>
 </header>
 
 <div id="container">
@@ -142,6 +151,8 @@
 <div class="cockpit-controls">
     <div class="io-group">
         <button class="tactic-btn btn-io" onclick="document.getElementById('fileInput').click()">IMPORT</button>
+        <button id="trainBtn" class="tactic-btn" onclick="trainModel()">TRAIN</button>
+        <button id="predictBtn" class="tactic-btn" style="border-color: #00ff66; color: #00ff66;" onclick="predict()">PREDICT</button>
         <button class="tactic-btn btn-io" onclick="exportZip()">EXPORT</button>
     </div>
     <input type="file" id="fileInput" multiple webkitdirectory directory hidden onchange="handleFiles(this.files)">
@@ -173,11 +184,103 @@
     // 交互状态
     let isDrawing = false;
     let isDragging = false;
-    let isMoveMode = false; // 切换模式
-    let startX, startY; // 屏幕坐标
-    let lastX, lastY;   // 屏幕坐标
+    let isMoveMode = false;
+    let startX, startY, lastX, lastY;
     let initialPinchDist = 0;
     let initialScale = 1;
+
+    // AI 核心变量
+    let model = null;
+    const IMG_SIZE = 224; // 训练基准尺寸
+
+    async function initModel() {
+        // 构建一个简单的轻量级目标检测回归模型 (MobileNet-style YOLO Head)
+        const base = await tf.loadLayersModel('https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v1_0.25_224/model.json');
+        const layer = base.getLayer('conv_pw_13_relu');
+        const truncated = tf.model({inputs: base.inputs, outputs: layer.output});
+        
+        const x = tf.layers.flatten().apply(truncated.output);
+        const output = tf.layers.dense({units: 5, activation: 'sigmoid'}).apply(x); // class, x, y, w, h
+        
+        model = tf.model({inputs: truncated.input, outputs: output});
+        model.compile({optimizer: tf.train.adam(0.001), loss: 'meanSquaredError'});
+        console.log("AI_CORE_READY");
+    }
+
+    async function trainModel() {
+        if (images.length === 0 || !images[currentIndex].labels.length) {
+            alert("INSUFFICIENT DATA FOR NEURAL LINK.");
+            return;
+        }
+        
+        const trainBtn = document.getElementById('trainBtn');
+        document.getElementById('loss-val').innerText = "CALCULATING...";
+
+        try {
+            const imgTensor = tf.browser.fromPixels(currentImgObj)
+                .resizeBilinear([IMG_SIZE, IMG_SIZE])
+                .expandDims(0)
+                .div(255.0);
+
+            const label = images[currentIndex].labels[0]; 
+            const labelTensor = tf.tensor2d([[
+                parseFloat(label[0])/10, 
+                parseFloat(label[1]), 
+                parseFloat(label[2]), 
+                parseFloat(label[3]), 
+                parseFloat(label[4])
+            ]]);
+
+            const epochs = 20;
+            const history = await model.fit(imgTensor, labelTensor, {
+                epochs: epochs,
+                callbacks: {
+                    onEpochEnd: (epoch, logs) => {
+                        const progress = ((epoch + 1) / epochs) * 100;
+                        // 更新按钮背景作为进度条
+                        trainBtn.style.background = `linear-gradient(to right, rgba(255, 0, 255, 0.4) ${progress}%, transparent ${progress}%)`;
+                        document.getElementById('loss-val').innerText = `LOSS: ${logs.loss.toFixed(4)}`;
+                    }
+                }
+            });
+
+            tf.dispose([imgTensor, labelTensor]);
+            setTimeout(() => {
+                trainBtn.style.background = "rgba(0, 255, 102, 0.05)";
+                alert("TRAINING SEQUENCE COMPLETE.");
+            }, 500);
+        } catch (e) {
+            console.error(e);
+            alert("CORE CRITICAL ERROR.");
+        }
+    }
+
+    async function predict() {
+        if (!model || currentIndex === -1) {
+            alert("AI_CORE_NOT_INITIALIZED");
+            return;
+        }
+
+        const imgTensor = tf.browser.fromPixels(currentImgObj)
+            .resizeBilinear([IMG_SIZE, IMG_SIZE])
+            .expandDims(0)
+            .div(255.0);
+
+        const prediction = await model.predict(imgTensor).data();
+        
+        // 转换预测结果并添加到当前图像标签中
+        const [cls, cx, cy, cw, ch] = prediction;
+        images[currentIndex].labels.push([
+            Math.round(cls * 10),
+            cx.toFixed(6),
+            cy.toFixed(6),
+            cw.toFixed(6),
+            ch.toFixed(6)
+        ]);
+
+        tf.dispose(imgTensor);
+        render();
+    }
 
     function toggleMode() {
         isMoveMode = !isMoveMode;
@@ -193,23 +296,23 @@
         currentIndex = 0;
         resetTransform();
         loadImage(0);
+        if (!model) initModel();
     }
 
     function resetTransform() {
-        scale = 1;
-        offsetX = 0;
-        offsetY = 0;
+        scale = 1; offsetX = 0; offsetY = 0;
     }
 
     function resetProject() {
         if (confirm("REBOOT SYSTEM? ALL UNSAVED DATA WILL BE PURGED.")) {
-            images = [];
-            currentIndex = -1;
+            images = []; currentIndex = -1;
             currentImgObj = new Image();
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             document.getElementById('imgName').innerText = "NO_SIGNAL";
             document.getElementById('imgIndex').innerText = "00/00";
             document.getElementById('fileInput').value = "";
+            document.getElementById('loss-val').innerText = "OFFLINE";
+            document.getElementById('trainBtn').style.background = "rgba(0, 255, 102, 0.05)";
             resetTransform();
         }
     }
@@ -283,7 +386,6 @@
             ctx.strokeRect(sPos.x, sPos.y, cPos.x - sPos.x, cPos.y - sPos.y);
             ctx.setLineDash([]);
         }
-
         ctx.restore();
     }
 
@@ -299,115 +401,69 @@
 
     const startAction = (e) => {
         if(currentIndex === -1) return;
-        
         if (e.touches && e.touches.length === 2) {
-            isDrawing = false;
-            isDragging = true;
+            isDrawing = false; isDragging = true;
             initialPinchDist = getDist(e.touches[0], e.touches[1]);
-            initialScale = scale;
-            return;
+            initialScale = scale; return;
         }
-
         const touch = e.touches ? e.touches[0] : e;
-        startX = touch.clientX;
-        startY = touch.clientY;
-        lastX = startX;
-        lastY = startY;
-
-        if (isMoveMode) {
-            isDragging = true;
-            isDrawing = false;
-        } else {
-            isDrawing = true;
-            isDragging = false;
-        }
+        startX = touch.clientX; startY = touch.clientY;
+        lastX = startX; lastY = startY;
+        if (isMoveMode) { isDragging = true; isDrawing = false; } 
+        else { isDrawing = true; isDragging = false; }
     };
 
     const moveAction = (e) => {
         if (currentIndex === -1) return;
         if (e.cancelable) e.preventDefault();
-
         if (e.touches && e.touches.length === 2) {
             const currentDist = getDist(e.touches[0], e.touches[1]);
-            scale = initialScale * (currentDist / initialPinchDist);
-            scale = Math.max(0.5, Math.min(10, scale));
-            render();
-            return;
+            scale = Math.max(0.5, Math.min(10, initialScale * (currentDist / initialPinchDist)));
+            render(); return;
         }
-
         const touch = e.touches ? e.touches[0] : e;
-
         if (isMoveMode && isDragging) {
-            const dx = touch.clientX - lastX;
-            const dy = touch.clientY - lastY;
-            offsetX += dx;
-            offsetY += dy;
-            lastX = touch.clientX;
-            lastY = touch.clientY;
+            offsetX += touch.clientX - lastX;
+            offsetY += touch.clientY - lastY;
+            lastX = touch.clientX; lastY = touch.clientY;
             render();
         } else if (isDrawing) {
-            lastX = touch.clientX;
-            lastY = touch.clientY;
+            lastX = touch.clientX; lastY = touch.clientY;
             render();
         }
     };
 
     const endAction = (e) => {
-        if (isMoveMode) {
-            isDragging = false;
-            return;
-        }
-        if (!isDrawing) {
-            isDragging = false;
-            return;
-        }
+        if (isMoveMode || !isDrawing) { isDragging = false; return; }
         isDrawing = false;
-        
         const container = document.getElementById('container');
         const baseRatio = Math.min((container.clientWidth - 30) / currentImgObj.width, (container.clientHeight - 30) / currentImgObj.height);
         const drawW = currentImgObj.width * baseRatio;
         const drawH = currentImgObj.height * baseRatio;
-
         const p1 = screenToCanvas(startX, startY);
         const p2 = screenToCanvas(lastX, lastY);
-
-        const xmin = Math.min(p1.x, p2.x);
-        const ymin = Math.min(p1.y, p2.y);
-        const w = Math.abs(p2.x - p1.x);
-        const h = Math.abs(p2.y - p1.y);
-
-        if (w * scale < 5 || h * scale < 5) {
-            render();
-            return;
-        }
-
-        const normX = (xmin + w/2 + drawW/2) / drawW;
-        const normY = (ymin + h/2 + drawH/2) / drawH;
-        const normW = w / drawW;
-        const normH = h / drawH;
-
+        const xmin = Math.min(p1.x, p2.x), ymin = Math.min(p1.y, p2.y);
+        const w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y);
+        if (w * scale < 5 || h * scale < 5) { render(); return; }
         images[currentIndex].labels.push([
             document.getElementById('classId').value,
-            normX.toFixed(6),
-            normY.toFixed(6),
-            normW.toFixed(6),
-            normH.toFixed(6)
+            ((xmin + w/2 + drawW/2) / drawW).toFixed(6),
+            ((ymin + h/2 + drawH/2) / drawH).toFixed(6),
+            (w / drawW).toFixed(6),
+            (h / drawH).toFixed(6)
         ]);
         render();
     };
 
     canvas.addEventListener('wheel', (e) => {
         e.preventDefault();
-        const delta = e.deltaY > 0 ? 0.9 : 1.1;
-        scale *= delta;
-        scale = Math.max(0.5, Math.min(10, scale));
+        scale = Math.max(0.5, Math.min(10, scale * (e.deltaY > 0 ? 0.9 : 1.1)));
         render();
     }, { passive: false });
 
     canvas.addEventListener('mousedown', startAction);
     window.addEventListener('mousemove', moveAction);
     window.addEventListener('mouseup', endAction);
-
     canvas.addEventListener('touchstart', startAction, { passive: false });
     window.addEventListener('touchmove', moveAction, { passive: false });
     window.addEventListener('touchend', endAction);

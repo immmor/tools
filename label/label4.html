@@ -3,231 +3,385 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>INDUSTRIAL-YOLO | Precision Lab</title>
+    <title>NEURAL-LINK YOLO | V5.0 AI_CORE</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
         :root {
-            --metal-grey: #f0f0f2;
-            --active-red: #ff3b30;
-            --obsidian: #1c1c1e;
-            --border-line: #d1d1d6;
+            --plasma: #ffde00;
+            --cyber: #00ff66;
+            --void: #0a0c10;
+            --hull: rgba(20, 25, 35, 0.9);
+            --neon-pink: #ff00ff;
+            --ai-box: #ff8800;
         }
 
         * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
 
         body {
-            margin: 0; padding: 0; background: var(--metal-grey); color: var(--obsidian);
-            font-family: -apple-system, "SF Mono", "Roboto Mono", monospace;
-            height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+            margin: 0; padding: 0; background: var(--void); color: var(--cyber);
+            font-family: 'Share Tech Mono', monospace; height: 100vh;
+            display: flex; flex-direction: column; overflow: hidden;
+            background-image: radial-gradient(circle at 2px 2px, rgba(0, 255, 102, 0.05) 1px, transparent 0);
+            background-size: 30px 30px;
         }
 
-        /* 顶部信息栏：模拟工业仪表盘 */
         header {
-            padding: 10px 15px; background: #fff;
-            border-bottom: 2px solid var(--obsidian);
-            display: flex; justify-content: space-between; align-items: center;
-            z-index: 100;
+            padding: 10px 20px;
+            display: flex; justify-content: space-between; align-items: flex-end;
+            background: linear-gradient(180deg, rgba(0,255,102,0.1), transparent);
+            border-bottom: 1px dashed var(--cyber);
         }
 
-        .img-meta { font-size: 11px; font-weight: 700; letter-spacing: 0.5px; }
-        .batch-counter { background: var(--obsidian); color: #fff; padding: 2px 6px; border-radius: 3px; }
+        .system-stat { font-size: 10px; text-transform: uppercase; letter-spacing: 2px; }
 
-        /* 画布区：纯净实验室背景 */
         #container {
             flex: 1; position: relative; overflow: hidden;
             display: flex; align-items: center; justify-content: center;
-            background-color: #e5e5ea;
-            background-image: radial-gradient(var(--border-line) 1px, transparent 1px);
-            background-size: 20px 20px;
+            touch-action: none;
         }
 
         canvas {
-            border: 1px solid var(--obsidian);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-            background: #fff; touch-action: none;
+            border: 2px solid rgba(0, 255, 102, 0.2);
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.9), inset 0 0 20px rgba(0, 255, 102, 0.1);
+            background: #000;
+            touch-action: none;
+            cursor: crosshair;
         }
 
-        /* 底部工业级控制矩阵 */
-        .industrial-dock {
-            background: #fff; padding: 20px;
-            display: grid; grid-template-columns: 1fr 1.2fr 1fr;
-            align-items: center; gap: 15px;
-            border-top: 2px solid var(--obsidian);
-            box-shadow: 0 -5px 15px rgba(0,0,0,0.05);
+        .cockpit-controls {
+            background: var(--hull);
+            backdrop-filter: blur(15px);
+            border-top: 2px solid var(--cyber);
+            padding: 15px;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            grid-template-rows: auto auto auto auto;
+            gap: 10px;
+            box-shadow: 0 -10px 30px rgba(0,0,0,0.8);
+            clip-path: polygon(0 15%, 5% 0, 95% 0, 100% 15%, 100% 100%, 0 100%);
+            z-index: 100;
         }
 
-        /* 物理质感按钮 */
-        button {
-            background: #fff; border: 1px solid var(--obsidian);
-            color: var(--obsidian); padding: 12px 5px; font-size: 11px;
-            font-weight: 800; text-transform: uppercase; cursor: pointer;
-            transition: all 0.1s; border-radius: 4px;
-            box-shadow: 0 2px 0 var(--obsidian);
+        .tactic-btn {
+            background: rgba(0, 255, 102, 0.05);
+            border: 1px solid var(--cyber);
+            color: var(--cyber);
+            padding: 12px 5px;
+            text-align: center;
+            font-size: 12px;
+            font-weight: bold;
+            transition: 0.2s;
+            outline: none;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
         }
 
-        button:active {
-            transform: translateY(2px);
-            box-shadow: 0 0 0 var(--obsidian);
-            background: var(--obsidian); color: #fff;
+        .tactic-btn:active {
+            background: var(--cyber);
+            color: var(--void);
+            box-shadow: 0 0 20px var(--cyber);
         }
 
-        /* “快门”风格导出按钮 */
-        .shutter-btn {
-            height: 60px; width: 60px; border-radius: 50% !important;
-            background: var(--active-red) !important; color: #fff !important;
-            border: 4px solid var(--obsidian) !important;
-            font-size: 10px; display: flex; align-items: center; justify-content: center;
-            box-shadow: 0 4px 0 #990000 !important; margin: 0 auto;
+        .btn-io { 
+            grid-column: span 1; 
+            background: rgba(255, 222, 0, 0.05); 
+            border-color: var(--plasma); 
+            color: var(--plasma); 
         }
 
-        .shutter-btn:active { transform: translateY(3px) scale(0.95); box-shadow: 0 0 0 #990000 !important; }
+        #trainBtn {
+            border-color: var(--neon-pink);
+            color: var(--neon-pink);
+            background-image: linear-gradient(to right, rgba(255, 0, 255, 0.3) 0%, rgba(255, 0, 255, 0.3) 100%);
+            background-repeat: no-repeat;
+            background-size: 0% 100%; 
+            transition: background-size 0.3s ease;
+        }
 
-        /* 类别 ID 窗口 */
-        .id-display {
-            display: flex; flex-direction: column; align-items: center;
-            border: 1px solid var(--border-line); border-radius: 4px; padding: 5px;
+        .class-selector {
+            grid-column: span 1;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            border: 1px solid var(--cyber); background: rgba(0,0,0,0.5);
         }
 
         #classId {
-            background: transparent; border: none; color: var(--active-red);
-            font-size: 1.8rem; width: 45px; text-align: center; font-weight: bold;
+            background: transparent; border: none; color: var(--cyber);
+            font-family: 'Share Tech Mono'; font-size: 1.5rem; width: 100%; text-align: center;
+            outline: none;
         }
 
-        .side-stack { display: flex; flex-direction: column; gap: 10px; }
+        .label-text { font-size: 8px; color: rgba(0, 255, 102, 0.5); }
 
-        /* 浮动撤销按钮 */
-        .undo-pill {
-            position: absolute; top: 15px; right: 15px;
-            background: rgba(255,255,255,0.9); border: 1px solid var(--obsidian);
-            padding: 5px 12px; border-radius: 20px; font-size: 10px; font-weight: bold;
+        .v-line {
+            position: absolute; width: 1px; height: 100%;
+            background: rgba(0, 255, 102, 0.2); left: 50%; pointer-events: none;
         }
+        .h-line {
+            position: absolute; height: 1px; width: 100%;
+            background: rgba(0, 255, 102, 0.2); top: 50%; pointer-events: none;
+        }
+
+        .io-group {
+            grid-column: span 3;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+        }
+
     </style>
 </head>
 <body>
 
 <header>
-    <div class="img-meta">
-        <span class="batch-counter">LAB-STATION-01</span>
-        <span id="imgName" style="margin-left: 10px; opacity: 0.6;">READY_</span>
+    <div>
+        <div class="system-stat">Target_Aquisition: <span id="imgIndex">00/00</span></div>
+        <div id="imgName" style="font-size: 12px; color: var(--plasma);">NO_SIGNAL</div>
     </div>
-    <div class="img-meta" id="imgIndex">00 / 00</div>
+    <div class="system-stat" style="text-align: right;">AI_CORE: <span id="loss-val">OFFLINE</span><br>Status: OK</div>
 </header>
 
 <div id="container">
-    <div class="undo-pill" onclick="undo()">↩ UNDO_LAST</div>
+    <div class="v-line"></div><div class="h-line"></div>
     <canvas id="canvas"></canvas>
 </div>
 
-<div class="industrial-dock">
-    <div class="side-stack">
-        <button onclick="document.getElementById('fileInput').click()">IMPORT</button>
-        <input type="file" id="fileInput" multiple webkitdirectory directory hidden onchange="handleFiles(this.files)">
-        <button onclick="prevImg()">PREV</button>
+<div class="cockpit-controls">
+    <div class="io-group">
+        <button class="tactic-btn btn-io" onclick="document.getElementById('fileInput').click()">IMPORT</button>
+        <button id="trainBtn" class="tactic-btn" onclick="trainModel()">TRAIN_AI</button>
+        <button id="predictBtn" class="tactic-btn btn-io" style="border-color: #00ccff; color: #00ccff;" onclick="runInference()">PREDICT</button>
     </div>
-
-    <button class="shutter-btn" onclick="exportZip()">EXPORT<br>ZIP</button>
-
-    <div class="side-stack">
-        <div class="id-display">
-            <span style="font-size: 8px; opacity: 0.5;">CLASS_ID</span>
-            <input type="number" id="classId" value="0">
-        </div>
-        <button onclick="nextImg()">NEXT</button>
+    <input type="file" id="fileInput" multiple webkitdirectory directory hidden onchange="handleFiles(this.files)">
+    
+    <button class="tactic-btn" onclick="prevImg()">LAST</button>
+    <div class="class-selector">
+        <span class="label-text">CLASS_ID</span>
+        <input type="number" id="classId" value="0">
     </div>
+    <button class="tactic-btn" onclick="nextImg()">NEXT</button>
+    
+    <button class="tactic-btn" style="grid-column: span 1; border-color: #ff9900; color: #ff9900;" onclick="resetProject()">RESET</button>
+    <button id="modeBtn" class="tactic-btn" style="grid-column: span 1; border-color: #00ccff; color: #00ccff;" onclick="toggleMode()">MODE: DRAW</button>
+    <button class="tactic-btn" style="grid-column: span 1; border-color: #ff3300; color: #ff3300;" onclick="undo()">UNDO</button>
 </div>
 
 <script>
-    // 核心逻辑完全不动
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     let images = [];
     let currentIndex = -1;
-    let isDrawing = false;
-    let startX, startY;
     let currentImgObj = new Image();
+    let aiPredictions = []; // 存储AI推理结果
+
+    let scale = 1, offsetX = 0, offsetY = 0;
+    let isDrawing = false, isDragging = false, isMoveMode = false;
+    let startX, startY, lastX, lastY, initialPinchDist = 0, initialScale = 1;
+
+    let model = null;
+    const IMG_SIZE = 224;
+
+    async function initModel() {
+        const base = await tf.loadLayersModel('https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v1_0.25_224/model.json');
+        const layer = base.getLayer('conv_pw_13_relu');
+        const truncated = tf.model({inputs: base.inputs, outputs: layer.output});
+        const x = tf.layers.flatten().apply(truncated.output);
+        const output = tf.layers.dense({units: 5, activation: 'sigmoid'}).apply(x);
+        model = tf.model({inputs: truncated.input, outputs: output});
+        model.compile({optimizer: tf.train.adam(0.001), loss: 'meanSquaredError'});
+        console.log("AI_CORE_READY");
+    }
+
+    async function trainModel() {
+        if (images.length === 0 || !images[currentIndex].labels.length) {
+            alert("DATA REQUIRED."); return;
+        }
+        const btn = document.getElementById('trainBtn');
+        const totalEpochs = 30; 
+        btn.disabled = true;
+
+        try {
+            const imgTensor = tf.browser.fromPixels(currentImgObj).resizeBilinear([IMG_SIZE, IMG_SIZE]).expandDims(0).div(255.0);
+            const label = images[currentIndex].labels[0];
+            const labelTensor = tf.tensor2d([[parseFloat(label[0])/10, parseFloat(label[1]), parseFloat(label[2]), parseFloat(label[3]), parseFloat(label[4])]]);
+
+            await model.fit(imgTensor, labelTensor, {
+                epochs: totalEpochs,
+                callbacks: {
+                    onEpochEnd: (epoch, logs) => {
+                        const progress = ((epoch + 1) / totalEpochs) * 100;
+                        btn.style.backgroundSize = `${progress}% 100%`;
+                        btn.innerText = `LEARNING ${Math.round(progress)}%`;
+                        document.getElementById('loss-val').innerText = `L:${logs.loss.toFixed(4)}`;
+                    }
+                }
+            });
+            tf.dispose([imgTensor, labelTensor]);
+            btn.style.backgroundSize = `0% 100%`; btn.innerText = `TRAIN_AI`; btn.disabled = false;
+            alert("NEURAL WEIGHTS UPDATED.");
+        } catch (e) { btn.disabled = false; }
+    }
+
+    async function runInference() {
+        if (!model || currentIndex === -1) return;
+        const btn = document.getElementById('predictBtn');
+        btn.innerText = "SCANNING...";
+        
+        const imgTensor = tf.browser.fromPixels(currentImgObj).resizeBilinear([IMG_SIZE, IMG_SIZE]).expandDims(0).div(255.0);
+        const prediction = model.predict(imgTensor);
+        const data = await prediction.data(); // [class, cx, cy, w, h]
+        
+        // 存储推理出来的框
+        aiPredictions = [{
+            id: Math.round(data[0] * 10),
+            cx: data[1],
+            cy: data[2],
+            w: data[3],
+            h: data[4]
+        }];
+        
+        tf.dispose([imgTensor, prediction]);
+        btn.innerText = "PREDICT";
+        render(); // 重新渲染显示AI框
+    }
+
+    function render() {
+        if (currentIndex === -1) return;
+        const container = document.getElementById('container');
+        const baseRatio = Math.min((container.clientWidth - 30) / currentImgObj.width, (container.clientHeight - 30) / currentImgObj.height);
+        canvas.width = container.clientWidth - 30; canvas.height = container.clientHeight - 30;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        ctx.translate(canvas.width/2 + offsetX, canvas.height/2 + offsetY);
+        ctx.scale(scale, scale);
+        const drawW = currentImgObj.width * baseRatio, drawH = currentImgObj.height * baseRatio;
+        ctx.drawImage(currentImgObj, -drawW/2, -drawH/2, drawW, drawH);
+
+        // 绘制手动标注 (绿色)
+        images[currentIndex].labels.forEach(box => {
+            drawBox(box[0], box[1], box[2], box[3], box[4], drawW, drawH, '#00ff66', 'USER');
+        });
+
+        // 绘制AI预测 (橙色)
+        aiPredictions.forEach(box => {
+            drawBox(box.id, box.cx, box.cy, box.w, box.h, drawW, drawH, '#ff8800', 'AI_AUTO');
+        });
+
+        if (isDrawing && !isMoveMode && !isDragging) {
+            const sPos = screenToCanvas(startX, startY), cPos = screenToCanvas(lastX, lastY);
+            ctx.strokeStyle = 'rgba(255, 222, 0, 0.8)'; ctx.setLineDash([5/scale, 5/scale]);
+            ctx.strokeRect(sPos.x, sPos.y, cPos.x - sPos.x, cPos.y - sPos.y);
+        }
+        ctx.restore();
+    }
+
+    function drawBox(id, cx, cy, cw, ch, drawW, drawH, color, tag) {
+        const w = cw * drawW, h = ch * drawH;
+        const x = (cx * drawW) - w/2 - drawW/2, y = (cy * drawH) - h/2 - drawH/2;
+        ctx.strokeStyle = color; ctx.lineWidth = 2 / scale;
+        ctx.setLineDash([]);
+        ctx.strokeRect(x, y, w, h);
+        ctx.fillStyle = color; ctx.font = `${10/scale}px Share Tech Mono`;
+        ctx.fillText(`${tag}_ID:${id}`, x, y - 5/scale);
+    }
+
+    function toggleMode() {
+        isMoveMode = !isMoveMode;
+        document.getElementById('modeBtn').innerText = isMoveMode ? "MODE: MOVE" : "MODE: DRAW";
+        canvas.style.cursor = isMoveMode ? "move" : "crosshair";
+    }
 
     function handleFiles(fileList) {
         const filteredFiles = Array.from(fileList).filter(f => f.type.startsWith('image/'));
         if (filteredFiles.length === 0) return;
         images = filteredFiles.map(f => ({ file: f, name: f.name, labels: [] }));
-        currentIndex = 0;
-        loadImage(0);
+        currentIndex = 0; loadImage(0);
+        if (!model) initModel();
+    }
+
+    function resetTransform() { scale = 1; offsetX = 0; offsetY = 0; aiPredictions = []; }
+
+    function resetProject() {
+        if (confirm("REBOOT SYSTEM?")) {
+            images = []; currentIndex = -1; aiPredictions = [];
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            document.getElementById('imgName').innerText = "NO_SIGNAL";
+            document.getElementById('loss-val').innerText = "OFFLINE";
+            resetTransform();
+        }
     }
 
     function loadImage(index) {
         if (index < 0 || index >= images.length) return;
         const reader = new FileReader();
         reader.onload = (e) => {
-            currentImgObj.onload = () => render();
+            currentImgObj.onload = () => { resetTransform(); render(); };
             currentImgObj.src = e.target.result;
         };
         reader.readAsDataURL(images[index].file);
-        document.getElementById('imgName').innerText = images[index].name.toUpperCase();
-        document.getElementById('imgIndex').innerText = `${index + 1} / ${images.length}`;
+        document.getElementById('imgName').innerText = `ID: ${images[index].name.toUpperCase()}`;
+        document.getElementById('imgIndex').innerText = `${index + 1}/${images.length}`;
     }
 
-    function render() {
-        if (currentIndex === -1) return;
-        const container = document.getElementById('container');
-        const ratio = Math.min((container.clientWidth - 30) / currentImgObj.width, (container.clientHeight - 30) / currentImgObj.height);
-        canvas.width = currentImgObj.width * ratio;
-        canvas.height = currentImgObj.height * ratio;
-
-        ctx.drawImage(currentImgObj, 0, 0, canvas.width, canvas.height);
-
-        images[currentIndex].labels.forEach(box => {
-            const [id, cx, cy, cw, ch] = box;
-            const w = cw * canvas.width;
-            const h = ch * canvas.height;
-            const x = (cx * canvas.width) - w/2;
-            const y = (cy * canvas.height) - h/2;
-
-            // 工业标尺风格框
-            ctx.strokeStyle = '#ff3b30';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(x, y, w, h);
-            
-            // 绘制四角坐标指示
-            ctx.fillStyle = '#ff3b30';
-            ctx.font = 'bold 11px monospace';
-            ctx.fillText(`ID:${id}`, x + 4, y + 14);
-        });
-    }
-
-    const getPos = (e) => {
+    function screenToCanvas(sx, sy) {
         const rect = canvas.getBoundingClientRect();
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        return [clientX - rect.left, clientY - rect.top];
+        return { x: (sx - rect.left - canvas.width/2 - offsetX) / scale, y: (sy - rect.top - canvas.height/2 - offsetY) / scale };
+    }
+
+    const startAction = (e) => {
+        if(currentIndex === -1) return;
+        const touch = e.touches ? e.touches[0] : e;
+        startX = touch.clientX; startY = touch.clientY; lastX = startX; lastY = startY;
+        if (e.touches && e.touches.length === 2) { 
+            isDragging = true; isDrawing = false; initialPinchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); initialScale = scale; 
+        } else { isMoveMode ? isDragging = true : isDrawing = true; }
     };
 
-    canvas.addEventListener('mousedown', e => { if(currentIndex===-1) return; isDrawing = true; [startX, startY] = getPos(e); });
-    canvas.addEventListener('touchstart', e => { if(currentIndex===-1) return; isDrawing = true; [startX, startY] = getPos(e); });
-
-    window.addEventListener('mousemove', e => {
-        if (!isDrawing) return;
+    const moveAction = (e) => {
+        if (currentIndex === -1) return;
+        if (e.cancelable) e.preventDefault();
+        const touch = e.touches ? e.touches[0] : e;
+        if (e.touches && e.touches.length === 2) {
+            const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+            scale = Math.max(0.5, Math.min(10, initialScale * (d / initialPinchDist)));
+        } else if (isDragging && isMoveMode) {
+            offsetX += touch.clientX - lastX; offsetY += touch.clientY - lastY;
+            lastX = touch.clientX; lastY = touch.clientY;
+        } else if (isDrawing) { lastX = touch.clientX; lastY = touch.clientY; }
         render();
-        const [curX, curY] = getPos(e);
-        ctx.strokeStyle = '#000';
-        ctx.setLineDash([2, 2]);
-        ctx.strokeRect(startX, startY, curX - startX, curY - startY);
-        ctx.setLineDash([]);
-    });
+    };
 
-    window.addEventListener('mouseup', e => {
-        if (!isDrawing) return;
+    const endAction = (e) => {
+        if (!isDrawing) { isDragging = false; return; }
         isDrawing = false;
-        const [endX, endY] = getPos(e);
-        const w = Math.abs(endX - startX);
-        const h = Math.abs(endY - startY);
-        if (w < 5 || h < 5) return;
-        const x_center = (Math.min(startX, endX) + w / 2) / canvas.width;
-        const y_center = (Math.min(startY, endY) + h / 2) / canvas.height;
-        images[currentIndex].labels.push([document.getElementById('classId').value, x_center, y_center, w/canvas.width, h/canvas.height]);
+        const container = document.getElementById('container');
+        const baseRatio = Math.min((container.clientWidth - 30) / currentImgObj.width, (container.clientHeight - 30) / currentImgObj.height);
+        const drawW = currentImgObj.width * baseRatio, drawH = currentImgObj.height * baseRatio;
+        const p1 = screenToCanvas(startX, startY), p2 = screenToCanvas(lastX, lastY);
+        const w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y);
+        if (w * scale > 5) {
+            images[currentIndex].labels.push([
+                document.getElementById('classId').value,
+                ((Math.min(p1.x, p2.x) + w/2 + drawW/2) / drawW).toFixed(6),
+                ((Math.min(p1.y, p2.y) + h/2 + drawH/2) / drawH).toFixed(6),
+                (w / drawW).toFixed(6), (h / drawH).toFixed(6)
+            ]);
+        }
         render();
-    });
+    };
 
-    function undo() { images[currentIndex].labels.pop(); render(); }
+    canvas.addEventListener('mousedown', startAction);
+    window.addEventListener('mousemove', moveAction);
+    window.addEventListener('mouseup', endAction);
+    canvas.addEventListener('touchstart', startAction, { passive: false });
+    window.addEventListener('touchmove', moveAction, { passive: false });
+    window.addEventListener('touchend', endAction);
+    canvas.addEventListener('wheel', (e) => { e.preventDefault(); scale = Math.max(0.5, Math.min(10, scale * (e.deltaY > 0 ? 0.9 : 1.1))); render(); }, { passive: false });
+
+    function undo() { if(currentIndex !== -1) { images[currentIndex].labels.pop(); render(); } }
     function nextImg() { if(currentIndex < images.length-1) { currentIndex++; loadImage(currentIndex); } }
     function prevImg() { if(currentIndex > 0) { currentIndex--; loadImage(currentIndex); } }
 
@@ -239,9 +393,7 @@
             zip.file(img.name.replace(/\.[^/.]+$/, "") + ".txt", content);
         });
         const blob = await zip.generateAsync({type: "blob"});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; a.download = "INDUSTRIAL_YOLO_BATCH.zip"; a.click();
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = "NEURAL_LINK.zip"; a.click();
     }
 </script>
 </body>

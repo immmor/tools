@@ -3,102 +3,130 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>QUANTUM-YOLO v4.0</title>
+    <title>NEURAL-LINK YOLO | V5.0 AI_CORE</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
 
         :root {
-            --neon-primary: #00ffaa;
-            --neon-second: #0088ff;
-            --bg-black: #020408;
-            --glass: rgba(10, 20, 30, 0.7);
+            --plasma: #ffde00;
+            --cyber: #00ff66;
+            --void: #0a0c10;
+            --hull: rgba(20, 25, 35, 0.9);
+            --warn: #ff3300;
         }
 
         * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
 
         body {
-            margin: 0; padding: 0; background: var(--bg-black); color: white;
-            font-family: 'Orbitron', sans-serif; height: 100vh;
+            margin: 0; padding: 0; background: var(--void); color: var(--cyber);
+            font-family: 'Share Tech Mono', monospace; height: 100vh;
             display: flex; flex-direction: column; overflow: hidden;
+            background-image: 
+                radial-gradient(circle at 2px 2px, rgba(0, 255, 102, 0.05) 1px, transparent 0);
+            background-size: 30px 30px;
         }
 
-        /* 电子背景网格 */
-        body::before {
-            content: ""; position: fixed; inset: 0;
-            background-image: radial-gradient(var(--neon-second) 1px, transparent 1px);
-            background-size: 40px 40px; opacity: 0.1; z-index: -1;
-        }
-
-        /* 顶部扫描状态栏 */
         header {
-            padding: 15px; background: linear-gradient(to bottom, rgba(0,255,170,0.1), transparent);
-            display: flex; justify-content: space-between; align-items: center;
-            border-bottom: 1px solid rgba(0,255,170,0.2);
+            padding: 10px 20px;
+            display: flex; justify-content: space-between; align-items: flex-end;
+            background: linear-gradient(180deg, rgba(0,255,102,0.1), transparent);
+            border-bottom: 1px dashed var(--cyber);
         }
 
-        .status-light {
-            width: 8px; height: 8px; background: var(--neon-primary);
-            border-radius: 50%; display: inline-block; margin-right: 8px;
-            box-shadow: 0 0 10px var(--neon-primary);
-            animation: pulse 1.5s infinite;
-        }
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
+        .system-stat { font-size: 10px; text-transform: uppercase; letter-spacing: 2px; }
 
-        /* 画布交互区 */
         #container {
             flex: 1; position: relative; overflow: hidden;
             display: flex; align-items: center; justify-content: center;
-        }
-        
-        canvas {
-            border: 1px solid rgba(255,255,255,0.05);
-            background: rgba(0,0,0,0.4);
-            box-shadow: 0 0 40px rgba(0,0,0,0.8);
             touch-action: none;
         }
 
-        /* 手机端悬浮 HUD 按钮 */
-        .hud-overlay {
-            position: absolute; bottom: 20px; width: 95%; left: 2.5%;
-            display: flex; flex-direction: column; gap: 10px; z-index: 100;
+        canvas {
+            border: 2px solid rgba(0, 255, 102, 0.2);
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.9), inset 0 0 20px rgba(0, 255, 102, 0.1);
+            background: #000;
+            touch-action: none;
+            cursor: crosshair;
         }
 
-        .main-controls {
-            display: flex; justify-content: space-between; align-items: flex-end;
+        .cockpit-controls {
+            background: var(--hull);
+            backdrop-filter: blur(15px);
+            border-top: 2px solid var(--cyber);
+            padding: 15px;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            grid-template-rows: auto auto auto auto;
+            gap: 10px;
+            box-shadow: 0 -10px 30px rgba(0,0,0,0.8);
+            clip-path: polygon(0 15%, 5% 0, 95% 0, 100% 15%, 100% 100%, 0 100%);
+            z-index: 100;
         }
 
-        .side-btns { display: flex; flex-direction: column; gap: 12px; }
-
-        /* 极简玻璃按钮 */
-        .btn-glass {
-            background: var(--glass); border: 1px solid rgba(0,255,170,0.3);
-            color: var(--neon-primary); padding: 12px 20px; border-radius: 4px;
-            backdrop-filter: blur(10px); font-size: 12px; letter-spacing: 1px;
-            text-transform: uppercase; transition: 0.3s;
-        }
-        .btn-glass:active { background: var(--neon-primary); color: #000; box-shadow: 0 0 20px var(--neon-primary); }
-
-        .btn-export {
-            border-color: var(--neon-second); color: var(--neon-second);
-            padding: 15px 30px; font-weight: bold; border-radius: 30px;
+        .tactic-btn {
+            background: rgba(0, 255, 102, 0.05);
+            border: 1px solid var(--cyber);
+            color: var(--cyber);
+            padding: 12px 5px;
+            text-align: center;
+            font-size: 12px;
+            font-weight: bold;
+            transition: 0.2s;
+            outline: none;
+            cursor: pointer;
         }
 
-        /* 类别选择浮动窗 */
-        .class-badge {
-            background: rgba(0,0,0,0.8); border: 1px solid var(--neon-primary);
-            padding: 5px 15px; border-radius: 20px; display: flex; align-items: center; gap: 10px;
+        .tactic-btn:active {
+            background: var(--cyber);
+            color: var(--void);
+            box-shadow: 0 0 20px var(--cyber);
         }
+
+        .btn-io { 
+            grid-column: span 1; 
+            background: rgba(255, 222, 0, 0.05); 
+            border-color: var(--plasma); 
+            color: var(--plasma); 
+        }
+        .btn-io:active { background: var(--plasma); border-color: var(--plasma); }
+
+        .class-selector {
+            grid-column: span 1;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            border: 1px solid var(--cyber); background: rgba(0,0,0,0.5);
+        }
+
         #classId {
-            background: transparent; border: none; color: var(--neon-primary);
-            font-size: 1.2rem; width: 40px; text-align: center; font-family: 'Orbitron';
+            background: transparent; border: none; color: var(--cyber);
+            font-family: 'Share Tech Mono'; font-size: 1.5rem; width: 100%; text-align: center;
+            outline: none;
         }
 
-        /* 底部信息流 */
-        footer {
-            height: 30px; background: rgba(0,0,0,0.5); font-size: 9px;
-            display: flex; align-items: center; padding: 0 20px;
-            color: rgba(255,255,255,0.4); border-top: 1px solid rgba(255,255,255,0.05);
+        .label-text { font-size: 8px; color: rgba(0, 255, 102, 0.5); }
+
+        .v-line {
+            position: absolute; width: 1px; height: 100%;
+            background: rgba(0, 255, 102, 0.2); left: 50%; pointer-events: none;
+        }
+        .h-line {
+            position: absolute; height: 1px; width: 100%;
+            background: rgba(0, 255, 102, 0.2); top: 50%; pointer-events: none;
+        }
+
+        .io-group {
+            grid-column: span 3;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+        }
+
+        #train-overlay {
+            position: absolute; top: 10px; right: 10px;
+            background: rgba(0,0,0,0.7); padding: 5px 10px;
+            border: 1px solid var(--plasma); font-size: 10px;
+            display: none; z-index: 200;
         }
 
     </style>
@@ -106,140 +134,308 @@
 <body>
 
 <header>
-    <div style="font-size: 0.8rem; letter-spacing: 2px;">
-        <span class="status-light"></span>SYS_ONLINE: <span id="imgIndex">00 / 00</span>
+    <div>
+        <div class="system-stat">Target_Aquisition: <span id="imgIndex">00/00</span></div>
+        <div id="imgName" style="font-size: 12px; color: var(--plasma);">NO_SIGNAL</div>
     </div>
-    <div style="display: flex; gap: 8px;">
-        <button class="btn-glass" style="padding: 5px 10px;" onclick="document.getElementById('fileInput').click()">LOAD</button>
-        <input type="file" id="fileInput" multiple webkitdirectory directory hidden onchange="handleFiles(this.files)">
-    </div>
+    <div class="system-stat" style="text-align: right;">AI_CORE: <span id="loss-val">OFFLINE</span><br>Status: OK</div>
 </header>
 
-<div id="container">
-    <canvas id="canvas"></canvas>
-    
-    <div class="hud-overlay">
-        <div class="main-controls">
-            <div class="side-btns">
-                <button class="btn-glass" onclick="undo()">UNDO</button>
-                <div class="class-badge">
-                    <span style="font-size: 8px;">TAG:</span>
-                    <input type="number" id="classId" value="0">
-                </div>
-            </div>
-            
-            <button class="btn-glass btn-export" onclick="exportZip()">DATA_EXTRACT</button>
-        </div>
+<div id="train-overlay">NEURAL_TRAINING_IN_PROGRESS...</div>
 
-        <div style="display: flex; gap: 10px; width: 100%;">
-            <button class="btn-glass" style="flex:1" onclick="prevImg()">◀ PREV</button>
-            <button class="btn-glass" style="flex:1" onclick="nextImg()">NEXT ▶</button>
-        </div>
-    </div>
+<div id="container">
+    <div class="v-line"></div><div class="h-line"></div>
+    <canvas id="canvas"></canvas>
 </div>
 
-<footer>
-    <span id="imgName">READY_FOR_IMAGE_INGESTION...</span>
-</footer>
+<div class="cockpit-controls">
+    <div class="io-group">
+        <button class="tactic-btn btn-io" onclick="document.getElementById('fileInput').click()">IMPORT</button>
+        <button id="trainBtn" class="tactic-btn btn-io" style="border-color: #ff00ff; color: #ff00ff;" onclick="trainModel()">TRAIN_AI</button>
+        <button class="tactic-btn btn-io" onclick="exportZip()">EXPORT</button>
+    </div>
+    <input type="file" id="fileInput" multiple webkitdirectory directory hidden onchange="handleFiles(this.files)">
+    
+    <button class="tactic-btn" onclick="prevImg()">LAST</button>
+    <div class="class-selector">
+        <span class="label-text">CLASS_ID</span>
+        <input type="number" id="classId" value="0">
+    </div>
+    <button class="tactic-btn" onclick="nextImg()">NEXT</button>
+    
+    <button class="tactic-btn" style="grid-column: span 1; border-color: #ff9900; color: #ff9900;" onclick="resetProject()">RESET</button>
+    <button id="modeBtn" class="tactic-btn" style="grid-column: span 1; border-color: #00ccff; color: #00ccff;" onclick="toggleMode()">MODE: DRAW</button>
+    <button class="tactic-btn" style="grid-column: span 1; border-color: #ff3300; color: #ff3300;" onclick="undo()">UNDO</button>
+</div>
 
 <script>
-    // 逻辑严格保持不动
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     let images = [];
     let currentIndex = -1;
-    let isDrawing = false;
-    let startX, startY;
     let currentImgObj = new Image();
+
+    // 变换状态
+    let scale = 1;
+    let offsetX = 0;
+    let offsetY = 0;
+    
+    // 交互状态
+    let isDrawing = false;
+    let isDragging = false;
+    let isMoveMode = false;
+    let startX, startY, lastX, lastY;
+    let initialPinchDist = 0;
+    let initialScale = 1;
+
+    // AI 核心变量
+    let model = null;
+    const IMG_SIZE = 224; // 训练基准尺寸
+
+    async function initModel() {
+        // 构建一个简单的轻量级目标检测回归模型 (MobileNet-style YOLO Head)
+        const base = await tf.loadLayersModel('https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v1_0.25_224/model.json');
+        const layer = base.getLayer('conv_pw_13_relu');
+        const truncated = tf.model({inputs: base.inputs, outputs: layer.output});
+        
+        const x = tf.layers.flatten().apply(truncated.output);
+        const output = tf.layers.dense({units: 5, activation: 'sigmoid'}).apply(x); // class, x, y, w, h
+        
+        model = tf.model({inputs: truncated.input, outputs: output});
+        model.compile({optimizer: tf.train.adam(0.001), loss: 'meanSquaredError'});
+        console.log("AI_CORE_READY");
+    }
+
+    async function trainModel() {
+        if (images.length === 0 || !images[currentIndex].labels.length) {
+            alert("INSUFFICIENT DATA FOR NEURAL LINK.");
+            return;
+        }
+        
+        document.getElementById('train-overlay').style.display = 'block';
+        document.getElementById('loss-val').innerText = "CALCULATING...";
+
+        try {
+            // 简单演示：针对当前图像进行 10 轮过拟合训练 (实际应批量训练)
+            const imgTensor = tf.browser.fromPixels(currentImgObj)
+                .resizeBilinear([IMG_SIZE, IMG_SIZE])
+                .expandDims(0)
+                .div(255.0);
+
+            const label = images[currentIndex].labels[0]; // 取第一个标注
+            const labelTensor = tf.tensor2d([[
+                parseFloat(label[0])/10, // 假设类别做简单归一
+                parseFloat(label[1]), 
+                parseFloat(label[2]), 
+                parseFloat(label[3]), 
+                parseFloat(label[4])
+            ]]);
+
+            const history = await model.fit(imgTensor, labelTensor, {
+                epochs: 10,
+                callbacks: {
+                    onEpochEnd: (epoch, logs) => {
+                        document.getElementById('loss-val').innerText = `LOSS: ${logs.loss.toFixed(4)}`;
+                    }
+                }
+            });
+
+            tf.dispose([imgTensor, labelTensor]);
+            alert("TRAINING SEQUENCE COMPLETE.");
+        } catch (e) {
+            console.error(e);
+            alert("CORE CRITICAL ERROR.");
+        } finally {
+            document.getElementById('train-overlay').style.display = 'none';
+        }
+    }
+
+    function toggleMode() {
+        isMoveMode = !isMoveMode;
+        const btn = document.getElementById('modeBtn');
+        btn.innerText = isMoveMode ? "MODE: MOVE" : "MODE: DRAW";
+        canvas.style.cursor = isMoveMode ? "move" : "crosshair";
+    }
 
     function handleFiles(fileList) {
         const filteredFiles = Array.from(fileList).filter(f => f.type.startsWith('image/'));
         if (filteredFiles.length === 0) return;
         images = filteredFiles.map(f => ({ file: f, name: f.name, labels: [] }));
         currentIndex = 0;
+        resetTransform();
         loadImage(0);
+        if (!model) initModel();
+    }
+
+    function resetTransform() {
+        scale = 1; offsetX = 0; offsetY = 0;
+    }
+
+    function resetProject() {
+        if (confirm("REBOOT SYSTEM? ALL UNSAVED DATA WILL BE PURGED.")) {
+            images = []; currentIndex = -1;
+            currentImgObj = new Image();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            document.getElementById('imgName').innerText = "NO_SIGNAL";
+            document.getElementById('imgIndex').innerText = "00/00";
+            document.getElementById('fileInput').value = "";
+            document.getElementById('loss-val').innerText = "OFFLINE";
+            resetTransform();
+        }
     }
 
     function loadImage(index) {
         if (index < 0 || index >= images.length) return;
         const reader = new FileReader();
         reader.onload = (e) => {
-            currentImgObj.onload = () => render();
+            currentImgObj.onload = () => {
+                resetTransform();
+                render();
+            };
             currentImgObj.src = e.target.result;
         };
         reader.readAsDataURL(images[index].file);
-        document.getElementById('imgName').innerText = `PROCESS_TARGET: ${images[index].name.toUpperCase()}`;
-        document.getElementById('imgIndex').innerText = `${index + 1} / ${images.length}`;
+        document.getElementById('imgName').innerText = `ID: ${images[index].name.toUpperCase()}`;
+        document.getElementById('imgIndex').innerText = `${index + 1}/${images.length}`;
     }
 
     function render() {
         if (currentIndex === -1) return;
         const container = document.getElementById('container');
-        const ratio = Math.min((container.clientWidth - 20) / currentImgObj.width, (container.clientHeight - 100) / currentImgObj.height);
-        canvas.width = currentImgObj.width * ratio;
-        canvas.height = currentImgObj.height * ratio;
+        
+        const baseRatio = Math.min((container.clientWidth - 30) / currentImgObj.width, (container.clientHeight - 30) / currentImgObj.height);
+        canvas.width = container.clientWidth - 30;
+        canvas.height = container.clientHeight - 30;
 
-        ctx.drawImage(currentImgObj, 0, 0, canvas.width, canvas.height);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.save();
+        ctx.translate(canvas.width/2 + offsetX, canvas.height/2 + offsetY);
+        ctx.scale(scale, scale);
+        
+        const drawW = currentImgObj.width * baseRatio;
+        const drawH = currentImgObj.height * baseRatio;
+        
+        ctx.drawImage(currentImgObj, -drawW/2, -drawH/2, drawW, drawH);
 
         images[currentIndex].labels.forEach(box => {
-            const [id, cx, cy, cw, ch] = box;
-            const w = cw * canvas.width;
-            const h = ch * canvas.height;
-            const x = (cx * canvas.width) - w/2;
-            const y = (cy * canvas.height) - h/2;
+            const [id, cx, cy, cw, ch] = box.map(Number);
+            const w = cw * drawW;
+            const h = ch * drawH;
+            const x = (cx * drawW) - w/2 - drawW/2;
+            const y = (cy * drawH) - h/2 - drawH/2;
 
-            // 炫酷量子框
-            ctx.shadowBlur = 10;
-            ctx.shadowColor = '#00ffaa';
-            ctx.strokeStyle = '#00ffaa';
-            ctx.lineWidth = 2;
+            ctx.shadowBlur = 10 / scale;
+            ctx.shadowColor = '#00ff66';
+            ctx.strokeStyle = '#00ff66';
+            ctx.lineWidth = 1.5 / scale;
             ctx.strokeRect(x, y, w, h);
             
-            // 四角增强
+            const len = 10 / scale;
+            ctx.lineWidth = 3 / scale;
+            ctx.beginPath();
+            ctx.moveTo(x, y+len); ctx.lineTo(x, y); ctx.lineTo(x+len, y);
+            ctx.moveTo(x+w-len, y); ctx.lineTo(x+w, y); ctx.lineTo(x+w, y+len);
+            ctx.stroke();
+
+            ctx.fillStyle = '#00ff66';
             ctx.shadowBlur = 0;
-            ctx.fillStyle = '#00ffaa';
-            ctx.fillRect(x-2, y-2, 8, 2);
-            ctx.fillRect(x-2, y-2, 2, 8);
-            
-            ctx.font = 'bold 10px Orbitron';
-            ctx.fillText(`ID:${id}`, x + 5, y + 12);
+            ctx.font = `${10/scale}px Share Tech Mono`;
+            ctx.fillText(`OBJ_DATA_ID:${id}`, x + 5/scale, y - 5/scale);
         });
+
+        if (isDrawing && !isMoveMode && !isDragging) {
+            const sPos = screenToCanvas(startX, startY);
+            const cPos = screenToCanvas(lastX, lastY);
+            ctx.strokeStyle = 'rgba(255, 222, 0, 0.8)';
+            ctx.setLineDash([5/scale, 5/scale]);
+            ctx.lineWidth = 2 / scale;
+            ctx.strokeRect(sPos.x, sPos.y, cPos.x - sPos.x, cPos.y - sPos.y);
+            ctx.setLineDash([]);
+        }
+        ctx.restore();
     }
 
-    const getPos = (e) => {
+    function screenToCanvas(sx, sy) {
         const rect = canvas.getBoundingClientRect();
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-        return [clientX - rect.left, clientY - rect.top];
+        return {
+            x: (sx - rect.left - canvas.width/2 - offsetX) / scale,
+            y: (sy - rect.top - canvas.height/2 - offsetY) / scale
+        };
+    }
+
+    const getDist = (t1, t2) => Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+
+    const startAction = (e) => {
+        if(currentIndex === -1) return;
+        if (e.touches && e.touches.length === 2) {
+            isDrawing = false; isDragging = true;
+            initialPinchDist = getDist(e.touches[0], e.touches[1]);
+            initialScale = scale; return;
+        }
+        const touch = e.touches ? e.touches[0] : e;
+        startX = touch.clientX; startY = touch.clientY;
+        lastX = startX; lastY = startY;
+        if (isMoveMode) { isDragging = true; isDrawing = false; } 
+        else { isDrawing = true; isDragging = false; }
     };
 
-    canvas.addEventListener('mousedown', e => { if(currentIndex===-1) return; isDrawing = true; [startX, startY] = getPos(e); });
-    canvas.addEventListener('touchstart', e => { if(currentIndex===-1) return; isDrawing = true; [startX, startY] = getPos(e); });
+    const moveAction = (e) => {
+        if (currentIndex === -1) return;
+        if (e.cancelable) e.preventDefault();
+        if (e.touches && e.touches.length === 2) {
+            const currentDist = getDist(e.touches[0], e.touches[1]);
+            scale = Math.max(0.5, Math.min(10, initialScale * (currentDist / initialPinchDist)));
+            render(); return;
+        }
+        const touch = e.touches ? e.touches[0] : e;
+        if (isMoveMode && isDragging) {
+            offsetX += touch.clientX - lastX;
+            offsetY += touch.clientY - lastY;
+            lastX = touch.clientX; lastY = touch.clientY;
+            render();
+        } else if (isDrawing) {
+            lastX = touch.clientX; lastY = touch.clientY;
+            render();
+        }
+    };
 
-    window.addEventListener('mousemove', e => {
-        if (!isDrawing) return;
-        render();
-        const [curX, curY] = getPos(e);
-        ctx.strokeStyle = 'rgba(0, 255, 170, 0.5)';
-        ctx.setLineDash([4, 2]);
-        ctx.strokeRect(startX, startY, curX - startX, curY - startY);
-        ctx.setLineDash([]);
-    });
-
-    window.addEventListener('mouseup', e => {
-        if (!isDrawing) return;
+    const endAction = (e) => {
+        if (isMoveMode || !isDrawing) { isDragging = false; return; }
         isDrawing = false;
-        const [endX, endY] = getPos(e);
-        const w = Math.abs(endX - startX);
-        const h = Math.abs(endY - startY);
-        if (w < 5 || h < 5) return;
-        const x_center = (Math.min(startX, endX) + w / 2) / canvas.width;
-        const y_center = (Math.min(startY, endY) + h / 2) / canvas.height;
-        images[currentIndex].labels.push([document.getElementById('classId').value, x_center, y_center, w/canvas.width, h/canvas.height]);
+        const container = document.getElementById('container');
+        const baseRatio = Math.min((container.clientWidth - 30) / currentImgObj.width, (container.clientHeight - 30) / currentImgObj.height);
+        const drawW = currentImgObj.width * baseRatio;
+        const drawH = currentImgObj.height * baseRatio;
+        const p1 = screenToCanvas(startX, startY);
+        const p2 = screenToCanvas(lastX, lastY);
+        const xmin = Math.min(p1.x, p2.x), ymin = Math.min(p1.y, p2.y);
+        const w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y);
+        if (w * scale < 5 || h * scale < 5) { render(); return; }
+        images[currentIndex].labels.push([
+            document.getElementById('classId').value,
+            ((xmin + w/2 + drawW/2) / drawW).toFixed(6),
+            ((ymin + h/2 + drawH/2) / drawH).toFixed(6),
+            (w / drawW).toFixed(6),
+            (h / drawH).toFixed(6)
+        ]);
         render();
-    });
+    };
 
-    function undo() { images[currentIndex].labels.pop(); render(); }
+    canvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        scale = Math.max(0.5, Math.min(10, scale * (e.deltaY > 0 ? 0.9 : 1.1)));
+        render();
+    }, { passive: false });
+
+    canvas.addEventListener('mousedown', startAction);
+    window.addEventListener('mousemove', moveAction);
+    window.addEventListener('mouseup', endAction);
+    canvas.addEventListener('touchstart', startAction, { passive: false });
+    window.addEventListener('touchmove', moveAction, { passive: false });
+    window.addEventListener('touchend', endAction);
+
+    function undo() { if(currentIndex !== -1) { images[currentIndex].labels.pop(); render(); } }
     function nextImg() { if(currentIndex < images.length-1) { currentIndex++; loadImage(currentIndex); } }
     function prevImg() { if(currentIndex > 0) { currentIndex--; loadImage(currentIndex); } }
 
@@ -253,7 +449,7 @@
         const blob = await zip.generateAsync({type: "blob"});
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url; a.download = "YOLO_QUANTUM_DATA.zip"; a.click();
+        a.href = url; a.download = "NEURAL_LINK_EXPORT.zip"; a.click();
     }
 </script>
 </body>
