@@ -208,52 +208,83 @@
     }
 
     async function trainModel() {
-        if (images.length === 0 || !images[currentIndex].labels.length) {
-            alert("INSUFFICIENT DATA FOR NEURAL LINK.");
-            return;
-        }
-        
-        const trainBtn = document.getElementById('trainBtn');
-        document.getElementById('loss-val').innerText = "CALCULATING...";
+    // 1. 筛选出所有带有标签的图片
+    const labeledImages = images.filter(img => img.labels && img.labels.length > 0);
 
-        try {
-            const imgTensor = tf.browser.fromPixels(currentImgObj)
-                .resizeBilinear([IMG_SIZE, IMG_SIZE])
-                .expandDims(0)
-                .div(255.0);
+    if (labeledImages.length === 0) {
+        alert("CRITICAL ERROR: NO LABELED DATA FOUND. PLEASE MARK TARGETS FIRST.");
+        return;
+    }
 
-            const label = images[currentIndex].labels[0]; 
-            const labelTensor = tf.tensor2d([[
-                parseFloat(label[0])/10, 
-                parseFloat(label[1]), 
-                parseFloat(label[2]), 
-                parseFloat(label[3]), 
-                parseFloat(label[4])
-            ]]);
+    const trainBtn = document.getElementById('trainBtn');
+    const lossDisplay = document.getElementById('loss-val');
+    lossDisplay.innerText = "PREPARING DATA...";
 
-            const epochs = 20;
-            const history = await model.fit(imgTensor, labelTensor, {
-                epochs: epochs,
-                callbacks: {
-                    onEpochEnd: (epoch, logs) => {
-                        const progress = ((epoch + 1) / epochs) * 100;
-                        // 更新按钮背景作为进度条
-                        trainBtn.style.background = `linear-gradient(to right, rgba(255, 0, 255, 0.4) ${progress}%, transparent ${progress}%)`;
-                        document.getElementById('loss-val').innerText = `LOSS: ${logs.loss.toFixed(4)}`;
-                    }
-                }
+    try {
+        // 2. 准备训练张量
+        const imageTensors = [];
+        const labelTensors = [];
+
+        for (const imgData of labeledImages) {
+            // 加载图片并处理为张量
+            const imgElement = await new Promise((resolve) => {
+                const img = new Image();
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    img.onload = () => resolve(img);
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(imgData.file);
             });
 
-            tf.dispose([imgTensor, labelTensor]);
-            setTimeout(() => {
-                trainBtn.style.background = "rgba(0, 255, 102, 0.05)";
-                alert("TRAINING SEQUENCE COMPLETE.");
-            }, 500);
-        } catch (e) {
-            console.error(e);
-            alert("CORE CRITICAL ERROR.");
+            const t = tf.browser.fromPixels(imgElement)
+                .resizeBilinear([IMG_SIZE, IMG_SIZE])
+                .div(255.0);
+            
+            imageTensors.push(t);
+
+            // 取每张图的第一个标签 [class, cx, cy, cw, ch]
+            const label = imgData.labels[0];
+            labelTensors.push([
+                parseFloat(label[0]) / 10, // Class ID 归一化
+                parseFloat(label[1]),
+                parseFloat(label[2]),
+                parseFloat(label[3]),
+                parseFloat(label[4])
+            ]);
         }
+
+        // 合并为 Batch
+        const xs = tf.stack(imageTensors);
+        const ys = tf.tensor2d(labelTensors);
+
+        // 3. 开始全量训练
+        const epochs = 50; // 增加训练轮数以适应多图
+        await model.fit(xs, ys, {
+            epochs: epochs,
+            shuffle: true, // 打乱顺序，防止模型产生顺序记忆
+            callbacks: {
+                onEpochEnd: (epoch, logs) => {
+                    const progress = ((epoch + 1) / epochs) * 100;
+                    trainBtn.style.background = `linear-gradient(to right, rgba(255, 0, 255, 0.4) ${progress}%, transparent ${progress}%)`;
+                    lossDisplay.innerText = `BATCH_LOSS: ${logs.loss.toFixed(5)}`;
+                }
+            }
+        });
+
+        // 释放显存
+        tf.dispose([xs, ys, ...imageTensors]);
+        
+        setTimeout(() => {
+            trainBtn.style.background = "rgba(0, 255, 102, 0.05)";
+            alert(`TRAINING COMPLETE: ${labeledImages.length} SAMPLES PROCESSED.`);
+        }, 500);
+
+    } catch (e) {
+        console.error(e);
+        alert("CORE CRITICAL ERROR DURING BATCH TRAINING.");
     }
+}
 
     async function predict() {
         if (!model || currentIndex === -1) {
