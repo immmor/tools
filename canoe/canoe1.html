@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>NextGen Automotive Testing Console</title>
+    <style>
+        :root {
+            --neon-blue: #00f2ff;
+            --neon-red: #ff0055;
+            --bg-dark: #0a0b10;
+            --panel-bg: rgba(20, 25, 40, 0.8);
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: white;
+            font-family: 'Segoe UI', Orbitron, sans-serif;
+            margin: 0;
+            overflow: hidden;
+            display: grid;
+            grid-template-columns: 300px 1fr 300px;
+            grid-template-rows: 80px 1fr 250px;
+            height: 100-vh;
+            gap: 10px;
+            padding: 10px;
+        }
+
+        /* 顶部装饰 */
+        header {
+            grid-column: 1 / 4;
+            background: var(--panel-bg);
+            border: 1px solid var(--neon-blue);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            justify-content: space-between;
+            box-shadow: 0 0 15px rgba(0, 242, 255, 0.2);
+        }
+
+        .status-dot {
+            height: 10px;
+            width: 10px;
+            background-color: #0f0;
+            border-radius: 50%;
+            display: inline-block;
+            box-shadow: 0 0 8px #0f0;
+            margin-right: 10px;
+        }
+
+        /* 左侧面板：节点列表 */
+        .node-panel {
+            grid-row: 2 / 3;
+            background: var(--panel-bg);
+            border-left: 3px solid var(--neon-blue);
+            padding: 15px;
+        }
+
+        /* 中间：主仪表盘 */
+        .main-display {
+            grid-row: 2 / 3;
+            position: relative;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            background: radial-gradient(circle, #1a2035 0%, #0a0b10 100%);
+            border: 1px solid rgba(0, 242, 255, 0.1);
+        }
+
+        .gauge {
+            width: 250px;
+            height: 250px;
+            border: 10px solid #222;
+            border-radius: 50%;
+            border-top: 10px solid var(--neon-blue);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: transform 0.1s;
+            position: relative;
+        }
+
+        .gauge::after {
+            content: '';
+            position: absolute;
+            width: 110%;
+            height: 110%;
+            border: 2px dashed var(--neon-blue);
+            border-radius: 50%;
+            animation: rotate 10s linear infinite;
+        }
+
+        /* 右侧：诊断数据 */
+        .diag-panel {
+            grid-row: 2 / 3;
+            background: var(--panel-bg);
+            padding: 15px;
+        }
+
+        /* 底部：日志控制台 */
+        .console-panel {
+            grid-column: 1 / 4;
+            background: rgba(0, 0, 0, 0.9);
+            border: 1px solid #333;
+            font-family: 'Courier New', monospace;
+            padding: 10px;
+            color: #00ff41;
+            overflow-y: auto;
+            font-size: 13px;
+        }
+
+        .btn {
+            background: transparent;
+            border: 1px solid var(--neon-blue);
+            color: var(--neon-blue);
+            padding: 8px 20px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .btn:hover {
+            background: var(--neon-blue);
+            color: black;
+            box-shadow: 0 0 20px var(--neon-blue);
+        }
+
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .glitch {
+            text-shadow: 2px 0 var(--neon-red), -2px 0 var(--neon-blue);
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h2 class="glitch">CANoe.WEB_CORE v4.0</h2>
+    <div>
+        <span class="status-dot"></span> CONNECTION: STABLE (CAN-FD)
+        <button class="btn" style="margin-left: 20px;" onclick="startTest()">START TEST</button>
+    </div>
+</header>
+
+<div class="node-panel">
+    <h3>ECU NODES</h3>
+    <ul style="list-style: none; padding: 0;">
+        <li style="margin-bottom: 15px;">🚗 Gateway (0x101) - <span style="color: #0f0;">Online</span></li>
+        <li style="margin-bottom: 15px;">🔒 BCM (0x210) - <span style="color: #0f0;">Online</span></li>
+        <li style="margin-bottom: 15px;">⚡ BMS (0x350) - <span style="color: var(--neon-red);">Error</span></li>
+        <li style="margin-bottom: 15px;">🛰️ ADAS (0x420) - <span style="color: #aaa;">Idle</span></li>
+    </ul>
+</div>
+
+<div class="main-display">
+    <div class="gauge" id="speedGauge">
+        <small>SPEED</small>
+        <h1 id="speedVal">0</h1>
+        <small>km/h</small>
+    </div>
+    <div class="gauge" id="rpmGauge" style="border-top-color: var(--neon-red);">
+        <small>BUS LOAD</small>
+        <h1 id="loadVal">12</h1>
+        <small>%</small>
+    </div>
+</div>
+
+<div class="diag-panel">
+    <h3>DIAGNOSTICS</h3>
+    <div style="background: #111; padding: 10px; border-radius: 5px;">
+        <p>Active DTC: <span style="color: var(--neon-red);">P0A1B</span></p>
+        <p>Voltage: 13.8V</p>
+        <p>Temp: 42°C</p>
+    </div>
+</div>
+
+<div class="console-panel" id="console">
+    [INFO] System initialized. Waiting for CAN frame...<br>
+    [INFO] Protocol: CAN-FD, Bitrate: 500k/2M
+</div>
+
+<script>
+    const consoleEl = document.getElementById('console');
+    const speedVal = document.getElementById('speedVal');
+    const loadVal = document.getElementById('loadVal');
+
+    // 模拟日志输出
+    function log(msg, type = 'INFO') {
+        const time = new Date().toLocaleTimeString();
+        consoleEl.innerHTML += `<br>[${time}] [${type}] ${msg}`;
+        consoleEl.scrollTop = consoleEl.scrollHeight;
+    }
+
+    // 模拟数据更新
+    function startTest() {
+        log("Test Sequence Started...", "EXE");
+        
+        setInterval(() => {
+            // 模拟随机速度
+            const s = Math.floor(Math.random() * 40) + 60;
+            speedVal.innerText = s;
+            
+            // 模拟总线负载
+            const l = (Math.random() * 5 + 15).toFixed(1);
+            loadVal.innerText = l;
+
+            // 模拟随机CAN帧
+            const id = "0x" + Math.floor(Math.random()*0xFFF).toString(16).toUpperCase();
+            const data = Array.from({length: 8}, () => Math.floor(Math.random()*256).toString(16).padStart(2, '0')).join(' ');
+            log(`RX: ${id} | DATA: ${data}`);
+        }, 800);
+    }
+
+    // 初始欢迎消息
+    setTimeout(() => log("All systems nominal. Ready for automation."), 1000);
+</script>
+
+</body>
+</html>

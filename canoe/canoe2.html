@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Advanced Automotive Test Pro</title>
+    <style>
+        :root {
+            --neon-blue: #00f2ff;
+            --neon-red: #ff0055;
+            --neon-green: #39ff14;
+            --bg-dark: #05060a;
+            --panel-bg: rgba(15, 20, 35, 0.9);
+            --border-style: 1px solid rgba(0, 242, 255, 0.3);
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: #e0e0e0;
+            font-family: 'Segoe UI', 'Consolas', sans-serif;
+            margin: 0;
+            display: grid;
+            grid-template-columns: 320px 1fr 320px;
+            grid-template-rows: 60px 1fr 200px;
+            height: 100vh;
+            gap: 8px;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+
+        /* 统一面板样式 */
+        .glass-panel {
+            background: var(--panel-bg);
+            border: var(--border-style);
+            border-radius: 4px;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            grid-column: 1 / 4;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            background: linear-gradient(90deg, #0a0c14, #1a1f35);
+            border-bottom: 2px solid var(--neon-blue);
+        }
+
+        .panel-header {
+            background: rgba(0, 242, 255, 0.1);
+            padding: 5px 10px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            color: var(--neon-blue);
+            border-bottom: var(--border-style);
+            text-transform: uppercase;
+        }
+
+        /* 左侧：信号树 */
+        #signal-tree {
+            padding: 10px;
+            font-size: 14px;
+            overflow-y: auto;
+        }
+        .signal-item { margin: 5px 0; cursor: pointer; }
+        .signal-item:hover { color: var(--neon-blue); }
+
+        /* 中间：主监控区 */
+        .main-view {
+            display: grid;
+            grid-template-rows: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .chart-container {
+            position: relative;
+            flex-grow: 1;
+            padding: 10px;
+        }
+
+        canvas { width: 100%; height: 100%; border-bottom: 1px solid #333; }
+
+        /* 发送控制区 */
+        .send-area {
+            padding: 15px;
+            display: flex;
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        input {
+            background: #000;
+            border: 1px solid #444;
+            color: var(--neon-green);
+            padding: 5px;
+            font-family: monospace;
+        }
+
+        /* 动画与状态 */
+        .warning-flash {
+            animation: flash 0.5s infinite alternate;
+        }
+        @keyframes flash {
+            from { box-shadow: inset 0 0 0px var(--neon-red); }
+            to { box-shadow: inset 0 0 20px var(--neon-red); }
+        }
+
+        .btn {
+            background: #111;
+            border: 1px solid var(--neon-blue);
+            color: var(--neon-blue);
+            cursor: pointer;
+            padding: 5px 15px;
+        }
+        .btn:hover { background: var(--neon-blue); color: #000; }
+
+        .log-entry { font-size: 12px; margin-bottom: 2px; border-left: 2px solid #333; padding-left: 5px; }
+        .log-tx { color: #aaa; }
+        .log-rx { color: var(--neon-green); }
+        .log-err { color: var(--neon-red); font-weight: bold; }
+
+    </style>
+</head>
+<body id="main-body">
+
+<header>
+    <div style="display: flex; align-items: center; gap: 20px;">
+        <h2 style="margin: 0; letter-spacing: 2px;">V-CAN <span style="color: var(--neon-blue);">ANALYZE</span></h2>
+        <div style="color: #666;">| Node: ECU_01 (Master)</div>
+    </div>
+    <div id="bus-status">BUS LOAD: 14.2% | FPS: 60</div>
+</header>
+
+<div class="glass-panel">
+    <div class="panel-header">Database (DBC) Signals</div>
+    <div id="signal-tree">
+        <details open>
+            <summary>Engine_Data (0x301)</summary>
+            <div class="signal-item">└─ EngSpeed: <span id="val-speed" style="color:var(--neon-blue)">0</span> rpm</div>
+            <div class="signal-item">└─ ThrottlePos: <span id="val-thr" style="color:var(--neon-blue)">0</span> %</div>
+        </details>
+        <details style="margin-top: 10px;">
+            <summary>ABS_Status (0x220)</summary>
+            <div class="signal-item">└─ WheelSpeed_FL: 0 km/h</div>
+            <div class="signal-item">└─ BrakeActive: OFF</div>
+        </details>
+    </div>
+</div>
+
+<div class="main-view">
+    <div class="glass-panel">
+        <div class="panel-header">Real-time Signal Trace</div>
+        <div class="chart-container">
+            <canvas id="traceCanvas"></canvas>
+        </div>
+    </div>
+    
+    <div class="glass-panel">
+        <div class="panel-header">Interactive Interaction</div>
+        <div class="send-area">
+            <input type="text" id="txId" placeholder="ID (Hex)" value="0x601" style="width: 80px;">
+            <input type="text" id="txData" placeholder="Data (e.g. 11 22 33 AA)" style="flex-grow: 1;">
+            <button class="btn" onclick="manualSend()">SEND FRAME</button>
+        </div>
+        <div style="padding: 10px; display: flex; gap: 10px;">
+            <button class="btn" onclick="toggleError()">Inject Error Frame</button>
+            <button class="btn" onclick="clearLogs()">Clear Console</button>
+        </div>
+    </div>
+</div>
+
+<div class="glass-panel">
+    <div class="panel-header">Diagnostics / CAPL State</div>
+    <div style="padding: 15px;">
+        <div style="background: #000; padding: 10px; border: 1px dashed #444;">
+            <p style="margin: 5px 0;">Session: <span style="color:var(--neon-green);">Programming</span></p>
+            <p style="margin: 5px 0;">Security: <span style="color:var(--neon-red);">Locked (L3)</span></p>
+            <progress value="45" max="100" style="width: 100%;"></progress>
+            <p style="font-size: 10px; text-align: center;">Flashing: ECU_APP_v2.1.hex</p>
+        </div>
+    </div>
+</div>
+
+<div class="glass-panel" style="grid-column: 1 / 4;">
+    <div class="panel-header">Trace Window (CAN-FD)</div>
+    <div id="console" style="padding: 10px; overflow-y: scroll; font-family: monospace; flex-grow: 1;">
+        <div class="log-entry">[SYS] Measurement started at 2024-05-20 10:00:01</div>
+    </div>
+</div>
+
+<script>
+    const consoleEl = document.getElementById('console');
+    const canvas = document.getElementById('traceCanvas');
+    const ctx = canvas.getContext('2d');
+    let dataPoints = Array(100).fill(50);
+    let isErrorActive = false;
+
+    // 初始化画布
+    function resizeCanvas() {
+        canvas.width = canvas.parentElement.clientWidth;
+        canvas.height = canvas.parentElement.clientHeight - 20;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // 绘制实时波形
+    function drawTrace() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.strokeStyle = isErrorActive ? '#ff0055' : '#00f2ff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        
+        const step = canvas.width / 100;
+        for(let i = 0; i < dataPoints.length; i++) {
+            const x = i * step;
+            const y = canvas.height - (dataPoints[i] / 100 * canvas.height);
+            if(i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+
+        // 模拟数据流动
+        dataPoints.shift();
+        let nextVal = dataPoints[dataPoints.length-1] + (Math.random() - 0.5) * 10;
+        nextVal = Math.max(10, Math.min(90, nextVal));
+        dataPoints.push(nextVal);
+        
+        // 更新UI数值
+        document.getElementById('val-speed').innerText = Math.floor(nextVal * 60);
+        document.getElementById('val-thr').innerText = nextVal.toFixed(1);
+
+        requestAnimationFrame(drawTrace);
+    }
+    drawTrace();
+
+    // 模拟接收报文
+    function simulateRX() {
+        if(Math.random() > 0.3) {
+            const id = "0x" + (0x100 + Math.floor(Math.random()*500)).toString(16).toUpperCase();
+            const data = Array.from({length: 8}, () => Math.floor(Math.random()*255).toString(16).padStart(2,'0')).join(' ');
+            addLog(`RX | ${id} | d 8 | ${data}`, 'rx');
+        }
+        setTimeout(simulateRX, 500);
+    }
+    simulateRX();
+
+    function addLog(msg, type) {
+        const div = document.createElement('div');
+        div.className = `log-entry log-${type}`;
+        div.innerText = `[${new Date().toLocaleTimeString('en-GB', {hour12:false})}.${Math.floor(Math.random()*1000)}] ${msg}`;
+        consoleEl.appendChild(div);
+        if(consoleEl.childNodes.length > 50) consoleEl.removeChild(consoleEl.firstChild);
+        consoleEl.scrollTop = consoleEl.scrollHeight;
+    }
+
+    function manualSend() {
+        const id = document.getElementById('txId').value;
+        const data = document.getElementById('txData').value || "00 00 00 00";
+        addLog(`TX | ${id} | d 8 | ${data}`, 'tx');
+    }
+
+    function toggleError() {
+        isErrorActive = !isErrorActive;
+        const body = document.getElementById('main-body');
+        if(isErrorActive) {
+            body.classList.add('warning-flash');
+            addLog("!!! ERROR FRAME DETECTED - BUS HEAVY STRESS !!!", "err");
+        } else {
+            body.classList.remove('warning-flash');
+            addLog("Bus recovered to normal state.", "tx");
+        }
+    }
+
+    function clearLogs() { consoleEl.innerHTML = ''; }
+</script>
+
+</body>
+</html>
