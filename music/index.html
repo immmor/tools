@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Liquid Future Player</title>
+    <style>
+        :root {
+            --c1: #3a1c71; --c2: #d76d77; --c3: #ffaf7b;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+
+        body {
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #000;
+            overflow: hidden;
+            font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        /* 极致液态背景 */
+        .mesh-bg {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(45deg, var(--c1), var(--c2), var(--c3));
+            background-size: 400% 400%;
+            animation: meshMove 15s ease infinite;
+            filter: saturate(1.5) brightness(0.6);
+            z-index: 1;
+        }
+
+        @keyframes meshMove {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        /* 播放器容器 */
+        .player-shell {
+            position: relative;
+            z-index: 10;
+            width: 90vw;
+            max-width: 400px;
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(40px) saturate(180%);
+            -webkit-backdrop-filter: blur(40px) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 48px;
+            padding: 40px;
+            box-shadow: 0 50px 100px rgba(0,0,0,0.4);
+            transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        /* 封面区域 */
+        .cover-wrapper {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1;
+            margin-bottom: 40px;
+            perspective: 1000px;
+        }
+
+        .main-img {
+            width: 100%; height: 100%;
+            object-fit: cover;
+            border-radius: 32px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+            transition: transform 0.8s ease;
+        }
+
+        .playing .main-img {
+            transform: scale(1.02) translateY(-10px);
+        }
+
+        /* 文本信息 */
+        .track-meta { text-align: left; margin-bottom: 30px; }
+        .track-meta h1 { font-size: 28px; color: #fff; font-weight: 700; margin-bottom: 4px; }
+        .track-meta p { font-size: 18px; color: rgba(255,255,255,0.6); }
+
+        /* 智能交互进度条 */
+        .progress-section { margin-bottom: 40px; }
+        .bar-bg {
+            width: 100%; height: 8px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 4px;
+            cursor: pointer;
+            position: relative;
+        }
+        .bar-current {
+            position: absolute;
+            left: 0; top: 0; height: 100%;
+            width: 30%;
+            background: #fff;
+            border-radius: 4px;
+            box-shadow: 0 0 20px rgba(255,255,255,0.4);
+            transition: width 0.1s linear;
+        }
+
+        /* 控制按钮 - 触感反馈 */
+        .action-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .btn {
+            background: none; border: none; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .btn svg { fill: #fff; width: 32px; height: 32px; }
+
+        .btn-play {
+            width: 80px; height: 80px;
+            background: #fff;
+            border-radius: 50%;
+            box-shadow: 0 15px 35px rgba(255,255,255,0.2);
+        }
+        .btn-play svg { fill: #000; width: 36px; height: 36px; }
+
+        .btn:active { transform: scale(0.85); opacity: 0.7; }
+
+    </style>
+</head>
+<body>
+
+    <div class="mesh-bg"></div>
+
+    <div class="player-shell" id="player">
+        <div class="cover-wrapper">
+            <img src="https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=800" class="main-img" id="cover">
+        </div>
+
+        <div class="track-meta">
+            <h1 id="title">Prism Echo</h1>
+            <p id="artist">Future Soul</p>
+        </div>
+
+        <div class="progress-section">
+            <div class="bar-bg" id="progress-container">
+                <div class="bar-current" id="progress-bar"></div>
+            </div>
+        </div>
+
+        <div class="action-bar">
+            <button class="btn">
+                <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6L18 18V6z"/></svg>
+            </button>
+            
+            <button class="btn btn-play" id="play-trigger">
+                <svg id="p-icon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+            </button>
+
+            <button class="btn">
+                <svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+            </button>
+        </div>
+
+        <audio id="audio" src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3"></audio>
+    </div>
+
+    <script>
+        const audio = document.getElementById('audio');
+const playBtn = document.getElementById('play-trigger');
+const icon = document.getElementById('p-icon');
+const player = document.getElementById('player');
+const bar = document.getElementById('progress-bar');
+const container = document.getElementById('progress-container');
+
+// UI 文本元素
+const titleTag = document.getElementById('title');
+const artistTag = document.getElementById('artist');
+const coverImg = document.getElementById('cover');
+
+// 1. 音乐资源库
+const playlist = [
+    {
+        title: "Prism Echo",
+        artist: "Future Soul",
+        cover: "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=800",
+        url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"
+    },
+    {
+        title: "Neon Horizon",
+        artist: "Digital Drift",
+        cover: "https://images.unsplash.com/photo-1493225255756-d9584f8606e9?w=800",
+        url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3"
+    },
+    {
+        title: "Liquid Cyber",
+        artist: "Aether Flow",
+        cover: "https://images.unsplash.com/photo-1459749411177-042180ce673c?w=800",
+        url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3"
+    },
+    {
+        title: "Starlight Velocity",
+        artist: "Synth Wave",
+        cover: "https://images.unsplash.com/photo-1514525253361-bee8718a300c?w=800",
+        url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3"
+    }
+];
+
+let currentTrackIndex = 0;
+
+// 2. 加载歌曲并同步到系统媒体中心
+function loadTrack(index) {
+    const track = playlist[index];
+    titleTag.innerText = track.title;
+    artistTag.innerText = track.artist;
+    coverImg.src = track.cover;
+    audio.src = track.url;
+
+    // 更新手机锁屏和耳机控制中心的信息
+    if ('mediaSession' in navigator) {
+        navigator.mediaSession.metadata = new MediaMetadata({
+            title: track.title,
+            artist: track.artist,
+            artwork: [
+                { src: track.cover, sizes: '512x512', type: 'image/png' }
+            ]
+        });
+    }
+}
+
+// 3. 随机切歌逻辑
+function playRandom() {
+    let newIndex;
+    do {
+        newIndex = Math.floor(Math.random() * playlist.length);
+    } while (newIndex === currentTrackIndex);
+    
+    currentTrackIndex = newIndex;
+    loadTrack(currentTrackIndex);
+    
+    if (player.classList.contains('playing')) {
+        audio.play().catch(() => { /* 捕获自动播放限制 */ });
+    }
+}
+
+// 4. 播放/暂停切换
+function togglePlay() {
+    if (audio.paused) {
+        audio.play();
+        player.classList.add('playing');
+        icon.innerHTML = '<path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>';
+    } else {
+        audio.pause();
+        player.classList.remove('playing');
+        icon.innerHTML = '<path d="M8 5v14l11-7z"/>';
+    }
+}
+
+// --- 硬件与系统控制 (核心修改) ---
+if ('mediaSession' in navigator) {
+    // 监听耳机或系统的播放/暂停键
+    navigator.mediaSession.setActionHandler('play', togglePlay);
+    navigator.mediaSession.setActionHandler('pause', togglePlay);
+    // 监听耳机或系统的切歌键
+    navigator.mediaSession.setActionHandler('previoustrack', playRandom);
+    navigator.mediaSession.setActionHandler('nexttrack', playRandom);
+}
+
+// --- 页面事件监听 ---
+playBtn.addEventListener('click', togglePlay);
+
+// 上一首和下一首按钮均执行随机切歌
+document.querySelectorAll('.btn')[0].addEventListener('click', playRandom);
+document.querySelectorAll('.btn')[2].addEventListener('click', playRandom);
+
+audio.addEventListener('ended', playRandom);
+
+audio.addEventListener('timeupdate', () => {
+    if (audio.duration) {
+        const pct = (audio.currentTime / audio.duration) * 100;
+        bar.style.width = `${pct}%`;
+    }
+});
+
+container.addEventListener('click', (e) => {
+    const width = container.clientWidth;
+    const clickX = e.offsetX;
+    if (audio.duration) {
+        audio.currentTime = (clickX / width) * audio.duration;
+    }
+});
+
+// 陀螺仪视差
+if (window.DeviceOrientationEvent) {
+    window.addEventListener('deviceorientation', (e) => {
+        const gamma = e.gamma;
+        const beta = e.beta;
+        player.style.transform = `rotateY(${gamma/4}deg) rotateX(${(beta-45)/4}deg)`;
+    });
+}
+
+// 初始化
+window.onload = () => loadTrack(currentTrackIndex);
+    </script>
+</body>
+</html>

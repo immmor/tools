@@ -1,0 +1,119 @@
+name: Build Music Player APK
+on:
+  # 只有提交信息包含[build]时才触发APK打包
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    # 只在提交信息包含[build]时执行构建
+    if: contains(github.event.head_commit.message, '[build music]')
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      # 使用 Capacitor 将 HTML 转换为安卓工程
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with: { node-version: '20' }
+        
+      - name: Install Dependencies
+        run: |
+          npm init -y
+          npm i @capacitor/core @capacitor/cli @capacitor/android
+          npx cap init "Liquid Future Player" "com.liquid.future.player" --web-dir music
+          npx cap add android
+          
+          # 配置应用图标和启动画面
+          mkdir -p android/app/src/main/res/drawable
+          # 如果没有自定义图标，使用默认图标
+          if [ -f "music/icon.png" ]; then
+            cp music/icon.png android/app/src/main/res/drawable/icon.png
+          else
+            # 创建简单的默认图标
+            echo "Creating default icon..."
+          fi
+          
+          # 更新Android配置以使用自定义图标
+          cat > android/app/src/main/res/values/strings.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <string name="app_name">Liquid Future Player</string>
+              <string name="title_activity_main">Liquid Future Player</string>
+              <string name="package_name">com.liquid.future.player</string>
+              <string name="custom_url_scheme">liquidplayer</string>
+          </resources>
+          EOF
+          
+          npx cap copy
+
+      - name: Fix Kotlin versions to avoid duplicate stdlib
+        run: |
+          BUILD_FILE=android/build.gradle
+          if [ -f "$BUILD_FILE" ]; then
+            cat >> "$BUILD_FILE" <<'EOF'
+          subprojects {
+            configurations.all {
+              resolutionStrategy {
+                force 'org.jetbrains.kotlin:kotlin-stdlib:1.8.22', 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22'
+                eachDependency { details ->
+                  if (details.requested.group == 'org.jetbrains.kotlin' && details.requested.name.startsWith('kotlin-stdlib')) {
+                    details.useVersion '1.8.22'
+                  }
+                }
+              }
+            }
+          }
+          EOF
+          fi
+          
+      # 真正打包成 APK (需要 Java 环境)
+      - name: set up JDK 21
+        uses: actions/setup-java@v4
+        with: { java-version: '21', distribution: 'temurin' }
+        
+      - name: Build with Gradle
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+          
+      # 将打包好的 APK 变成可下载的"工件"
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: liquid-future-player-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          
+      # 发布到 GitHub Releases
+      - name: Create Release
+        if: github.event_name == 'push'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: android/app/build/outputs/apk/debug/app-debug.apk
+          tag_name: "music-build-${{ github.run_number }}"
+          name: "Liquid Future Player Build #${{ github.run_number }}"
+          body: |
+            Liquid Future Player Android APK - Automated Build
+            
+            **Build Information:**
+            - Commit: ${{ github.sha }}
+            - Branch: ${{ github.ref_name }}
+            - Build Number: #${{ github.run_number }}
+            - Date: ${{ github.event.head_commit.timestamp }}
+            
+            **Features:**
+            - Liquid future music player with modern UI
+            - Advanced audio visualization
+            - Responsive design for mobile devices
+            - Smooth animations and transitions
+            - Cross-platform compatibility
+            
+            **Download:**
+            Click the APK file above to download and install on your Android device.
+          draft: false
+          prerelease: true

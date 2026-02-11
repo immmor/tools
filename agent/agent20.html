@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Neural-Pulse Agent</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --neon-green: #00ff9d;
+            --pulse-red: #ff0055;
+        }
+
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            background: #000; overflow: hidden;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Canvas 背景层 */
+        #canvas-bg {
+            position: fixed; top: 0; left: 0; z-index: 0;
+            filter: blur(2px) contrast(1.2);
+        }
+
+        /* 全球幕布阴影 */
+        .vignette {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle, transparent 20%, rgba(0,0,0,0.8) 100%);
+            pointer-events: none; z-index: 1;
+        }
+
+        /* 消息层 */
+        .chat-overlay {
+            position: relative; z-index: 10;
+            height: 100vh; display: flex; flex-direction: column;
+        }
+
+        /* 神经脉冲气泡 */
+        .neural-msg {
+            position: relative;
+            background: rgba(0, 255, 157, 0.03);
+            border: 1px solid rgba(0, 255, 157, 0.2);
+            padding: 1.25rem;
+            color: var(--neon-green);
+            text-shadow: 0 0 8px rgba(0, 255, 157, 0.5);
+            clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+            backdrop-filter: blur(10px);
+            animation: glitch-entry 0.4s ease-out;
+        }
+
+        .user-msg {
+            background: rgba(255, 0, 85, 0.05);
+            border-color: rgba(255, 0, 85, 0.3);
+            color: #ffb3cc;
+            text-shadow: 0 0 8px rgba(255, 0, 85, 0.5);
+            text-align: right;
+        }
+
+        @keyframes glitch-entry {
+            0% { transform: skewX(20deg) translateX(-50px); opacity: 0; }
+            100% { transform: skewX(0deg) translateX(0); opacity: 1; }
+        }
+
+        /* 底部控制台：液态感 */
+        .control-panel {
+            background: linear-gradient(to top, rgba(0, 255, 157, 0.1), transparent);
+            border-top: 1px solid rgba(0, 255, 157, 0.2);
+            padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
+        }
+
+        .pulse-input {
+            background: rgba(0,0,0,0.6);
+            border: 1px solid var(--neon-green);
+            box-shadow: inset 0 0 15px rgba(0, 255, 157, 0.2);
+            color: var(--neon-green);
+            transition: all 0.3s;
+        }
+
+        .pulse-input:focus {
+            box-shadow: 0 0 20px rgba(0, 255, 157, 0.4);
+            outline: none;
+        }
+
+        /* 打字机光标 */
+        .cursor {
+            display: inline-block;
+            width: 8px; height: 18px;
+            background: var(--neon-green);
+            animation: blink 0.8s infinite;
+            vertical-align: middle;
+            margin-left: 4px;
+        }
+        @keyframes blink { 50% { opacity: 0; } }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body>
+
+    <canvas id="canvas-bg"></canvas>
+    <div class="vignette"></div>
+
+    <div class="chat-overlay">
+        <header class="p-6 flex justify-between items-center border-b border-white/5">
+            <div class="text-xs tracking-[0.3em] font-bold text-emerald-400">
+                CORE_LINK [STABLE]
+            </div>
+            <div class="flex gap-1">
+                <div class="w-1 h-4 bg-emerald-500 animate-[pulse_1s_infinite]"></div>
+                <div class="w-1 h-6 bg-emerald-500 animate-[pulse_1.2s_infinite]"></div>
+                <div class="w-1 h-3 bg-emerald-500 animate-[pulse_0.8s_infinite]"></div>
+            </div>
+        </header>
+
+        <main id="chat-flow" class="flex-1 overflow-y-auto p-6 space-y-8 no-scrollbar">
+            <div class="flex flex-col items-start gap-2">
+                <div class="text-[10px] text-emerald-500/50">NEURAL_OUT_01</div>
+                <div class="neural-msg max-w-[90%]">
+                    <span id="welcome-text">系统神经元已激活。等待数据脉冲输入...</span><span class="cursor"></span>
+                </div>
+            </div>
+        </main>
+
+        <footer class="control-panel">
+            <div class="max-w-4xl mx-auto flex gap-4">
+                <input type="text" id="userInput" placeholder="COMMAND_INPUT >" 
+                    class="pulse-input flex-1 px-4 py-4 rounded-none font-mono text-sm">
+                <button onclick="send()" class="px-8 bg-emerald-500 text-black font-bold hover:bg-white transition-all transform active:scale-95">
+                    EXEC
+                </button>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        // --- Canvas 粒子流背景逻辑 ---
+        const canvas = document.getElementById('canvas-bg');
+        const ctx = canvas.getContext('2d');
+        let points = [];
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.onresize = resize;
+        resize();
+
+        class Point {
+            constructor() {
+                this.reset();
+            }
+            reset() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.vx = (Math.random() - 0.5) * 0.5;
+                this.vy = (Math.random() - 0.5) * 0.5;
+                this.life = Math.random() * 100;
+            }
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                if (this.x < 0 || this.x > canvas.width || this.y < 0 || this.y > canvas.height) this.reset();
+            }
+        }
+
+        for(let i=0; i<60; i++) points.push(new Point());
+
+        function animate() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.strokeStyle = 'rgba(0, 255, 157, 0.15)';
+            ctx.beginPath();
+            points.forEach((p, i) => {
+                p.update();
+                points.slice(i + 1).forEach(p2 => {
+                    let dist = Math.hypot(p.x - p2.x, p.y - p2.y);
+                    if (dist < 150) {
+                        ctx.moveTo(p.x, p.y);
+                        ctx.lineTo(p2.x, p2.y);
+                    }
+                });
+            });
+            ctx.stroke();
+            requestAnimationFrame(animate);
+        }
+        animate();
+
+        // --- 交互逻辑 ---
+        const flow = document.getElementById('chat-flow');
+        const input = document.getElementById('userInput');
+
+        function send() {
+            const val = input.value.trim();
+            if(!val) return;
+
+            // User Message
+            const uDiv = document.createElement('div');
+            uDiv.className = 'flex flex-col items-end gap-2';
+            uDiv.innerHTML = `<div class="text-[10px] text-rose-500/50">USER_SIGNAL</div>
+                              <div class="neural-msg user-msg max-w-[85%]">${val}</div>`;
+            flow.appendChild(uDiv);
+            
+            input.value = '';
+            flow.scrollTo({ top: flow.scrollHeight, behavior: 'smooth' });
+
+            // Agent Effect
+            setTimeout(() => {
+                const bDiv = document.createElement('div');
+                bDiv.className = 'flex flex-col items-start gap-2';
+                bDiv.innerHTML = `<div class="text-[10px] text-emerald-500/50">NEURAL_OUT_DATA</div>
+                                  <div class="neural-msg max-w-[90%]">收到脉冲。正在通过主节点下行数据 [${Math.random().toString(16).toUpperCase().slice(2,8)}]... </div>`;
+                flow.appendChild(bDiv);
+                flow.scrollTo({ top: flow.scrollHeight, behavior: 'smooth' });
+            }, 800);
+        }
+
+        input.addEventListener('keypress', (e) => { if(e.key === 'Enter') send(); });
+    </script>
+</body>
+</html>
