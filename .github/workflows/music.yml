@@ -28,17 +28,85 @@ jobs:
           npx cap init "Liquid Future Player" "com.liquid.future.player" --web-dir music
           npx cap add android
           
-          # 配置应用图标和启动画面
-          mkdir -p android/app/src/main/res/drawable
-          # 如果没有自定义图标，使用默认图标
+          # 检查图标文件
+          echo "📱 检查图标文件..."
           if [ -f "music/icon.png" ]; then
-            cp music/icon.png android/app/src/main/res/drawable/icon.png
+            echo "✅ 找到自定义图标: music/icon.png"
+            ls -la music/icon.png
           else
-            # 创建简单的默认图标
-            echo "Creating default icon..."
+            echo "❌ 未找到自定义图标文件"
+            exit 1
           fi
           
-          # 更新Android配置以使用自定义图标
+          # 配置应用图标 - 使用 Capacitor 推荐的方式
+          echo "🔄 配置应用图标..."
+          
+          # 创建 Capacitor 配置文件
+          cat > capacitor.config.json <<'EOF'
+          {
+            "appId": "com.liquid.future.player",
+            "appName": "Liquid Future Player",
+            "webDir": "music",
+            "android": {
+              "path": "android"
+            }
+          }
+          EOF
+          
+          # 手动复制图标到 Android 资源目录
+          mkdir -p android/app/src/main/res
+          
+          # 复制图标到不同分辨率的目录
+          mkdir -p android/app/src/main/res/drawable-mdpi
+          mkdir -p android/app/src/main/res/drawable-hdpi
+          mkdir -p android/app/src/main/res/drawable-xhdpi
+          mkdir -p android/app/src/main/res/drawable-xxhdpi
+          mkdir -p android/app/src/main/res/drawable-xxxhdpi
+          
+          cp music/icon.png android/app/src/main/res/drawable-mdpi/ic_launcher.png
+          cp music/icon.png android/app/src/main/res/drawable-hdpi/ic_launcher.png
+          cp music/icon.png android/app/src/main/res/drawable-xhdpi/ic_launcher.png
+          cp music/icon.png android/app/src/main/res/drawable-xxhdpi/ic_launcher.png
+          cp music/icon.png android/app/src/main/res/drawable-xxxhdpi/ic_launcher.png
+          
+          # 复制图标到 mipmap 目录（Android 推荐）
+          mkdir -p android/app/src/main/res/mipmap-mdpi
+          mkdir -p android/app/src/main/res/mipmap-hdpi
+          mkdir -p android/app/src/main/res/mipmap-xhdpi
+          mkdir -p android/app/src/main/res/mipmap-xxhdpi
+          mkdir -p android/app/src/main/res/mipmap-xxxhdpi
+          
+          cp music/icon.png android/app/src/main/res/mipmap-mdpi/ic_launcher.png
+          cp music/icon.png android/app/src/main/res/mipmap-hdpi/ic_launcher.png
+          cp music/icon.png android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
+          cp music/icon.png android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
+          cp music/icon.png android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+          
+          # 更新 AndroidManifest.xml 以使用正确的图标
+          cat > android/app/src/main/AndroidManifest.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <application
+                  android:allowBackup="true"
+                  android:icon="@mipmap/ic_launcher"
+                  android:label="@string/app_name"
+                  android:theme="@style/AppTheme">
+                  <activity
+                      android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:label="@string/title_activity_main"
+                      android:theme="@style/AppTheme.NoActionBarLaunch">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+          
+          # 更新字符串资源
           cat > android/app/src/main/res/values/strings.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
@@ -49,6 +117,7 @@ jobs:
           </resources>
           EOF
           
+          echo "✅ 图标配置完成"
           npx cap copy
 
       - name: Fix Kotlin versions to avoid duplicate stdlib
