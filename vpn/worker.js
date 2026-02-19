@@ -318,6 +318,59 @@ export default {
         }
       }
 
+      // ========== VIP V2Ray节点接口 ==========
+      if (path === '/vip/v2ray' && request.method === 'GET') {
+        try {
+          const username = url.searchParams.get('username');
+          
+          if (!username) {
+            return resJson({ code: 400, msg: '缺少username参数' }, 400);
+          }
+          
+          // 检查用户VIP状态
+          const user = await DB
+            .prepare('SELECT v_expire_date FROM user WHERE username = ?')
+            .bind(username)
+            .first();
+          
+          if (!user) {
+            return resJson({ code: 404, msg: '用户不存在' }, 404);
+          }
+          
+          // 检查VIP是否过期
+          const now = new Date();
+          const expireDate = user.v_expire_date ? new Date(user.v_expire_date) : null;
+          
+          if (!expireDate || expireDate < now) {
+            return resJson({ code: 403, msg: 'VIP已过期或未开通' }, 403);
+          }
+          
+          // VIP V2Ray 节点链接
+          const vipV2rayUrl = `https://qb9kz.no-mad-world.club/link/G2dobrO737NuPnGF?sub=3&extend=1`;
+          
+          const response = await fetch(vipV2rayUrl);
+          
+          if (!response.ok) {
+            return resJson({ code: 404, msg: 'VIP节点配置不存在' }, 404);
+          }
+          
+          const configText = await response.text();
+          const year = now.getFullYear();
+          const month = String(now.getMonth() + 1).padStart(2, '0');
+          const day = String(now.getDate()).padStart(2, '0');
+          
+          return new Response(configText, {
+            headers: {
+              'Content-Type': 'text/plain; charset=utf-8',
+              'Access-Control-Allow-Origin': '*',
+              'Content-Disposition': `attachment; filename="vip-v2ray-${year}${month}${day}.txt"`
+            }
+          });
+        } catch (err) {
+          return resJson({ code: 500, msg: '获取VIP节点配置失败', error: err.message }, 500);
+        }
+      }
+
       // ========== 免费节点接口 ==========
       if (path === '/free/clash' && request.method === 'GET') {
         try {
