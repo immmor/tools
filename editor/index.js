@@ -2542,6 +2542,7 @@ function toggleExplorerMax(sectionId) {
         <div style="max-height: 400px; overflow-y: auto;">
             ${providersHtml}
             <button class="ai-btn" style="width:100%; border: 1px dashed var(--amber); margin-top:10px;" onclick="addProvider()">+ ADD_NEW_PROVIDER</button>
+            <button class="ai-btn" style="width:100%; border: 1px dashed var(--term-green); margin-top:10px;" onclick="importProviders()">IMPORT_FROM_JSON</button>
         </div>
         <div class="modal-btns">
             <button class="ai-btn" onclick="closeModal()">CLOSE</button>
@@ -2564,6 +2565,24 @@ function deleteProvider(index) {
     config.providers.splice(index, 1);
     if (config.activeProviderIndex >= config.providers.length) config.activeProviderIndex = 0;
     openSettings();
+}
+
+function importProviders() {
+    const jsonStr = prompt("PASTE_PROVIDERS_JSON:");
+    if (!jsonStr) return;
+    try {
+        const imported = JSON.parse(jsonStr);
+        if (Array.isArray(imported)) {
+            config.providers = [...config.providers, ...imported];
+        } else if (typeof imported === 'object' && imported.providers) {
+            config.providers = [...config.providers, ...imported.providers];
+        } else {
+            throw new Error("INVALID_FORMAT");
+        }
+        openSettings();
+    } catch (e) {
+        alert(`IMPORT_ERROR: ${e.message}`);
+    }
 }
 
 function saveSettings() {
