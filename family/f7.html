@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>王氏家族宗谱·典藏版</title>
+    <style>
+        :root {
+            --stone-bg: #e5e5e0; 
+            --ink: #1a1a1a;
+            --bronze: #8c6d46; 
+            --border-heavy: #2c2c2c;
+            --paper: #f9f7f2;
+            --highlight: #c0392b;
+            --wood: #5d4037;
+        }
+
+        /* 骨架与背景 */
+        body {
+            background-color: #d6d6d0;
+            background-image: url("https://www.transparenttextures.com/patterns/natural-paper.png");
+            margin: 0;
+            padding: 20px 10px 80px 10px;
+            font-family: "Noto Serif SC", "Source Han Serif SC", "SimSun", serif;
+            color: var(--ink);
+            transition: background 0.5s ease;
+        }
+
+        .ancestral-shrine {
+            max-width: 850px;
+            margin: 0 auto;
+            border: 8px double var(--border-heavy);
+            padding: 50px 30px;
+            background: var(--stone-bg);
+            box-shadow: 0 30px 60px rgba(0,0,0,0.4);
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* 顶部装饰与统计 */
+        .shrine-header {
+            text-align: center;
+            margin-bottom: 40px;
+            border-bottom: 2px solid var(--bronze);
+            padding-bottom: 30px;
+        }
+
+        .shrine-header h1 {
+            font-size: clamp(40px, 8vw, 64px);
+            letter-spacing: 20px;
+            margin: 0;
+            font-weight: 900;
+            text-shadow: 2px 2px 0px rgba(255,255,255,0.5);
+        }
+
+        .stat-badge {
+            display: inline-block;
+            background: var(--wood);
+            color: #fff;
+            padding: 4px 15px;
+            border-radius: 20px;
+            font-size: 13px;
+            margin: 15px 5px 0;
+            letter-spacing: 1px;
+        }
+
+        /* 工具栏 */
+        .toolbar {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .search-input {
+            background: var(--paper);
+            border: 2px solid var(--bronze);
+            padding: 10px 20px;
+            width: 250px;
+            font-family: inherit;
+            outline: none;
+            border-radius: 4px;
+        }
+
+        .btn-action {
+            background: var(--bronze);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-family: inherit;
+            border-radius: 4px;
+            transition: 0.3s;
+        }
+
+        .btn-action:hover { background: var(--wood); }
+
+        /* 树状核心 */
+        #genealogy-tree { padding: 0; }
+        ul { list-style: none; padding-left: 45px; position: relative; }
+        li { position: relative; padding: 15px 0; }
+        
+        /* 连线 */
+        li::before {
+            content: "";
+            position: absolute;
+            left: -25px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: repeating-linear-gradient(to bottom, var(--bronze), var(--bronze) 4px, transparent 4px, transparent 8px);
+        }
+        li:last-child::before { height: 35px; }
+        li::after {
+            content: "";
+            position: absolute;
+            left: -25px;
+            top: 35px;
+            width: 25px;
+            height: 2px;
+            background: var(--bronze);
+        }
+
+        /* 牌位节点 */
+        .tablet-node {
+            background: var(--paper);
+            border: 1px solid #d1d1c1;
+            border-left: 8px solid var(--border-heavy);
+            padding: 15px;
+            box-shadow: 5px 5px 15px rgba(0,0,0,0.1);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            position: relative;
+            z-index: 5;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .tablet-node:hover {
+            transform: translateX(12px) scale(1.02);
+            box-shadow: 8px 8px 20px rgba(0,0,0,0.15);
+        }
+
+        .search-match {
+            border-color: var(--highlight) !important;
+            box-shadow: 0 0 15px var(--highlight) !important;
+        }
+
+        /* 头像与文字 */
+        .avatar-box {
+            width: 55px;
+            height: 55px;
+            border: 2px solid var(--bronze);
+            margin-right: 18px;
+            background: #f0ede5;
+            flex-shrink: 0;
+            padding: 2px;
+        }
+        .avatar-box img { width: 100%; height: 100%; object-fit: cover; filter: grayscale(0.5) contrast(1.2); }
+
+        .name-area { flex: 1; }
+        .full-name { font-size: 20px; font-weight: bold; color: #1a1a1a; display: block; }
+        .life-info { font-size: 13px; color: #555; margin-top: 5px; display: block; }
+        
+        .rank-label {
+            writing-mode: vertical-rl;
+            font-size: 12px;
+            color: var(--bronze);
+            border-left: 1px solid #ddd;
+            padding: 5px 5px 5px 10px;
+            margin-left: 15px;
+            line-height: 1.1;
+        }
+
+        /* 弹窗样式 */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background: var(--paper);
+            width: 90%;
+            max-width: 500px;
+            padding: 40px;
+            border: 10px double var(--bronze);
+            position: relative;
+            text-align: center;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 10px; right: 15px;
+            font-size: 24px; cursor: pointer; color: var(--bronze);
+        }
+
+        /* 装饰角 */
+        .corner {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            border: 4px solid var(--bronze);
+            pointer-events: none;
+        }
+        .tl { top: 15px; left: 15px; border-right: none; border-bottom: none; }
+        .tr { top: 15px; right: 15px; border-left: none; border-bottom: none; }
+        .bl { bottom: 15px; left: 15px; border-right: none; border-top: none; }
+        .br { bottom: 15px; right: 15px; border-left: none; border-top: none; }
+
+        /* 动画 */
+        .sub-descendants { display: none; }
+        .expanded > .sub-descendants { display: block; animation: fadeIn 0.4s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
+        @media print {
+            .toolbar, .corner { display: none; }
+            body { background: white; padding: 0; }
+            .ancestral-shrine { border: none; box-shadow: none; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="ancestral-shrine" id="capture-area">
+    <div class="corner tl"></div><div class="corner tr"></div>
+    <div class="corner bl"></div><div class="corner br"></div>
+
+    <div class="shrine-header">
+        <h1>王氏族譜</h1>
+        <div id="stats-container">
+            <span class="stat-badge" id="member-total">族人：-- 位</span>
+            <span class="stat-badge" id="gen-total">世系：-- 代</span>
+        </div>
+    </div>
+
+    <div class="toolbar">
+        <input type="text" id="memberSearch" class="search-input" placeholder="寻根溯源（输入姓名）...">
+        <button class="btn-action" onclick="window.print()">保存/打印宗谱</button>
+        <button class="btn-action" style="background: var(--border-heavy)" onclick="toggleTheme()">切换古籍模式</button>
+    </div>
+
+    <div id="tree-container">
+        <ul id="genealogy-tree"></ul>
+    </div>
+</div>
+
+<div class="modal-overlay" id="modal">
+    <div class="modal-content">
+        <span class="modal-close" onclick="closeModal()">&times;</span>
+        <h2 id="modal-name" style="font-size: 32px; margin-bottom: 10px;"></h2>
+        <div id="modal-rank" style="color: var(--bronze); margin-bottom: 20px;"></div>
+        <hr style="border: 0; border-top: 1px solid var(--bronze);">
+        <p id="modal-bio" style="line-height: 1.8; text-align: left; text-indent: 2em; padding: 20px 0;"></p>
+        <div style="font-size: 12px; color: #888;">—— 载于家族年谱 ——</div>
+    </div>
+</div>
+
+<script>
+    const familyData = [
+        {
+            name: "王公諱世傑",
+            meta: "第一世 · 始遷祖 · 配李氏",
+            rank: "正本清源",
+            bio: "公讳世杰，生于明洪武年间。自冀州迁至此地，开荒拓土，修德齐家。为人慷慨仗义，邻里称颂。卒后葬于村东凤凰岗，后世尊为始迁祖。",
+            avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=A1",
+            children: [
+                {
+                    name: "王公諱繼先",
+                    meta: "第二世 · 長房 · 宣德年间生",
+                    rank: "枝繁葉茂",
+                    bio: "继先公承父志，扩田产三百余亩。一生勤俭，尤重教育，创办家学，供子孙读书。",
+                    avatar: "https://api.dicebear.com/7.x/bottts/svg?seed=A2",
+                    children: [
+                        {
+                            name: "王公諱紹寬",
+                            meta: "第三世 · 庠生 · 承嗣",
+                            rank: "克紹箕裘",
+                            bio: "公天资聪颖，弱冠入泮为庠生。书法名噪一时，村中碑文多出其手。",
+                            children: []
+                        },
+                        {
+                            name: "王公諱紹敏",
+                            meta: "第三世 · 居城南",
+                            rank: "兰馨桂馥",
+                            bio: "移居城南经营绸缎，富甲一方，常行施粥之举。",
+                            children: []
+                        }
+                    ]
+                },
+                {
+                    name: "王公諱繼德",
+                    meta: "第二世 · 次房 · 居永安",
+                    rank: "德厚流光",
+                    bio: "德公敦厚，躬耕垄亩，守望相助。其后代多以务农为本，民风淳朴。",
+                    children: [
+                        {
+                            name: "王公諱紹严",
+                            meta: "第三世 · 岁贡生",
+                            rank: "光宗耀祖",
+                            bio: "嘉靖年间岁贡生，曾任县丞，为官清廉，留有《治家格言》一卷。",
+                            children: []
+                        }
+                    ]
+                }
+            ]
+        }
+    ];
+
+    let totalMembers = 0;
+    let maxGen = 0;
+    const defaultAvatar = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0iI2NjYyIgZD0iTTEyIDJDNi40OCAyIDIgNi40OCAyIDIgNi40OCAyIDEyczQuNDggMTAgMTAgMTAgMTAtNC40OCAxMC0xMFMxNy41MiAyIDEyIDJ6bTAgM2MyLjIxIDAgNCAxLjc5IDQgNHMtMS43OSA0LTQgNC00LTEuNzktNC00IDEuNzktNCA0LTR6bTAgMTMuOTFjLTIuNTEgMC00LjczLTEuMjgtNS44Ni0zLjI0LjA4LTEuOTQgMy45OC0zIDUuODYtMyA0LjgyIDAgOC43OSAxLjA2IDguODYgM3YtLjA2Yy0xLjEzIDEuOTYtMy4zNSAzLjI0LTUuODYgMy4yNHoiLz48L3N2Zz4=";
+
+    function renderTree(data, container, depth = 1) {
+        maxGen = Math.max(maxGen, depth);
+        data.forEach(person => {
+            totalMembers++;
+            const li = document.createElement('li');
+            const hasChildren = person.children && person.children.length > 0;
+            li.className = hasChildren ? 'item has-children expanded' : 'item';
+            
+            li.innerHTML = `
+                <div class="tablet-node" data-name="${person.name}" data-bio="${person.bio || '生平详实待考证。'}">
+                    <div style="width:20px; color:var(--bronze)">${hasChildren ? '▼' : '·'}</div>
+                    <div class="avatar-box">
+                        <img src="${person.avatar || defaultAvatar}">
+                    </div>
+                    <div class="name-area">
+                        <span class="full-name">${person.name}</span>
+                        <span class="life-info">${person.meta}</span>
+                    </div>
+                    <div class="rank-label">${person.rank}</div>
+                </div>
+                ${hasChildren ? '<ul class="sub-descendants"></ul>' : ''}
+            `;
+
+            // 点击逻辑：区分展开和查看详情
+            li.querySelector('.tablet-node').addEventListener('click', function(e) {
+                // 如果点击的是左侧图标，仅折叠
+                if (e.offsetX < 30 && hasChildren) {
+                    li.classList.toggle('expanded');
+                    this.querySelector('div').innerText = li.classList.contains('expanded') ? '▼' : '▶';
+                } else {
+                    // 弹出详情
+                    showModal(person);
+                }
+            });
+
+            if (hasChildren) {
+                renderTree(person.children, li.querySelector('.sub-descendants'), depth + 1);
+            }
+            container.appendChild(li);
+        });
+    }
+
+    // 弹窗控制
+    function showModal(person) {
+        document.getElementById('modal-name').innerText = person.name;
+        document.getElementById('modal-rank').innerText = person.meta + " | " + person.rank;
+        document.getElementById('modal-bio').innerText = person.bio || "此位先人遗迹待考，族亲若有线索可补入。";
+        document.getElementById('modal').style.display = 'flex';
+    }
+
+    function closeModal() {
+        document.getElementById('modal').style.display = 'none';
+    }
+
+    // 搜索
+    document.getElementById('memberSearch').addEventListener('input', function(e) {
+        const key = e.target.value.trim();
+        document.querySelectorAll('.tablet-node').forEach(node => {
+            if (key && node.getAttribute('data-name').includes(key)) {
+                node.classList.add('search-match');
+                expandParents(node);
+            } else {
+                node.classList.remove('search-match');
+            }
+        });
+    });
+
+    function expandParents(node) {
+        let p = node.parentElement.closest('.item');
+        while (p) {
+            p.classList.add('expanded');
+            p = p.parentElement.closest('.item');
+        }
+    }
+
+    // 主题切换
+    function toggleTheme() {
+        const isDark = document.body.style.filter === 'invert(0.9) hue-rotate(180deg)';
+        document.body.style.filter = isDark ? '' : 'invert(0.9) hue-rotate(180deg)';
+    }
+
+    // 初始化
+    renderTree(familyData, document.getElementById('genealogy-tree'));
+    document.getElementById('member-total').innerText = `族人：${totalMembers} 位`;
+    document.getElementById('gen-total').innerText = `世系：${maxGen} 代`;
+
+</script>
+
+</body>
+</html>
