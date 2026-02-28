@@ -57,10 +57,10 @@ export default {
           return resJson({ success: false, message: '用户名已存在！' }, 409);
         }
 
-        // 插入新用户（默认余额0，VIP过期时间为null）
+        // 插入新用户（默认余额0，VIP过期时间为null，流量限制相关字段）
         const result = await DB
-          .prepare('INSERT INTO user (username, password, balance, v_expire_date) VALUES (?, ?, 0, NULL)')
-          .bind(username, password)
+          .prepare('INSERT INTO user (username, password, balance, v_expire_date, monthly_quota, used_quota, quota_reset_date) VALUES (?, ?, 0, NULL, 307200, 0, ?)')
+          .bind(username, password, new Date().toISOString().slice(0, 19).replace('T', ' '))
           .run();
 
         if (result.success) {
@@ -263,6 +263,59 @@ export default {
         }
       }
 
+      // ========== 查询流量使用情况接口 ==========
+      if (path === '/api/quota' && request.method === 'GET') {
+        try {
+          const username = url.searchParams.get('username');
+          
+          if (!username) {
+            return resJson({ code: 400, msg: '缺少username参数' }, 400);
+          }
+          
+          const user = await DB
+            .prepare('SELECT monthly_quota, used_quota, quota_reset_date, v_expire_date FROM user WHERE username = ?')
+            .bind(username)
+            .first();
+          
+          if (!user) {
+            return resJson({ code: 404, msg: '用户不存在' }, 404);
+          }
+          
+          const now = new Date();
+          const expireDate = user.v_expire_date ? new Date(user.v_expire_date) : null;
+          const isVipValid = expireDate && expireDate > now;
+          
+          // 检查是否需要重置流量
+          const resetDate = user.quota_reset_date ? new Date(user.quota_reset_date) : new Date();
+          const nextMonth = new Date(resetDate);
+          nextMonth.setMonth(nextMonth.getMonth() + 1);
+          
+          if (now > nextMonth) {
+            await DB
+              .prepare('UPDATE user SET used_quota = 0, quota_reset_date = ? WHERE username = ?')
+              .bind(now.toISOString().slice(0, 19).replace('T', ' '), username)
+              .run();
+            user.used_quota = 0;
+          }
+          
+          return resJson({
+            code: 200,
+            msg: '查询成功',
+            data: {
+              username: username,
+              is_vip: isVipValid,
+              monthly_quota: user.monthly_quota || 307200,
+              used_quota: user.used_quota || 0,
+              remaining_quota: (user.monthly_quota || 307200) - (user.used_quota || 0),
+              quota_reset_date: user.quota_reset_date,
+              next_reset_date: nextMonth.toISOString().slice(0, 19).replace('T', ' ')
+            }
+          });
+        } catch (err) {
+          return resJson({ code: 500, msg: '查询失败', error: err.message }, 500);
+        }
+      }
+
       // ========== VIP节点接口 ==========
       if (path === '/vip/clash' && request.method === 'GET') {
         try {
@@ -272,9 +325,9 @@ export default {
             return resJson({ code: 400, msg: '缺少username参数' }, 400);
           }
           
-          // 检查用户VIP状态
+          // 检查用户VIP状态和流量限制
           const user = await DB
-            .prepare('SELECT v_expire_date FROM user WHERE username = ?')
+            .prepare('SELECT v_expire_date, monthly_quota, used_quota, quota_reset_date FROM user WHERE username = ?')
             .bind(username)
             .first();
           
@@ -286,8 +339,36 @@ export default {
           const now = new Date();
           const expireDate = user.v_expire_date ? new Date(user.v_expire_date) : null;
           
+          // 检查流量重置日期（每月重置）
+          const resetDate = user.quota_reset_date ? new Date(user.quota_reset_date) : new Date();
+          const nextMonth = new Date(resetDate);
+          nextMonth.setMonth(nextMonth.getMonth() + 1);
+          
+          // 如果超过一个月，重置流量
+          if (now > nextMonth) {
+            await DB
+              .prepare('UPDATE user SET used_quota = 0, quota_reset_date = ? WHERE username = ?')
+              .bind(now.toISOString().slice(0, 19).replace('T', ' '), username)
+              .run();
+            user.used_quota = 0;
+          }
+          
+          // 非VIP用户检查流量限制
           if (!expireDate || expireDate < now) {
-            return resJson({ code: 403, msg: 'VIP已过期或未开通' }, 403);
+            const monthlyQuota = user.monthly_quota || 307200; // 默认300GB
+            const usedQuota = user.used_quota || 0;
+            
+            if (usedQuota >= monthlyQuota) {
+              return resJson({ 
+                code: 403, 
+                msg: '本月流量已用完，请升级VIP或等待下月重置',
+                quota_info: {
+                  monthly_quota: monthlyQuota,
+                  used_quota: usedQuota,
+                  remaining_quota: monthlyQuota - usedQuota
+                }
+              }, 403);
+            }
           }
           
           // 根据当前日期生成VIP节点链接
@@ -295,7 +376,7 @@ export default {
           const month = String(now.getMonth() + 1).padStart(2, '0');
           const day = String(now.getDate()).padStart(2, '0');
           
-          const vipUrl = `https://du3e3.no-mad-world.club/link/G2dobrO737NuPnGF?clash=3&extend=1`;
+          const vipUrl = `https://coolchick.dpdns.org/666000?clash`;
           
           // 获取VIP Clash配置
           const response = await fetch(vipUrl);
@@ -346,7 +427,7 @@ export default {
           }
           
           // VIP V2Ray 节点链接
-          const vipV2rayUrl = `https://qb9kz.no-mad-world.club/link/G2dobrO737NuPnGF?sub=3&extend=1`;
+          const vipV2rayUrl = `https://coolchick.dpdns.org/666000?clash`;
           
           const response = await fetch(vipV2rayUrl);
           

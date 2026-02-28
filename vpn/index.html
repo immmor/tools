@@ -124,9 +124,19 @@
             <div id="user-menu-container" class="relative">
                 <button id="auth-toggle" class="btn-cyber">Login</button>
                 <!-- 下拉菜单 -->
-                <div id="dropdown-menu" class="dropdown-menu absolute right-0 top-full mt-2 w-38 hidden z-[100]">
-                    <div class="px-4 py-3 border-b border-zinc-800">
+                <div id="dropdown-menu" class="dropdown-menu absolute right-0 top-full mt-2 w-39 hidden z-[100]">
+                    <div class="px-4 py-3 border-b border-zinc-800 text-center">
                         <div id="user-balance" class="text-xl font-black text-[var(--neon-green)]">¥0.00</div>
+                    </div>
+                    <div class="px-4 py-4 border-b border-zinc-800 text-center">
+                        <div id="dropdown-quota" class="text-xs text-zinc-400 hidden">
+                            <div class="mb-1">流量: <span id="dropdown-quota-text">0GB/300GB</span></div>
+                            <div class="flex justify-center">
+                                <div class="w-24 h-1 bg-gray-700 rounded-full">
+                                    <div id="dropdown-quota-bar" class="h-full bg-neon-green rounded-full" style="width: 0%"></div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <a href="https://immmor.com/pay" class="dropdown-item block px-4 py-3 text-sm border-b border-zinc-800 text-center">充值</a>
                     <button id="logout-btn" class="dropdown-item block w-full px-4 py-3 text-sm text-[var(--neon-red)] hover:text-[var(--neon-red)] text-center">退出</button>
@@ -495,11 +505,52 @@ navigator.clipboard.writeText('${vipV2rayUrl}')" class="flex-1 bg-[var(--neon-bl
                 } catch {}
             };
             
+            const updateQuota = async () => {
+                if (!userInfo) {
+                    document.getElementById('dropdown-quota').classList.add('hidden');
+                    return;
+                }
+                
+                try {
+                    const res = await fetch(`${API}/api/quota?username=${encodeURIComponent(userInfo.username)}`);
+                    const data = await res.json();
+                    
+                    if (data.code === 200) {
+                        const quotaData = data.data;
+                        const usedGB = (quotaData.used_quota / 1024).toFixed(1);
+                        const totalGB = (quotaData.monthly_quota / 1024).toFixed(0);
+                        const percentage = Math.min(100, Math.round((quotaData.used_quota / quotaData.monthly_quota) * 100));
+                        
+                        // 更新下拉菜单流量显示
+                        const dropdownQuota = document.getElementById('dropdown-quota');
+                        const dropdownQuotaText = document.getElementById('dropdown-quota-text');
+                        const dropdownQuotaBar = document.getElementById('dropdown-quota-bar');
+                        
+                        dropdownQuotaText.textContent = `${usedGB}GB/${totalGB}GB`;
+                        dropdownQuotaBar.style.width = `${percentage}%`;
+                        dropdownQuota.classList.remove('hidden');
+                        
+                        // 根据使用情况设置颜色
+                        if (percentage > 80) {
+                            dropdownQuotaBar.style.background = 'var(--neon-red)';
+                        } else if (percentage > 60) {
+                            dropdownQuotaBar.style.background = 'var(--neon-blue)';
+                        } else {
+                            dropdownQuotaBar.style.background = 'var(--neon-green)';
+                        }
+                    }
+                } catch (error) {
+                    console.error('流量查询失败:', error);
+                    document.getElementById('dropdown-quota').classList.add('hidden');
+                }
+            };
+            
             const updateNav = (user) => {
                 userInfo = user;
                 if (user) {
                     els.btn.textContent = user.username;
                     updateBalance();
+                    updateQuota();
                 } else {
                     els.btn.textContent = 'Login';
                     els.dropdown.classList.add('hidden');
@@ -511,6 +562,13 @@ navigator.clipboard.writeText('${vipV2rayUrl}')" class="flex-1 bg-[var(--neon-bl
                 userInfo = null;
                 updateNav(null);
                 closeDropdown();
+            };
+            
+            // 定期更新流量信息（每30秒）
+            const startQuotaPolling = () => {
+                if (userInfo) {
+                    setInterval(updateQuota, 30000);
+                }
             };
             
             const checkAuth = () => {
@@ -567,6 +625,7 @@ navigator.clipboard.writeText('${vipV2rayUrl}')" class="flex-1 bg-[var(--neon-bl
                 els.logout.addEventListener('click', logout);
                 document.addEventListener('click', (e) => !e.target.closest('#user-menu-container') && closeDropdown());
                 checkAuth();
+                startQuotaPolling();
             };
             
             return { init };
