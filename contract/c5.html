@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Agent 开发合同签署工具</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;700&display=swap');
+        body { font-family: 'Noto Sans SC', sans-serif; background: #f4f7f6; }
+        .contract-paper { box-shadow: 0 10px 25px rgba(0,0,0,0.1); background: white; }
+        .signature-pad { border: 2px dashed #cbd5e1; touch-action: none; cursor: crosshair; }
+        @media print { .no-print { display: none; } }
+    </style>
+</head>
+<body class="p-4 md:p-10">
+
+    <div class="max-w-4xl mx-auto">
+        <div class="no-print mb-6 flex flex-wrap gap-4 justify-between items-center bg-white p-4 rounded-xl shadow-sm">
+            <h1 class="text-xl font-bold text-gray-800">📜 AI 合同在线签署</h1>
+            <div class="flex gap-2">
+                <button onclick="exportPDF()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg transition shadow-md">
+                    导出 PDF
+                </button>
+            </div>
+        </div>
+
+        <div id="contract-content" class="contract-paper p-8 md:p-16 rounded-sm text-gray-800 leading-relaxed">
+            <h2 class="text-3xl font-bold text-center mb-10 border-b-2 border-gray-900 pb-4">AI Agent 委托开发合同</h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                <div>
+                    <p class="font-bold">甲方（委托方）：</p>
+                    <input type="text" class="w-full border-b border-gray-300 focus:border-indigo-500 outline-none p-1" placeholder="请输入公司/个人名称">
+                </div>
+                <div>
+                    <p class="font-bold">乙方（开发方）：</p>
+                    <input type="text" class="w-full border-b border-gray-300 focus:border-indigo-500 outline-none p-1" placeholder="请输入公司/个人名称">
+                </div>
+            </div>
+
+            <div class="space-y-6 text-sm md:text-base">
+                <section>
+                    <h3 class="font-bold text-lg mb-2">一、项目概述</h3>
+                    <div contenteditable="true" class="p-2 bg-gray-50 rounded border border-transparent hover:border-gray-200 focus:bg-white transition">
+                        本合同旨在约定乙方为甲方开发基于大语言模型的 AI Agent（智能代理）系统。该 Agent 应具备以下核心功能：自然语言处理、自主任务规划、外部 API 调用及私有知识库检索。
+                    </div>
+                </section>
+
+                <section>
+                    <h3 class="font-bold text-lg mb-2">二、费用与支付</h3>
+                    <div contenteditable="true" class="p-2 bg-gray-50 rounded border border-transparent hover:border-gray-200">
+                        项目总费用为人民币：<span class="font-bold text-red-600">¥ 50,000.00</span>。
+                        支付方式：首付 30% 作为启动资金，验收合格后支付剩余 70%。
+                    </div>
+                </section>
+
+                <section>
+                    <h3 class="font-bold text-lg mb-2">三、知识产权</h3>
+                    <div contenteditable="true" class="p-2 bg-gray-50 rounded border border-transparent hover:border-gray-200">
+                        甲方支付全额费用后，本项目下开发的 AI Agent 源代码、模型 Prompt、训练数据集（甲方提供部分除外）的知识产权归甲方所有。
+                    </div>
+                </section>
+
+                <div class="mt-20 grid grid-cols-1 md:grid-cols-2 gap-12">
+                    <div class="space-y-4">
+                        <p class="font-bold border-b border-gray-800">甲方签章/签名：</p>
+                        <div class="relative h-32 w-full bg-gray-50 rounded" id="area-partyA">
+                            <img id="img-partyA" class="hidden absolute inset-0 h-full w-full object-contain pointer-events-none">
+                            <canvas id="canvas-partyA" class="signature-pad w-full h-full rounded"></canvas>
+                        </div>
+                        <div class="flex gap-2 no-print">
+                            <button onclick="clearCanvas('canvas-partyA')" class="text-xs text-gray-500 underline">清除</button>
+                            <label class="text-xs text-indigo-600 cursor-pointer underline">
+                                导入图片 <input type="file" class="hidden" onchange="importImage(this, 'img-partyA', 'canvas-partyA')">
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="space-y-4">
+                        <p class="font-bold border-b border-gray-800">乙方签章/签名：</p>
+                        <div class="relative h-32 w-full bg-gray-50 rounded" id="area-partyB">
+                            <img id="img-partyB" class="hidden absolute inset-0 h-full w-full object-contain pointer-events-none">
+                            <canvas id="canvas-partyB" class="signature-pad w-full h-full rounded"></canvas>
+                        </div>
+                        <div class="flex gap-2 no-print">
+                            <button onclick="clearCanvas('canvas-partyB')" class="text-xs text-gray-500 underline">清除</button>
+                            <label class="text-xs text-indigo-600 cursor-pointer underline">
+                                导入图片 <input type="file" class="hidden" onchange="importImage(this, 'img-partyB', 'canvas-partyB')">
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-10 text-right text-gray-500">
+                    签署日期：<span id="current-date"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 设置日期
+        document.getElementById('current-date').innerText = new Date().toLocaleDateString();
+
+        // 签名逻辑
+        function initSignature(canvasId) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+            let writing = false;
+
+            // 适配视网膜屏幕
+            const ratio = window.devicePixelRatio || 1;
+            canvas.width = canvas.offsetWidth * ratio;
+            canvas.height = canvas.offsetHeight * ratio;
+            ctx.scale(ratio, ratio);
+            ctx.lineWidth = 2;
+            ctx.lineCap = "round";
+            ctx.strokeStyle = "#000";
+
+            function start(e) {
+                writing = true;
+                const pos = getPos(e);
+                ctx.beginPath();
+                ctx.moveTo(pos.x, pos.y);
+            }
+
+            function move(e) {
+                if (!writing) return;
+                e.preventDefault();
+                const pos = getPos(e);
+                ctx.lineTo(pos.x, pos.y);
+                ctx.stroke();
+            }
+
+            function stop() { writing = false; }
+
+            function getPos(e) {
+                const rect = canvas.getBoundingClientRect();
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                return {
+                    x: clientX - rect.left,
+                    y: clientY - rect.top
+                };
+            }
+
+            canvas.addEventListener('mousedown', start);
+            canvas.addEventListener('mousemove', move);
+            window.addEventListener('mouseup', stop);
+            canvas.addEventListener('touchstart', start);
+            canvas.addEventListener('touchmove', move);
+            canvas.addEventListener('touchend', stop);
+        }
+
+        function clearCanvas(canvasId) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            document.getElementById('img-' + canvasId.split('-')[1]).classList.add('hidden');
+            canvas.classList.remove('hidden');
+        }
+
+        // 导入签名图片
+        function importImage(input, imgId, canvasId) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const img = document.getElementById(imgId);
+                    img.src = e.target.result;
+                    img.classList.remove('hidden');
+                    document.getElementById(canvasId).classList.add('hidden');
+                };
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
+        // 导出 PDF
+        function exportPDF() {
+            const element = document.getElementById('contract-content');
+            // 将所有 input 值替换为纯文本以便打印
+            const inputs = element.querySelectorAll('input');
+            inputs.forEach(i => {
+                const span = document.createElement('span');
+                span.innerText = i.value || '______';
+                span.className = "border-b border-black px-2";
+                i.parentNode.replaceChild(span, i);
+            });
+
+            const opt = {
+                margin: 10,
+                filename: 'AI_Agent_Development_Contract.pdf',
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, useCORS: true },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            };
+
+            html2pdf().set(opt).from(element).save().then(() => {
+                window.location.reload(); // 刷新以恢复编辑模式
+            });
+        }
+
+        // 初始化两个签名面板
+        initSignature('canvas-partyA');
+        initSignature('canvas-partyB');
+    </script>
+</body>
+</html>

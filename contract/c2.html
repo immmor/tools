@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Protocol: AI Agent Development</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+        :root {
+            --base-font: 14px;
+            --line-height: 1.6;
+            --color-black: #000000;
+            --color-gray: #707070;
+            --color-light: #e0e0e0;
+            --accent: #ff3b30; /* 经典的瑞士红，仅用于极其微小的点缀 */
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: "Inter", "Helvetica Neue", Helvetica, Arial, "PingFang SC", sans-serif;
+            background: #ffffff;
+            color: var(--color-black);
+            line-height: var(--line-height);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* 极细悬浮控制条 */
+        .controls {
+            position: fixed;
+            bottom: 40px;
+            right: 40px;
+            display: flex;
+            gap: 12px;
+            z-index: 1000;
+        }
+
+        .btn {
+            background: var(--color-black);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .btn:hover { opacity: 0.8; }
+        .btn-outline { background: white; color: var(--color-black); border: 1px solid var(--color-black); }
+
+        /* 文档容器 */
+        .document {
+            width: 100%;
+            max-width: 1000px;
+            padding: 100px 80px;
+            min-height: 100vh;
+        }
+
+        /* 头部网格布局 */
+        header {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            margin-bottom: 120px;
+        }
+
+        .doc-title {
+            grid-column: 1 / 8;
+            font-size: 48px;
+            font-weight: 700;
+            line-height: 1;
+            letter-spacing: -0.04em;
+            text-transform: uppercase;
+        }
+
+        .doc-meta {
+            grid-column: 9 / 13;
+            font-size: 11px;
+            color: var(--color-gray);
+            text-align: right;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        /* 甲方乙方信息区 */
+        .entities {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 100px;
+            margin-bottom: 80px;
+            border-bottom: 0.5px solid var(--color-black);
+            padding-bottom: 40px;
+        }
+
+        .entity-box label {
+            display: block;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-bottom: 15px;
+        }
+
+        .input-field {
+            font-size: 18px;
+            border: none;
+            outline: none;
+            width: 100%;
+            font-weight: 400;
+        }
+
+        /* 条款排版 */
+        .content-section {
+            display: grid;
+            grid-template-columns: 180px 1fr;
+            margin-bottom: 60px;
+        }
+
+        .section-num {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--accent); /* 唯一红点 */
+        }
+
+        .section-body h3 {
+            font-size: 14px;
+            text-transform: uppercase;
+            margin-bottom: 20px;
+            letter-spacing: 0.05em;
+        }
+
+        #editor { outline: none; }
+
+        /* 签名区：极致留白 */
+        .signing-area {
+            margin-top: 150px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 120px;
+        }
+
+        .sig-block { position: relative; }
+        
+        .sig-line {
+            height: 1px;
+            background: var(--color-black);
+            margin-bottom: 15px;
+        }
+
+        .sig-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            color: var(--color-gray);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .canvas-container {
+            width: 100%;
+            height: 120px;
+            margin-bottom: 10px;
+        }
+
+        canvas { width: 100%; height: 100%; cursor: crosshair; }
+        .sig-image { position: absolute; top: 0; left: 0; width: 100%; height: 120px; object-fit: contain; display: none; }
+
+        .sig-tools { display: flex; gap: 10px; margin-top: 10px; }
+        .sig-tools button { 
+            font-size: 9px; border: none; background: none; 
+            text-transform: uppercase; cursor: pointer; color: var(--color-gray);
+        }
+
+        @media print {
+            .controls, .sig-tools { display: none !important; }
+            .document { padding: 0; }
+            body { background: white; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="controls">
+    <button class="btn btn-outline" onclick="saveDraft()">Draft</button>
+    <button class="btn" onclick="exportPDF()">Finalize Agreement</button>
+</div>
+
+<div class="document" id="doc-root">
+    <header>
+        <div class="doc-title">AI Agent<br>Collaboration<br>Protocol</div>
+        <div class="doc-meta">
+            No. 2024_AIPC_001<br>
+            Version 1.0.0<br>
+            Issued Mar 2024
+        </div>
+    </header>
+
+    <div class="entities">
+        <div class="entity-box">
+            <label>Party A / Principal</label>
+            <div contenteditable="true" class="input-field">[NAME]</div>
+        </div>
+        <div class="entity-box">
+            <label>Party B / Developer</label>
+            <div contenteditable="true" class="input-field">[NAME]</div>
+        </div>
+    </div>
+
+    <div id="editor" contenteditable="true">
+        <div class="content-section">
+            <div class="section-num">01.</div>
+            <div class="section-body">
+                <h3>项目目标</h3>
+                <p>乙方负责甲方专属 AI Agent 系统的设计、逻辑开发及 API 集成。系统需具备自主规划任务、多维工具调用及长周期记忆维护等核心特征。</p>
+            </div>
+        </div>
+
+        <div class="content-section">
+            <div class="section-num">02.</div>
+            <div class="section-body">
+                <h3>交付矩阵</h3>
+                <p>核心交付物包括但不限于：Agent 核心容器镜像、完整的系统调用接口文档以及在甲方指定环境下的成功部署证明。验收响应延迟基准为 [XX]ms。</p>
+            </div>
+        </div>
+
+        <div class="content-section">
+            <div class="section-num">03.</div>
+            <div class="section-body">
+                <h3>权利声明</h3>
+                <p>在甲方完成全部阶段性款项支付后，该 AI Agent 的专有代码及知识产权全额转移至甲方。乙方需确保其所使用的开源组件或模型均符合相应商业许可。</p>
+            </div>
+        </div>
+
+        <div class="content-section">
+            <div class="section-num">04.</div>
+            <div class="section-body">
+                <h3>财务结算</h3>
+                <p>协议总金额人民币：<strong>￥[0.00]</strong>。按 30% / 40% / 30% 的比例分阶段拨付，每阶段交付需经甲方技术代表签字确认。</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="signing-area">
+        <div class="sig-block">
+            <div class="canvas-container">
+                <canvas id="canvas-a"></canvas>
+                <img id="img-a" class="sig-image">
+            </div>
+            <div class="sig-line"></div>
+            <div class="sig-label">
+                <span>Authorized Signature (Party A)</span>
+                <span>Date: 202X / __ / __</span>
+            </div>
+            <div class="sig-tools">
+                <button onclick="clearSig('a')">Clear</button>
+                <button onclick="document.getElementById('file-a').click()">Import</button>
+                <input type="file" id="file-a" hidden onchange="importSig(this, 'a')">
+            </div>
+        </div>
+
+        <div class="sig-block">
+            <div class="canvas-container">
+                <canvas id="canvas-b"></canvas>
+                <img id="img-b" class="sig-image">
+            </div>
+            <div class="sig-line"></div>
+            <div class="sig-label">
+                <span>Authorized Signature (Party B)</span>
+                <span>Date: 202X / __ / __</span>
+            </div>
+            <div class="sig-tools">
+                <button onclick="clearSig('b')">Clear</button>
+                <button onclick="document.getElementById('file-b').click()">Import</button>
+                <input type="file" id="file-b" hidden onchange="importSig(this, 'b')">
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 逻辑部分：针对高分辨率导出进行了 Canvas 精度优化
+    function setupCanvas(id) {
+        const canvas = document.getElementById('canvas-' + id);
+        const ctx = canvas.getContext('2d');
+        let drawing = false;
+
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        canvas.width = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        ctx.scale(dpr, dpr);
+
+        ctx.lineWidth = 1.2;
+        ctx.lineCap = 'round';
+        ctx.strokeStyle = '#000';
+
+        function start(e) { drawing = true; draw(e); }
+        function end() { drawing = false; ctx.beginPath(); }
+        function draw(e) {
+            if (!drawing) return;
+            const r = canvas.getBoundingClientRect();
+            const x = (e.touches ? e.touches[0].clientX : e.clientX) - r.left;
+            const y = (e.touches ? e.touches[0].clientY : e.clientY) - r.top;
+            ctx.lineTo(x, y);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+        }
+
+        canvas.addEventListener('mousedown', start);
+        canvas.addEventListener('mousemove', draw);
+        window.addEventListener('mouseup', end);
+        canvas.addEventListener('touchstart', (e) => { e.preventDefault(); start(e); });
+        canvas.addEventListener('touchmove', (e) => { e.preventDefault(); draw(e); });
+    }
+
+    function clearSig(id) {
+        const canvas = document.getElementById('canvas-' + id);
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        document.getElementById('img-' + id).style.display = 'none';
+        canvas.style.display = 'block';
+    }
+
+    function importSig(input, id) {
+        if (input.files && input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = document.getElementById('img-' + id);
+                img.src = e.target.result;
+                img.style.display = 'block';
+                document.getElementById('canvas-' + id).style.display = 'none';
+            };
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
+
+    function exportPDF() {
+        const element = document.getElementById('doc-root');
+        ['a', 'b'].forEach(id => {
+            const canvas = document.getElementById('canvas-' + id);
+            const img = document.getElementById('img-' + id);
+            if (canvas.style.display !== 'none') {
+                img.src = canvas.toDataURL();
+                img.style.display = 'block';
+                canvas.style.display = 'none';
+            }
+        });
+
+        const opt = {
+            margin: 0,
+            filename: 'AI_Protocol_Modern.pdf',
+            html2canvas: { scale: 3, useCORS: true },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+
+        html2pdf().set(opt).from(element).save().then(() => {
+            ['a', 'b'].forEach(id => {
+                document.getElementById('canvas-' + id).style.display = 'block';
+            });
+        });
+    }
+
+    function saveDraft() {
+        alert('Protocol snapshot saved.');
+    }
+
+    window.onload = () => {
+        setupCanvas('a');
+        setupCanvas('b');
+    };
+</script>
+
+</body>
+</html>
