@@ -554,59 +554,7 @@ export default {
         }
       }
 
-      // ========== 合同签字接口 ==========
-      if (path === '/api/contract/sign' && request.method === 'POST') {
-        try {
-          const params = await request.json();
-          const { contractId, signType, signatureImage, signerName } = params;
-          
-          if (!contractId || !signatureImage || !signType) {
-            return resJson({ code: 400, msg: '缺少必要参数' }, 400);
-          }
-          
-          const contract = await DB
-            .prepare('SELECT * FROM contracts WHERE contract_id = ?')
-            .bind(contractId)
-            .first();
-          
-          if (!contract) {
-            return resJson({ code: 404, msg: '合同不存在' }, 404);
-          }
-          
-          // 获取原有签名
-          const existingSignatures = JSON.parse(contract.signature_images || '{}');
-          
-          // 添加新签名（signType: 'partyA', 'partyB', 'witness' 等）
-          existingSignatures[signType] = signatureImage;
-          
-          const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
-          
-          // 更新合同签名
-          const result = await DB
-            .prepare('UPDATE contracts SET signature_images = ?, updated_at = ? WHERE contract_id = ?')
-            .bind(JSON.stringify(existingSignatures), now, contractId)
-            .run();
-          
-          if (result.success) {
-            return resJson({
-              code: 200,
-              msg: '签字成功',
-              data: {
-                contractId: contractId,
-                signType: signType,
-                signerName: signerName || '匿名'
-              }
-            });
-          } else {
-            return resJson({ code: 500, msg: '签字失败' }, 500);
-          }
-        } catch (err) {
-          console.error('签字错误:', err);
-          return resJson({ code: 500, msg: '签字失败', error: err.message }, 500);
-        }
-      }
-
-      // ========== 查看分享合同接口（支持签字） ==========
+      // ========== 查看分享合同接口 ==========
       if (path === '/api/contract/view' && request.method === 'GET') {
         try {
           const token = url.searchParams.get('token');
@@ -634,14 +582,11 @@ export default {
             code: 200,
             msg: '查询成功',
             data: {
-              contractId: contract.contract_id,
               contractTitle: contract.contract_title,
               contractContent: contract.contract_content,
               signatureImages: JSON.parse(contract.signature_images || '{}'),
               createdAt: contract.created_at,
-              updatedAt: contract.updated_at,
-              username: contract.username,
-              viewCount: contract.view_count + 1
+              username: contract.username
             }
           });
         } catch (err) {
