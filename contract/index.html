@@ -41,6 +41,102 @@
             flex-wrap: wrap;
         }
 
+        .user-info {
+            background: white;
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+            display: none;
+        }
+
+        .user-info.show {
+            display: block;
+        }
+
+        .contract-list {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+            display: none;
+        }
+
+        .contract-list.show {
+            display: block;
+        }
+
+        .contract-item {
+            padding: 15px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .contract-item:hover {
+            background: #f8fafc;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            max-width: 500px;
+            width: 90%;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .share-link {
+            background: #f1f5f9;
+            padding: 10px;
+            border-radius: 6px;
+            margin: 10px 0;
+            word-break: break-all;
+        }
+
+        .btn-small {
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+
         button {
             padding: 10px 20px;
             border: none;
@@ -128,9 +224,73 @@
 <body>
 
 <div class="container">
+    <!-- 登录/注册区域 -->
+    <div id="auth-section" class="user-info">
+        <h3>账号管理</h3>
+        <div class="form-group">
+            <input type="text" id="auth-username" placeholder="用户名">
+        </div>
+        <div class="form-group">
+            <input type="password" id="auth-password" placeholder="密码">
+        </div>
+        <div style="display: flex; gap: 10px;">
+            <button class="btn-primary" onclick="login()">登录</button>
+            <button class="btn-success" onclick="register()">注册</button>
+            <button class="btn-secondary" onclick="hideAuth()" style="margin-left: auto;">收起</button>
+        </div>
+    </div>
+
+    <!-- 用户信息区域 -->
+    <div id="user-section" class="user-info">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <strong>欢迎，<span id="username-display"></span></strong>
+                <span style="margin-left: 15px; color: #64748b;">余额：￥<span id="balance-display">0.00</span></span>
+            </div>
+            <button class="btn-secondary btn-small" onclick="logout()">退出</button>
+        </div>
+    </div>
+
+    <!-- 合同列表区域 -->
+    <div id="contract-list-section" class="contract-list">
+        <h3>我的合同</h3>
+        <div id="contract-list-content">加载中...</div>
+    </div>
+
     <div class="toolbar">
-        <button class="btn-primary" onclick="exportPDF()">📄 导出为 PDF</button>
+        <button class="btn-primary" onclick="showSaveModal()">💾 保存合同</button>
+        <button class="btn-success" onclick="exportPDF()">📄 导出为 PDF</button>
         <button class="btn-secondary" onclick="toggleEdit()">🔒 锁定/解锁编辑</button>
+        <button class="btn-secondary" onclick="showAuth()">👤 账号管理</button>
+        <button class="btn-secondary" onclick="loadContractList()">📋 我的合同</button>
+    </div>
+
+    <!-- 保存合同弹窗 -->
+    <div id="save-modal" class="modal">
+        <div class="modal-content">
+            <h3>保存合同</h3>
+            <div class="form-group">
+                <label>合同标题</label>
+                <input type="text" id="save-title" placeholder="输入合同标题">
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button class="btn-secondary" onclick="closeSaveModal()">取消</button>
+                <button class="btn-primary" onclick="saveContract()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 分享成功弹窗 -->
+    <div id="share-modal" class="modal">
+        <div class="modal-content">
+            <h3>✅ 保存成功</h3>
+            <p>合同已保存并生成分享链接：</p>
+            <div class="share-link" id="share-link-text"></div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 15px;">
+                <button class="btn-secondary" onclick="copyShareLink()">复制链接</button>
+                <button class="btn-primary" onclick="closeShareModal()">关闭</button>
+            </div>
+        </div>
     </div>
 
     <div id="contract-content" class="contract-paper" contenteditable="true">
@@ -198,7 +358,288 @@
 </div>
 
 <script>
-    // 初始化画布逻辑
+    const API_BASE = 'https://api.immmor.com'; // 替换为实际的API地址同域名，无需配置
+    let currentUser = null;
+    let currentShareLink = '';
+
+    // ========== 用户认证相关 ==========
+    function showAuth() {
+        document.getElementById('auth-section').classList.add('show');
+        document.getElementById('user-section').classList.remove('show');
+    }
+
+    function hideAuth() {
+        document.getElementById('auth-section').classList.remove('show');
+        if (currentUser) {
+            document.getElementById('user-section').classList.add('show');
+        }
+    }
+
+    async function register() {
+        const username = document.getElementById('auth-username').value.trim();
+        const password = document.getElementById('auth-password').value.trim();
+        
+        if (!username || !password) {
+            alert('请输入用户名和密码');
+            return;
+        }
+
+        try {
+            const res = await fetch(`${API_BASE}/api/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+            const data = await res.json();
+            
+            if (data.success) {
+                alert('注册成功！请登录');
+                hideAuth();
+            } else {
+                alert(data.message || '注册失败');
+            }
+        } catch (err) {
+            alert('注册失败：' + err.message);
+        }
+    }
+
+    async function login() {
+        const username = document.getElementById('auth-username').value.trim();
+        const password = document.getElementById('auth-password').value.trim();
+        
+        if (!username || !password) {
+            alert('请输入用户名和密码');
+            return;
+        }
+
+        try {
+            const res = await fetch(`${API_BASE}/api/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+            const data = await res.json();
+            
+            if (data.success) {
+                currentUser = { username, balance: data.userInfo.balance };
+                localStorage.setItem('user', JSON.stringify(currentUser));
+                updateUserUI();
+                hideAuth();
+                alert('登录成功！');
+            } else {
+                alert(data.message || '登录失败');
+            }
+        } catch (err) {
+            alert('登录失败：' + err.message);
+        }
+    }
+
+    function logout() {
+        currentUser = null;
+        localStorage.removeItem('user');
+        document.getElementById('user-section').classList.remove('show');
+        document.getElementById('contract-list-section').classList.remove('show');
+        alert('已退出登录');
+    }
+
+    function updateUserUI() {
+        if (currentUser) {
+            document.getElementById('username-display').textContent = currentUser.username;
+            document.getElementById('balance-display').textContent = (currentUser.balance || 0).toFixed(2);
+            document.getElementById('user-section').classList.add('show');
+        }
+    }
+
+    // ========== 合同保存相关 ==========
+    function showSaveModal() {
+        if (!currentUser) {
+            alert('请先登录或注册账号');
+            showAuth();
+            return;
+        }
+        document.getElementById('save-modal').classList.add('show');
+        document.getElementById('save-title').value = '';
+    }
+
+    function closeSaveModal() {
+        document.getElementById('save-modal').classList.remove('show');
+    }
+
+    function closeShareModal() {
+        document.getElementById('share-modal').classList.remove('show');
+    }
+
+    async function saveContract() {
+        const title = document.getElementById('save-title').value.trim() || '未命名合同';
+        const content = document.getElementById('contract-content').innerHTML;
+        
+        // 获取签名图片
+        const signatures = {};
+        ['partyA', 'partyB'].forEach(id => {
+            const img = document.getElementById(`img-${id}`);
+            if (img && img.style.display !== 'none' && img.src) {
+                signatures[id] = img.src;
+            }
+        });
+
+        try {
+            const res = await fetch(`${API_BASE}/api/contract/save`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    username: currentUser.username,
+                    contractTitle: title,
+                    contractContent: content,
+                    signatureImages: signatures
+                })
+            });
+            const data = await res.json();
+            
+            if (data.code === 200) {
+                currentShareLink = window.location.origin + data.data.shareUrl;
+                document.getElementById('share-link-text').textContent = currentShareLink;
+                closeSaveModal();
+                document.getElementById('share-modal').classList.add('show');
+            } else {
+                alert(data.msg || '保存失败');
+            }
+        } catch (err) {
+            alert('保存失败：' + err.message);
+        }
+    }
+
+    function copyShareLink() {
+        navigator.clipboard.writeText(currentShareLink).then(() => {
+            alert('链接已复制到剪贴板');
+        }).catch(() => {
+            // 降级方案
+            const text = document.getElementById('share-link-text');
+            const range = document.createRange();
+            range.selectNode(text);
+            window.getSelection().addRange(range);
+            document.execCommand('copy');
+            alert('链接已复制到剪贴板');
+        });
+    }
+
+    // ========== 合同列表相关 ==========
+    async function loadContractList() {
+        if (!currentUser) {
+            alert('请先登录');
+            showAuth();
+            return;
+        }
+
+        document.getElementById('contract-list-section').classList.add('show');
+        const listContent = document.getElementById('contract-list-content');
+        listContent.textContent = '加载中...';
+
+        try {
+            const res = await fetch(`${API_BASE}/api/contract/list?username=${encodeURIComponent(currentUser.username)}`);
+            const data = await res.json();
+            
+            if (data.code === 200) {
+                if (data.data.length === 0) {
+                    listContent.innerHTML = '<p style="color: #64748b;">暂无合同</p>';
+                } else {
+                    listContent.innerHTML = data.data.map(contract => `
+                        <div class="contract-item">
+                            <div>
+                                <strong>${contract.contract_title}</strong>
+                                <div style="font-size: 12px; color: #64748b; margin-top: 5px;">
+                                    创建于：${contract.created_at} | 查看：${contract.view_count}次
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 10px;">
+                                <button class="btn-primary btn-small" onclick="viewContract('${contract.share_token}')">查看</button>
+                                <button class="btn-secondary btn-small" onclick="deleteContract('${contract.contract_id}')">删除</button>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+            } else {
+                listContent.innerHTML = '<p style="color: #ef4444;">加载失败</p>';
+            }
+        } catch (err) {
+            listContent.innerHTML = '<p style="color: #ef4444;">加载失败：' + err.message + '</p>';
+        }
+    }
+
+    async function viewContract(token) {
+        const url = window.location.origin + `/api/contract/view?token=${token}`;
+        window.open(url, '_blank');
+    }
+
+    async function deleteContract(contractId) {
+        if (!confirm('确定要删除这份合同吗？')) return;
+
+        try {
+            const res = await fetch(`${API_BASE}/api/contract/delete`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    username: currentUser.username,
+                    contractId: contractId
+                })
+            });
+            const data = await res.json();
+            
+            if (data.code === 200) {
+                alert('删除成功');
+                loadContractList();
+            } else {
+                alert(data.msg || '删除失败');
+            }
+        } catch (err) {
+            alert('删除失败：' + err.message);
+        }
+    }
+
+    // ========== 查看分享合同 ==========
+    async function loadSharedContract() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token');
+        
+        if (token) {
+            try {
+                const res = await fetch(`${API_BASE}/api/contract/view?token=${token}`);
+                const data = await res.json();
+                
+                if (data.code === 200) {
+                    document.getElementById('contract-content').innerHTML = data.data.contractContent;
+                    document.title = data.data.contractTitle + ' - 智能合同';
+                    
+                    // 恢复签名图片
+                    if (data.data.signatureImages) {
+                        Object.keys(data.data.signatureImages).forEach(id => {
+                            const img = document.getElementById(`img-${id}`);
+                            const canvas = document.getElementById(`canvas-${id}`);
+                            if (img && data.data.signatureImages[id]) {
+                                img.src = data.data.signatureImages[id];
+                                img.style.display = 'inline-block';
+                                canvas.style.display = 'none';
+                            }
+                        });
+                    }
+                    
+                    // 锁定编辑模式
+                    toggleEdit();
+                    
+                    // 显示提示
+                    const tip = document.createElement('div');
+                    tip.style.cssText = 'background: #dbeafe; padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: center; color: #1e40af;';
+                    tip.innerHTML = '📄 这是一份分享的合同，仅供查看';
+                    document.querySelector('.container').insertBefore(tip, document.querySelector('.container').firstChild);
+                } else {
+                    alert('合同加载失败：' + data.msg);
+                }
+            } catch (err) {
+                alert('合同加载失败：' + err.message);
+            }
+        }
+    }
+
+    // ========== 画布初始化逻辑 ==========
     const canvases = {
         partyA: { el: document.getElementById('canvas-partyA'), ctx: null, drawing: false },
         partyB: { el: document.getElementById('canvas-partyB'), ctx: null, drawing: false }
@@ -305,6 +746,16 @@
 
     // 初始化
     window.onload = () => {
+        // 检查登录状态
+        const savedUser = localStorage.getItem('user');
+        if (savedUser) {
+            currentUser = JSON.parse(savedUser);
+            updateUserUI();
+        }
+        
+        // 检查是否是分享链接
+        loadSharedContract();
+        
         initCanvas('partyA');
         initCanvas('partyB');
         document.getElementById('current-date').innerText = new Date().toLocaleDateString('zh-CN', {
