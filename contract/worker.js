@@ -578,15 +578,68 @@ export default {
             .bind(token)
             .run();
           
-          return resJson({
-            code: 200,
-            msg: '查询成功',
-            data: {
-              contractTitle: contract.contract_title,
-              contractContent: contract.contract_content,
-              signatureImages: JSON.parse(contract.signature_images || '{}'),
-              createdAt: contract.created_at,
-              username: contract.username
+          // 返回HTML页面而不是JSON
+          const html = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${contract.contract_title}</title>
+    <style>
+        body {
+            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background-color: #f8fafc;
+            margin: 0;
+            padding: 20px;
+            color: #1e293b;
+        }
+        .contract-paper {
+            background: white;
+            padding: 60px 80px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+            border-radius: 4px;
+            line-height: 1.8;
+        }
+        h1 { text-align: center; color: #0f172a; margin-bottom: 40px; }
+        h2 { border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-top: 30px; }
+        .editable-field {
+            background-color: #fffbeb;
+            border-bottom: 1px dashed #f59e0b;
+            padding: 0 5px;
+        }
+        .signature-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            margin-top: 50px;
+        }
+        .sig-box {
+            border: 2px dashed #cbd5e1;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        @media (max-width: 768px) {
+            .contract-paper { padding: 30px 20px; }
+            .signature-section { grid-template-columns: 1fr; }
+        }
+        @media print {
+            body { background: white; padding: 0; }
+            .contract-paper { box-shadow: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="contract-paper">
+${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
+    </div>
+</body>
+</html>`;
+          
+          return new Response(html, {
+            headers: {
+              'Content-Type': 'text/html; charset=utf-8',
+              'Access-Control-Allow-Origin': '*'
             }
           });
         } catch (err) {
