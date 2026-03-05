@@ -40,6 +40,16 @@
 
       #elegant-panel.open { display: flex; transform: translateY(0) scale(1); opacity: 1; }
 
+      @media (max-width: 768px) {
+        #elegant-panel {
+          position: fixed; top: 50%; left: 50%;
+          width: 90%; max-width: 340px; height: 80%; max-height: 480px;
+          transform: translate(-50%, -50%) translateY(20px) scale(0.95); transform-origin: center;
+        }
+
+        #elegant-panel.open { transform: translate(-50%, -50%) translateY(0) scale(1); }
+      }
+
       .header { padding: 20px 24px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #f3f4f6; }
       .header-dot { width: 8px; height: 8px; background: #10b981; border-radius: 50%; box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1); }
       .header-title { font-weight: 600; font-size: 15px; color: var(--text-main); }
