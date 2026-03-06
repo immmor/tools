@@ -138,10 +138,10 @@
         e.preventDefault();
       }
       
-      document.onmousemove = handleDragMove;
-      document.ontouchmove = handleDragMove;
-      document.onmouseup = handleDragEnd;
-      document.ontouchend = handleDragEnd;
+      document.addEventListener('mousemove', handleDragMove);
+      document.addEventListener('touchmove', handleDragMove, { passive: false });
+      document.addEventListener('mouseup', handleDragEnd);
+      document.addEventListener('touchend', handleDragEnd);
     };
 
     const handleDragMove = (e) => {
@@ -156,6 +156,9 @@
       dragDistance += Math.abs(dx) + Math.abs(dy);
       
       trigger.style.transform = `translate(${initialLeft + dx}px, ${initialTop + dy}px)`;
+      
+      e.preventDefault();
+      e.stopPropagation();
     };
 
     const handleDragEnd = () => {
@@ -176,10 +179,10 @@
         trigger.style.transform = `translate(${newX}px, ${newY}px)`;
       }
       
-      document.onmousemove = null;
-      document.ontouchmove = null;
-      document.onmouseup = null;
-      document.ontouchend = null;
+      document.removeEventListener('mousemove', handleDragMove);
+      document.removeEventListener('touchmove', handleDragMove);
+      document.removeEventListener('mouseup', handleDragEnd);
+      document.removeEventListener('touchend', handleDragEnd);
     };
 
     const handleClick = (e) => {
