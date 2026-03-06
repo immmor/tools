@@ -109,11 +109,19 @@
 
     let isDragging = false;
     let startX, startY, initialLeft, initialTop;
+    let isMobile = false;
+    let dragDistance = 0;
 
-    trigger.onmousedown = (e) => {
+    const handleDragStart = (e) => {
       isDragging = true;
-      startX = e.clientX;
-      startY = e.clientY;
+      isMobile = e.type === 'touchstart';
+      dragDistance = 0;
+      
+      const clientX = isMobile ? e.touches[0].clientX : e.clientX;
+      const clientY = isMobile ? e.touches[0].clientY : e.clientY;
+      
+      startX = clientX;
+      startY = clientY;
       
       const rect = trigger.getBoundingClientRect();
       const containerRect = container.getBoundingClientRect();
@@ -124,19 +132,28 @@
       trigger.style.cursor = 'grabbing';
       trigger.style.transition = 'none';
       
-      e.preventDefault();
+      if (isMobile) {
+        e.stopPropagation();
+      } else {
+        e.preventDefault();
+      }
     };
 
-    document.onmousemove = (e) => {
+    const handleDragMove = (e) => {
       if (!isDragging) return;
       
-      const dx = e.clientX - startX;
-      const dy = e.clientY - startY;
+      const clientX = isMobile ? e.touches[0].clientX : e.clientX;
+      const clientY = isMobile ? e.touches[0].clientY : e.clientY;
+      
+      const dx = clientX - startX;
+      const dy = clientY - startY;
+      
+      dragDistance += Math.abs(dx) + Math.abs(dy);
       
       trigger.style.transform = `translate(${initialLeft + dx}px, ${initialTop + dy}px)`;
     };
 
-    document.onmouseup = () => {
+    const handleDragEnd = () => {
       if (!isDragging) return;
       isDragging = false;
       
@@ -155,8 +172,9 @@
       }
     };
 
-    trigger.onclick = () => {
+    const handleClick = (e) => {
       if (isDragging) return;
+      
       const isOpen = panel.classList.toggle('open');
       container.classList.toggle('active');
       if (isOpen) {
@@ -166,6 +184,17 @@
         setTimeout(() => { if(!panel.classList.contains('open')) panel.style.display = 'none'; }, 400);
       }
     };
+
+    trigger.onmousedown = handleDragStart;
+    trigger.ontouchstart = handleDragStart;
+
+    document.onmousemove = handleDragMove;
+    document.ontouchmove = handleDragMove;
+
+    document.onmouseup = handleDragEnd;
+    document.ontouchend = handleDragEnd;
+
+    trigger.onclick = handleClick;
 
     const pushMessage = (role, text) => {
       const b = document.createElement('div');
