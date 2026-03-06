@@ -137,6 +137,11 @@
       } else {
         e.preventDefault();
       }
+      
+      document.onmousemove = handleDragMove;
+      document.ontouchmove = handleDragMove;
+      document.onmouseup = handleDragEnd;
+      document.ontouchend = handleDragEnd;
     };
 
     const handleDragMove = (e) => {
@@ -170,6 +175,11 @@
         
         trigger.style.transform = `translate(${newX}px, ${newY}px)`;
       }
+      
+      document.onmousemove = null;
+      document.ontouchmove = null;
+      document.onmouseup = null;
+      document.ontouchend = null;
     };
 
     const handleClick = (e) => {
@@ -187,12 +197,6 @@
 
     trigger.onmousedown = handleDragStart;
     trigger.ontouchstart = handleDragStart;
-
-    document.onmousemove = handleDragMove;
-    document.ontouchmove = handleDragMove;
-
-    document.onmouseup = handleDragEnd;
-    document.ontouchend = handleDragEnd;
 
     trigger.onclick = handleClick;
 
@@ -236,7 +240,7 @@
         return data.choices[0].message.content;
       } catch (error) {
         console.error('API 调用错误:', error);
-        return '抱歉，服务暂时不可用。请确保 ollama_server.py 已启动。';
+        return '抱歉，服务暂时不可用。';
       } finally {
         flow.removeChild(loading);
         document.getElementById('send-btn').disabled = false;
