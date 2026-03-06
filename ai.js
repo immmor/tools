@@ -53,6 +53,9 @@
       .header { padding: 20px 24px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #f3f4f6; }
       .header-dot { width: 8px; height: 8px; background: #10b981; border-radius: 50%; box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1); }
       .header-title { font-weight: 600; font-size: 15px; color: var(--text-main); }
+      .header-actions { margin-left: auto; display: flex; gap: 8px; }
+      .header-btn { background: none; border: none; cursor: pointer; font-size: 12px; color: #6b7280; padding: 4px 8px; border-radius: 4px; transition: background 0.2s; }
+      .header-btn:hover { background: #f3f4f6; color: var(--accent-color); }
 
       #messages-flow { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; scrollbar-width: none; }
       #messages-flow::-webkit-scrollbar { display: none; }
@@ -87,6 +90,9 @@
         <div class="header">
           <div class="header-dot"></div>
           <div class="header-title">小客服</div>
+          <div class="header-actions">
+            <button class="header-btn" id="key-btn">🔑 密钥</button>
+          </div>
         </div>
         <div id="messages-flow">
           <div class="bubble ai">下午好。很高兴见到你，有什么我可以帮你的吗？</div>
@@ -192,7 +198,10 @@
       container.classList.toggle('active');
       if (isOpen) {
         panel.style.display = 'flex';
-        setTimeout(() => input.focus(), 200);
+        setTimeout(() => {
+          input.focus();
+          initKeyBtn();
+        }, 200);
       } else {
         setTimeout(() => { if(!panel.classList.contains('open')) panel.style.display = 'none'; }, 400);
       }
@@ -202,6 +211,11 @@
     trigger.ontouchstart = handleDragStart;
 
     trigger.onclick = handleClick;
+
+    const initKeyBtn = () => {
+      const keyBtn = document.getElementById('key-btn');
+      if (keyBtn) keyBtn.onclick = showKeyInput;
+    };
 
     const pushMessage = (role, text) => {
       const b = document.createElement('div');
@@ -213,6 +227,17 @@
 
     const messages = [];
     let messageCount = 0;
+    let apiKey = localStorage.getItem('elegant_ai_api_key') || 'AIzaSyCPD3zr473D24gY9edkIabdFMQR80YIqmQ';
+
+    const showKeyInput = () => {
+      const currentKey = localStorage.getItem('elegant_ai_api_key');
+      const newKey = prompt('请输入 API 密钥：', currentKey || '');
+      if (newKey !== null && newKey.trim() !== '') {
+        apiKey = newKey.trim();
+        localStorage.setItem('elegant_ai_api_key', apiKey);
+        pushMessage('ai', '✅ API 密钥已更新');
+      }
+    };
 
     const callAPI = async (messages) => {
       document.getElementById('send-btn').disabled = true;
@@ -228,7 +253,7 @@
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
-            'Authorization': 'Bearer AIzaSyCPD3zr473D24gY9edkIabdFMQR80YIqmQ'
+            'Authorization': `Bearer ${apiKey}`
           },
           body: JSON.stringify({
             model: 'gemini-flash-latest',
