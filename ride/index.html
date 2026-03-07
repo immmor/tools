@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Hitch Essence - Precision</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        :root {
+            --accent-blue: #007AFF;
+            --pure-black: #000000;
+            --glass-white: rgba(255, 255, 255, 0.9);
+            --border: #f2f2f2;
+            --text-sub: #86868b;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body, html { height: 100%; font-family: -apple-system, "SF Pro Display", sans-serif; background: #fff; overflow: hidden; }
+
+        /* 地图：极简灰阶 */
+        #map { width: 100%; height: 100%; position: absolute; z-index: 1; filter: grayscale(1) contrast(0.9); }
+
+        /* 1. 高级地址输入模块 */
+        .location-manager {
+            position: absolute; top: calc(20px + env(safe-area-inset-top)); left: 16px; right: 16px;
+            z-index: 1000; background: var(--glass-white); backdrop-filter: blur(30px);
+            border-radius: 24px; padding: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.06);
+            border: 1px solid rgba(255,255,255,0.5);
+        }
+        .address-connector { position: absolute; left: 27px; top: 42px; bottom: 42px; width: 1px; background: #eee; }
+        .address-row { display: flex; align-items: center; gap: 15px; position: relative; padding: 10px 0; }
+        
+        /* 出发点指针 */
+        .origin-dot { width: 8px; height: 8px; background: var(--accent-blue); border-radius: 50%; outline: 4px solid rgba(0,122,255,0.15); z-index: 2; }
+        /* 目的地指针图标 */
+        .dest-icon { width: 8px; height: 8px; background: #000; border-radius: 1px; transform: rotate(45deg); z-index: 2; }
+        
+        .input-box { flex: 1; }
+        .input-box p { font-size: 11px; color: var(--text-sub); text-transform: uppercase; letter-spacing: 0.5px; }
+        .input-box input { border: none; background: transparent; width: 100%; font-size: 16px; font-weight: 500; outline: none; padding: 2px 0; }
+
+        /* 2. 地址建议列表 */
+        .suggestions { margin-top: 15px; display: none; border-top: 1px solid #f2f2f2; padding-top: 15px; }
+        .sug-item { display: flex; align-items: center; gap: 12px; padding: 12px 0; cursor: pointer; }
+        .sug-item .icon { font-size: 18px; color: #ccc; }
+        .sug-item .text h4 { font-size: 14px; font-weight: 500; }
+        .sug-item .text p { font-size: 12px; color: #999; }
+
+        /* 3. 底部功能卡片 */
+        .action-sheet {
+            position: absolute; bottom: 0; left: 0; right: 0; z-index: 2000;
+            background: #fff; border-radius: 32px 32px 0 0;
+            padding: 20px 24px calc(20px + env(safe-area-inset-bottom));
+            box-shadow: 0 -20px 60px rgba(0,0,0,0.08);
+            transform: translateY(110%); transition: 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .action-sheet.show { transform: translateY(0); }
+        .drag-bar { width: 40px; height: 5px; background: #f2f2f2; border-radius: 10px; margin: -10px auto 20px; }
+
+        /* 车型多选 */
+        .vehicle-grid { display: flex; gap: 15px; overflow-x: auto; padding-bottom: 25px; scrollbar-width: none; }
+        .vehicle-card {
+            flex: 0 0 130px; padding: 20px 15px; border-radius: 20px; background: #f9f9f9;
+            border: 1.5px solid transparent; transition: 0.3s;
+        }
+        .vehicle-card.active { border-color: #000; background: #fff; box-shadow: 0 10px 20px rgba(0,0,0,0.03); }
+        .vehicle-card .v-type { font-size: 13px; font-weight: 700; display: block; }
+        .vehicle-card .v-time { font-size: 11px; color: #999; margin-top: 4px; display: block; }
+        .vehicle-card .v-price { font-size: 16px; font-weight: 300; margin-top: 15px; display: block; }
+
+        /* 主按钮组 */
+        .btn-container { display: flex; gap: 12px; margin-top: 10px; }
+        .config-btn { width: 56px; height: 56px; background: #f2f2f2; border-radius: 18px; border: none; display: flex; align-items: center; justify-content: center; }
+        .confirm-btn {
+            flex: 1; height: 56px; background: #000; color: #fff; border-radius: 18px; border: none;
+            font-size: 16px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; padding: 0 25px;
+        }
+
+        /* 自定义地图指针 (Leaflet DivIcon) */
+        .custom-pin-dest {
+            width: 30px; height: 30px; background: #000; border: 3px solid #fff;
+            border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
+            box-shadow: 10px 10px 20px rgba(0,0,0,0.2);
+            animation: pinDrop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        @keyframes pinDrop { 
+            0% { transform: translateY(-40px) rotate(-45deg); opacity: 0; }
+            100% { transform: translateY(0) rotate(-45deg); opacity: 1; }
+        }
+        .custom-pin-origin {
+            width: 16px; height: 16px; background: var(--accent-blue);
+            border: 3px solid #fff; border-radius: 50%;
+            box-shadow: 0 0 0 8px rgba(0,122,255,0.1);
+        }
+
+        .leaflet-control-attribution { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+
+    <div class="location-manager">
+        <div class="address-connector"></div>
+        <div class="address-row">
+            <div class="origin-dot"></div>
+            <div class="input-box">
+                <p>Starting Point</p>
+                <input type="text" value="静安嘉里中心 · 东门" readonly>
+            </div>
+            <span style="font-size:12px; color:var(--accent-blue); font-weight:600;">修改</span>
+        </div>
+        <div class="address-row" style="margin-top:5px;">
+            <div class="dest-icon"></div>
+            <div class="input-box">
+                <p>Destination</p>
+                <input type="text" id="dest-input" placeholder="你要去哪儿？" onfocus="showSug()">
+            </div>
+            <button style="border:none; background:none; font-size:18px;">⊕</button>
+        </div>
+
+        <div class="suggestions" id="sugBox">
+            <div class="sug-item" onclick="selectDest('上海浦东国际机场', 'T2航站楼')">
+                <div class="icon">✈️</div>
+                <div class="text"><h4>上海浦东国际机场</h4><p>Pudong International Airport</p></div>
+            </div>
+            <div class="sug-item" onclick="selectDest('陆家嘴金融中心', '世纪大道8号')">
+                <div class="icon">🏙️</div>
+                <div class="text"><h4>陆家嘴金融中心</h4><p>Lujiazui Financial District</p></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="action-sheet" id="actionSheet">
+        <div class="drag-bar"></div>
+        
+        <div class="vehicle-grid">
+            <div class="vehicle-card active" onclick="switchV(this, 35.0)">
+                <span class="v-type">Hitch Lite</span>
+                <span class="v-time">15分钟内接送</span>
+                <span class="v-price">¥ 35.0</span>
+            </div>
+            <div class="vehicle-card" onclick="switchV(this, 68.5)">
+                <span class="v-type">Private Pro</span>
+                <span class="v-time">实时出发</span>
+                <span class="v-price">¥ 68.5</span>
+            </div>
+            <div class="vehicle-card" onclick="switchV(this, 120.0)">
+                <span class="v-type">Business XL</span>
+                <span class="v-time">六座宽敞</span>
+                <span class="v-price">¥ 120.0</span>
+            </div>
+        </div>
+
+        <div style="display:flex; justify-content:space-between; margin-bottom:20px; font-size:12px; color:#888; padding:0 5px;">
+            <span>🛡️ 行程安全保障已开启</span>
+            <span>支付：Apple Pay ></span>
+        </div>
+
+        <div class="btn-container">
+            <button class="config-btn">🕒</button>
+            <button class="confirm-btn" onclick="order()">
+                <span>预约顺风车</span>
+                <span id="final-price">¥ 35.0</span>
+            </button>
+            <button class="config-btn">⚙️</button>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const map = L.map('map', { zoomControl: false }).setView([31.224, 121.445], 15);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
+
+        // 自定义起点指针
+        const originIcon = L.divIcon({ className: 'custom-pin-origin', iconSize: [16, 16], iconAnchor: [8, 8] });
+        L.marker([31.224, 121.445], { icon: originIcon }).addTo(map);
+
+        let destMarker, routeLine;
+
+        // 点击地图：落下“黑针”
+        map.on('click', (e) => {
+            const { lat, lng } = e.latlng;
+            dropPin(lat, lng, `位置 (${lat.toFixed(2)}, ${lng.toFixed(2)})`);
+        });
+
+        function showSug() {
+            document.getElementById('sugBox').style.display = 'block';
+        }
+
+        function selectDest(name, addr) {
+            document.getElementById('dest-input').value = name;
+            document.getElementById('sugBox').style.display = 'none';
+            // 模拟坐标落点
+            dropPin(31.235, 121.506, name);
+        }
+
+        function dropPin(lat, lng, name) {
+            if (destMarker) map.removeLayer(destMarker);
+            if (routeLine) map.removeLayer(routeLine);
+
+            const destIcon = L.divIcon({ className: 'custom-pin-dest', iconSize: [30, 30], iconAnchor: [15, 30] });
+            destMarker = L.marker([lat, lng], { icon: destIcon }).addTo(map);
+
+            routeLine = L.polyline([[31.224, 121.445], [lat, lng]], {
+                color: '#000', weight: 2, opacity: 0.6, dashArray: '5, 10'
+            }).addTo(map);
+
+            document.getElementById('dest-input').value = name;
+            document.getElementById('actionSheet').classList.add('show');
+            map.fitBounds(routeLine.getBounds(), { padding: [120, 180] });
+        }
+
+        function switchV(el, price) {
+            document.querySelectorAll('.vehicle-card').forEach(c => c.classList.remove('active'));
+            el.classList.add('active');
+            document.getElementById('final-price').innerText = `¥ ${price.toFixed(1)}`;
+        }
+
+        function order() {
+            const btn = document.querySelector('.confirm-btn');
+            btn.style.background = "#333";
+            btn.innerText = "正在锁定最优车主...";
+            setTimeout(() => {
+                alert('预约成功！\n车主：刘师傅 (5.0 ★)\n车辆：蔚来 ET7 · 黑色\n预计 16:45 准时出发');
+                btn.style.background = "#000";
+                btn.innerHTML = '<span>预约顺风车</span><span>¥ 35.0</span>';
+            }, 2000);
+        }
+    </script>
+</body>
+</html>
