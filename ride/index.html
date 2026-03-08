@@ -2,231 +2,642 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Hitch Essence - Precision</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SleekRide Pro | 极简顺风车</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         :root {
-            --accent-blue: #007AFF;
-            --pure-black: #000000;
-            --glass-white: rgba(255, 255, 255, 0.9);
-            --border: #f2f2f2;
-            --text-sub: #86868b;
+            --bg: #f0f2f5;
+            --shadow-light: #ffffff;
+            --shadow-dark: #d1d9e6;
+            --accent: #3a86ff;
+            --text: #4a5568;
         }
-
-        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        body, html { height: 100%; font-family: -apple-system, "SF Pro Display", sans-serif; background: #fff; overflow: hidden; }
-
-        /* 地图：极简灰阶 */
-        #map { width: 100%; height: 100%; position: absolute; z-index: 1; filter: grayscale(1) contrast(0.9); }
-
-        /* 1. 高级地址输入模块 */
-        .location-manager {
-            position: absolute; top: calc(20px + env(safe-area-inset-top)); left: 16px; right: 16px;
-            z-index: 1000; background: var(--glass-white); backdrop-filter: blur(30px);
-            border-radius: 24px; padding: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.06);
-            border: 1px solid rgba(255,255,255,0.5);
-        }
-        .address-connector { position: absolute; left: 27px; top: 42px; bottom: 42px; width: 1px; background: #eee; }
-        .address-row { display: flex; align-items: center; gap: 15px; position: relative; padding: 10px 0; }
         
-        /* 出发点指针 */
-        .origin-dot { width: 8px; height: 8px; background: var(--accent-blue); border-radius: 50%; outline: 4px solid rgba(0,122,255,0.15); z-index: 2; }
-        /* 目的地指针图标 */
-        .dest-icon { width: 8px; height: 8px; background: #000; border-radius: 1px; transform: rotate(45deg); z-index: 2; }
+        :root.mode-driver {
+            --accent: #48bb78;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', system-ui; }
+        body { background: var(--bg); color: var(--text); height: 100vh; display: flex; overflow: hidden; }
+
+        /* --- 导航 Tab 栏 --- */
+        .tab-bar {
+            width: 80px;
+            background: var(--bg);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 30px 0;
+            gap: 30px;
+            box-shadow: 5px 0 15px var(--shadow-dark);
+            z-index: 1000;
+        }
+
+        .tab-item {
+            width: 50px;
+            height: 50px;
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: 0.3s;
+            color: #a0aec0;
+            box-shadow: 4px 4px 8px var(--shadow-dark), -4px -4px 8px var(--shadow-light);
+        }
+
+        .tab-item.active {
+            box-shadow: inset 4px 4px 8px var(--shadow-dark), inset -4px -4px 8px var(--shadow-light);
+            color: var(--accent);
+        }
+
+        /* --- 主内容区 --- */
+        main { flex: 1; display: flex; position: relative; overflow: hidden; }
+
+        .content-panel {
+            width: 420px;
+            height: 100%;
+            padding: 25px;
+            overflow-y: auto;
+            background: var(--bg);
+            z-index: 100;
+            display: none; /* 默认隐藏，JS控制切换 */
+        }
+        .content-panel.active { display: flex; flex-direction: column; gap: 20px; }
+
+        /* --- 凹凸组件 --- */
+        .neu-card {
+            background: var(--bg);
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 8px 8px 16px var(--shadow-dark), -8px -8px 16px var(--shadow-light);
+        }
+
+        .neu-input-box {
+            background: var(--bg);
+            border-radius: 12px;
+            box-shadow: inset 5px 5px 10px var(--shadow-dark), inset -5px -5px 10px var(--shadow-light);
+            padding: 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .neu-input-box input {
+            background: transparent; border: none; outline: none; width: 100%; color: var(--text);
+        }
+
+        .btn-primary {
+            background: var(--bg);
+            border-radius: 15px;
+            border: none;
+            padding: 18px;
+            font-weight: bold;
+            color: var(--accent);
+            box-shadow: 6px 6px 12px var(--shadow-dark), -6px -6px 12px var(--shadow-light);
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .btn-primary:active {
+            box-shadow: inset 4px 4px 8px var(--shadow-dark), inset -4px -4px 8px var(--shadow-light);
+        }
+
+        /* --- 地图 --- */
+        #map { flex: 1; z-index: 10; background: #eee; filter: grayscale(1) contrast(0.9); }
+
+        /* --- 响应式 --- */
+        @media (max-width: 900px) {
+            body { flex-direction: column; }
+            .tab-bar {
+                width: 100%; height: 70px; flex-direction: row; 
+                order: 3; padding: 0; justify-content: space-around;
+                box-shadow: 0 -5px 15px var(--shadow-dark);
+            }
+            main { flex: none; height: calc(100vh - 70px); }
+            .content-panel {
+                position: absolute; bottom: 0; width: 100%; 
+                height: 100%; border-radius: 25px 25px 0 0;
+            }
+            #home.content-panel { height: 50%; }
+            #map { height: 50%; }
+            #trips #map, #msg #map, #profile #map { display: none; }
+            #trips .content-panel, #msg .content-panel, #profile .content-panel { height: 100%; }
+        }
+
+        /* --- 模式切换开关 --- */
+        .mode-switch {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 15px 20px;
+            margin-bottom: 15px;
+        }
+        .mode-switch-label {
+            font-weight: 600;
+            font-size: 14px;
+        }
+        .switch-toggle {
+            position: relative;
+            width: 60px;
+            height: 30px;
+            border-radius: 15px;
+            background: var(--bg);
+            box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light);
+            cursor: pointer;
+            transition: 0.3s;
+        }
+        .switch-toggle::after {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: var(--accent);
+            box-shadow: 3px 3px 6px var(--shadow-dark), -3px -3px 6px var(--shadow-light);
+            transition: 0.3s;
+        }
+        .switch-toggle.active {
+            background: var(--bg);
+        }
+        .switch-toggle.active::after {
+            left: 33px;
+            background: #48bb78;
+        }
+        .switch-toggle span {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 10px;
+            font-weight: 600;
+            color: #a0aec0;
+        }
+        .switch-toggle span.passenger {
+            left: 8px;
+        }
+        .switch-toggle span.driver {
+            right: 10px;
+        }
+
+        /* 隐藏滚动条 */
+        .content-panel::-webkit-scrollbar { display: none; }
         
-        .input-box { flex: 1; }
-        .input-box p { font-size: 11px; color: var(--text-sub); text-transform: uppercase; letter-spacing: 0.5px; }
-        .input-box input { border: none; background: transparent; width: 100%; font-size: 16px; font-weight: 500; outline: none; padding: 2px 0; }
-
-        /* 2. 地址建议列表 */
-        .suggestions { margin-top: 15px; display: none; border-top: 1px solid #f2f2f2; padding-top: 15px; }
-        .sug-item { display: flex; align-items: center; gap: 12px; padding: 12px 0; cursor: pointer; }
-        .sug-item .icon { font-size: 18px; color: #ccc; }
-        .sug-item .text h4 { font-size: 14px; font-weight: 500; }
-        .sug-item .text p { font-size: 12px; color: #999; }
-
-        /* 3. 底部功能卡片 */
-        .action-sheet {
-            position: absolute; bottom: 0; left: 0; right: 0; z-index: 2000;
-            background: #fff; border-radius: 32px 32px 0 0;
-            padding: 20px 24px calc(20px + env(safe-area-inset-bottom));
-            box-shadow: 0 -20px 60px rgba(0,0,0,0.08);
-            transform: translateY(110%); transition: 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+        /* --- 全屏转场动画 --- */
+        .fade-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--bg);
+            z-index: 9999;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 1s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-        .action-sheet.show { transform: translateY(0); }
-        .drag-bar { width: 40px; height: 5px; background: #f2f2f2; border-radius: 10px; margin: -10px auto 20px; }
-
-        /* 车型多选 */
-        .vehicle-grid { display: flex; gap: 15px; overflow-x: auto; padding-bottom: 25px; scrollbar-width: none; }
-        .vehicle-card {
-            flex: 0 0 130px; padding: 20px 15px; border-radius: 20px; background: #f9f9f9;
-            border: 1.5px solid transparent; transition: 0.3s;
+        
+        .fade-overlay.active {
+            opacity: 1;
+            pointer-events: all;
+            background: var(--accent);
         }
-        .vehicle-card.active { border-color: #000; background: #fff; box-shadow: 0 10px 20px rgba(0,0,0,0.03); }
-        .vehicle-card .v-type { font-size: 13px; font-weight: 700; display: block; }
-        .vehicle-card .v-time { font-size: 11px; color: #999; margin-top: 4px; display: block; }
-        .vehicle-card .v-price { font-size: 16px; font-weight: 300; margin-top: 15px; display: block; }
-
-        /* 主按钮组 */
-        .btn-container { display: flex; gap: 12px; margin-top: 10px; }
-        .config-btn { width: 56px; height: 56px; background: #f2f2f2; border-radius: 18px; border: none; display: flex; align-items: center; justify-content: center; }
-        .confirm-btn {
-            flex: 1; height: 56px; background: #000; color: #fff; border-radius: 18px; border: none;
-            font-size: 16px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; padding: 0 25px;
+        
+        .fade-overlay.fade-out {
+            opacity: 0;
         }
-
-        /* 自定义地图指针 (Leaflet DivIcon) */
-        .custom-pin-dest {
-            width: 30px; height: 30px; background: #000; border: 3px solid #fff;
-            border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
-            box-shadow: 10px 10px 20px rgba(0,0,0,0.2);
-            animation: pinDrop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        
+        .fade-overlay::after {
+            content: '切换至 ' attr(data-mode);
+            color: white;
+            font-size: 48px;
+            font-weight: 800;
+            animation: fadeInOut 2s ease-in-out;
         }
-        @keyframes pinDrop { 
-            0% { transform: translateY(-40px) rotate(-45deg); opacity: 0; }
-            100% { transform: translateY(0) rotate(-45deg); opacity: 1; }
+        
+        @keyframes fadeInOut {
+            0% {
+                opacity: 0;
+                transform: scale(0.5);
+            }
+            20% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            80% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            100% {
+                opacity: 0;
+                transform: scale(0.5);
+            }
         }
-        .custom-pin-origin {
-            width: 16px; height: 16px; background: var(--accent-blue);
-            border: 3px solid #fff; border-radius: 50%;
-            box-shadow: 0 0 0 8px rgba(0,122,255,0.1);
-        }
-
-        .leaflet-control-attribution { display: none !important; }
     </style>
 </head>
 <body>
 
-    <div id="map"></div>
-
-    <div class="location-manager">
-        <div class="address-connector"></div>
-        <div class="address-row">
-            <div class="origin-dot"></div>
-            <div class="input-box">
-                <p>Starting Point</p>
-                <input type="text" value="静安嘉里中心 · 东门" readonly>
-            </div>
-            <span style="font-size:12px; color:var(--accent-blue); font-weight:600;">修改</span>
-        </div>
-        <div class="address-row" style="margin-top:5px;">
-            <div class="dest-icon"></div>
-            <div class="input-box">
-                <p>Destination</p>
-                <input type="text" id="dest-input" placeholder="你要去哪儿？" onfocus="showSug()">
-            </div>
-            <button style="border:none; background:none; font-size:18px;">⊕</button>
-        </div>
-
-        <div class="suggestions" id="sugBox">
-            <div class="sug-item" onclick="selectDest('上海浦东国际机场', 'T2航站楼')">
-                <div class="icon">✈️</div>
-                <div class="text"><h4>上海浦东国际机场</h4><p>Pudong International Airport</p></div>
-            </div>
-            <div class="sug-item" onclick="selectDest('陆家嘴金融中心', '世纪大道8号')">
-                <div class="icon">🏙️</div>
-                <div class="text"><h4>陆家嘴金融中心</h4><p>Lujiazui Financial District</p></div>
-            </div>
-        </div>
+    <div class="tab-bar">
+        <div class="tab-item active" data-target="home"><i class="fas fa-car"></i></div>
+        <div class="tab-item" data-target="trips"><i class="fas fa-calendar-alt"></i></div>
+        <div class="tab-item" data-target="msg"><i class="fas fa-comment-dots"></i></div>
+        <div class="tab-item" data-target="profile"><i class="fas fa-user"></i></div>
     </div>
+    
+    <div class="fade-overlay" id="fadeOverlay"></div>
 
-    <div class="action-sheet" id="actionSheet">
-        <div class="drag-bar"></div>
-        
-        <div class="vehicle-grid">
-            <div class="vehicle-card active" onclick="switchV(this, 35.0)">
-                <span class="v-type">Hitch Lite</span>
-                <span class="v-time">15分钟内接送</span>
-                <span class="v-price">¥ 35.0</span>
+    <main>
+        <div id="home" class="content-panel active">
+            <h2 style="font-weight: 800; margin-bottom: 10px;" id="homeTitle">SleekRide</h2>
+            
+            <div class="neu-card">
+                <p style="font-size: 14px; margin-bottom: 15px; font-weight: 600;" id="homeSubtitle">要去哪里？</p>
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                    <div class="neu-input-box">
+                        <i class="fas fa-dot-circle" style="color: #48bb78;"></i>
+                        <input type="text" value="我的位置：上海中心大厦">
+                    </div>
+                    <div class="neu-input-box">
+                        <i class="fas fa-map-marker-alt" style="color: #f56565;"></i>
+                        <input type="text" placeholder="输入目的地">
+                    </div>
+                </div>
             </div>
-            <div class="vehicle-card" onclick="switchV(this, 68.5)">
-                <span class="v-type">Private Pro</span>
-                <span class="v-time">实时出发</span>
-                <span class="v-price">¥ 68.5</span>
+
+            <div class="neu-card">
+                <p style="font-size: 14px; margin-bottom: 15px; font-weight: 600;" id="carTypeTitle">车型选择</p>
+                <div style="display: flex; gap: 15px;" id="carTypeSelector">
+                    <div class="tab-item active" data-type="comfort" style="flex:1; flex-direction: column; font-size: 10px; height: 70px;">
+                        <i class="fas fa-car" style="font-size: 20px;"></i>舒适型
+                    </div>
+                    <div class="tab-item" data-type="six" style="flex:1; flex-direction: column; font-size: 10px; height: 70px;">
+                        <i class="fas fa-truck-pickup" style="font-size: 20px;"></i>六座车
+                    </div>
+                    <div class="tab-item" data-type="electric" style="flex:1; flex-direction: column; font-size: 10px; height: 70px;">
+                        <i class="fas fa-leaf" style="font-size: 20px;"></i>新能源
+                    </div>
+                </div>
             </div>
-            <div class="vehicle-card" onclick="switchV(this, 120.0)">
-                <span class="v-type">Business XL</span>
-                <span class="v-time">六座宽敞</span>
-                <span class="v-price">¥ 120.0</span>
+
+            <button class="btn-primary" id="callRideBtn">呼叫顺风车</button>
+        </div>
+
+        <div id="trips" class="content-panel">
+            <h2 style="font-weight: 800; margin-bottom: 10px;" id="tripsTitle">我的行程</h2>
+            <div class="neu-card" style="margin-bottom: 15px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                    <span style="font-size: 12px; color: var(--accent);" id="tripsStatus1">进行中</span>
+                    <span style="font-size: 12px;">今日 18:30</span>
+                </div>
+                <p style="font-weight: 600;" id="trip1Route">静安区 -> 浦东机场</p>
+                <p style="font-size: 13px; color: #888; margin-top: 5px;" id="trip1Amount">预计收益: ¥85.00</p>
+            </div>
+            <div class="neu-card">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                    <span style="font-size: 12px; color: #888;" id="tripsStatus2">已完成</span>
+                    <span style="font-size: 12px;">昨天 09:15</span>
+                </div>
+                <p style="font-weight: 600;" id="trip2Route">徐家汇 -> 五角场</p>
+                <p style="font-size: 13px; color: #888; margin-top: 5px;" id="trip2Amount">支付金额: ¥42.50</p>
             </div>
         </div>
 
-        <div style="display:flex; justify-content:space-between; margin-bottom:20px; font-size:12px; color:#888; padding:0 5px;">
-            <span>🛡️ 行程安全保障已开启</span>
-            <span>支付：Apple Pay ></span>
+        <div id="msg" class="content-panel">
+            <h2 style="font-weight: 800; margin-bottom: 10px;" id="msgTitle">消息</h2>
+            <div class="neu-card" style="display: flex; gap: 15px; margin-bottom: 15px;">
+                <div style="width: 50px; height: 50px; border-radius: 50%; background: #e6fffa; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                    <i class="fas fa-car" style="color: #48bb78; font-size: 20px;"></i>
+                </div>
+                <div style="flex: 1;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                        <span style="font-weight: 600;" id="msgTitle1">行程提醒</span>
+                        <span style="font-size: 12px; color: #888;">10:30</span>
+                    </div>
+                    <p style="font-size: 13px; color: #718096;" id="msgContent1">您的顺风车已出发，预计15分钟到达。</p>
+                </div>
+            </div>
+            <div class="neu-card" style="display: flex; gap: 15px; margin-bottom: 15px;">
+                <div style="width: 50px; height: 50px; border-radius: 50%; background: #fff5f5; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                    <i class="fas fa-comment" style="color: #f56565; font-size: 20px;"></i>
+                </div>
+                <div style="flex: 1;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                        <span style="font-weight: 600;" id="msgTitle2">司机留言</span>
+                        <span style="font-size: 12px; color: #888;">昨天</span>
+                    </div>
+                    <p style="font-size: 13px; color: #718096;" id="msgContent2">司机：您好，我到了上车点，请联系我。</p>
+                </div>
+            </div>
+            <div class="neu-card" style="display: flex; gap: 15px; margin-bottom: 15px;">
+                <div style="width: 50px; height: 50px; border-radius: 50%; background: #edf2ff; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                    <i class="fas fa-dollar-sign" style="color: #3a86ff; font-size: 20px;"></i>
+                </div>
+                <div style="flex: 1;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                        <span style="font-weight: 600;" id="msgTitle3">支付成功</span>
+                        <span style="font-size: 12px; color: #888;">昨天</span>
+                    </div>
+                    <p style="font-size: 13px; color: #718096;" id="msgContent3">行程已完成，金额 ¥42.50 已结算。</p>
+                </div>
+            </div>
         </div>
 
-        <div class="btn-container">
-            <button class="config-btn">🕒</button>
-            <button class="confirm-btn" onclick="order()">
-                <span>预约顺风车</span>
-                <span id="final-price">¥ 35.0</span>
-            </button>
-            <button class="config-btn">⚙️</button>
+        <div id="profile" class="content-panel">
+            <div class="neu-card" style="text-align: center; padding: 40px 20px;">
+                <div style="width: 80px; height: 80px; border-radius: 50%; box-shadow: 5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light); margin: 0 auto 15px; overflow: hidden;">
+                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Mrok" width="100%">
+                </div>
+                <h3>Mrok De Engineer</h3>
+                <p style="font-size: 12px; color: #888;">系统工程师 | 信用极好 780</p>
+            </div>
+            
+            <div class="neu-card mode-switch">
+                <span class="mode-switch-label">当前身份</span>
+                <div class="switch-toggle active" id="modeToggle">
+                    <span class="passenger">车主</span>
+                    <span class="driver">乘客</span>
+                </div>
+            </div>
+            
+            <div class="neu-card" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div class="btn-primary" style="text-align: center; font-size: 13px;">钱包余额<br><b>¥1250.00</b></div>
+                <div class="btn-primary" style="text-align: center; font-size: 13px;">优惠券<br><b>12 张</b></div>
+            </div>
+            <button class="btn-primary" style="color: #f56565;">退出登录</button>
         </div>
-    </div>
+
+        <div id="map"></div>
+    </main>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        const map = L.map('map', { zoomControl: false }).setView([31.224, 121.445], 15);
+        // 0. 用户模式：'passenger' 或 'driver'
+        let userMode = 'passenger';
+        
+        // 模式切换数据
+        const modeData = {
+            passenger: {
+                homeTitle: 'SleekRide',
+                homeSubtitle: '要去哪里？',
+                carTypeTitle: '车型选择',
+                callBtnText: '呼叫顺风车',
+                tripsTitle: '我的行程',
+                trip1Status: '进行中',
+                trip1Route: '静安区 -> 浦东机场',
+                trip1Amount: '预计收益: ¥85.00',
+                trip2Status: '已完成',
+                trip2Route: '徐家汇 -> 五角场',
+                trip2Amount: '支付金额: ¥42.50',
+                msgTitle: '消息',
+                msg1Title: '行程提醒',
+                msg1Content: '您的顺风车已出发，预计15分钟到达。',
+                msg2Title: '司机留言',
+                msg2Content: '司机：您好，我到了上车点，请联系我。',
+                msg3Title: '支付成功',
+                msg3Content: '行程已完成，金额 ¥42.50 已结算。'
+            },
+            driver: {
+                homeTitle: '接单中心',
+                homeSubtitle: '选择接单区域',
+                carTypeTitle: '车辆信息',
+                callBtnText: '上线接单',
+                tripsTitle: '我的收入',
+                trip1Status: '服务中',
+                trip1Route: '静安区 -> 浦东机场 (进行中)',
+                trip1Amount: '收入: ¥85.00',
+                trip2Status: '已完成',
+                trip2Route: '徐家汇 -> 五角场',
+                trip2Amount: '收入: ¥42.50',
+                msgTitle: '订单消息',
+                msg1Title: '新订单提醒',
+                msg1Content: '有乘客下单，预计15分钟后接单。',
+                msg2Title: '乘客留言',
+                msg2Content: '乘客：您好，我在上车点等您。',
+                msg3Title: '收款成功',
+                msg3Content: '订单已完成，收入 ¥42.50 已到账。'
+            }
+        };
+
+        // 更新界面内容
+        function updateUIForMode() {
+            const data = modeData[userMode];
+            
+            document.getElementById('homeTitle').textContent = data.homeTitle;
+            document.getElementById('homeSubtitle').textContent = data.homeSubtitle;
+            document.getElementById('carTypeTitle').textContent = data.carTypeTitle;
+            document.getElementById('callRideBtn').textContent = data.callBtnText;
+            
+            document.getElementById('tripsTitle').textContent = data.tripsTitle;
+            document.getElementById('tripsStatus1').textContent = data.trip1Status;
+            document.getElementById('trip1Route').textContent = data.trip1Route;
+            document.getElementById('trip1Amount').textContent = data.trip1Amount;
+            document.getElementById('tripsStatus2').textContent = data.trip2Status;
+            document.getElementById('trip2Route').textContent = data.trip2Route;
+            document.getElementById('trip2Amount').textContent = data.trip2Amount;
+            
+            document.getElementById('msgTitle').textContent = data.msgTitle;
+            document.getElementById('msgTitle1').textContent = data.msg1Title;
+            document.getElementById('msgContent1').textContent = data.msg1Content;
+            document.getElementById('msgTitle2').textContent = data.msg2Title;
+            document.getElementById('msgContent2').textContent = data.msg2Content;
+            document.getElementById('msgTitle3').textContent = data.msg3Title;
+            document.getElementById('msgContent3').textContent = data.msg3Content;
+            
+            const modeToggle = document.getElementById('modeToggle');
+            if (userMode === 'driver') {
+                modeToggle.classList.add('active');
+                document.documentElement.classList.add('mode-driver');
+            } else {
+                modeToggle.classList.remove('active');
+                document.documentElement.classList.remove('mode-driver');
+            }
+        }
+
+        // 1. 初始化地图 (明亮模式)
+        const map = L.map('map', { zoomControl: false, attributionControl: false }).setView([31.2304, 121.4737], 13);
+        
+        // 使用CartoDB明亮色调的瓦片
         L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
 
-        // 自定义起点指针
-        const originIcon = L.divIcon({ className: 'custom-pin-origin', iconSize: [16, 16], iconAnchor: [8, 8] });
-        L.marker([31.224, 121.445], { icon: originIcon }).addTo(map);
-
-        let destMarker, routeLine;
-
-        // 点击地图：落下“黑针”
-        map.on('click', (e) => {
-            const { lat, lng } = e.latlng;
-            dropPin(lat, lng, `位置 (${lat.toFixed(2)}, ${lng.toFixed(2)})`);
+        // 2. 模拟司机图标
+        const carIcon = L.divIcon({
+            className: 'car-marker',
+            html: `<div style="background: white; border: 2px solid var(--accent); width: 14px; height: 14px; border-radius: 50%; box-shadow: 2px 2px 5px rgba(0,0,0,0.2);"></div>`
         });
 
-        function showSug() {
-            document.getElementById('sugBox').style.display = 'block';
-        }
+        const drivers = [
+            L.marker([31.235, 121.480], {icon: carIcon}).addTo(map),
+            L.marker([31.225, 121.465], {icon: carIcon}).addTo(map)
+        ];
 
-        function selectDest(name, addr) {
-            document.getElementById('dest-input').value = name;
-            document.getElementById('sugBox').style.display = 'none';
-            // 模拟坐标落点
-            dropPin(31.235, 121.506, name);
-        }
+        // 起始点和目的地标记
+        const originIcon = L.divIcon({
+            className: 'origin-marker',
+            html: '<div style="background: #3a86ff; width: 16px; height: 16px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 0 8px rgba(58,134,255,0.2);"></div>',
+            iconSize: [16, 16],
+            iconAnchor: [8, 8]
+        });
 
-        function dropPin(lat, lng, name) {
-            if (destMarker) map.removeLayer(destMarker);
-            if (routeLine) map.removeLayer(routeLine);
+        const destIcon = L.divIcon({
+            className: 'dest-marker',
+            html: '<div style="background: #000; width: 14px; height: 14px; border-radius: 2px; transform: rotate(45deg); border: 3px solid white; box-shadow: 5px 5px 10px rgba(0,0,0,0.3);"></div>',
+            iconSize: [14, 14],
+            iconAnchor: [7, 7]
+        });
 
-            const destIcon = L.divIcon({ className: 'custom-pin-dest', iconSize: [30, 30], iconAnchor: [15, 30] });
-            destMarker = L.marker([lat, lng], { icon: destIcon }).addTo(map);
+        let originMarker = L.marker([31.2304, 121.4737], {icon: originIcon, draggable: true}).addTo(map);
+        let destMarker = L.marker([31.235, 121.480], {icon: destIcon, draggable: true}).addTo(map);
 
-            routeLine = L.polyline([[31.224, 121.445], [lat, lng]], {
-                color: '#000', weight: 2, opacity: 0.6, dashArray: '5, 10'
-            }).addTo(map);
+        let routeLine = L.polyline([
+            originMarker.getLatLng(),
+            destMarker.getLatLng()
+        ], {
+            color: '#000',
+            weight: 2,
+            opacity: 0.6,
+            dashArray: '5, 10'
+        }).addTo(map);
 
-            document.getElementById('dest-input').value = name;
-            document.getElementById('actionSheet').classList.add('show');
-            map.fitBounds(routeLine.getBounds(), { padding: [120, 180] });
-        }
+        // 起始点拖拽事件
+        originMarker.on('drag', function() {
+            routeLine.setLatLngs([originMarker.getLatLng(), destMarker.getLatLng()]);
+        });
 
-        function switchV(el, price) {
-            document.querySelectorAll('.vehicle-card').forEach(c => c.classList.remove('active'));
-            el.classList.add('active');
-            document.getElementById('final-price').innerText = `¥ ${price.toFixed(1)}`;
-        }
+        // 起始点拖拽结束事件
+        originMarker.on('dragend', function() {
+            routeLine.setLatLngs([originMarker.getLatLng(), destMarker.getLatLng()]);
+        });
 
-        function order() {
-            const btn = document.querySelector('.confirm-btn');
-            btn.style.background = "#333";
-            btn.innerText = "正在锁定最优车主...";
+        // 目的地拖拽事件
+        destMarker.on('drag', function() {
+            routeLine.setLatLngs([originMarker.getLatLng(), destMarker.getLatLng()]);
+        });
+
+        // 目的地拖拽结束事件
+        destMarker.on('dragend', function() {
+            routeLine.setLatLngs([originMarker.getLatLng(), destMarker.getLatLng()]);
+        });
+
+        // 点击地图添加目的地
+        map.on('click', function(e) {
+            destMarker.setLatLng(e.latlng);
+            routeLine.setLatLngs([originMarker.getLatLng(), destMarker.getLatLng()]);
+        });
+
+        // 模式切换按钮
+        const modeToggleBtn = document.getElementById('modeToggle');
+        modeToggleBtn.addEventListener('click', () => {
+            const overlay = document.getElementById('fadeOverlay');
+            const targetMode = userMode === 'passenger' ? 'driver' : 'passenger';
+            const targetModeText = targetMode === 'passenger' ? '乘客模式' : '车主模式';
+            
+            // 设置转场动画文字
+            overlay.setAttribute('data-mode', targetModeText);
+            
+            // 先更新主题颜色
+            if (targetMode === 'driver') {
+                document.documentElement.classList.add('mode-driver');
+            } else {
+                document.documentElement.classList.remove('mode-driver');
+            }
+            
+            // 开始转场动画
+            overlay.classList.add('active');
+            
             setTimeout(() => {
-                alert('预约成功！\n车主：刘师傅 (5.0 ★)\n车辆：蔚来 ET7 · 黑色\n预计 16:45 准时出发');
-                btn.style.background = "#000";
-                btn.innerHTML = '<span>预约顺风车</span><span>¥ 35.0</span>';
+                // 切换模式
+                userMode = targetMode;
+                updateUIForMode();
+                
+                // 结束转场动画
+                overlay.classList.remove('active');
             }, 2000);
-        }
+        });
+
+        // 3. 车型选择逻辑
+        const carTypes = document.querySelectorAll('#carTypeSelector .tab-item');
+        let selectedCarType = 'comfort';
+
+        carTypes.forEach(car => {
+            car.addEventListener('click', () => {
+                carTypes.forEach(c => c.classList.remove('active'));
+                car.classList.add('active');
+                selectedCarType = car.getAttribute('data-type');
+            });
+        });
+
+        // 初始化UI
+        updateUIForMode();
+
+        // 5. 叫车/接单功能
+        const callBtn = document.getElementById('callRideBtn');
+        callBtn.addEventListener('click', () => {
+            const inputs = document.querySelectorAll('#home input[type="text"]');
+            const origin = inputs[0].value;
+            const dest = inputs[1].value;
+            
+            if(!dest || dest === '输入目的地') {
+                alert('请输入目的地');
+                return;
+            }
+
+            const carTypeMap = { 'comfort': '舒适型', 'six': '六座车', 'electric': '新能源' };
+            const carTypeName = carTypeMap[selectedCarType];
+            const modeText = userMode === 'passenger' ? '乘客' : '车主';
+
+            callBtn.innerHTML = '匹配中...';
+            callBtn.style.opacity = '0.7';
+
+            setTimeout(() => {
+                if (userMode === 'passenger') {
+                    alert(`成功呼叫${carTypeName}\n起点: ${origin}\n目的地: ${dest}`);
+                } else {
+                    alert(`成功上线接单\n车型: ${carTypeName}\n区域: ${origin}`);
+                }
+                callBtn.innerHTML = userMode === 'passenger' ? '已呼叫' : '已上线';
+                callBtn.style.background = '#48bb78';
+                callBtn.style.color = '#fff';
+                callBtn.style.boxShadow = 'inset 4px 4px 8px var(--shadow-dark), inset -4px -4px 8px var(--shadow-light)';
+            }, 1500);
+        });
+
+        // 5. Tab 切换逻辑
+        const tabs = document.querySelectorAll('.tab-item[data-target]');
+        const panels = document.querySelectorAll('.content-panel');
+
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                // 处理 Tab 样式
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+
+                // 处理面板切换
+                const target = tab.getAttribute('data-target');
+                panels.forEach(p => {
+                    p.classList.remove('active');
+                    if(p.id === target) p.classList.add('active');
+                });
+
+                // 切换后刷新地图布局
+                setTimeout(() => map.invalidateSize(), 300);
+                // 切换Tab时也更新UI内容
+                updateUIForMode();
+            });
+        });
+
+        // 模拟车辆缓慢移动
+        setInterval(() => {
+            drivers.forEach(d => {
+                const pos = d.getLatLng();
+                d.setLatLng([pos.lat + 0.0001, pos.lng + 0.0001]);
+            });
+        }, 2000);
     </script>
 </body>
 </html>
