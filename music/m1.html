@@ -104,6 +104,8 @@
 </head>
 <body>
 
+    <audio id="main-audio"></audio>
+
     <div class="desktop-container">
         <aside class="sidebar h-full flex flex-col justify-between">
             <div class="neu-flat p-8">
@@ -139,7 +141,7 @@
             <header class="flex justify-between items-center mb-8">
                 <div class="neu-inset flex-1 max-w-xl flex items-center px-4 py-2">
                     <i class="fas fa-search opacity-30 mr-3"></i>
-                    <input type="text" placeholder="搜索 AI 灵感、流派..." class="bg-transparent border-none outline-none text-sm w-full">
+                    <input type="text" id="search-input" oninput="handleSearch(this.value)" placeholder="搜索 AI 灵感、流派..." class="bg-transparent border-none outline-none text-sm w-full">
                 </div>
                 <div class="lg:hidden ml-4 neu-button neu-flat w-10 h-10 rounded-xl flex items-center justify-center" onclick="toggleTheme()">
                     <i class="fas fa-moon"></i>
@@ -168,10 +170,16 @@
 
                 <h2 class="text-2xl font-black mt-12 mb-6">热门 AI 创作</h2>
                 <div class="space-y-4">
-                    <div class="neu-flat p-4 flex items-center gap-4 hover:bg-[#6d5dfc10]">
+                    <div class="neu-flat p-4 flex items-center gap-4 hover:bg-[#6d5dfc10] cursor-pointer" onclick="playSpecific(0)">
                         <span class="w-8 font-black opacity-20 text-xl italic">01</span>
                         <div class="w-12 h-12 neu-inset rounded-lg overflow-hidden flex-shrink-0"><img src="https://picsum.photos/100?random=5"></div>
                         <div class="flex-1"><h5 class="text-sm font-bold">午后蝉鸣</h5><p class="text-[10px] opacity-40 uppercase">Ambient Fusion</p></div>
+                        <div class="neu-button w-10 h-10 rounded-full neu-flat flex items-center justify-center text-[#6d5dfc]"><i class="fas fa-play"></i></div>
+                    </div>
+                    <div class="neu-flat p-4 flex items-center gap-4 hover:bg-[#6d5dfc10] cursor-pointer" onclick="playSpecific(1)">
+                        <span class="w-8 font-black opacity-20 text-xl italic">02</span>
+                        <div class="w-12 h-12 neu-inset rounded-lg overflow-hidden flex-shrink-0"><img src="https://picsum.photos/100?random=6"></div>
+                        <div class="flex-1"><h5 class="text-sm font-bold">算法夏日</h5><p class="text-[10px] opacity-40 uppercase">Lo-Fi AI Beats</p></div>
                         <div class="neu-button w-10 h-10 rounded-full neu-flat flex items-center justify-center text-[#6d5dfc]"><i class="fas fa-play"></i></div>
                     </div>
                 </div>
@@ -193,22 +201,22 @@
             <section id="page-playing-mobile" class="page-section lg:hidden">
                 <div class="neu-flat p-6 flex-1 flex flex-col items-center justify-center">
                     <div class="neu-inset p-4 rounded-[40px] mb-8">
-                        <img src="https://picsum.photos/400?random=10" class="w-64 h-64 rounded-[30px] object-cover shadow-2xl">
+                        <img id="mobile-player-cover" src="https://picsum.photos/400?random=10" class="w-64 h-64 rounded-[30px] object-cover shadow-2xl">
                     </div>
                     <div class="text-center mb-8">
-                        <h3 class="text-2xl font-black">午后蝉鸣 (Remix)</h3>
-                        <p class="text-[#6d5dfc] font-bold mt-2">Neural Orchestra</p>
+                        <h3 id="mobile-player-title" class="text-2xl font-black">午后蝉鸣 (Remix)</h3>
+                        <p id="mobile-player-artist" class="text-[#6d5dfc] font-bold mt-2">Neural Orchestra</p>
                     </div>
                     <div class="w-full px-4 mb-8">
-                        <div class="neu-inset h-2 w-full mb-3">
-                            <div class="h-full bg-[#6d5dfc] w-1/3 rounded-full"></div>
+                        <div class="neu-inset h-2 w-full mb-3" id="mobile-progress-container">
+                            <div id="mobile-progress-bar" class="h-full bg-[#6d5dfc] w-0 rounded-full"></div>
                         </div>
-                        <div class="flex justify-between text-[10px] font-bold opacity-40"><span>01:24</span><span>04:32</span></div>
+                        <div class="flex justify-between text-[10px] font-bold opacity-40"><span id="mobile-current-time">00:00</span><span id="mobile-duration-time">00:00</span></div>
                     </div>
                     <div class="flex items-center gap-8">
-                        <i class="fas fa-step-backward text-xl"></i>
-                        <div class="neu-button neu-flat w-20 h-20 rounded-full flex items-center justify-center text-[#6d5dfc] text-2xl"><i class="fas fa-pause"></i></div>
-                        <i class="fas fa-step-forward text-xl"></i>
+                        <i class="fas fa-step-backward text-xl cursor-pointer" onclick="prevSong()"></i>
+                        <div id="mobile-play-btn" class="neu-button neu-flat w-20 h-20 rounded-full flex items-center justify-center text-[#6d5dfc] text-2xl cursor-pointer"><i class="fas fa-play" id="mobile-play-icon"></i></div>
+                        <i class="fas fa-step-forward text-xl cursor-pointer" onclick="nextSong()"></i>
                     </div>
                 </div>
             </section>
@@ -272,15 +280,21 @@
         <aside class="player-panel h-full">
             <div class="neu-flat p-6 h-full flex flex-col items-center">
                 <p class="text-[10px] font-black opacity-40 uppercase tracking-widest mb-8">Now Playing</p>
-                <div class="neu-inset p-4 rounded-[40px] mb-8 overflow-hidden">
-                    <img src="https://picsum.photos/400?random=10" class="w-56 h-56 rounded-[30px] object-cover">
+                <div class="neu-inset p-4 rounded-[40px] mb-8 overflow-hidden cursor-pointer" onclick="showPage('playing-mobile')">
+                    <img id="desktop-cover" src="https://picsum.photos/400?random=10" class="w-56 h-56 rounded-[30px] object-cover">
                 </div>
-                <h3 class="text-xl font-black">午后蝉鸣 (Remix)</h3>
-                <p class="text-[#6d5dfc] text-xs font-bold mt-2 mb-10">Neural Orchestra</p>
+                <h3 id="desktop-title" class="text-xl font-black">午后蝉鸣 (Remix)</h3>
+                <p id="desktop-artist" class="text-[#6d5dfc] text-xs font-bold mt-2 mb-10">Neural Orchestra</p>
                 <div class="flex items-center gap-6 mb-12">
-                    <i class="fas fa-step-backward neu-button"></i>
-                    <div class="neu-button neu-flat w-16 h-16 rounded-full flex items-center justify-center text-[#6d5dfc] text-xl"><i class="fas fa-pause"></i></div>
-                    <i class="fas fa-step-forward neu-button"></i>
+                    <i class="fas fa-step-backward neu-button cursor-pointer" onclick="prevSong()"></i>
+                    <div id="desktop-play-btn" class="neu-button neu-flat w-16 h-16 rounded-full flex items-center justify-center text-[#6d5dfc] text-xl cursor-pointer"><i class="fas fa-play" id="desktop-play-icon"></i></div>
+                    <i class="fas fa-step-forward neu-button cursor-pointer" onclick="nextSong()"></i>
+                </div>
+                <div class="w-full px-4 mb-6">
+                    <div class="neu-inset h-2 w-full mb-3 cursor-pointer" id="desktop-progress-container">
+                        <div id="desktop-progress-bar" class="h-full bg-[#6d5dfc] w-0 rounded-full"></div>
+                    </div>
+                    <div class="flex justify-between text-[10px] font-bold opacity-40"><span id="desktop-current-time">00:00</span><span id="desktop-duration-time">00:00</span></div>
                 </div>
             </div>
         </aside>
@@ -293,8 +307,8 @@
         <div id="tab-ai" class="mobile-tab w-12 h-12 flex items-center justify-center rounded-xl" onclick="showPage('ai')">
             <i class="fas fa-magic"></i>
         </div>
-        <div id="tab-playing" class="w-16 h-16 -mt-10 neu-flat p-1" onclick="showPage('playing-mobile')">
-            <img src="https://picsum.photos/400?random=10" class="w-full h-full rounded-full object-cover animate-spin-slow">
+        <div id="tab-playing" class="w-16 h-16 -mt-10 neu-flat p-1 cursor-pointer" onclick="showPage('playing-mobile')">
+            <img id="mobile-cover" src="https://picsum.photos/400?random=10" class="w-full h-full rounded-full object-cover animate-spin-slow">
         </div>
         <div id="tab-profile" class="mobile-tab w-12 h-12 flex items-center justify-center rounded-xl" onclick="showPage('profile')">
             <i class="fas fa-user"></i>
@@ -305,11 +319,219 @@
     </nav>
 
     <script>
-        function toggleTheme() {
-            const body = document.body;
-            const current = body.getAttribute('data-theme');
-            body.setAttribute('data-theme', current === 'dark' ? '' : 'dark');
+        // 1. 数据配置
+        const playlist = [
+            { title: "Algorithm of Summer", artist: "Lo-Fi AI Beats", src: "music/AlgorithmofSummer.mp3", cover: "music/AlgorithmofSummer.jpeg" },
+            { title: "Breath Syncs With The Clip", artist: "Lo-Fi AI Beats", src: "music/BreathSyncsWithTheClip.mp3", cover: "https://images.unsplash.com/photo-1493225255756-d9584f8606e9?w=500" },
+            { title: "Goth Girl Knife Fight", artist: "Lo-Fi AI Beats", src: "music/GothGirlKnifeFight.mp3", cover: "https://images.unsplash.com/photo-1493225255756-d9584f8606e9?w=500" },
+            { title: "Damned If I Do", artist: "Lo-Fi AI Beats", src: "music/DamnedIfIDo.mp3", cover: "music/DamnedIfIDo.jpeg" },
+            { title: "Mark It Explicit", artist: "Lo-Fi AI Beats", src: "music/MarkItExplicit.mp3", cover: "music/MarkItExplicit.jpeg" },
+            { title: "Tally", artist: "Lo-Fi AI Beats", src: "music/Tally.mp3", cover: "music/Tally.jpeg" }
+        ];
+        
+        let currentIndex = 0;
+        let currentUser = JSON.parse(localStorage.getItem('im_user')) || null;
+        let playMode = 'sequence';
+        const playModes = ['sequence', 'repeat-one', 'shuffle'];
+        const playModeIcons = {
+            'sequence': 'fa-list',
+            'repeat-one': 'fa-redo-alt',
+            'shuffle': 'fa-random'
+        };
+        const playModeTexts = {
+            'sequence': '顺序播放',
+            'repeat-one': '单曲循环',
+            'shuffle': '随机播放'
+        };
+
+        // 2. 核心逻辑：播放控制
+        const audio = document.getElementById('main-audio');
+        const playBtn = document.getElementById('desktop-play-btn');
+        const playIcon = document.getElementById('desktop-play-icon');
+        const progressBar = document.getElementById('desktop-progress-bar');
+        const progressContainer = document.getElementById('desktop-progress-container');
+        const currentTimeEl = document.getElementById('desktop-current-time');
+        const durationTimeEl = document.getElementById('desktop-duration-time');
+
+        function loadSong(index) {
+            const song = playlist[index];
+            audio.src = song.src;
+            document.getElementById('desktop-title').textContent = song.title;
+            document.getElementById('desktop-artist').textContent = song.artist;
+            document.getElementById('desktop-cover').src = song.cover;
+            document.getElementById('mobile-player-title').textContent = song.title;
+            document.getElementById('mobile-player-artist').textContent = song.artist;
+            document.getElementById('mobile-player-cover').src = song.cover;
+            document.getElementById('mobile-cover').src = song.cover;
         }
+
+        function togglePlay() {
+            if (audio.paused) {
+                audio.play();
+                playIcon.classList.replace('fa-play', 'fa-pause');
+                playBtn.classList.add('breathing');
+            } else {
+                audio.pause();
+                playIcon.classList.replace('fa-pause', 'fa-play');
+                playBtn.classList.remove('breathing');
+            }
+        }
+
+        function togglePlayMode() {
+            const currentIndexMode = playModes.indexOf(playMode);
+            const nextIndex = (currentIndexMode + 1) % playModes.length;
+            playMode = playModes[nextIndex];
+            const icon = document.getElementById('play-mode-icon');
+            if(icon) icon.className = 'fas ' + playModeIcons[playMode];
+            if (window.navigator.vibrate) window.navigator.vibrate(10);
+        }
+
+        function nextSong() {
+            if (playMode === 'repeat-one') {
+                audio.play();
+                playIcon.classList.replace('fa-play', 'fa-pause');
+                playBtn.classList.add('breathing');
+                return;
+            }
+            
+            if (playMode === 'shuffle') {
+                currentIndex = Math.floor(Math.random() * playlist.length);
+            } else {
+                currentIndex = (currentIndex + 1) % playlist.length;
+            }
+            loadSong(currentIndex);
+            audio.play();
+            playIcon.classList.replace('fa-play', 'fa-pause');
+            playBtn.classList.add('breathing');
+        }
+
+        function prevSong() {
+            if (playMode === 'repeat-one') {
+                audio.play();
+                playIcon.classList.replace('fa-play', 'fa-pause');
+                playBtn.classList.add('breathing');
+                return;
+            }
+            
+            if (playMode === 'shuffle') {
+                currentIndex = Math.floor(Math.random() * playlist.length);
+            } else {
+                currentIndex = (currentIndex - 1 + playlist.length) % playlist.length;
+            }
+            loadSong(currentIndex);
+            audio.play();
+            playIcon.classList.replace('fa-play', 'fa-pause');
+            playBtn.classList.add('breathing');
+        }
+
+        function playSpecific(index) {
+            currentIndex = index;
+            loadSong(currentIndex);
+            navTo('player');
+            setTimeout(() => togglePlay(), 100);
+        }
+
+        function toggleLyrics() {
+            const coverContainer = document.getElementById('cover-container');
+            const lyricsOverlay = document.getElementById('lyrics-overlay');
+            const isHidden = lyricsOverlay.classList.contains('hidden');
+            
+            if (isHidden) {
+                coverContainer.classList.add('hidden');
+                lyricsOverlay.classList.remove('hidden');
+                updateLyrics();
+            } else {
+                coverContainer.classList.remove('hidden');
+                lyricsOverlay.classList.add('hidden');
+            }
+            if (window.navigator.vibrate) window.navigator.vibrate(10);
+        }
+
+        function updateLyrics() {
+            const lyricsContent = document.getElementById('lyrics-content');
+            const sampleLyrics = [
+                "[00:10]音乐响起心灵放松",
+                "[00:15]旋律流淌在心间",
+                "[00:20]沉浸在这美好时刻",
+                "[00:25]感受音符的跳跃",
+                "[00:35]音乐连接你我",
+                "[00:40]心灵得到治愈",
+                "[00:45]享受此刻宁静",
+                "[00:50]音乐永不停歇",
+                "[00:55]音乐响起心灵放松",
+                "[01:00]旋律流淌在心间"
+            ];
+            
+            lyricsContent.innerHTML = sampleLyrics.map((line, index) => {
+                const timeMatch = line.match(/\[(\d{2}:\d{2})\]/);
+                const text = line.replace(/\[\d{2}:\d{2}\]/, '');
+                if (timeMatch) {
+                    return `<div class="lyric-line text-gray-600 text-lg transition-all duration-300" data-time="${timeMatch[1]}" data-index="${index}">${text}</div>`;
+                }
+                return `<div class="lyric-line text-gray-600 text-lg">${line}</div>`;
+            }).join('');
+        }
+
+        function handleSearch(query) {
+            const resultsContainer = document.getElementById('search-results');
+            if (!resultsContainer) return;
+            
+            const hotContainer = document.getElementById('search-hot');
+            const inputEl = document.getElementById('search-input');
+            inputEl.value = query;
+            if (!query.trim()) {
+                resultsContainer.innerHTML = '';
+                if(hotContainer) hotContainer.style.display = 'block';
+                return;
+            }
+            if(hotContainer) hotContainer.style.display = 'none';
+            const filtered = playlist.map((song, index) => ({...song, originalIndex: index}))
+                                     .filter(song => song.title.includes(query) || song.artist.includes(query));
+
+            if (filtered.length > 0) {
+                resultsContainer.innerHTML = filtered.map(song => `
+                    <div class="neu-flat p-4 flex items-center justify-between cursor-pointer" onclick="playSpecific(${song.originalIndex});">
+                        <div class="flex items-center">
+                            <img src="${song.cover}" class="w-10 h-10 rounded-lg object-cover mr-4">
+                            <div>
+                                <div class="text-sm font-bold">${song.title}</div>
+                                <div class="text-[10px] text-gray-400">${song.artist}</div>
+                            </div>
+                        </div>
+                        <i class="fas fa-play text-[#6d5dfc] text-xs"></i>
+                    </div>
+                `).join('');
+            } else {
+                resultsContainer.innerHTML = '<div class="text-center text-gray-400 text-xs py-10">未找到相关创作</div>';
+            }
+        }
+
+        playBtn.addEventListener('click', togglePlay);
+        audio.addEventListener('timeupdate', () => {
+            const percent = (audio.currentTime / audio.duration) * 100;
+            progressBar.style.width = `${percent || 0}%`;
+            currentTimeEl.textContent = formatTime(audio.currentTime);
+        });
+        audio.addEventListener('loadedmetadata', () => {
+            durationTimeEl.textContent = formatTime(audio.duration);
+        });
+        progressContainer.addEventListener('click', (e) => {
+            const width = progressContainer.clientWidth;
+            const clickX = e.offsetX;
+            audio.currentTime = (clickX / width) * audio.duration;
+        });
+
+        function formatTime(time) {
+            if (isNaN(time)) return "00:00";
+            const min = Math.floor(time / 60);
+            const sec = Math.floor(time % 60);
+            return `${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
+        }
+
+        // 初始化 
+        loadSong(0);
+        const playModeIcon = document.getElementById('play-mode-icon');
+        if(playModeIcon) playModeIcon.className = 'fas ' + playModeIcons[playMode];
 
         function showPage(pageId) {
             // 隐藏所有页面
@@ -352,8 +574,45 @@
         style.innerHTML = `
             @keyframes spin-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
             .animate-spin-slow { animation: spin-slow 12s linear infinite; }
+            @keyframes breathe { 0%, 100% { box-shadow: 0 0 10px rgba(109, 93, 252, 0.2); } 50% { box-shadow: 0 0 25px rgba(109, 93, 252, 0.5); } }
+            .breathing { animation: breathe 3s ease-in-out infinite; }
         `;
         document.head.appendChild(style);
+
+        // 移动端播放按钮
+        const mobilePlayBtn = document.getElementById('mobile-play-btn');
+        const mobilePlayIcon = document.getElementById('mobile-play-icon');
+        const mobileProgressContainer = document.getElementById('mobile-progress-container');
+        const mobileProgressBar = document.getElementById('mobile-progress-bar');
+        const mobileCurrentTime = document.getElementById('mobile-current-time');
+        const mobileDurationTime = document.getElementById('mobile-duration-time');
+
+        mobilePlayBtn.addEventListener('click', () => {
+            if (audio.paused) {
+                audio.play();
+                mobilePlayIcon.classList.replace('fa-play', 'fa-pause');
+                mobilePlayBtn.classList.add('breathing');
+                playIcon.classList.replace('fa-play', 'fa-pause');
+                playBtn.classList.add('breathing');
+            } else {
+                audio.pause();
+                mobilePlayIcon.classList.replace('fa-pause', 'fa-play');
+                mobilePlayBtn.classList.remove('breathing');
+                playIcon.classList.replace('fa-pause', 'fa-play');
+                playBtn.classList.remove('breathing');
+            }
+        });
+
+        audio.addEventListener('timeupdate', () => {
+            const percent = (audio.currentTime / audio.duration) * 100;
+            mobileProgressBar.style.width = `${percent || 0}%`;
+            mobileCurrentTime.textContent = formatTime(audio.currentTime);
+        });
+        mobileProgressContainer.addEventListener('click', (e) => {
+            const width = mobileProgressContainer.clientWidth;
+            const clickX = e.offsetX;
+            audio.currentTime = (clickX / width) * audio.duration;
+        });
     </script>
 </body>
 </html>
