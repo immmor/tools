@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ZenRide | 简约出行</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <style>
+        :root {
+            --accent: #1a1a1a;
+            --text-main: #333;
+            --text-sub: #8e8e93;
+            --bg-light: #f5f5f7;
+            --panel-bg: rgba(255, 255, 255, 0.85);
+            --shadow: 0 8px 32px rgba(0,0,0,0.08);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg-light); height: 100vh; overflow: hidden; }
+
+        /* --- 地图层 --- */
+        #map {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 1;
+            filter: grayscale(1) invert(0.9) brightness(0.9); /* 让地图变灰调，更有质感 */
+        }
+
+        /* --- 顶栏状态 --- */
+        .status-bar {
+            position: absolute;
+            top: 20px; left: 20px; right: 20px;
+            display: flex; justify-content: space-between;
+            z-index: 10; pointer-events: none;
+        }
+        .user-profile {
+            width: 45px; height: 45px;
+            background: white; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: var(--shadow); pointer-events: auto; cursor: pointer;
+        }
+
+        /* --- 主交互面板 --- */
+        .main-panel {
+            position: absolute;
+            left: 30px; top: 100px; bottom: 30px;
+            width: 380px;
+            background: var(--panel-bg);
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            box-shadow: var(--shadow);
+            z-index: 100;
+            padding: 30px;
+            display: flex; flex-direction: column;
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        h1 { font-size: 24px; font-weight: 700; color: var(--accent); margin-bottom: 25px; }
+
+        /* 输入区 */
+        .search-container {
+            background: #fff;
+            border-radius: 16px;
+            padding: 15px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+            margin-bottom: 25px;
+        }
+        .input-row {
+            display: flex; align-items: center; gap: 12px;
+            padding: 10px 0;
+        }
+        .input-row:first-child { border-bottom: 1px solid #f0f0f0; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; }
+        input { border: none; outline: none; width: 100%; font-size: 16px; color: var(--text-main); }
+        input::placeholder { color: #ccc; }
+
+        /* 车型选择 */
+        .car-types {
+            display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;
+            margin-bottom: 25px;
+        }
+        .car-card {
+            background: white; padding: 12px; border-radius: 12px;
+            text-align: center; cursor: pointer; border: 2px solid transparent;
+            transition: 0.2s;
+        }
+        .car-card.active { border-color: var(--accent); background: #fafafa; }
+        .car-card i { font-size: 20px; display: block; margin-bottom: 8px; }
+        .car-card span { font-size: 12px; font-weight: 500; }
+
+        /* 确认按钮 */
+        .btn-confirm {
+            background: var(--accent); color: white; border: none;
+            padding: 18px; border-radius: 16px; font-size: 16px; font-weight: 600;
+            width: 100%; cursor: pointer; margin-top: auto;
+            transition: transform 0.2s;
+        }
+        .btn-confirm:active { transform: scale(0.98); }
+
+        /* --- 手机端适配 --- */
+        @media (max-width: 768px) {
+            .main-panel {
+                left: 0; right: 0; bottom: 0; top: auto;
+                width: 100%; height: 50vh;
+                border-radius: 24px 24px 0 0;
+                transform: translateY(0);
+                padding: 20px;
+            }
+            .pull-bar {
+                width: 40px; height: 4px; background: #ddd;
+                border-radius: 2px; margin: -10px auto 15px auto;
+            }
+        }
+
+        /* 地图标记脉冲动画 */
+        .pulse-marker {
+            width: 14px; height: 14px;
+            background: var(--accent); border-radius: 50%;
+            border: 2px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.3);
+        }
+        .pulse-marker::after {
+            content: ''; position: absolute; width: 100%; height: 100%;
+            border-radius: 50%; background: var(--accent);
+            animation: pulse-ring 1.5s infinite;
+        }
+        @keyframes pulse-ring {
+            0% { transform: scale(1); opacity: 0.5; }
+            100% { transform: scale(3); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="status-bar">
+        <div class="user-profile"><i class="fa-solid fa-bars"></i></div>
+        <div class="user-profile"><i class="fa-solid fa-bell"></i></div>
+    </div>
+
+    <div id="map"></div>
+
+    <div class="main-panel">
+        <div class="pull-bar"></div>
+        <h1>您想去哪里？</h1>
+
+        <div class="search-container">
+            <div class="input-row">
+                <div class="dot" style="background: #10b981;"></div>
+                <input type="text" value="我的位置：中关村壹号" readonly>
+            </div>
+            <div class="input-row">
+                <div class="dot" style="background: #f59e0b;"></div>
+                <input type="text" placeholder="输入目的地...">
+            </div>
+        </div>
+
+        <div class="car-types">
+            <div class="car-card active">
+                <i class="fa-solid fa-car"></i>
+                <span>快车</span>
+            </div>
+            <div class="car-card">
+                <i class="fa-solid fa-car-side"></i>
+                <span>豪华车</span>
+            </div>
+            <div class="car-card">
+                <i class="fa-solid fa-van-shuttle"></i>
+                <span>拼车</span>
+            </div>
+        </div>
+
+        <div style="margin-bottom: 20px;">
+            <div style="display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 8px;">
+                <span style="color: var(--text-sub);"><i class="fa-solid fa-wallet"></i> 支付方式</span>
+                <span style="color: var(--accent); font-weight: 500;">微信支付 <i class="fa-solid fa-chevron-right" style="font-size: 10px;"></i></span>
+            </div>
+        </div>
+
+        <button class="btn-confirm">预约顺风车</button>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // 1. 初始化地图 (坐标设为北京)
+        const map = L.map('map', {
+            zoomControl: false,
+            attributionControl: false
+        }).setView([39.9042, 116.4074], 13);
+
+        // 2. 加载瓦片图层
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+        // 3. 添加自定义脉冲标记 (模拟当前位置)
+        const myIcon = L.divIcon({
+            className: 'custom-div-icon',
+            html: "<div class='pulse-marker'></div>",
+            iconSize: [14, 14],
+            iconAnchor: [7, 7]
+        });
+        L.marker([39.9042, 116.4074], {icon: myIcon}).addTo(map);
+
+        // 4. 模拟附近的小车
+        const cars = [
+            [39.9142, 116.4174],
+            [39.8942, 116.3974],
+            [39.9000, 116.4274]
+        ];
+
+        cars.forEach(pos => {
+            L.marker(pos, {
+                icon: L.divIcon({
+                    html: '<i class="fa-solid fa-car-side" style="color: #1a1a1a; font-size: 20px; text-shadow: 0 2px 4px rgba(0,0,0,0.2);"></i>',
+                    className: 'car-marker',
+                    iconSize: [20, 20]
+                })
+            }).addTo(map);
+        });
+
+        // 5. 点击卡片交互
+        document.querySelectorAll('.car-card').forEach(card => {
+            card.addEventListener('click', function() {
+                document.querySelectorAll('.car-card').forEach(c => c.classList.remove('active'));
+                this.classList.add('active');
+            });
+        });
+
+        // 6. 自动调整地图缩放以适应移动端
+        window.addEventListener('resize', () => {
+            map.invalidateSize();
+        });
+    </script>
+</body>
+</html>
