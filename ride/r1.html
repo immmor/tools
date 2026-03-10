@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>LIQUID RIDE | 流体出行</title>
+    <style>
+        :root { --fluid-color: #ffffff; --bg: #000000; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: var(--bg); overflow: hidden; color: white; font-family: "Inter", sans-serif; }
+
+        /* 背景流体画布 */
+        #canvas { position: fixed; top: 0; left: 0; filter: url('#goo'); }
+
+        /* SVG 滤镜：实现粘滞的流体质感（粘胶效果） */
+        .svg-filters { position: absolute; visibility: hidden; }
+
+        /* 核心交互环 */
+        .ring-container {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+
+        .main-orb {
+            width: 120px; height: 120px;
+            background: var(--fluid-color);
+            border-radius: 50%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: black;
+            font-weight: 900;
+            font-size: 12px;
+            transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            cursor: pointer;
+            box-shadow: 0 0 50px rgba(255,255,255,0.2);
+        }
+
+        /* 动态数据标签 */
+        .info-panel {
+            position: absolute;
+            bottom: 10%;
+            width: 100%;
+            text-align: center;
+            font-family: monospace;
+            letter-spacing: 2px;
+            pointer-events: none;
+            opacity: 0.6;
+        }
+
+        /* 能量条质感 */
+        .energy-bar {
+            position: absolute;
+            bottom: 0; left: 0;
+            height: 2px;
+            background: var(--fluid-color);
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        /* 手机端适配：全屏手势区 */
+        #touch-zone {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 5;
+        }
+    </style>
+</head>
+<body>
+
+    <svg class="svg-filters">
+        <defs>
+            <filter id="goo">
+                <feGaussianBlur in="SourceGraphic" stdDeviation="12" result="blur" />
+                <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 19 -9" result="goo" />
+                <feComposite in="SourceGraphic" in2="goo" operator="atop" />
+            </filter>
+        </defs>
+    </svg>
+
+    <canvas id="canvas"></canvas>
+
+    <div id="touch-zone"></div>
+
+    <div class="ring-container">
+        <div class="main-orb" id="orb">
+            <span id="price">￥0.00</span>
+            <span style="font-size: 8px; margin-top: 5px;">HOLD TO CALL</span>
+        </div>
+    </div>
+
+    <div class="info-panel">
+        <div id="status">ESTIMATING DIMENSIONS...</div>
+        <div id="coords">DRAG TO SCAN TARGET</div>
+    </div>
+
+    <div class="energy-bar" id="progress"></div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const orb = document.getElementById('orb');
+        const touchZone = document.getElementById('touch-zone');
+        const priceTag = document.getElementById('price');
+        let width, height;
+        let particles = [];
+        let mouse = { x: -1000, y: -1000, active: false };
+
+        function init() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', init);
+        init();
+
+        class Particle {
+            constructor(x, y) {
+                this.x = x; this.y = y;
+                this.baseX = x; this.baseY = y;
+                this.size = Math.random() * 25 + 15;
+                this.vx = 0; this.vy = 0;
+            }
+            update() {
+                let dx = mouse.x - this.x;
+                let dy = mouse.y - this.y;
+                let dist = Math.sqrt(dx*dx + dy*dy);
+                let force = (200 - dist) / 200;
+
+                if (dist < 200 && mouse.active) {
+                    this.vx += dx * force * 0.05;
+                    this.vy += dy * force * 0.05;
+                }
+
+                this.vx += (this.baseX - this.x) * 0.05;
+                this.vy += (this.baseY - this.y) * 0.05;
+                this.vx *= 0.85; this.vy *= 0.85;
+                this.x += this.vx; this.y += this.vy;
+            }
+            draw() {
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // 创建流体粒子
+        function createParticles() {
+            particles = [];
+            const count = 12;
+            for(let i=0; i<count; i++) {
+                const angle = (i / count) * Math.PI * 2;
+                particles.push(new Particle(
+                    width/2 + Math.cos(angle) * 80,
+                    height/2 + Math.sin(angle) * 80
+                ));
+            }
+        }
+        createParticles();
+
+        function animate() {
+            ctx.clearRect(0, 0, width, height);
+            particles.forEach(p => {
+                p.update();
+                p.draw();
+            });
+            requestAnimationFrame(animate);
+        }
+        animate();
+
+        // 交互逻辑
+        let pressTimer;
+        let pressActive = false;
+
+        const handleStart = (e) => {
+            mouse.active = true;
+            pressActive = true;
+            orb.style.transform = "scale(0.8)";
+            let count = 0;
+            pressTimer = setInterval(() => {
+                count += 1.5;
+                if(count <= 100) {
+                    document.getElementById('progress').style.width = count + "%";
+                    priceTag.innerText = "￥" + (count * 0.85).toFixed(2);
+                } else {
+                    confirmRide();
+                    clearInterval(pressTimer);
+                }
+            }, 30);
+        };
+
+        const handleEnd = () => {
+            mouse.active = false;
+            pressActive = false;
+            orb.style.transform = "scale(1)";
+            clearInterval(pressTimer);
+            document.getElementById('progress').style.width = "0%";
+        };
+
+        const handleMove = (e) => {
+            const pos = e.touches ? e.touches[0] : e;
+            mouse.x = pos.clientX;
+            mouse.y = pos.clientY;
+            
+            // 视差效果
+            const dx = (pos.clientX - width/2) / 20;
+            const dy = (pos.clientY - height/2) / 20;
+            orb.parentElement.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+        };
+
+        touchZone.addEventListener('mousedown', handleStart);
+        touchZone.addEventListener('touchstart', (e) => { e.preventDefault(); handleStart(); });
+        window.addEventListener('mouseup', handleEnd);
+        window.addEventListener('touchend', handleEnd);
+        window.addEventListener('mousemove', handleMove);
+        window.addEventListener('touchmove', handleMove);
+
+        function confirmRide() {
+            orb.style.background = "#00ffcc";
+            document.getElementById('status').innerText = "RIDE BREACHED - VEHICLE MATERIALIZING";
+            navigator.vibrate?.(200); // 手机震动
+            setTimeout(() => alert("流体契约已达成，载具正在生成。"), 100);
+        }
+    </script>
+</body>
+</html>

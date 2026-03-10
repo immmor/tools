@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AURORA - 极光信标</title>
+    <style>
+        :root {
+            --accent: #ff9a9e;
+            --deep: #2f334d;
+            --glass: rgba(255, 255, 255, 0.12);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            height: 100vh; overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            color: white;
+        }
+
+        #ocean { position: absolute; width: 100%; height: 100%; z-index: 1; }
+
+        /* UI层 */
+        .overlay {
+            position: relative; z-index: 10;
+            width: 100%; height: 100%;
+            display: flex; flex-direction: column;
+            pointer-events: none;
+        }
+
+        header { padding: 30px; text-align: center; }
+        header h1 { font-weight: 200; letter-spacing: 6px; font-size: 1.2rem; opacity: 0.8; }
+
+        /* 发送区域 */
+        .input-zone {
+            position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
+            width: 90%; max-width: 400px;
+            background: var(--glass); backdrop-filter: blur(20px);
+            padding: 15px; border-radius: 30px;
+            display: flex; align-items: center; pointer-events: auto;
+            border: 1px solid rgba(255,255,255,0.2);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        input {
+            flex: 1; background: none; border: none; color: white;
+            padding: 5px 15px; outline: none; font-size: 14px;
+        }
+
+        .send-btn {
+            background: var(--accent); color: white; border: none;
+            width: 40px; height: 40px; border-radius: 50%;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+        }
+
+        /* 飞机样式 */
+        .plane {
+            position: absolute; cursor: pointer; pointer-events: auto;
+            transition: transform 0.3s; z-index: 5;
+            display: flex; flex-direction: column; align-items: center;
+        }
+
+        .plane-icon { font-size: 24px; filter: drop-shadow(0 0 10px var(--accent)); }
+        
+        .plane-text {
+            background: rgba(255,255,255,0.9); color: #333;
+            padding: 5px 12px; border-radius: 15px; font-size: 12px;
+            margin-top: 10px; white-space: nowrap; opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .plane:hover .plane-text { opacity: 1; }
+
+        /* 弹出的交友卡片 */
+        .match-modal {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.9);
+            width: 85%; max-width: 340px; background: white;
+            border-radius: 25px; padding: 30px; color: #333;
+            opacity: 0; visibility: hidden; transition: 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            z-index: 100; pointer-events: auto;
+        }
+
+        .match-modal.active { opacity: 1; visibility: visible; transform: translate(-50%, -50%) scale(1); }
+
+        .avatar { width: 80px; height: 80px; border-radius: 50%; margin: -70px auto 15px; border: 5px solid white; display: block; }
+        .match-modal h3 { text-align: center; margin-bottom: 5px; }
+        .match-modal p { font-size: 14px; color: #666; text-align: center; margin-bottom: 20px; }
+        
+        .chat-input {
+            width: 100%; padding: 12px; border: 1px solid #eee;
+            border-radius: 10px; margin-bottom: 10px;
+        }
+
+        .btn-confirm {
+            width: 100%; background: #ff7e5f; color: white; border: none;
+            padding: 12px; border-radius: 10px; font-weight: bold; cursor: pointer;
+        }
+
+        /* 适配手机端全屏感 */
+        @media (max-width: 480px) {
+            header h1 { font-size: 1rem; }
+            .input-zone { bottom: 20px; }
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="ocean"></canvas>
+
+    <div class="overlay">
+        <header>
+            <h1>AURORA BEACON</h1>
+            <p style="font-size: 10px; opacity: 0.5; margin-top: 5px;">捕捉划过天际的灵魂信号</p>
+        </header>
+
+        <div class="input-zone">
+            <input type="text" id="my-signal" placeholder="写下现在的感受，放飞它...">
+            <button class="send-btn" onclick="launchPlane()">🚀</button>
+        </div>
+    </div>
+
+    <div class="match-modal" id="modal">
+        <img src="" class="avatar" id="m-avatar">
+        <h3 id="m-name">未知信号</h3>
+        <p id="m-content"></p>
+        <input type="text" class="chat-input" placeholder="输入回复...">
+        <button class="btn-confirm" onclick="closeModal()">建立连接</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('ocean');
+        const ctx = canvas.getContext('2d');
+        const modal = document.getElementById('modal');
+        let width, height, planes = [];
+
+        const mockData = [
+            { name: "夏日萤火", content: "想找个人一起在天台看星星...", avatar: "https://i.pravatar.cc/150?u=a1" },
+            { name: "落日收藏家", content: "今天拍到了超美的晚霞，想分享给你。", avatar: "https://i.pravatar.cc/150?u=a2" },
+            { name: "深夜电台", content: "正在听一首很小众的歌，有人共鸣吗？", avatar: "https://i.pravatar.cc/150?u=a3" },
+            { name: "极客诗人", content: "用代码写了一首诗，读给你听。", avatar: "https://i.pravatar.cc/150?u=a4" }
+        ];
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+
+        class FlyingPlane {
+            constructor(isManual = false, text = "") {
+                this.isManual = isManual;
+                this.text = text || mockData[Math.floor(Math.random()*mockData.length)].content;
+                this.data = mockData[Math.floor(Math.random()*mockData.length)];
+                this.reset();
+            }
+            reset() {
+                this.x = -50;
+                this.y = Math.random() * (height * 0.6) + 100;
+                this.speed = Math.random() * 2 + 1;
+                this.angle = Math.sin(Math.random()) * 0.5;
+                this.dom = document.createElement('div');
+                this.dom.className = 'plane';
+                this.dom.innerHTML = `<span class="plane-icon">✈️</span><span class="plane-text">${this.text}</span>`;
+                this.dom.onclick = () => showMatch(this.data, this.text);
+                document.body.appendChild(this.dom);
+            }
+            update() {
+                this.x += this.speed;
+                this.y += Math.sin(this.x / 50) * 1;
+                this.dom.style.left = this.x + 'px';
+                this.dom.style.top = this.y + 'px';
+                this.dom.style.transform = `rotate(${this.angle}rad)`;
+
+                if (this.x > width + 100) {
+                    this.dom.remove();
+                    return false;
+                }
+                return true;
+            }
+        }
+
+        function launchPlane() {
+            const input = document.getElementById('my-signal');
+            if (!input.value) return;
+            const p = new FlyingPlane(true, input.value);
+            planes.push(p);
+            input.value = "";
+            // 简单动画提示
+            alert("信号已放飞，请等待回应...");
+        }
+
+        function showMatch(data, content) {
+            document.getElementById('m-name').innerText = data.name;
+            document.getElementById('m-content').innerText = `“${content}”`;
+            document.getElementById('m-avatar').src = data.avatar;
+            modal.classList.add('active');
+        }
+
+        function closeModal() {
+            modal.classList.remove('active');
+        }
+
+        function init() {
+            resize();
+            animate();
+            setInterval(() => {
+                if(planes.length < 5) planes.push(new FlyingPlane());
+            }, 3000);
+        }
+
+        function animate() {
+            // 绘制星空背景
+            ctx.fillStyle = 'rgba(15, 12, 41, 0.2)';
+            ctx.fillRect(0, 0, width, height);
+            
+            // 随机星点
+            for(let i=0; i<3; i++) {
+                ctx.fillStyle = "white";
+                ctx.beginPath();
+                ctx.arc(Math.random()*width, Math.random()*height, Math.random()*1.5, 0, Math.PI*2);
+                ctx.fill();
+            }
+
+            planes = planes.filter(p => p.update());
+            requestAnimationFrame(animate);
+        }
+
+        window.addEventListener('resize', resize);
+        init();
+    </script>
+</body>
+</html>
