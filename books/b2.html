@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aura Ultra | 卷曲模拟</title>
+    <style>
+        :root {
+            --paper-bg: #fffcf5;
+            --spine-shadow: rgba(0,0,0,0.15);
+            --curl-shadow: rgba(0,0,0,0.3);
+            --transition: 1.6s cubic-bezier(0.645, 0.045, 0.355, 1);
+        }
+
+        body {
+            background: #121212;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            perspective: 2500px;
+            overflow: hidden;
+            margin: 0;
+        }
+
+        /* 书脊中心线 */
+        .book-container {
+            position: relative;
+            width: 400px;
+            height: 560px;
+            transform-style: preserve-3d;
+        }
+
+        .page {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0; left: 0;
+            transform-origin: left center;
+            transform-style: preserve-3d;
+            transition: var(--transition);
+            cursor: pointer;
+        }
+
+        /* 页面正面 */
+        .page-front {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: var(--paper-bg);
+            backface-visibility: hidden;
+            padding: 40px;
+            box-sizing: border-box;
+            border-radius: 0 5px 5px 0;
+            /* 初始书脊阴影 */
+            box-shadow: inset 10px 0 20px -10px var(--spine-shadow);
+        }
+
+        /* 核心：卷曲阴影层 */
+        .page-front::before {
+            content: '';
+            position: absolute;
+            top: 0; right: 0;
+            width: 50px; height: 100%;
+            background: linear-gradient(to right, transparent, rgba(0,0,0,0.02) 50%, rgba(0,0,0,0.1) 100%);
+            transition: var(--transition);
+        }
+
+        /* 页面背面（翻转后的底色） */
+        .page-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: #f0ede5;
+            transform: rotateY(180deg);
+            backface-visibility: hidden;
+            border-radius: 5px 0 0 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 5rem;
+            color: rgba(0,0,0,0.05);
+            font-weight: bold;
+        }
+
+        /* 翻页时的卷曲特效逻辑 */
+        .page.active {
+            transform: rotateY(-180deg);
+        }
+
+        /* 翻转过程中，模拟纸张弯曲隆起的亮部和暗部变化 */
+        .page.active .page-front {
+            background: linear-gradient(to left, 
+                var(--paper-bg) 0%, 
+                var(--paper-bg) 80%, 
+                #eee 90%, 
+                #fff 95%, 
+                #ccc 100%
+            );
+        }
+
+        /* 页面翻起时的底部投影 */
+        .page-shadow {
+            position: absolute;
+            top: 5%; left: 0; width: 100%; height: 90%;
+            background: rgba(0,0,0,0.4);
+            filter: blur(20px);
+            transform-origin: left center;
+            transition: var(--transition);
+            opacity: 0;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .page.active .page-shadow {
+            opacity: 0.3;
+            transform: rotateY(-180deg) scaleX(0.8);
+        }
+
+        /* 内容样式 */
+        h1 { font-family: "Songti SC", serif; color: #444; margin-bottom: 20px; }
+        p { line-height: 1.8; color: #555; text-align: justify; font-size: 1.1rem; }
+
+        /* 自动播放进度条 */
+        .progress {
+            position: fixed; bottom: 0; left: 0; height: 4px;
+            background: gold; width: 0;
+        }
+    </style>
+</head>
+<body>
+
+<div class="progress" id="progress"></div>
+
+<div class="book-container" id="book">
+    </div>
+
+<script>
+    const book = document.getElementById('book');
+    const contentData = [
+        {title: "卷曲之美", body: "真正的卷曲感来源于光影的非线性变化。当纸张翻起，由于受光角度不同，边缘会产生微小的亮线。"},
+        {title: "物理模拟", body: "我们通过 CSS 渐变模拟了纸张在 120 度角时的隆起阴影。虽然它是平面的，但你的眼睛会被欺骗。"},
+        {title: "沉浸阅读", body: "这种节奏感让阅读变得神圣。文字不再是屏幕上的像素，而是承载于指尖的温度。"},
+        {title: "未完待续", body: "技术的终点是艺术。希望这个版本能满足你对‘炫酷’与‘仿真’的所有幻想。"}
+    ];
+
+    let currentPage = 0;
+
+    function init() {
+        contentData.forEach((data, i) => {
+            const page = document.createElement('div');
+            page.className = 'page';
+            page.style.zIndex = contentData.length - i;
+            page.innerHTML = `
+                <div class="page-shadow"></div>
+                <div class="page-front">
+                    <h1>${data.title}</h1>
+                    <p>${data.body}</p>
+                </div>
+                <div class="page-back">${i+1}</div>
+            `;
+            page.onclick = () => manualFlip();
+            book.appendChild(page);
+        });
+        startAuto();
+    }
+
+    function flip() {
+        const pages = document.querySelectorAll('.page');
+        if (currentPage < pages.length) {
+            pages[currentPage].classList.add('active');
+            currentPage++;
+        } else {
+            pages.forEach(p => p.classList.remove('active'));
+            currentPage = 0;
+        }
+    }
+
+    function manualFlip() {
+        clearInterval(timer);
+        flip();
+        startAuto();
+    }
+
+    let timer;
+    function startAuto() {
+        const bar = document.getElementById('progress');
+        bar.style.transition = 'none';
+        bar.style.width = '0';
+        setTimeout(() => {
+            bar.style.transition = 'width 4s linear';
+            bar.style.width = '100%';
+        }, 50);
+        timer = setInterval(flip, 4000);
+    }
+
+    init();
+</script>
+</body>
+</html>

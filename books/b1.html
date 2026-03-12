@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aura Infinite | 极客翻页阅读器</title>
+    <style>
+        :root {
+            --primary: #00f2fe;
+            --secondary: #4facfe;
+            --bg: #0a0a0c;
+            --card-w: 340px;
+            --card-h: 500px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background-color: var(--bg);
+            background-image: 
+                radial-gradient(circle at 20% 30%, rgba(79, 172, 254, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 70%, rgba(0, 242, 254, 0.1) 0%, transparent 50%);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            color: #fff;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+
+        /* 3D 容器 */
+        .stack-container {
+            position: relative;
+            width: var(--card-w);
+            height: var(--card-h);
+            perspective: 1200px;
+            transition: transform 0.5s;
+        }
+
+        .card {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            padding: 30px;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            transform-origin: center;
+            transition: all 0.8s cubic-bezier(0.23, 1, 0.32, 1);
+            user-select: none;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* 每一页的文字 */
+        .card p {
+            font-size: 1.1rem;
+            line-height: 1.8;
+            color: rgba(255,255,255,0.85);
+            text-align: justify;
+        }
+
+        .card h3 {
+            margin-bottom: 15px;
+            color: var(--primary);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        /* 核心 3D 堆栈逻辑样式 */
+        .card.active { opacity: 1; transform: translate3d(0, 0, 0); z-index: 3; pointer-events: auto; }
+        .card.next { opacity: 0.6; transform: translate3d(40px, 0, -100px); z-index: 2; }
+        .card.prev { opacity: 0; transform: translate3d(-150px, 0, -200px) rotateY(45deg); z-index: 1; }
+        .card.hidden { opacity: 0; transform: translate3d(0, 0, -300px); }
+
+        /* 顶部装饰 */
+        .header {
+            position: fixed;
+            top: 40px;
+            text-align: center;
+        }
+        .header h2 { font-weight: 200; letter-spacing: 8px; font-size: 1rem; opacity: 0.6; }
+
+        /* 底部进度条 */
+        .auto-timer {
+            position: absolute;
+            bottom: 0; left: 0;
+            height: 3px; background: var(--primary);
+            width: 0%;
+            transition: width 4s linear;
+        }
+
+        .controls {
+            margin-top: 50px;
+            display: flex;
+            gap: 20px;
+            z-index: 100;
+        }
+
+        .btn {
+            background: transparent;
+            border: 1px solid var(--primary);
+            color: var(--primary);
+            padding: 8px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+        .btn:hover { background: var(--primary); color: #000; }
+
+        /* 手机端缩小比例 */
+        @media (max-width: 480px) {
+            :root { --card-w: 280px; --card-h: 420px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h2>AURA INFINITE</h2>
+    </div>
+
+    <div class="stack-container" id="stack">
+        </div>
+
+    <div class="controls">
+        <button class="btn" onclick="prev()">PREV</button>
+        <button class="btn" id="pauseBtn" onclick="toggleAuto()">PAUSE</button>
+        <button class="btn" onclick="next()">NEXT</button>
+    </div>
+
+    <script>
+        const texts = [
+            "在此刻，时间仿佛凝固。优雅的代码在后台静默运行，为你呈递极致的感官盛宴。",
+            "设计不仅仅是外观，它是如何运作的。通过 3D 堆栈算法，我们重新定义了阅读。",
+            "每一个像素都经过精准计算，每一次翻转都符合物理逻辑。这就是科技与艺术的交汇点。",
+            "沉浸式体验是数字时代的奢侈品。在这里，只有你和文字，以及永不停歇的律动。",
+            "你可以随时暂停自动滚动，或者手动切换。掌控权始终在你的指尖。"
+        ];
+
+        let currentIndex = 0;
+        let isAuto = true;
+        let timer = null;
+        const stack = document.getElementById('stack');
+
+        // 初始化页面
+        function init() {
+            stack.innerHTML = '';
+            texts.forEach((txt, i) => {
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.innerHTML = `
+                    <h3>PAGE ${i + 1}</h3>
+                    <p>${txt}</p>
+                    <div class="auto-timer" id="t-${i}"></div>
+                `;
+                stack.appendChild(card);
+            });
+            updateClasses();
+            startTimer();
+        }
+
+        function updateClasses() {
+            const cards = document.querySelectorAll('.card');
+            cards.forEach((card, i) => {
+                card.classList.remove('active', 'next', 'prev', 'hidden');
+                
+                if (i === currentIndex) {
+                    card.classList.add('active');
+                } else if (i === (currentIndex + 1) % cards.length) {
+                    card.classList.add('next');
+                } else if (i === (currentIndex - 1 + cards.length) % cards.length) {
+                    card.classList.add('prev');
+                } else {
+                    card.classList.add('hidden');
+                }
+            });
+        }
+
+        function next() {
+            const currentTimer = document.getElementById(`t-${currentIndex}`);
+            if(currentTimer) currentTimer.style.width = '0%';
+            currentIndex = (currentIndex + 1) % texts.length;
+            updateClasses();
+            if(isAuto) resetTimer();
+        }
+
+        function prev() {
+            currentIndex = (currentIndex - 1 + texts.length) % texts.length;
+            updateClasses();
+            if(isAuto) resetTimer();
+        }
+
+        // 自动翻页逻辑
+        function startTimer() {
+            if(!isAuto) return;
+            const currentTimer = document.getElementById(`t-${currentIndex}`);
+            if(currentTimer) {
+                setTimeout(() => currentTimer.style.width = '100%', 50);
+            }
+            timer = setTimeout(next, 4000); // 4秒翻一页
+        }
+
+        function resetTimer() {
+            clearTimeout(timer);
+            const timers = document.querySelectorAll('.auto-timer');
+            timers.forEach(t => t.style.width = '0%');
+            startTimer();
+        }
+
+        function toggleAuto() {
+            isAuto = !isAuto;
+            document.getElementById('pauseBtn').innerText = isAuto ? 'PAUSE' : 'PLAY';
+            if(isAuto) startTimer(); else clearTimeout(timer);
+        }
+
+        // 鼠标悬停暂停
+        stack.onmouseenter = () => { if(isAuto) clearTimeout(timer); };
+        stack.onmouseleave = () => { if(isAuto) startTimer(); };
+
+        init();
+    </script>
+</body>
+</html>

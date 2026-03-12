@@ -42,6 +42,7 @@ export default {
       if (path === '/api/register' && request.method === 'POST') {
         const params = await request.json();
         const { username, password } = params;
+        const inviter = url.searchParams.get('inviter');
         
         if (!username || !password) {
           return resJson({ success: false, message: '用户名和密码不能为空！' }, 400);
@@ -57,14 +58,67 @@ export default {
           return resJson({ success: false, message: '用户名已存在！' }, 409);
         }
 
+        // 如果有邀请人，检查邀请人是否存在
+        if (inviter) {
+          const inviterUser = await DB
+            .prepare('SELECT * FROM user WHERE username = ?')
+            .bind(inviter)
+            .first();
+          
+          if (!inviterUser) {
+            return resJson({ success: false, message: '邀请人不存在！' }, 400);
+          }
+        }
+
+        // 生成唯一的6位邀请码（字母+数字）
+        const generateInviteCode = () => {
+          const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+          let code = '';
+          for (let i = 0; i < 6; i++) {
+            code += chars.charAt(Math.floor(Math.random() * chars.length));
+          }
+          return code;
+        };
+
+        // 确保邀请码唯一
+        let inviteCode = generateInviteCode();
+        let isUnique = false;
+        let attempts = 0;
+        
+        while (!isUnique && attempts < 10) {
+          const existingInvite = await DB
+            .prepare('SELECT * FROM user WHERE invite_code = ?')
+            .bind(inviteCode)
+            .first();
+          
+          if (!existingInvite) {
+            isUnique = true;
+          } else {
+            inviteCode = generateInviteCode();
+            attempts++;
+          }
+        }
+
+        if (!isUnique) {
+          return resJson({ success: false, message: '邀请码生成失败，请重试！' }, 500);
+        }
+
         // 插入新用户（默认余额0，VIP过期时间为null，流量限制相关字段）
         const result = await DB
-          .prepare('INSERT INTO user (username, password, balance, v_expire_date, monthly_quota, used_quota, quota_reset_date) VALUES (?, ?, 0, NULL, 307200, 0, ?)')
-          .bind(username, password, new Date().toISOString().slice(0, 19).replace('T', ' '))
+          .prepare('INSERT INTO user (username, password, balance, v_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code) VALUES (?, ?, 0, NULL, 307200, 0, ?, ?)')
+          .bind(username, password, new Date().toISOString().slice(0, 19).replace('T', ' '), inviteCode)
           .run();
 
         if (result.success) {
-          return resJson({ success: true, message: '注册成功！', userInfo: { id: result.meta.last_row_id, username: username } });
+          return resJson({ 
+            success: true, 
+            message: '注册成功！', 
+            userInfo: { 
+              id: result.meta.last_row_id, 
+              username: username,
+              invite_code: inviteCode
+            }
+          });
         } else {
           return resJson({ success: false, message: '注册失败，请重试！' }, 500);
         }
@@ -81,12 +135,21 @@ export default {
 
         // 查询账号：包含余额和VIP信息
         const user = await DB
-          .prepare('SELECT rowid, username, balance, v_expire_date FROM user WHERE username = ? AND password = ?')
+          .prepare('SELECT rowid, username, balance, v_expire_date, invite_code FROM user WHERE username = ? AND password = ?')
           .bind(username, password)
           .first();
 
         if (user) {
-          return resJson({ success: true, message: '登录成功！', userInfo: { id: user.id, username: user.username, balance: user.balance } });
+          return resJson({ 
+            success: true, 
+            message: '登录成功！', 
+            userInfo: { 
+              id: user.rowid, 
+              username: user.username, 
+              balance: user.balance,
+              invite_code: user.invite_code
+            } 
+          });
         } else {
           return resJson({ success: false, message: '用户名或密码错误' }, 401);
         }
@@ -158,11 +221,44 @@ export default {
             .run();
           
           if (result.success && result.meta.changes > 0) {
-            // 查询更新后的用户信息
+            // 查询更新后的用户信息（包含invite_code字段）
             const updatedUser = await DB
-              .prepare('SELECT username, balance, v_expire_date FROM user WHERE username = ?')
+              .prepare('SELECT username, balance, v_expire_date, invite_code FROM user WHERE username = ?')
               .bind(username)
               .first();
+            
+            // 如果有邀请码，查找邀请人并赠送一个月VIP
+            if (updatedUser.invite_code) {
+              try {
+                // 通过邀请码查找邀请人
+                const inviterUser = await DB
+                  .prepare('SELECT username, v_expire_date FROM user WHERE invite_code = ?')
+                  .bind(updatedUser.invite_code)
+                  .first();
+                
+                if (inviterUser) {
+                  const now = new Date();
+                  let newInviterExpireDate = new Date();
+                  
+                  // 如果邀请人当前VIP未过期，则在原基础上延长
+                  if (inviterUser.v_expire_date && new Date(inviterUser.v_expire_date) > now) {
+                    newInviterExpireDate = new Date(inviterUser.v_expire_date);
+                    newInviterExpireDate.setDate(newInviterExpireDate.getDate() + 30);
+                  } else {
+                    // 如果邀请人VIP已过期或未开通，则从现在开始计算
+                    newInviterExpireDate.setDate(now.getDate() + 30);
+                  }
+                  
+                  // 更新邀请人的VIP过期时间（免费赠送，不扣余额）
+                  await DB
+                    .prepare('UPDATE user SET v_expire_date = ? WHERE username = ?')
+                    .bind(newInviterExpireDate.toISOString().slice(0, 19).replace('T', ' '), inviterUser.username)
+                    .run();
+                }
+              } catch (inviteErr) {
+                console.error('赠送邀请人VIP失败:', inviteErr);
+              }
+            }
             
             return resJson({
               code: 200,
@@ -515,6 +611,197 @@ export default {
         }
       }
 
+      // ========== 保存合同接口 ==========
+      if (path === '/api/contract/save' && request.method === 'POST') {
+        try {
+          const params = await request.json();
+          const { username, contractTitle, contractContent, signatureImages } = params;
+          
+          if (!username || !contractContent) {
+            return resJson({ code: 400, msg: '缺少必要参数' }, 400);
+          }
+          
+          const contractId = 'contract_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+          const shareToken = Math.random().toString(36).substr(2, 16) + Date.now().toString(36);
+          const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+          
+          // 插入合同记录
+          const result = await DB
+            .prepare('INSERT INTO contracts (contract_id, username, contract_title, contract_content, signature_images, share_token, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+            .bind(contractId, username, contractTitle || '未命名合同', contractContent, JSON.stringify(signatureImages || {}), shareToken, now, now)
+            .run();
+          
+          if (result.success) {
+            return resJson({
+              code: 200,
+              msg: '合同保存成功',
+              data: {
+                contractId: contractId,
+                shareToken: shareToken,
+                shareUrl: `/api/contract/view?token=${shareToken}`
+              }
+            });
+          } else {
+            return resJson({ code: 500, msg: '保存失败，请重试' }, 500);
+          }
+        } catch (err) {
+          console.error('保存合同错误:', err);
+          return resJson({ code: 500, msg: '保存失败', error: err.message }, 500);
+        }
+      }
+
+      // ========== 查看分享合同接口 ==========
+      if (path === '/api/contract/view' && request.method === 'GET') {
+        try {
+          const token = url.searchParams.get('token');
+          
+          if (!token) {
+            return resJson({ code: 400, msg: '缺少 token 参数' }, 400);
+          }
+          
+          const contract = await DB
+            .prepare('SELECT * FROM contracts WHERE share_token = ?')
+            .bind(token)
+            .first();
+          
+          if (!contract) {
+            return resJson({ code: 404, msg: '合同不存在' }, 404);
+          }
+          
+          // 增加查看次数
+          await DB
+            .prepare('UPDATE contracts SET view_count = view_count + 1 WHERE share_token = ?')
+            .bind(token)
+            .run();
+          
+          // 返回HTML页面而不是JSON
+          const html = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${contract.contract_title}</title>
+    <style>
+        body {
+            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background-color: #f8fafc;
+            margin: 0;
+            padding: 20px;
+            color: #1e293b;
+        }
+        .contract-paper {
+            background: white;
+            padding: 60px 80px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+            border-radius: 4px;
+            line-height: 1.8;
+        }
+        h1 { text-align: center; color: #0f172a; margin-bottom: 40px; }
+        h2 { border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-top: 30px; }
+        .editable-field {
+            background-color: #fffbeb;
+            border-bottom: 1px dashed #f59e0b;
+            padding: 0 5px;
+        }
+        .signature-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            margin-top: 50px;
+        }
+        .sig-box {
+            border: 2px dashed #cbd5e1;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        @media (max-width: 768px) {
+            .contract-paper { padding: 30px 20px; }
+            .signature-section { grid-template-columns: 1fr; }
+        }
+        @media print {
+            body { background: white; padding: 0; }
+            .contract-paper { box-shadow: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="contract-paper">
+${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
+    </div>
+</body>
+</html>`;
+          
+          return new Response(html, {
+            headers: {
+              'Content-Type': 'text/html; charset=utf-8',
+              'Access-Control-Allow-Origin': '*'
+            }
+          });
+        } catch (err) {
+          return resJson({ code: 500, msg: '查询失败', error: err.message }, 500);
+        }
+      }
+
+      // ========== 获取用户合同列表接口 ==========
+      if (path === '/api/contract/list' && request.method === 'GET') {
+        try {
+          const username = url.searchParams.get('username');
+          
+          if (!username) {
+            return resJson({ code: 400, msg: '缺少 username 参数' }, 400);
+          }
+          
+          const contracts = await DB
+            .prepare('SELECT contract_id, contract_title, share_token, created_at, updated_at, view_count FROM contracts WHERE username = ? ORDER BY created_at DESC')
+            .bind(username)
+            .all();
+          
+          return resJson({
+            code: 200,
+            msg: '查询成功',
+            data: contracts.results || []
+          });
+        } catch (err) {
+          return resJson({ code: 500, msg: '查询失败', error: err.message }, 500);
+        }
+      }
+
+      // ========== 删除合同接口 ==========
+      if (path === '/api/contract/delete' && request.method === 'POST') {
+        try {
+          const params = await request.json();
+          const { username, contractId } = params;
+          
+          if (!username || !contractId) {
+            return resJson({ code: 400, msg: '缺少必要参数' }, 400);
+          }
+          
+          // 验证合同所有权
+          const contract = await DB
+            .prepare('SELECT * FROM contracts WHERE contract_id = ? AND username = ?')
+            .bind(contractId, username)
+            .first();
+          
+          if (!contract) {
+            return resJson({ code: 404, msg: '合同不存在或无权删除' }, 404);
+          }
+          
+          const result = await DB
+            .prepare('DELETE FROM contracts WHERE contract_id = ? AND username = ?')
+            .bind(contractId, username)
+            .run();
+          
+          if (result.success) {
+            return resJson({ code: 200, msg: '删除成功' });
+          } else {
+            return resJson({ code: 500, msg: '删除失败' }, 500);
+          }
+        } catch (err) {
+          return resJson({ code: 500, msg: '删除失败', error: err.message }, 500);
+        }
+      }
+
       // ========== 默认接口提示 ==========
       return resJson({
         code: 200,
@@ -524,10 +811,14 @@ export default {
           'POST /api/login → 登录（传{username,password}）',
           'POST /api/register → 注册（传{username,password}）',
           'GET /api/get-users → 查看所有用户',
-          'POST /api/pay/build-url → 构建支付URL',
+          'POST /api/pay/build-url → 构建支付 URL',
           'POST /api/recharge → 充值（传{username,amount}）',
           'GET /api/balance?username=xxx → 查询余额',
-          'GET /api/vip-status?username=xxx → 查询VIP状态',
+          'GET /api/vip-status?username=xxx → 查询 VIP 状态',
+          'POST /api/contract/save → 保存合同',
+          'GET /api/contract/view?token=xxx → 查看分享合同',
+          'GET /api/contract/list?username=xxx → 获取合同列表',
+          'POST /api/contract/delete → 删除合同',
           'POST /api/open-vip → 开通VIP（传{username,duration}）',
           'GET /vip/clash?username=xxx → 获取VIP Clash节点',
           'POST /chat → AI聊天接口（传{prompt,stream}）',

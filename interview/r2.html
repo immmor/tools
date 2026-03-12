@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>React AI Agent Mental Map</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Fira+Code:wght@400&display=swap');
+        body { background-color: #0f172a; color: #f1f5f9; font-family: 'Inter', sans-serif; }
+        .node-card { 
+            background: #1e293b; 
+            border: 1px solid #334155; 
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+        }
+        .node-card:hover { 
+            border-color: #38bdf8; 
+            box-shadow: 0 0 20px rgba(56, 189, 248, 0.2);
+            transform: scale(1.02);
+        }
+        .connector { border-left: 2px dashed #334155; margin-left: 20px; padding-left: 20px; }
+        .logic-tag { font-size: 10px; font-weight: bold; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; }
+        .bg-react { background: rgba(56, 189, 248, 0.1); color: #38bdf8; }
+        .bg-agent { background: rgba(168, 85, 247, 0.1); color: #a855f7; }
+        #detail-view { display: none; position: fixed; right: 2rem; top: 5rem; width: 400px; z-index: 50; }
+    </style>
+</head>
+<body class="p-6 md:p-12">
+
+    <div id="detail-view" class="bg-slate-900 border border-sky-500 p-6 rounded-2xl shadow-2xl animate-in slide-in-from-right">
+        <h3 id="view-title" class="text-xl font-bold text-sky-400 mb-2"></h3>
+        <div id="view-body" class="text-sm text-slate-300 leading-relaxed"></div>
+        <div class="mt-4 pt-4 border-t border-slate-800">
+            <p class="text-[10px] text-slate-500">面试官可能会问：</p>
+            <p id="view-q" class="text-xs text-amber-400 italic mt-1"></p>
+        </div>
+    </div>
+
+    <header class="max-w-5xl mx-auto mb-12">
+        <h1 class="text-4xl font-black tracking-tight mb-2 bg-gradient-to-r from-sky-400 to-purple-500 bg-clip-text text-transparent">
+            React x AI Agent Architecture
+        </h1>
+        <p class="text-slate-400">点击节点，建立“前端组件”与“Agent 逻辑”的深度映射记忆</p>
+    </header>
+
+    <main class="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-12">
+        
+        <div class="space-y-8">
+            <h2 class="text-xs font-bold text-slate-500 uppercase tracking-widest px-2">React Ecosystem Nodes</h2>
+
+            <div class="node-card p-5 rounded-xl" onclick="showInfo('State & Ref', '<b>useState:</b> 用于管理对话列表、加载状态。这是 Agent 的“短期记忆”。<br><br><b>useRef:</b> 关键点！用于存储 AbortController（取消请求）或 WebSocket 实例。它不触发重绘，适合存储与 UI 无关的底层控制逻辑。', '如何手动停止一个正在生成的流？（答：通过 Ref 里的 AbortController 调用 abort）')">
+                <div class="flex gap-2 mb-2">
+                    <span class="logic-tag bg-react">Hooks</span>
+                    <span class="logic-tag bg-agent">Memory</span>
+                </div>
+                <h3 class="text-lg font-bold">useState & useRef</h3>
+                <p class="text-sm text-slate-400">管理 Agent 上下文与持久化控制权</p>
+            </div>
+
+            <div class="connector">
+                <div class="node-card p-5 rounded-xl" onclick="showInfo('useEffect', '<b>面试重点：</b> 在 AI 开发中，useEffect 常用于处理 SSE 链接的建立与销毁。必须返回 Cleanup 函数来关闭 Stream，否则会导致严重的内存泄漏和 Token 浪费。', '组件卸载时如果不关闭 SSE 会发生什么？')">
+                    <div class="flex gap-2 mb-2">
+                        <span class="logic-tag bg-react">Lifecycle</span>
+                        <span class="logic-tag bg-agent">Monitor</span>
+                    </div>
+                    <h3 class="text-lg font-bold">useEffect (The Listener)</h3>
+                    <p class="text-sm text-slate-400">副作用管理：监控 API 响应与自动滚动</p>
+                </div>
+            </div>
+
+            <div class="node-card p-5 rounded-xl" onclick="showInfo('State Management', '对于多 Agent 协同系统（如 AutoGPT），全局状态管理是核心。你需要管理：<br>1. 当前激活的 Agent ID<br>2. 共享的知识库索引<br>3. 全局配置（API Keys, Model Selection）', '你会如何设计一个支持多 Agent 切换的全局状态？')">
+                <div class="flex gap-2 mb-2">
+                    <span class="logic-tag bg-react">Global State</span>
+                    <span class="logic-tag bg-agent">Collaboration</span>
+                </div>
+                <h3 class="text-lg font-bold">Context / Zustand</h3>
+                <p class="text-sm text-slate-400">跨组件的 Agent 调度与参数传递</p>
+            </div>
+        </div>
+
+        <div class="space-y-8">
+            <h2 class="text-xs font-bold text-slate-500 uppercase tracking-widest px-2">Agent Implementation</h2>
+
+            <div class="node-card p-5 rounded-xl border-sky-500/50" onclick="showInfo('Streaming', '<b>原理：</b> 使用 Fetch API 的 body.getReader() 获取 ReadableStream。<br><br><b>优化：</b> 采用“缓冲区”策略，避免每收到一个字符就重新渲染 UI，而是在一定毫秒内合并更新，提升 FPS。', '如何在高频流式输出时保证页面不卡顿？')">
+                <div class="flex gap-2 mb-2">
+                    <span class="logic-tag bg-agent">Performance</span>
+                    <span class="logic-tag bg-react">Optimization</span>
+                </div>
+                <h3 class="text-lg font-bold">流式渲染解析</h3>
+                <p class="text-sm text-slate-400">将二进制流转化为打字机效果</p>
+            </div>
+
+            <div class="connector">
+                <div class="node-card p-5 rounded-xl" onclick="showInfo('Generative UI', '这是前端 AI 开发的高级阶段。Agent 返回特定格式（如 JSON），前端使用 <b>Dynamic Import</b> 或一个 Map 映射表，根据模型指令动态挂载对应 React 组件。', '解释一下 Vercel AI SDK 中的 Generative UI 实现思路。')">
+                    <div class="flex gap-2 mb-2">
+                        <span class="logic-tag bg-agent">Decision</span>
+                        <span class="logic-tag bg-react">Dynamic Component</span>
+                    </div>
+                    <h3 class="text-lg font-bold">生成式 UI (Dynamic)</h3>
+                    <p class="text-sm text-slate-400">从返回文本到返回交互式组件的跨越</p>
+                </div>
+            </div>
+
+            <div class="node-card p-5 rounded-xl" onclick="showInfo('Virtualization', '当 Agent 进行数百轮对话后，DOM 节点过载。使用 react-window 或 tanstack-virtual。只渲染可见视口内的消息气泡。', '长对话场景下，如何保证滚动性能？')">
+                <div class="flex gap-2 mb-2">
+                    <span class="logic-tag bg-react">UX</span>
+                    <span class="logic-tag bg-agent">Stability</span>
+                </div>
+                <h3 class="text-lg font-bold">虚拟列表 (Virtual List)</h3>
+                <p class="text-sm text-slate-400">处理超长对话上下文的渲染瓶颈</p>
+            </div>
+        </div>
+    </main>
+
+    <footer class="mt-20 text-center border-t border-slate-800 pt-8 max-w-5xl mx-auto">
+        <div class="inline-flex gap-4 items-center grayscale opacity-50">
+            <span class="font-bold">Next.js</span>
+            <span class="font-bold">React Server Components</span>
+            <span class="font-bold">Vercel AI SDK</span>
+            <span class="font-bold">Tailwind</span>
+        </div>
+    </footer>
+
+    <script>
+        function showInfo(title, body, q) {
+            const view = document.getElementById('detail-view');
+            document.getElementById('view-title').innerHTML = title;
+            document.getElementById('view-body').innerHTML = body;
+            document.getElementById('view-q').innerText = q;
+            view.style.display = 'block';
+            event.stopPropagation();
+        }
+        window.onclick = function() {
+            document.getElementById('detail-view').style.display = 'none';
+        }
+    </script>
+</body>
+</html>

@@ -139,6 +139,12 @@
                             </div>
                         </div>
                     </div>
+                    <div class="px-4 py-3 border-b border-zinc-800 text-center">
+                        <div id="dropdown-invite" class="text-xs text-zinc-500 hidden">
+                            <div class="mb-1">邀请码: <span id="dropdown-invite-code" class="text-[var(--neon-blue)] font-bold text-[10px]">---</span></div>
+                            <!-- <button onclick="navigator.clipboard.writeText(window.location.origin + '?invite=' + document.getElementById('dropdown-invite-code').textContent)" class="text-[var(--neon-green)] hover:underline text-[10px]">复制链接</button> -->
+                        </div>
+                    </div>
                     <a href="https://immmor.com/pay" class="dropdown-item block px-4 py-3 text-sm border-b border-zinc-800 text-center">充值</a>
                     <button id="logout-btn" class="dropdown-item block w-full px-4 py-3 text-sm text-[var(--neon-red)] hover:text-[var(--neon-red)] text-center">退出</button>
                 </div>
@@ -552,9 +558,16 @@ navigator.clipboard.writeText('${vipV2rayUrl}')" class="flex-1 bg-[var(--neon-bl
                     els.btn.textContent = user.username;
                     updateBalance();
                     updateQuota();
+                    if (user.invite_code) {
+                        const inviteEl = document.getElementById('dropdown-invite');
+                        const inviteCodeEl = document.getElementById('dropdown-invite-code');
+                        inviteCodeEl.textContent = user.invite_code;
+                        inviteEl.classList.remove('hidden');
+                    }
                 } else {
                     els.btn.textContent = 'Login';
                     els.dropdown.classList.add('hidden');
+                    document.getElementById('dropdown-invite').classList.add('hidden');
                 }
             };
             
@@ -586,6 +599,10 @@ navigator.clipboard.writeText('${vipV2rayUrl}')" class="flex-1 bg-[var(--neon-bl
                 const [user, pass] = [els.user.value.trim(), els.pass.value.trim()];
                 if (!user || !pass) return showMsg('请填写用户名和密码', true);
                 
+                // 从URL获取邀请码参数
+                const urlParams = new URLSearchParams(window.location.search);
+                const inviteCode = urlParams.get('invite');
+                
                 setLoading(true);
                 els.msg.classList.add('hidden');
                 
@@ -593,7 +610,7 @@ navigator.clipboard.writeText('${vipV2rayUrl}')" class="flex-1 bg-[var(--neon-bl
                     const res = await fetch(`${API}${isLogin ? '/api/login' : '/api/register'}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ username: user, password: pass })
+                        body: JSON.stringify({ username: user, password: pass, inviteCode: inviteCode })
                     });
                     
                     const data = await res.json();
@@ -603,6 +620,17 @@ navigator.clipboard.writeText('${vipV2rayUrl}')" class="flex-1 bg-[var(--neon-bl
                         if (isLogin) {
                             localStorage.setItem('userInfo', JSON.stringify(data.userInfo));
                             updateNav(data.userInfo);
+                            // 登录后查询邀请码
+                            fetch(`${API}/api/get-user?name=${encodeURIComponent(data.userInfo.username)}`)
+                                .then(res => res.json())
+                                .then(userData => {
+                                    if (userData.code === 200 && userData.data.invite_code) {
+                                        const savedInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
+                                        savedInfo.invite_code = userData.data.invite_code;
+                                        localStorage.setItem('userInfo', JSON.stringify(savedInfo));
+                                        updateNav(savedInfo);
+                                    }
+                                }).catch(() => {});
                             setTimeout(closeModal, 1000);
                         } else {
                             setTimeout(toggleMode, 1000);
