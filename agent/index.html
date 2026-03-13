@@ -199,37 +199,18 @@
         </div>
 
         <main class="flex-1 flex flex-col bg-[#F7F7F7] p-4 lg:p-8 relative overflow-hidden">
-            <div class="flex-1 overflow-y-auto space-y-6 pb-20 px-2">
-                
-                <div class="flex items-start gap-4">
-                    <div class="w-12 h-12 brutal-card flex-shrink-0 flex items-center justify-center bg-blue-400 text-white text-xl">
-                        <i class="fas fa-robot"></i>
-                    </div>
-                    <div class="brutal-card p-5 max-w-2xl font-bold leading-tight">
-                        <p class="text-xs font-black text-gray-500 mb-1">Default Agent</p>
-                        <p>READY_TO_PROCEED. 系统已就绪。新野兽派风格加载完成。这种风格不讲究呼吸感，讲究的是【态度】。请输入指令。</p>
-                    </div>
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-black uppercase italic">Chat</h2>
+                <div class="flex gap-2">
+                    <button id="new-chat-btn" class="brutal-btn px-3 py-1 text-xs bg-[#4ECDC4]">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                    <button id="load-history-btn" class="brutal-btn px-3 py-1 text-xs bg-[#FFDE03]">
+                        <i class="fas fa-history"></i>
+                    </button>
                 </div>
-
-                <div class="flex items-start gap-4 flex-row-reverse">
-                    <div class="w-12 h-12 brutal-card flex-shrink-0 flex items-center justify-center bg-yellow-400 text-black text-xl">
-                        <i class="fas fa-terminal"></i>
-                    </div>
-                    <div class="brutal-card p-5 max-w-2xl font-bold bg-white italic shadow-[6px_6px_0px_0px_rgba(78,205,196,1)]">
-                        <p class="text-xs font-black text-gray-500 mb-1">User</p>
-                        告诉我，为什么这个界面这么多黑框？
-                    </div>
-                </div>
-
-                <div class="flex items-start gap-4">
-                    <div class="w-12 h-12 brutal-card flex-shrink-0 flex items-center justify-center bg-blue-400 text-white text-xl">
-                        <i class="fas fa-robot"></i>
-                    </div>
-                    <div class="brutal-card p-5 max-w-2xl font-bold leading-tight">
-                        <p class="text-xs font-black text-gray-500 mb-1">Default Agent</p>
-                        <p>因为黑框代表了坚固和明确。在新野兽派中，我们拒绝微妙，我们选择直接。这种 UI 极其适合高效率的 Agent 调试，因为每一个交互点都像石头一样清晰。</p>
-                    </div>
-                </div>
+            </div>
+            <div class="flex-1 overflow-y-auto space-y-6 pb-20 px-2" id="chat-container">
             </div>
 
             <div class="absolute bottom-4 left-0 right-0 px-4 lg:px-12">
@@ -277,7 +258,6 @@
         const toggleSettingsBtn = document.getElementById('toggle-settings-btn');
         const toggleTelemetryBtn = document.getElementById('toggle-telemetry-btn');
         const chatInput = document.getElementById('chat-input');
-        const chatContainer = document.querySelector('.flex-1.overflow-y-auto');
         const aiUrlInput = document.getElementById('ai-url');
         const apiKeyInput = document.getElementById('api-key');
         const modelEngineSelect = document.getElementById('model-engine');
@@ -296,6 +276,11 @@
                 { role: 'assistant', content: 'READY_TO_PROCEED. 系统已就绪。新野兽派风格加载完成。这种风格不讲究呼吸感，讲究的是【态度】。请输入指令。' }
             ]
         };
+        
+        let chatSessions = [];
+        let currentSessionId = null;
+        
+        let chatContainer = document.querySelector('#chat-container');
         
         function loadAgents() {
             const savedAgents = localStorage.getItem('agents');
@@ -317,6 +302,8 @@
                 }
             }
             
+            loadChatSessions();
+            
             agents.forEach(agent => {
                 if (!conversationHistory[agent.id]) {
                     conversationHistory[agent.id] = [
@@ -331,6 +318,7 @@
         
         function saveAgents() {
             localStorage.setItem('agents', JSON.stringify(agents));
+            saveChatSessions();
         }
         
         function renderAgentList() {
@@ -391,10 +379,20 @@
             
             agents.push(newAgent);
             activeAgentId = newAgent.id;
-            conversationHistory[newAgent.id] = [
+            
+            const defaultHistory = [
                 { role: 'system', content: newAgent.role },
                 { role: 'assistant', content: `${newAgent.name} is ready. I can help you with your tasks.` }
             ];
+            conversationHistory[newAgent.id] = defaultHistory;
+            
+            if (currentSessionId) {
+                const session = chatSessions.find(s => s.id === currentSessionId);
+                if (session) {
+                    session.history = [...defaultHistory];
+                    saveChatSessions();
+                }
+            }
             
             saveAgents();
             renderAgentList();
@@ -412,6 +410,15 @@
             selectedCollabAgents = [];
             document.getElementById('collab-mode-btn').classList.remove('hidden');
             document.getElementById('exit-collab-btn').classList.add('hidden');
+            
+            if (currentSessionId) {
+                const session = chatSessions.find(s => s.id === currentSessionId);
+                if (session) {
+                    session.agentId = agentId;
+                    saveChatSessions();
+                }
+            }
+            
             saveAgents();
             renderAgentList();
         }
@@ -533,6 +540,18 @@
                 chatContainer.insertAdjacentHTML('beforeend', createCollabSummaryMessage(summaryResponse));
                 scrollToBottom();
                 
+                if (currentSessionId) {
+                    const session = chatSessions.find(s => s.id === currentSessionId);
+                    if (session) {
+                        session.history.push({ role: 'user', content: message });
+                        responses.forEach(({ agent, response }) => {
+                            session.history.push({ role: 'assistant', content: `${agent.name}: ${response}` });
+                        });
+                        session.history.push({ role: 'assistant', content: summaryResponse });
+                        saveChatSessions();
+                    }
+                }
+                
             } catch (error) {
                 if (loadingMsg) loadingMsg.remove();
                 chatContainer.insertAdjacentHTML('beforeend', createCollabSummaryMessage(`ERROR: ${error.message}`));
@@ -611,17 +630,34 @@
         function updateConversationHistory(role, content) {
             const agent = agents.find(a => a.id === activeAgentId);
             if (!agent) {
+                if (!conversationHistory['default']) {
+                    conversationHistory['default'] = [];
+                }
                 conversationHistory['default'].push({ role, content });
+                
+                if (currentSessionId) {
+                    const session = chatSessions.find(s => s.id === currentSessionId);
+                    if (session) {
+                        session.history.push({ role, content });
+                        saveChatSessions();
+                    }
+                }
                 return;
             }
             
             if (!conversationHistory[agent.id]) {
-                conversationHistory[agent.id] = [
-                    { role: 'system', content: agent.role }
-                ];
+                conversationHistory[agent.id] = [];
             }
             
             conversationHistory[agent.id].push({ role, content });
+            
+            if (currentSessionId) {
+                const session = chatSessions.find(s => s.id === currentSessionId);
+                if (session) {
+                    session.history.push({ role, content });
+                    saveChatSessions();
+                }
+            }
         }
         
         function clearConversationHistory() {
@@ -631,6 +667,14 @@
                     { role: 'system', content: '你是一个高效、直接的AI助手，用简洁有力的方式回答问题。' },
                     { role: 'assistant', content: 'READY_TO_PROCEED. 系统已就绪。新野兽派风格加载完成。这种风格不讲究呼吸感，讲究的是【态度】。请输入指令。' }
                 ];
+                
+                if (currentSessionId) {
+                    const session = chatSessions.find(s => s.id === currentSessionId);
+                    if (session) {
+                        session.history = [...conversationHistory['default']];
+                        saveChatSessions();
+                    }
+                }
                 return;
             }
             
@@ -639,11 +683,177 @@
                 { role: 'assistant', content: `${agent.name} is ready. I can help you with your tasks.` }
             ];
             
+            if (currentSessionId) {
+                const session = chatSessions.find(s => s.id === currentSessionId);
+                if (session) {
+                    session.history = [...conversationHistory[agent.id]];
+                    saveChatSessions();
+                }
+            }
+            
             if (collabMode) {
                 collabMode = false;
                 selectedCollabAgents = [];
                 document.getElementById('collab-mode-btn').classList.remove('hidden');
                 document.getElementById('exit-collab-btn').classList.add('hidden');
+            }
+        }
+        
+        function createNewChat() {
+            const sessionId = Date.now().toString();
+            const sessionName = `Chat_${sessionId.slice(-6)}`;
+            
+            chatSessions.push({
+                id: sessionId,
+                name: sessionName,
+                timestamp: Date.now(),
+                agentId: activeAgentId,
+                history: []
+            });
+            
+            currentSessionId = sessionId;
+            saveChatSessions();
+            
+            chatContainer.innerHTML = '';
+            
+            const agent = agents.find(a => a.id === activeAgentId);
+            if (agent) {
+                chatContainer.insertAdjacentHTML('beforeend', createAIMessage(`${agent.name} is ready. I can help you with your tasks.`));
+            } else {
+                chatContainer.insertAdjacentHTML('beforeend', createAIMessage('READY_TO_PROCEED. 系统已就绪。请输入指令。'));
+            }
+            
+            alert(`New chat created: ${sessionName}`);
+        }
+        
+        function loadChatSessions() {
+            const savedSessions = localStorage.getItem('chat_sessions');
+            if (savedSessions) {
+                chatSessions = JSON.parse(savedSessions);
+            }
+            
+            if (chatSessions.length > 0) {
+                currentSessionId = chatSessions[0].id;
+                loadSessionHistory(currentSessionId);
+            } else {
+                currentSessionId = null;
+            }
+        }
+        
+        function saveChatSessions() {
+            localStorage.setItem('chat_sessions', JSON.stringify(chatSessions));
+        }
+        
+        function loadSessionHistory(sessionId) {
+            const session = chatSessions.find(s => s.id === sessionId);
+            if (!session) return;
+            
+            activeAgentId = session.agentId;
+            currentSessionId = sessionId;
+            
+            chatContainer.innerHTML = '';
+            
+            if (session.history && session.history.length > 0) {
+                session.history.forEach(msg => {
+                    if (msg.role === 'user') {
+                        chatContainer.insertAdjacentHTML('beforeend', createUserMessage(msg.content));
+                    } else if (msg.role === 'assistant') {
+                        chatContainer.insertAdjacentHTML('beforeend', createAIMessage(msg.content));
+                    }
+                });
+            } else {
+                const agent = agents.find(a => a.id === activeAgentId);
+                if (agent) {
+                    chatContainer.insertAdjacentHTML('beforeend', createAIMessage(`${agent.name} is ready. I can help you with your tasks.`));
+                } else {
+                    chatContainer.insertAdjacentHTML('beforeend', createAIMessage('READY_TO_PROCEED. 系统已就绪。请输入指令。'));
+                }
+            }
+            
+            renderAgentList();
+        }
+        
+        function showChatHistoryModal() {
+            let modal = document.getElementById('chat-history-modal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'chat-history-modal';
+                modal.className = 'fixed inset-0 z-50 bg-black bg-opacity-50 hidden flex items-center justify-center p-4';
+                modal.innerHTML = `
+                    <div class="brutal-card bg-white p-6 max-w-md w-full">
+                        <h3 class="text-xl font-black mb-4 uppercase">Chat_History</h3>
+                        <div id="sessions-list" class="space-y-3 mb-6 max-h-96 overflow-y-auto"></div>
+                        <div class="flex gap-3">
+                            <button id="close-modal-btn" class="brutal-btn flex-1 py-3 bg-gray-300">Close</button>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+            }
+            
+            const sessionsList = document.getElementById('sessions-list');
+            sessionsList.innerHTML = '';
+            
+            if (chatSessions.length === 0) {
+                sessionsList.innerHTML = '<p class="text-center text-gray-500">No chat history found</p>';
+            } else {
+                chatSessions.forEach(session => {
+                    const sessionDiv = document.createElement('div');
+                    sessionDiv.className = 'brutal-card p-3 flex items-center gap-3 cursor-pointer hover:bg-gray-50';
+                    sessionDiv.innerHTML = `
+                        <div class="bg-[#FFDE03] w-8 h-8 rounded flex items-center justify-center text-black">
+                            <i class="fas fa-comment"></i>
+                        </div>
+                        <div class="flex-1">
+                            <p class="font-black text-sm">${session.name}</p>
+                            <p class="text-[10px] text-gray-600">Agent: ${agents.find(a => a.id === session.agentId)?.name || 'Unknown'}</p>
+                            <p class="text-[10px] text-gray-500">Messages: ${session.history?.length || 0}</p>
+                        </div>
+                        <button class="delete-session-btn text-xs brutal-btn px-2 py-1 bg-red-400 text-white" data-session-id="${session.id}">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    `;
+                    sessionDiv.addEventListener('click', (e) => {
+                        if (!e.target.closest('.delete-session-btn')) {
+                            loadSessionHistory(session.id);
+                            document.getElementById('chat-history-modal').classList.add('hidden');
+                        }
+                    });
+                    sessionsList.appendChild(sessionDiv);
+                });
+            }
+            
+            modal.classList.remove('hidden');
+            
+            document.getElementById('close-modal-btn').onclick = () => {
+                modal.classList.add('hidden');
+            };
+            
+            sessionsList.addEventListener('click', (e) => {
+                if (e.target.closest('.delete-session-btn')) {
+                    const sessionId = e.target.closest('.delete-session-btn').dataset.sessionId;
+                    deleteSession(sessionId);
+                }
+            });
+        }
+        
+        function deleteSession(sessionId) {
+            if (confirm('Delete this chat session?')) {
+                chatSessions = chatSessions.filter(s => s.id !== sessionId);
+                saveChatSessions();
+                
+                if (currentSessionId === sessionId && chatSessions.length > 0) {
+                    loadSessionHistory(chatSessions[0].id);
+                } else if (chatSessions.length === 0) {
+                    currentSessionId = null;
+                    chatContainer.innerHTML = '';
+                    const agent = agents.find(a => a.id === activeAgentId);
+                    if (agent) {
+                        chatContainer.insertAdjacentHTML('beforeend', createAIMessage(`${agent.name} is ready.`));
+                    }
+                }
+                
+                showChatHistoryModal();
             }
         }
         
@@ -885,6 +1095,10 @@
         document.getElementById('send-btn').addEventListener('click', sendMessage);
         
         document.getElementById('save-agent-btn').addEventListener('click', saveSettings);
+        
+        document.getElementById('new-chat-btn').addEventListener('click', createNewChat);
+        
+        document.getElementById('load-history-btn').addEventListener('click', showChatHistoryModal);
         
         document.getElementById('telemetry-toggle').addEventListener('click', () => {
             telemetryVisible = !telemetryVisible;
