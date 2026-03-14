@@ -41,8 +41,7 @@ export default {
       // ========== 注册接口（核心）→ 用户名密码注册 ==========
       if (path === '/api/register' && request.method === 'POST') {
         const params = await request.json();
-        const { username, password } = params;
-        const inviter = url.searchParams.get('inviter');
+        const { username, password, inviteCode } = params;
         
         if (!username || !password) {
           return resJson({ success: false, message: '用户名和密码不能为空！' }, 400);
@@ -58,18 +57,6 @@ export default {
           return resJson({ success: false, message: '用户名已存在！' }, 409);
         }
 
-        // 如果有邀请人，检查邀请人是否存在
-        if (inviter) {
-          const inviterUser = await DB
-            .prepare('SELECT * FROM user WHERE username = ?')
-            .bind(inviter)
-            .first();
-          
-          if (!inviterUser) {
-            return resJson({ success: false, message: '邀请人不存在！' }, 400);
-          }
-        }
-
         // 生成唯一的6位邀请码（字母+数字）
         const generateInviteCode = () => {
           const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -81,20 +68,20 @@ export default {
         };
 
         // 确保邀请码唯一
-        let inviteCode = generateInviteCode();
+        let userInviteCode = generateInviteCode();
         let isUnique = false;
         let attempts = 0;
         
         while (!isUnique && attempts < 10) {
           const existingInvite = await DB
             .prepare('SELECT * FROM user WHERE invite_code = ?')
-            .bind(inviteCode)
+            .bind(userInviteCode)
             .first();
           
           if (!existingInvite) {
             isUnique = true;
           } else {
-            inviteCode = generateInviteCode();
+            userInviteCode = generateInviteCode();
             attempts++;
           }
         }
@@ -103,21 +90,39 @@ export default {
           return resJson({ success: false, message: '邀请码生成失败，请重试！' }, 500);
         }
 
+        let finalBalance = 0;
+
+        // 如果提供了邀请码，检查邀请人是否存在并给予奖励
+        if (inviteCode) {
+          const inviterUser = await DB
+            .prepare('SELECT * FROM user WHERE invite_code = ?')
+            .bind(inviteCode)
+            .first();
+          
+          if (inviterUser) {
+            // 被邀请人奖励2元
+            finalBalance = 2;
+            
+            // 邀请人奖励2元
+            await DB
+              .prepare('UPDATE user SET balance = balance + 2 WHERE username = ?')
+              .bind(inviterUser.username)
+              .run();
+          }
+        }
+
         // 插入新用户（默认余额0，VIP过期时间为null，流量限制相关字段）
         const result = await DB
-          .prepare('INSERT INTO user (username, password, balance, v_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code) VALUES (?, ?, 0, NULL, 307200, 0, ?, ?)')
-          .bind(username, password, new Date().toISOString().slice(0, 19).replace('T', ' '), inviteCode)
+          .prepare('INSERT INTO user (username, password, balance, v_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code) VALUES (?, ?, ?, NULL, 307200, 0, ?, ?)')
+          .bind(username, password, finalBalance, new Date().toISOString().slice(0, 19).replace('T', ' '), userInviteCode)
           .run();
 
         if (result.success) {
           return resJson({ 
             success: true, 
-            message: '注册成功！', 
-            userInfo: { 
-              id: result.meta.last_row_id, 
-              username: username,
-              invite_code: inviteCode
-            }
+            message: finalBalance > 0 ? '注册成功！获得邀请奖励2元' : '注册成功！', 
+            userInfo: { id: result.meta.last_row_id, username: username, balance: finalBalance },
+            inviteCode: userInviteCode
           });
         } else {
           return resJson({ success: false, message: '注册失败，请重试！' }, 500);
@@ -135,21 +140,12 @@ export default {
 
         // 查询账号：包含余额和VIP信息
         const user = await DB
-          .prepare('SELECT rowid, username, balance, v_expire_date, invite_code FROM user WHERE username = ? AND password = ?')
+          .prepare('SELECT rowid, username, balance, v_expire_date FROM user WHERE username = ? AND password = ?')
           .bind(username, password)
           .first();
 
         if (user) {
-          return resJson({ 
-            success: true, 
-            message: '登录成功！', 
-            userInfo: { 
-              id: user.rowid, 
-              username: user.username, 
-              balance: user.balance,
-              invite_code: user.invite_code
-            } 
-          });
+          return resJson({ success: true, message: '登录成功！', userInfo: { id: user.id, username: user.username, balance: user.balance } });
         } else {
           return resJson({ success: false, message: '用户名或密码错误' }, 401);
         }
