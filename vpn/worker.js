@@ -166,21 +166,33 @@ export default {
           : resJson({ code: 404, msg: '用户不存在' }, 404);
       }
 
+      // ========== 生成5位随机字符串 ==========
+      const generateVToken = () => {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        let token = '';
+        for (let i = 0; i < 5; i++) {
+          token += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return token;
+      };
+
       // ========== 开通VIP接口 ==========
       if (path === '/api/open-vip' && request.method === 'POST') {
         try {
           const params = await request.json();
-          const { username, duration = 30, price = 10.00 } = params; // duration为天数，price为价格
+          const { username, duration = 30, price = 10.00 } = params;
           
           if (!username) {
             return resJson({ code: 400, msg: '缺少username参数' }, 400);
           }
           
-          const vipPrice = parseFloat(price); // 动态价格
+          const vipPrice = parseFloat(price);
           
-          // 查询用户余额和VIP状态
+          const now = new Date();
+          let newExpireDate = new Date();
+          
           const user = await DB
-            .prepare('SELECT balance, v_expire_date FROM user WHERE username = ?')
+            .prepare('SELECT balance, v_expire_date, v_token FROM user WHERE username = ?')
             .bind(username)
             .first();
           
@@ -197,55 +209,43 @@ export default {
             }, 400);
           }
           
-          // 计算新的VIP过期时间
-          const now = new Date();
-          let newExpireDate = new Date();
-          
-          // 如果当前VIP未过期，则在原基础上延长
           if (user.v_expire_date && new Date(user.v_expire_date) > now) {
             newExpireDate = new Date(user.v_expire_date);
             newExpireDate.setDate(newExpireDate.getDate() + duration);
           } else {
-            // 如果VIP已过期或未开通，则从现在开始计算
             newExpireDate.setDate(now.getDate() + duration);
           }
           
-          // 更新用户余额和VIP过期时间
+          const vToken = generateVToken();
+          
           const result = await DB
-            .prepare('UPDATE user SET balance = balance - ?, v_expire_date = ? WHERE username = ?')
-            .bind(vipPrice, newExpireDate.toISOString().slice(0, 19).replace('T', ' '), username)
+            .prepare('UPDATE user SET balance = balance - ?, v_expire_date = ?, v_token = ? WHERE username = ?')
+            .bind(vipPrice, newExpireDate.toISOString().slice(0, 19).replace('T', ' '), vToken, username)
             .run();
           
           if (result.success && result.meta.changes > 0) {
-            // 查询更新后的用户信息（包含invite_code字段）
             const updatedUser = await DB
-              .prepare('SELECT username, balance, v_expire_date, invite_code FROM user WHERE username = ?')
+              .prepare('SELECT username, balance, v_expire_date, v_token, invite_code FROM user WHERE username = ?')
               .bind(username)
               .first();
             
-            // 如果有邀请码，查找邀请人并赠送一个月VIP
             if (updatedUser.invite_code) {
               try {
-                // 通过邀请码查找邀请人
                 const inviterUser = await DB
                   .prepare('SELECT username, v_expire_date FROM user WHERE invite_code = ?')
                   .bind(updatedUser.invite_code)
                   .first();
                 
                 if (inviterUser) {
-                  const now = new Date();
                   let newInviterExpireDate = new Date();
                   
-                  // 如果邀请人当前VIP未过期，则在原基础上延长
                   if (inviterUser.v_expire_date && new Date(inviterUser.v_expire_date) > now) {
                     newInviterExpireDate = new Date(inviterUser.v_expire_date);
                     newInviterExpireDate.setDate(newInviterExpireDate.getDate() + 30);
                   } else {
-                    // 如果邀请人VIP已过期或未开通，则从现在开始计算
                     newInviterExpireDate.setDate(now.getDate() + 30);
                   }
                   
-                  // 更新邀请人的VIP过期时间（免费赠送，不扣余额）
                   await DB
                     .prepare('UPDATE user SET v_expire_date = ? WHERE username = ?')
                     .bind(newInviterExpireDate.toISOString().slice(0, 19).replace('T', ' '), inviterUser.username)
@@ -263,6 +263,7 @@ export default {
                 username: updatedUser.username,
                 balance: updatedUser.balance,
                 v_expire_date: updatedUser.v_expire_date,
+                v_token: updatedUser.v_token,
                 duration: duration
               }
             });
@@ -293,7 +294,7 @@ export default {
           }
           
           const user = await DB
-            .prepare('SELECT username, v_expire_date FROM user WHERE username = ?')
+            .prepare('SELECT username, v_expire_date, v_token FROM user WHERE username = ?')
             .bind(username)
             .first();
           
@@ -302,11 +303,9 @@ export default {
           }
           
           const now = new Date();
-          // 确保正确解析数据库中的日期字符串
           const expireDate = user.v_expire_date ? new Date(user.v_expire_date.replace(' ', 'T') + 'Z') : null;
           const isVipValid = expireDate && expireDate > now;
           
-          // 正确计算剩余天数
           let daysRemaining = 0;
           if (isVipValid) {
             const timeDiff = expireDate.getTime() - now.getTime();
@@ -319,6 +318,7 @@ export default {
             data: {
               username: user.username,
               v_expire_date: user.v_expire_date,
+              v_token: user.v_token,
               is_vip_valid: isVipValid,
               days_remaining: daysRemaining
             }
@@ -411,59 +411,36 @@ export default {
       // ========== VIP节点接口 ==========
       if (path === '/vip/clash' && request.method === 'GET') {
         try {
-          const username = url.searchParams.get('username');
+          const vToken = url.searchParams.get('v');
           
-          if (!username) {
-            return resJson({ code: 400, msg: '缺少username参数' }, 400);
+          if (!vToken) {
+            return resJson({ code: 400, msg: '缺少v参数' }, 400);
           }
           
-          // 检查用户VIP状态和流量限制
           const user = await DB
-            .prepare('SELECT v_expire_date, monthly_quota, used_quota, quota_reset_date FROM user WHERE username = ?')
-            .bind(username)
+            .prepare('SELECT v_expire_date, v_token, monthly_quota, used_quota, quota_reset_date, username FROM user WHERE v_token = ?')
+            .bind(vToken)
             .first();
           
           if (!user) {
-            return resJson({ code: 404, msg: '用户不存在' }, 404);
+            return resJson({ code: 404, msg: 'Token无效' }, 404);
           }
           
-          // 检查VIP是否过期
           const now = new Date();
           const expireDate = user.v_expire_date ? new Date(user.v_expire_date) : null;
           
-          // 检查流量重置日期（每月重置）
-          const resetDate = user.quota_reset_date ? new Date(user.quota_reset_date) : new Date();
-          const nextMonth = new Date(resetDate);
-          nextMonth.setMonth(nextMonth.getMonth() + 1);
-          
-          // 如果超过一个月，重置流量
-          if (now > nextMonth) {
-            await DB
-              .prepare('UPDATE user SET used_quota = 0, quota_reset_date = ? WHERE username = ?')
-              .bind(now.toISOString().slice(0, 19).replace('T', ' '), username)
-              .run();
-            user.used_quota = 0;
-          }
-          
-          // 非VIP用户检查流量限制
           if (!expireDate || expireDate < now) {
-            const monthlyQuota = user.monthly_quota || 307200; // 默认300GB
-            const usedQuota = user.used_quota || 0;
-            
-            if (usedQuota >= monthlyQuota) {
-              return resJson({ 
-                code: 403, 
-                msg: '本月流量已用完，请升级VIP或等待下月重置',
-                quota_info: {
-                  monthly_quota: monthlyQuota,
-                  used_quota: usedQuota,
-                  remaining_quota: monthlyQuota - usedQuota
-                }
-              }, 403);
-            }
+            return resJson({ 
+              code: 403, 
+              msg: 'VIP已过期或未开通',
+              quota_info: {
+                monthly_quota: user.monthly_quota || 307200,
+                used_quota: user.used_quota || 0,
+                remaining_quota: (user.monthly_quota || 307200) - (user.used_quota || 0)
+              }
+            }, 403);
           }
           
-          // 根据当前日期生成VIP节点链接
           const year = now.getFullYear();
           const month = String(now.getMonth() + 1).padStart(2, '0');
           const day = String(now.getDate()).padStart(2, '0');
@@ -494,23 +471,21 @@ export default {
       // ========== VIP V2Ray节点接口 ==========
       if (path === '/vip/v2ray' && request.method === 'GET') {
         try {
-          const username = url.searchParams.get('username');
+          const vToken = url.searchParams.get('v');
           
-          if (!username) {
-            return resJson({ code: 400, msg: '缺少username参数' }, 400);
+          if (!vToken) {
+            return resJson({ code: 400, msg: '缺少v参数' }, 400);
           }
           
-          // 检查用户VIP状态
           const user = await DB
-            .prepare('SELECT v_expire_date FROM user WHERE username = ?')
-            .bind(username)
+            .prepare('SELECT v_expire_date, v_token, username FROM user WHERE v_token = ?')
+            .bind(vToken)
             .first();
           
           if (!user) {
-            return resJson({ code: 404, msg: '用户不存在' }, 404);
+            return resJson({ code: 404, msg: 'Token无效' }, 404);
           }
           
-          // 检查VIP是否过期
           const now = new Date();
           const expireDate = user.v_expire_date ? new Date(user.v_expire_date) : null;
           
@@ -518,7 +493,6 @@ export default {
             return resJson({ code: 403, msg: 'VIP已过期或未开通' }, 403);
           }
           
-          // VIP V2Ray 节点链接
           const vipV2rayUrl = `https://coolchick.dpdns.org/666000?clash`;
           
           const response = await fetch(vipV2rayUrl);
@@ -795,6 +769,62 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           }
         } catch (err) {
           return resJson({ code: 500, msg: '删除失败', error: err.message }, 500);
+        }
+      }
+
+      // ========== 重置VIP Token接口 ==========
+      if (path === '/api/reset-vtoken' && request.method === 'POST') {
+        try {
+          const params = await request.json();
+          const { username } = params;
+          
+          if (!username) {
+            return resJson({ code: 400, msg: '缺少username参数' }, 400);
+          }
+          
+          const now = new Date();
+          
+          const user = await DB
+            .prepare('SELECT username, v_expire_date, v_token FROM user WHERE username = ?')
+            .bind(username)
+            .first();
+          
+          if (!user) {
+            return resJson({ code: 404, msg: '用户不存在' }, 404);
+          }
+          
+          if (!user.v_expire_date || new Date(user.v_expire_date) <= now) {
+            return resJson({ code: 403, msg: 'VIP已过期或未开通，无法重置Token' }, 403);
+          }
+          
+          const newVToken = generateVToken();
+          
+          const result = await DB
+            .prepare('UPDATE user SET v_token = ? WHERE username = ?')
+            .bind(newVToken, username)
+            .run();
+          
+          if (result.success && result.meta.changes > 0) {
+            const updatedUser = await DB
+              .prepare('SELECT username, v_expire_date, v_token FROM user WHERE username = ?')
+              .bind(username)
+              .first();
+            
+            return resJson({
+              code: 200,
+              msg: 'Token重置成功',
+              data: {
+                username: updatedUser.username,
+                v_expire_date: updatedUser.v_expire_date,
+                v_token: updatedUser.v_token
+              }
+            });
+          } else {
+            return resJson({ code: 500, msg: 'Token重置失败，请重试' }, 500);
+          }
+        } catch (err) {
+          console.error('重置Token错误:', err);
+          return resJson({ code: 500, msg: 'Token重置失败', error: err.message }, 500);
         }
       }
 
