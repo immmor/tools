@@ -225,36 +225,9 @@ export default {
           
           if (result.success && result.meta.changes > 0) {
             const updatedUser = await DB
-              .prepare('SELECT username, balance, v_expire_date, v_token, invite_code FROM user WHERE username = ?')
+              .prepare('SELECT username, balance, v_expire_date, v_token FROM user WHERE username = ?')
               .bind(username)
               .first();
-            
-            if (updatedUser.invite_code) {
-              try {
-                const inviterUser = await DB
-                  .prepare('SELECT username, v_expire_date FROM user WHERE invite_code = ?')
-                  .bind(updatedUser.invite_code)
-                  .first();
-                
-                if (inviterUser) {
-                  let newInviterExpireDate = new Date();
-                  
-                  if (inviterUser.v_expire_date && new Date(inviterUser.v_expire_date) > now) {
-                    newInviterExpireDate = new Date(inviterUser.v_expire_date);
-                    newInviterExpireDate.setDate(newInviterExpireDate.getDate() + 30);
-                  } else {
-                    newInviterExpireDate.setDate(now.getDate() + 30);
-                  }
-                  
-                  await DB
-                    .prepare('UPDATE user SET v_expire_date = ? WHERE username = ?')
-                    .bind(newInviterExpireDate.toISOString().slice(0, 19).replace('T', ' '), inviterUser.username)
-                    .run();
-                }
-              } catch (inviteErr) {
-                console.error('赠送邀请人VIP失败:', inviteErr);
-              }
-            }
             
             return resJson({
               code: 200,
