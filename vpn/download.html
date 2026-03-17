@@ -157,10 +157,24 @@
                 <span class="text-white">PHANTOM</span><span class="text-[var(--neon-green)]">.NET</span>
             </a>
         </div>
-        <div class="flex items-center gap-2">
-            <button id="lang-btn" class="btn-cyber text-sm py-2 px-4">
-                <span id="lang-text">中文</span>
+        <div class="relative">
+            <button id="lang-btn" class="btn-cyber text-sm py-2 px-2 flex items-center gap-2">
+                <i data-lucide="globe" class="w-4 h-4"></i>
             </button>
+            <div id="lang-dropdown" class="absolute right-0 top-full mt-2 hidden min-w-[60px] bg-zinc-900 border border-zinc-700 rounded shadow-lg z-[100]">
+                <button class="w-full text-center px-2 py-2 hover:bg-zinc-800 transition-colors lang-option" data-lang="zh-CN">
+                    <span class="mr-1">🇨🇳</span>CN
+                </button>
+                <button class="w-full text-center px-2 py-2 hover:bg-zinc-800 transition-colors lang-option" data-lang="en-US">
+                    <span class="mr-1">🇺🇸</span>EN
+                </button>
+                <button class="w-full text-center px-2 py-2 hover:bg-zinc-800 transition-colors lang-option" data-lang="ar-SA">
+                    <span class="mr-1">🇸🇦</span>AR
+                </button>
+                <button class="w-full text-center px-2 py-2 hover:bg-zinc-800 transition-colors lang-option" data-lang="ru-RU">
+                    <span class="mr-1">🇷🇺</span>RU
+                </button>
+            </div>
         </div>
     </nav>
 
@@ -469,18 +483,24 @@
         // 语言切换功能
         const translations = {
             'zh-CN': null,
-            'en-US': null
+            'en-US': null,
+            'ar-SA': null,
+            'ru-RU': null
         };
         let currentLang = 'zh-CN';
 
         async function loadTranslations() {
             try {
-                const [zhRes, enRes] = await Promise.all([
-                    fetch('lang/zh-CN.json'),
-                    fetch('lang/en-US.json')
+                const [zhRes, enRes, arRes, ruRes] = await Promise.all([
+                    fetch('lang/download-zh-CN.json'),
+                    fetch('lang/download-en-US.json'),
+                    fetch('lang/download-ar-SA.json'),
+                    fetch('lang/download-ru-RU.json')
                 ]);
                 translations['zh-CN'] = await zhRes.json();
                 translations['en-US'] = await enRes.json();
+                translations['ar-SA'] = await arRes.json();
+                translations['ru-RU'] = await ruRes.json();
                 applyTranslation(currentLang);
             } catch (error) {
                 console.error('Failed to load translations:', error);
@@ -499,13 +519,41 @@
                 }
             });
 
-            document.getElementById('lang-text').textContent = lang === 'zh-CN' ? dict.lang_cn : dict.lang_en;
+            const langText = document.getElementById('lang-text');
+            if (langText) {
+                if (lang === 'zh-CN') {
+                    langText.textContent = dict.lang_cn;
+                } else if (lang === 'en-US') {
+                    langText.textContent = dict.lang_en;
+                } else if (lang === 'ar-SA') {
+                    langText.textContent = dict.lang_ar;
+                } else if (lang === 'ru-RU') {
+                    langText.textContent = dict.lang_ru;
+                }
+            }
             document.documentElement.lang = lang;
         }
 
-        document.getElementById('lang-btn').addEventListener('click', function() {
-            const newLang = currentLang === 'zh-CN' ? 'en-US' : 'zh-CN';
-            applyTranslation(newLang);
+        const langBtn = document.getElementById('lang-btn');
+        const langDropdown = document.getElementById('lang-dropdown');
+        const langOptions = document.querySelectorAll('.lang-option');
+
+        langBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            langDropdown.classList.toggle('hidden');
+        });
+
+        langOptions.forEach(option => {
+            option.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const newLang = this.getAttribute('data-lang');
+                applyTranslation(newLang);
+                langDropdown.classList.add('hidden');
+            });
+        });
+
+        document.addEventListener('click', function() {
+            langDropdown.classList.add('hidden');
         });
 
         // 平台切换功能
