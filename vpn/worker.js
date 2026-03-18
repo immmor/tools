@@ -418,7 +418,7 @@ export default {
           const month = String(now.getMonth() + 1).padStart(2, '0');
           const day = String(now.getDate()).padStart(2, '0');
           
-          const vipUrl = `https://coolchick.dpdns.org/666000?clash`;
+          const vipUrl = `https://ocons.no-mad-world.club/link/Nmno563qEF341Iah?clash=3&extend=1`;
           
           // 获取VIP Clash配置
           const response = await fetch(vipUrl);
@@ -466,7 +466,7 @@ export default {
             return resJson({ code: 403, msg: 'VIP已过期或未开通' }, 403);
           }
           
-          const vipV2rayUrl = `https://coolchick.dpdns.org/666000?clash`;
+          const vipV2rayUrl = `https://ocons.no-mad-world.club/link/Nmno563qEF341Iah?clash=3&extend=1`;
           
           const response = await fetch(vipV2rayUrl);
           
