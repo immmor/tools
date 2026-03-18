@@ -576,11 +576,13 @@
                                 <input type="text" id="userSearchInput" placeholder="输入用户名查询余额" style="padding: 0.5rem; border: 1px solid #e2e8f0; border-radius: 4px;">
                                 <button class="add-btn" onclick="queryUserBalance(document.getElementById('userSearchInput').value)" style="background-color: #667eea;">查询余额</button>
                                 <button class="add-btn" onclick="openUserModal()">添加用户</button>
+                                <button class="add-btn" onclick="openBatchEditModal()" style="background-color: #ed8936;">批量修改链接</button>
                             </div>
                         </div>
                         <table id="usersTable">
                             <thead>
                                 <tr>
+                                    <th><input type="checkbox" id="selectAllUsers" onchange="toggleSelectAllUsers(this)"></th>
                                     <th>ID</th>
                                     <th>用户名</th>
                                     <th>密码</th>
@@ -588,6 +590,8 @@
                                     <th>用户类型</th>
                                     <th>VIP过期时间</th>
                                     <th>邀请码</th>
+                                    <th>Clash链接</th>
+                                    <th>V2Ray链接</th>
                                     <th>操作</th>
                                 </tr>
                             </thead>
@@ -861,6 +865,31 @@
                     </select>
                 </div>
                 <button type="submit" class="btn">保存</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 批量修改链接模态框 -->
+    <div id="batchEditModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="batchEditModalTitle">批量修改链接</h3>
+                <button class="close-btn" onclick="closeBatchEditModal()">&times;</button>
+            </div>
+            <form id="batchEditForm">
+                <div class="form-group">
+                    <label for="selectedUsernames">已选择用户 (<span id="selectedCount">0</span>人)</label>
+                    <div id="selectedUsernames" style="max-height: 150px; overflow-y: auto; border: 1px solid #e2e8f0; padding: 10px; border-radius: 4px; background: #f7fafc;"></div>
+                </div>
+                <div class="form-group">
+                    <label for="clashLink">Clash链接</label>
+                    <input type="text" id="clashLink" name="clashLink" placeholder="https://...">
+                </div>
+                <div class="form-group">
+                    <label for="v2rayLink">V2Ray链接</label>
+                    <input type="text" id="v2rayLink" name="v2rayLink" placeholder="https://...">
+                </div>
+                <button type="submit" class="btn">批量保存</button>
             </form>
         </div>
     </div>
@@ -1162,13 +1191,17 @@
             tbody.innerHTML = '';
 
             if (usersData.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">暂无用户数据</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;">暂无用户数据</td></tr>';
                 return;
             }
+
+            allUsersData = usersData; // 保存所有用户数据用于批量选择
+            selectedUserIds = []; // 重置选择
 
             usersData.forEach(user => {
                 const row = document.createElement('tr');
                 row.innerHTML = `
+                    <td><input type="checkbox" class="user-checkbox" onchange="toggleUserSelection(${user.id}, this)"></td>
                     <td>${user.id}</td>
                     <td>${user.username}</td>
                     <td>${user.password || '-'}</td>
@@ -1176,6 +1209,8 @@
                     <td>${user.learn_vip_expire_date ? 'VIP' : '普通用户'}</td>
                     <td>${user.learn_vip_expire_date ? new Date(user.learn_vip_expire_date).toLocaleDateString() : '-'}</td>
                     <td>${user.invite_code || '-'}</td>
+                    <td style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${user.v_link_clash || '-'}">${user.v_link_clash || '-'}</td>
+                    <td style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${user.v_link_v2ray || '-'}">${user.v_link_v2ray || '-'}</td>
                     <td>
                         <button class="action-btn edit-btn" onclick="rechargeUser('${user.username}')">充值</button>
                         <button class="action-btn edit-btn" onclick="checkUserVIP('${user.username}')">VIP</button>
@@ -1326,6 +1361,116 @@
                 alert(`用户信息：\nID: ${user.id}\n用户名: ${user.username}\n余额: ¥${user.balance || 0}\nVIP过期: ${user.learn_vip_expire_date || '无'}`);
             }
         }
+
+        // 批量修改链接相关变量
+        let selectedUserIds = [];
+        let allUsersData = [];
+
+        // 切换全选用户
+        function toggleSelectAllUsers(checkbox) {
+            const isChecked = checkbox.checked;
+            selectedUserIds = isChecked ? allUsersData.map(u => u.id) : [];
+            updateSelectedUsernames();
+        }
+
+        // 切换单个用户选择
+        function toggleUserSelection(id, checkbox) {
+            if (checkbox.checked) {
+                if (!selectedUserIds.includes(id)) {
+                    selectedUserIds.push(id);
+                }
+            } else {
+                selectedUserIds = selectedUserIds.filter(uid => uid !== id);
+            }
+            updateSelectedUsernames();
+            updateSelectAllCheckbox();
+        }
+
+        // 更新已选择用户显示
+        function updateSelectedUsernames() {
+            const container = document.getElementById('selectedUsernames');
+            const countSpan = document.getElementById('selectedCount');
+            container.innerHTML = selectedUserIds.map(id => {
+                const user = allUsersData.find(u => u.id === id);
+                return user ? `<div style="margin: 5px 0; padding: 5px; background: #fff; border-radius: 3px;">${user.username}</div>` : '';
+            }).join('');
+            countSpan.textContent = selectedUserIds.length;
+        }
+
+        // 更新全选checkbox状态
+        function updateSelectAllCheckbox() {
+            const allCheckbox = document.getElementById('selectAllUsers');
+            if (allUsersData.length > 0 && selectedUserIds.length === allUsersData.length) {
+                allCheckbox.checked = true;
+            } else {
+                allCheckbox.checked = false;
+            }
+        }
+
+        // 打开批量修改模态框
+        function openBatchEditModal() {
+            if (selectedUserIds.length === 0) {
+                alert('请先选择要修改的用户');
+                return;
+            }
+            document.getElementById('batchEditModalTitle').textContent = '批量修改链接';
+            document.getElementById('batchEditForm').reset();
+            document.getElementById('batchEditModal').style.display = 'block';
+        }
+
+        // 关闭批量修改模态框
+        function closeBatchEditModal() {
+            document.getElementById('batchEditModal').style.display = 'none';
+        }
+
+        // 批量保存链接
+        document.getElementById('batchEditForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            if (selectedUserIds.length === 0) {
+                alert('请先选择要修改的用户');
+                return;
+            }
+            
+            const clashLink = document.getElementById('clashLink').value.trim();
+            const v2rayLink = document.getElementById('v2rayLink').value.trim();
+            
+            if (!clashLink && !v2rayLink) {
+                alert('请至少填写一个链接');
+                return;
+            }
+            
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            const originalText = submitBtn.textContent;
+            submitBtn.textContent = '保存中...';
+            submitBtn.disabled = true;
+            
+            try {
+                const usernames = selectedUserIds.map(id => {
+                    const user = allUsersData.find(u => u.id === id);
+                    return user ? user.username : '';
+                }).filter(Boolean);
+                
+                const result = await apiRequest('/api/batch-update-links', 'POST', {
+                    usernames: usernames,
+                    v_link_clash: clashLink,
+                    v_link_v2ray: v2rayLink
+                });
+                
+                if (result.code === 200) {
+                    alert(`成功更新 ${result.data?.updated || 0} 个用户的链接`);
+                    closeBatchEditModal();
+                    loadUsers();
+                } else {
+                    alert(result.msg || '更新失败');
+                }
+            } catch (error) {
+                alert('更新失败：' + error.message);
+            } finally {
+                submitBtn.textContent = originalText;
+                submitBtn.disabled = false;
+            }
+        });
 
         // 删除用户
         async function deleteUser(id) {

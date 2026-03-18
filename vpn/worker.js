@@ -113,8 +113,8 @@ export default {
 
         // 插入新用户（默认余额0，VIP过期时间为null，流量限制相关字段）
         const result = await DB
-          .prepare('INSERT INTO user (username, password, balance, v_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code) VALUES (?, ?, ?, NULL, 307200, 0, ?, ?)')
-          .bind(username, password, finalBalance, new Date().toISOString().slice(0, 19).replace('T', ' '), userInviteCode)
+          .prepare('INSERT INTO user (username, password, balance, v_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code, v_link_clash, v_link_v2ray) VALUES (?, ?, ?, NULL, 307200, 0, ?, ?, ?)')
+          .bind(username, password, finalBalance, new Date().toISOString().slice(0, 19).replace('T', ' '), userInviteCode, '', '')
           .run();
 
         if (result.success) {
@@ -139,6 +139,44 @@ export default {
           });
         } else {
           return resJson({ success: false, message: '注册失败，请重试！' }, 500);
+        }
+      }
+
+      // ========== 批量更新链接接口 ==========
+      if (path === '/api/batch-update-links' && request.method === 'POST') {
+        try {
+          const params = await request.json();
+          const { usernames, v_link_clash, v_link_v2ray } = params;
+          
+          if (!usernames || !Array.isArray(usernames) || usernames.length === 0) {
+            return resJson({ code: 400, msg: '请提供至少一个用户名' }, 400);
+          }
+          
+          if (!v_link_clash && !v_link_v2ray) {
+            return resJson({ code: 400, msg: '请至少提供一个链接' }, 400);
+          }
+          
+          let updatedCount = 0;
+          
+          for (const username of usernames) {
+            const result = await DB
+              .prepare('UPDATE user SET v_link_clash = ?, v_link_v2ray = ? WHERE username = ?')
+              .bind(v_link_clash || '', v_link_v2ray || '', username)
+              .run();
+            
+            if (result.success && result.meta.changes > 0) {
+              updatedCount++;
+            }
+          }
+          
+          return resJson({
+            code: 200,
+            msg: `成功更新 ${updatedCount} 个用户的链接`,
+            data: { updated: updatedCount }
+          });
+        } catch (err) {
+          console.error('批量更新链接错误:', err);
+          return resJson({ code: 500, msg: '更新失败', error: err.message }, 500);
         }
       }
 
@@ -205,7 +243,7 @@ export default {
           let newExpireDate = new Date();
           
           const user = await DB
-            .prepare('SELECT balance, v_expire_date, v_token FROM user WHERE username = ?')
+            .prepare('SELECT balance, v_expire_date, v_token, v_link_clash, v_link_v2ray FROM user WHERE username = ?')
             .bind(username)
             .first();
           
@@ -232,8 +270,8 @@ export default {
           const vToken = generateVToken();
           
           const result = await DB
-            .prepare('UPDATE user SET balance = balance - ?, v_expire_date = ?, v_token = ? WHERE username = ?')
-            .bind(vipPrice, newExpireDate.toISOString().slice(0, 19).replace('T', ' '), vToken, username)
+            .prepare('UPDATE user SET balance = balance - ?, v_expire_date = ?, v_token = ?, v_link_clash = ?, v_link_v2ray = ? WHERE username = ?')
+            .bind(vipPrice, newExpireDate.toISOString().slice(0, 19).replace('T', ' '), vToken, '', '', username)
             .run();
           
           if (result.success && result.meta.changes > 0) {
@@ -251,7 +289,7 @@ export default {
               .run();
             
             const updatedUser = await DB
-              .prepare('SELECT username, balance, v_expire_date, v_token FROM user WHERE username = ?')
+              .prepare('SELECT username, balance, v_expire_date, v_token, v_link_clash, v_link_v2ray FROM user WHERE username = ?')
               .bind(username)
               .first();
             
@@ -263,6 +301,8 @@ export default {
                 balance: updatedUser.balance,
                 v_expire_date: updatedUser.v_expire_date,
                 v_token: updatedUser.v_token,
+                v_link_clash: updatedUser.v_link_clash,
+                v_link_v2ray: updatedUser.v_link_v2ray,
                 duration: duration
               }
             });
@@ -293,7 +333,7 @@ export default {
           }
           
           const user = await DB
-            .prepare('SELECT username, v_expire_date, v_token FROM user WHERE username = ?')
+            .prepare('SELECT username, v_expire_date, v_token, v_link_clash, v_link_v2ray FROM user WHERE username = ?')
             .bind(username)
             .first();
           
@@ -318,6 +358,8 @@ export default {
               username: user.username,
               v_expire_date: user.v_expire_date,
               v_token: user.v_token,
+              v_link_clash: user.v_link_clash,
+              v_link_v2ray: user.v_link_v2ray,
               is_vip_valid: isVipValid,
               days_remaining: daysRemaining
             }
@@ -364,7 +406,7 @@ export default {
           }
           
           const user = await DB
-            .prepare('SELECT monthly_quota, used_quota, quota_reset_date, v_expire_date FROM user WHERE username = ?')
+            .prepare('SELECT monthly_quota, used_quota, quota_reset_date, v_expire_date, v_link_clash, v_link_v2ray FROM user WHERE username = ?')
             .bind(username)
             .first();
           
@@ -399,6 +441,8 @@ export default {
               used_quota: user.used_quota || 0,
               remaining_quota: (user.monthly_quota || 307200) - (user.used_quota || 0),
               quota_reset_date: user.quota_reset_date,
+              v_link_clash: user.v_link_clash,
+              v_link_v2ray: user.v_link_v2ray,
               next_reset_date: nextMonth.toISOString().slice(0, 19).replace('T', ' ')
             }
           });
@@ -417,7 +461,7 @@ export default {
           }
           
           const user = await DB
-            .prepare('SELECT v_expire_date, v_token, monthly_quota, used_quota, quota_reset_date, username FROM user WHERE v_token = ?')
+            .prepare('SELECT v_expire_date, v_token, monthly_quota, used_quota, quota_reset_date, username, v_link_clash FROM user WHERE v_token = ?')
             .bind(vToken)
             .first();
           
@@ -444,7 +488,7 @@ export default {
           const month = String(now.getMonth() + 1).padStart(2, '0');
           const day = String(now.getDate()).padStart(2, '0');
           
-          const vipUrl = `https://ocons.no-mad-world.club/link/Nmno563qEF341Iah?clash=3&extend=1`;
+          const vipUrl = user.v_link_clash || `https://ocons.no-mad-world.club/link/Nmno563qEF341Iah?clash=3&extend=1`;
           
           // 获取VIP Clash配置
           const response = await fetch(vipUrl);
@@ -477,7 +521,7 @@ export default {
           }
           
           const user = await DB
-            .prepare('SELECT v_expire_date, v_token, username FROM user WHERE v_token = ?')
+            .prepare('SELECT v_expire_date, v_token, username, v_link_v2ray FROM user WHERE v_token = ?')
             .bind(vToken)
             .first();
           
@@ -492,7 +536,7 @@ export default {
             return resJson({ code: 403, msg: 'VIP已过期或未开通' }, 403);
           }
           
-          const vipV2rayUrl = `https://ocons.no-mad-world.club/link/Nmno563qEF341Iah?clash=3&extend=1`;
+          const vipV2rayUrl = user.v_link_v2ray || `https://6x3t8.no-mad-world.club/link/Nmno563qEF341Iah?sub=3&extend=1`;
           
           const response = await fetch(vipV2rayUrl);
           
@@ -784,7 +828,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           const now = new Date();
           
           const user = await DB
-            .prepare('SELECT username, v_expire_date, v_token FROM user WHERE username = ?')
+            .prepare('SELECT username, v_expire_date, v_token, v_link_clash, v_link_v2ray FROM user WHERE username = ?')
             .bind(username)
             .first();
           
@@ -799,13 +843,13 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           const newVToken = generateVToken();
           
           const result = await DB
-            .prepare('UPDATE user SET v_token = ? WHERE username = ?')
-            .bind(newVToken, username)
+            .prepare('UPDATE user SET v_token = ?, v_link_clash = ?, v_link_v2ray = ? WHERE username = ?')
+            .bind(newVToken, '', '', username)
             .run();
           
           if (result.success && result.meta.changes > 0) {
             const updatedUser = await DB
-              .prepare('SELECT username, v_expire_date, v_token FROM user WHERE username = ?')
+              .prepare('SELECT username, v_expire_date, v_token, v_link_clash, v_link_v2ray FROM user WHERE username = ?')
               .bind(username)
               .first();
             
@@ -815,7 +859,9 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
               data: {
                 username: updatedUser.username,
                 v_expire_date: updatedUser.v_expire_date,
-                v_token: updatedUser.v_token
+                v_token: updatedUser.v_token,
+                v_link_clash: updatedUser.v_link_clash,
+                v_link_v2ray: updatedUser.v_link_v2ray
               }
             });
           } else {
