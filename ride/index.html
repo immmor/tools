@@ -108,6 +108,31 @@
         /* --- 地图 --- */
         #map { flex: 1; z-index: 10; background: #eee; filter: grayscale(1) contrast(0.9); }
 
+        /* --- 路线距离标签 --- */
+        .route-distance-label {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 8px 12px;
+            border-radius: 8px;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+            font-size: 12px;
+            font-weight: 600;
+            color: #333;
+            white-space: nowrap;
+            z-index: 1000;
+            pointer-events: none;
+            display: inline-flex;
+            gap: 10px;
+        }
+        .route-distance-label span {
+            display: inline-block;
+        }
+        .route-distance-label .straight-distance {
+            color: #3a86ff;
+        }
+        .route-distance-label .driving-distance {
+            color: #f56565;
+        }
+
         /* --- 响应式 --- */
         @media (max-width: 900px) {
             body { flex-direction: column; }
@@ -260,12 +285,15 @@
                 <p style="font-size: 14px; margin-bottom: 15px; font-weight: 600;" id="homeSubtitle">要去哪里？</p>
                 <div style="display: flex; flex-direction: column; gap: 12px;">
                     <div class="neu-input-box">
-                        <i class="fas fa-dot-circle" style="color: #48bb78;"></i>
-                        <input type="text" value="我的位置：上海中心大厦">
+                        <i class="fas fa-dot-circle" style="color: #48bb78; width: 20px; text-align: center;"></i>
+                        <input type="text" id="originInput" placeholder="当前位置">
+                        <button id="locateBtn" style="background: none; border: none; cursor: pointer; color: #48bb78; width: 20px; text-align: center;">
+                            <i class="fas fa-location-arrow"></i>
+                        </button>
                     </div>
                     <div class="neu-input-box">
-                        <i class="fas fa-map-marker-alt" style="color: #f56565;"></i>
-                        <input type="text" placeholder="输入目的地">
+                        <i class="fas fa-map-marker-alt" style="color: #f56565; width: 18px; text-align: center;"></i>
+                        <input type="text" id="destinationInput" placeholder="输入目的地">
                     </div>
                 </div>
             </div>
@@ -465,6 +493,43 @@
         // 使用CartoDB明亮色调的瓦片
         L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
 
+        // 1.1 获取用户当前位置
+        function locateUserPosition() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        const userLat = position.coords.latitude;
+                        const userLng = position.coords.longitude;
+                        const userLatLng = [userLat, userLng];
+                        
+                        // 更新起始点输入框
+                        document.getElementById('originInput').value = `${userLat.toFixed(6)}, ${userLng.toFixed(6)}`;
+                        
+                        // 更新地图视图和标记
+                        map.setView(userLatLng, 15);
+                        originMarker.setLatLng(userLatLng);
+                        
+                        // 重新计算路线
+                        routeLine.setLatLngs([originMarker.getLatLng(), destMarker.getLatLng()]);
+                    },
+                    function(error) {
+                        console.error('定位错误:', error);
+                        alert('无法获取当前位置，请检查定位权限');
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 0
+                    }
+                );
+            } else {
+                alert('您的浏览器不支持地理位置定位');
+            }
+        }
+
+        // 1.2 初始化时自动定位
+        locateUserPosition();
+
         // 2. 模拟司机图标
         const carIcon = L.divIcon({
             className: 'car-marker',
@@ -492,7 +557,7 @@
         });
 
         let originMarker = L.marker([31.2304, 121.4737], {icon: originIcon, draggable: true}).addTo(map);
-        let destMarker = L.marker([31.235, 121.480], {icon: destIcon, draggable: true}).addTo(map);
+        let destMarker = L.marker([31.235, 121.480], {icon: destIcon, draggable: true});
 
         let routeLine = L.polyline([
             originMarker.getLatLng(),
@@ -502,7 +567,58 @@
             weight: 2,
             opacity: 0.6,
             dashArray: '5, 10'
-        }).addTo(map);
+        });
+
+        // 距离显示标签
+        let distanceLabelHtml = '<div class="route-distance-label"><span class="straight-distance">直线: 0km</span><span class="driving-distance">开车: 0km</span></div>';
+        let distanceMarker = L.marker([0, 0], {
+            icon: L.divIcon({
+                className: 'distance-label',
+                html: distanceLabelHtml,
+                iconSize: [150, 40],
+                iconAnchor: [75, 0]
+            })
+        });
+
+        // 计算两点间直线距离（Haversine公式）
+        function calculateStraightDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) + 
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+
+        // 更新距离显示
+        function updateDistanceDisplay() {
+            const origin = originMarker.getLatLng();
+            const dest = destMarker.getLatLng();
+            
+            const straightDist = calculateStraightDistance(origin.lat, origin.lng, dest.lat, dest.lng);
+            const drivingDist = straightDist * 1.2;
+            
+            // 计算路线角度
+            const dLon = (dest.lng - origin.lng) * Math.PI / 180;
+            const y = Math.sin(dLon) * Math.cos(dest.lat * Math.PI / 180);
+            const x = Math.cos(origin.lat * Math.PI / 180) * Math.sin(dest.lat * Math.PI / 180) -
+                      Math.sin(origin.lat * Math.PI / 180) * Math.cos(dest.lat * Math.PI / 180) * Math.cos(dLon);
+            const bearing = Math.atan2(y, x) * 180 / Math.PI;
+            
+            distanceLabelHtml = `<div class="route-distance-label" style="transform: rotate(${bearing - 90}deg); transform-origin: center center;"><span class="straight-distance">直线: ${straightDist.toFixed(1)}km</span><span class="driving-distance">开车: ${drivingDist.toFixed(1)}km</span></div>`;
+            distanceMarker.setIcon(L.divIcon({
+                className: 'distance-label',
+                html: distanceLabelHtml,
+                iconSize: [150, 40],
+                iconAnchor: [75, 0]
+            }));
+            
+            const midLat = (origin.lat + dest.lat) / 2;
+            const midLng = (origin.lng + dest.lng) / 2;
+            distanceMarker.setLatLng([midLat, midLng]);
+        }
 
         // 起始点拖拽事件
         originMarker.on('drag', function() {
@@ -512,22 +628,37 @@
         // 起始点拖拽结束事件
         originMarker.on('dragend', function() {
             routeLine.setLatLngs([originMarker.getLatLng(), destMarker.getLatLng()]);
+            updateDistanceDisplay();
+            // 更新起始点输入框
+            const originLatLng = originMarker.getLatLng();
+            document.getElementById('originInput').value = `${originLatLng.lat.toFixed(6)}, ${originLatLng.lng.toFixed(6)}`;
         });
 
         // 目的地拖拽事件
         destMarker.on('drag', function() {
             routeLine.setLatLngs([originMarker.getLatLng(), destMarker.getLatLng()]);
+            updateDistanceDisplay();
         });
 
         // 目的地拖拽结束事件
         destMarker.on('dragend', function() {
             routeLine.setLatLngs([originMarker.getLatLng(), destMarker.getLatLng()]);
+            updateDistanceDisplay();
+            // 更新目的地输入框
+            const destLatLng = destMarker.getLatLng();
+            document.getElementById('destinationInput').value = `${destLatLng.lat.toFixed(6)}, ${destLatLng.lng.toFixed(6)}`;
         });
 
         // 点击地图添加目的地
         map.on('click', function(e) {
             destMarker.setLatLng(e.latlng);
+            map.addLayer(destMarker);
             routeLine.setLatLngs([originMarker.getLatLng(), destMarker.getLatLng()]);
+            map.addLayer(routeLine);
+            map.addLayer(distanceMarker);
+            updateDistanceDisplay();
+            // 更新目的地输入框
+            document.getElementById('destinationInput').value = `${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}`;
         });
 
         // 模式切换按钮
@@ -630,6 +761,10 @@
                 updateUIForMode();
             });
         });
+
+        // 定位按钮事件
+        const locateBtn = document.getElementById('locateBtn');
+        locateBtn.addEventListener('click', locateUserPosition);
 
         // 模拟车辆缓慢移动
         setInterval(() => {

@@ -118,6 +118,19 @@ export default {
           .run();
 
         if (result.success) {
+          const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+          const msg = `[系统通知] 用户 ${username} 注册成功！`;
+          
+          await DB
+            .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
+            .bind('immmor', msg, now)
+            .run();
+          
+          await DB
+            .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
+            .bind('admin', msg, now)
+            .run();
+          
           return resJson({ 
             success: true, 
             message: finalBalance > 0 ? '注册成功！获得邀请奖励2元' : '注册成功！', 
@@ -224,6 +237,19 @@ export default {
             .run();
           
           if (result.success && result.meta.changes > 0) {
+            const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+            const msg = `[系统通知] 用户 ${username} 开通VIP成功！`;
+            
+            await DB
+              .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
+              .bind('immmor', msg, now)
+              .run();
+            
+            await DB
+              .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
+              .bind('admin', msg, now)
+              .run();
+            
             const updatedUser = await DB
               .prepare('SELECT username, balance, v_expire_date, v_token FROM user WHERE username = ?')
               .bind(username)
