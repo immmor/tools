@@ -801,29 +801,151 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
         }
       }
 
+      // ========== 发送消息接口 ==========
+      if (path === '/api/send-message' && request.method === 'POST') {
+        try {
+          const params = await request.json();
+          const { content, target, username } = params;
+          
+          if (!content) {
+            return resJson({ code: 400, msg: '内容不能为空' }, 400);
+          }
+          
+          if (target === 'single' && !username) {
+            return resJson({ code: 400, msg: '请指定用户名' }, 400);
+          }
+          
+          const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+          
+          if (target === 'all') {
+            // 获取所有用户
+            const users = await DB
+              .prepare('SELECT username FROM user')
+              .all();
+            
+            if (!users.results || users.results.length === 0) {
+              return resJson({ code: 404, msg: '暂无用户' }, 404);
+            }
+            
+            // 为每个用户插入消息
+            for (const user of users.results) {
+              await DB
+                .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
+                .bind(user.username, content, now)
+                .run();
+            }
+            
+            return resJson({
+              code: 200,
+              msg: '发送成功',
+              data: {
+                total: users.results.length,
+                content
+              }
+            });
+          } else if (target === 'single') {
+            // 检查用户是否存在
+            const existingUser = await DB
+              .prepare('SELECT * FROM user WHERE username = ?')
+              .bind(username)
+              .first();
+            
+            if (!existingUser) {
+              return resJson({ code: 404, msg: '用户不存在' }, 404);
+            }
+            
+            // 插入消息
+            const result = await DB
+              .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
+              .bind(username, content, now)
+              .run();
+            
+            if (result.success) {
+              return resJson({
+                code: 200,
+                msg: '发送成功',
+                data: {
+                  username,
+                  content
+                }
+              });
+            } else {
+              return resJson({ code: 500, msg: '发送失败，请重试' }, 500);
+            }
+          } else {
+            return resJson({ code: 400, msg: '无效的发送目标' }, 400);
+          }
+        } catch (err) {
+          console.error('发送消息错误:', err);
+          return resJson({ code: 500, msg: '发送失败', error: err.message }, 500);
+        }
+      }
+
+      // ========== 获取用户消息接口 ==========
+      if (path === '/api/messages' && request.method === 'GET') {
+        try {
+          const username = url.searchParams.get('username');
+          
+          if (!username) {
+            return resJson({ code: 400, msg: '请传入username参数' }, 400);
+          }
+          
+          // 获取用户消息列表
+          const messages = await DB
+            .prepare('SELECT * FROM messages WHERE username = ? ORDER BY created_at DESC LIMIT 50')
+            .bind(username)
+            .all();
+          
+          // 获取未读消息数量
+          const unreadCount = await DB
+            .prepare('SELECT COUNT(*) as count FROM messages WHERE username = ? AND is_read = 0')
+            .bind(username)
+            .first();
+          
+          return resJson({
+            code: 200,
+            msg: '查询成功',
+            data: {
+              messages: messages.results || [],
+              unreadCount: unreadCount?.count || 0
+            }
+          });
+        } catch (err) {
+          console.error('获取消息错误:', err);
+          return resJson({ code: 500, msg: '查询失败', error: err.message }, 500);
+        }
+      }
+
+      // ========== 标记消息为已读接口 ==========
+      if (path === '/api/messages/read' && request.method === 'POST') {
+        try {
+          const params = await request.json();
+          const { messageId, username } = params;
+          
+          if (!messageId || !username) {
+            return resJson({ code: 400, msg: '缺少必要参数' }, 400);
+          }
+          
+          const result = await DB
+            .prepare('UPDATE messages SET is_read = 1 WHERE id = ? AND username = ?')
+            .bind(messageId, username)
+            .run();
+          
+          if (result.success) {
+            return resJson({ code: 200, msg: '标记成功' });
+          } else {
+            return resJson({ code: 500, msg: '标记失败' }, 500);
+          }
+        } catch (err) {
+          console.error('标记消息错误:', err);
+          return resJson({ code: 500, msg: '标记失败', error: err.message }, 500);
+        }
+      }
+
       // ========== 默认接口提示 ==========
       return resJson({
         code: 200,
-        msg: 'Worker+D1 服务正常 ✅',
-        testTips: [
-          'GET /api/get-user?name=kkk → 测试你的账号',
-          'POST /api/login → 登录（传{username,password}）',
-          'POST /api/register → 注册（传{username,password}）',
-          'GET /api/get-users → 查看所有用户',
-          'POST /api/pay/build-url → 构建支付 URL',
-          'POST /api/recharge → 充值（传{username,amount}）',
-          'GET /api/balance?username=xxx → 查询余额',
-          'GET /api/vip-status?username=xxx → 查询 VIP 状态',
-          'POST /api/contract/save → 保存合同',
-          'GET /api/contract/view?token=xxx → 查看分享合同',
-          'GET /api/contract/list?username=xxx → 获取合同列表',
-          'POST /api/contract/delete → 删除合同',
-          'POST /api/open-vip → 开通VIP（传{username,duration}）',
-          'GET /vip/clash?username=xxx → 获取VIP Clash节点',
-          'POST /chat → AI聊天接口（传{prompt,stream}）',
-          'GET /free/clash → 获取Clash免费节点',
-          'GET /free/v2ray → 获取V2Ray免费节点'
-        ]
+        msg: 'Worker+D1 服务正常 ✅'
       });
 
     } catch (err) {

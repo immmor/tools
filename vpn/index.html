@@ -929,6 +929,120 @@
                 }
             };
             
+            // 通知功能
+            let notifications = [];
+            let hasUnread = true;
+
+            const renderNotifications = (dataNotifications = []) => {
+                const notificationList = document.getElementById('notification-list');
+                notifications = dataNotifications;
+                notificationList.innerHTML = '';
+                if (notifications.length === 0) {
+                    notificationList.innerHTML = '<div class="px-4 py-3 text-sm text-zinc-400 text-center" data-i18n="no_notifications">暂无通知</div>';
+                    return;
+                }
+                notifications.forEach((notif, index) => {
+                    const div = document.createElement('div');
+                    div.className = 'px-4 py-3 border-b border-zinc-800/50 hover:bg-zinc-800/50 transition-colors cursor-pointer notification-item';
+                    div.dataset.index = index;
+                    div.innerHTML = `
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <p class="text-sm ${!notif.is_read ? 'text-white font-bold' : 'text-zinc-400'}">${notif.content}</p>
+                                <p class="text-xs text-zinc-600 mt-1">${formatTime(notif.created_at)}</p>
+                            </div>
+                            ${!notif.is_read ? '<span class="w-2 h-2 bg-[var(--neon-red)] rounded-full mt-2"></span>' : ''}
+                        </div>
+                    `;
+                    div.addEventListener('click', async () => {
+                        const idx = parseInt(div.dataset.index);
+                        if (!notifications[idx].is_read) {
+                            await markAsRead(notifications[idx].id);
+                            notifications[idx].is_read = true;
+                            renderNotifications(notifications);
+                            checkUnread(notifications);
+                        }
+                    });
+                    notificationList.appendChild(div);
+                });
+            };
+
+            const checkUnread = (dataNotifications = []) => {
+                const notificationDot = document.getElementById('notification-dot');
+                const unreadCount = dataNotifications.filter(n => !n.is_read).length;
+                hasUnread = unreadCount > 0;
+                if (hasUnread) {
+                    notificationDot.classList.remove('hidden');
+                } else {
+                    notificationDot.classList.add('hidden');
+                }
+            };
+
+            const markAsRead = async (messageId) => {
+                if (!userInfo) return;
+                try {
+                    await fetch(`${API}/api/messages/read`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ messageId, username: userInfo.username })
+                    });
+                } catch (error) {
+                    console.error('标记已读失败:', error);
+                }
+            };
+
+            const formatTime = (timeStr) => {
+                if (!timeStr) return '';
+                const date = new Date(timeStr.replace(' ', 'T') + 'Z');
+                const now = new Date();
+                const diff = now - date;
+                const minutes = Math.floor(diff / 60000);
+                const hours = Math.floor(diff / 3600000);
+                const days = Math.floor(diff / 86400000);
+                
+                if (minutes < 60) return `${minutes}分钟前`;
+                if (hours < 24) return `${hours}小时前`;
+                if (days < 7) return `${days}天前`;
+                return date.toLocaleDateString();
+            };
+            
+            // 通知按钮点击事件
+            const notificationBtn = document.getElementById('notification-btn');
+            const notificationDropdown = document.getElementById('notification-dropdown');
+            const notificationContainer = document.getElementById('notification-container');
+            
+            if (notificationBtn && notificationDropdown) {
+                notificationBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    notificationDropdown.classList.toggle('hidden');
+                    if (!notificationDropdown.classList.contains('hidden')) {
+                        hasUnread = false;
+                        checkUnread(notifications);
+                        lucide.createIcons();
+                    }
+                });
+
+                document.addEventListener('click', (e) => {
+                    if (notificationContainer && !notificationContainer.contains(e.target)) {
+                        notificationDropdown.classList.add('hidden');
+                    }
+                });
+            }
+            
+            const loadMessages = async () => {
+                if (!userInfo) return;
+                try {
+                    const res = await fetch(`${API}/api/messages?username=${encodeURIComponent(userInfo.username)}`);
+                    const data = await res.json();
+                    if (data.code === 200) {
+                        renderNotifications(data.data.messages || []);
+                        checkUnread(data.data.messages || []);
+                    }
+                } catch (error) {
+                    console.error('消息加载失败:', error);
+                }
+            };
+            
             const updateNav = (user) => {
                 userInfo = user;
                 if (user) {
@@ -937,6 +1051,7 @@
                     els.btn.textContent = displayName;
                     updateBalance();
                     updateQuota();
+                    loadMessages();
                     if (user.invite_code) {
                         const inviteEl = document.getElementById('dropdown-invite');
                         const inviteCodeEl = document.getElementById('dropdown-invite-code');
@@ -1280,80 +1395,6 @@
                     el.textContent = (base + randomAdd).toLocaleString();
                 }
             }, 30000);
-
-            // 通知功能
-            (() => {
-                const notificationBtn = document.getElementById('notification-btn');
-                const notificationDropdown = document.getElementById('notification-dropdown');
-                const notificationDot = document.getElementById('notification-dot');
-                const notificationList = document.getElementById('notification-list');
-                let hasUnread = true;
-
-                const notifications = [
-                    { title: '请重新更新您的链接', time: '2小时前', read: false },
-                    { title: '新版本 v2.1.0 上线，新增全球 50+ 节点，支持更多协议，速度提升 30%', time: '1天前', read: false },
-                    { title: '账户安全提醒：检测到新的登录尝试，请确认是否为本人操作', time: '3天前', read: true }
-                ];
-
-                const renderNotifications = () => {
-                    notificationList.innerHTML = '';
-                    if (notifications.length === 0) {
-                        notificationList.innerHTML = '<div class="px-4 py-3 text-sm text-zinc-400 text-center" data-i18n="no_notifications">暂无通知</div>';
-                        return;
-                    }
-                    notifications.forEach((notif, index) => {
-                        const div = document.createElement('div');
-                        div.className = 'px-4 py-3 border-b border-zinc-800/50 hover:bg-zinc-800/50 transition-colors cursor-pointer';
-                        div.innerHTML = `
-                            <div class="flex justify-between items-start">
-                                <div>
-                                    <p class="text-sm ${!notif.read ? 'text-white font-bold' : 'text-zinc-400'}">${notif.title}</p>
-                                    <p class="text-xs text-zinc-600 mt-1">${notif.time}</p>
-                                </div>
-                                ${!notif.read ? '<span class="w-2 h-2 bg-[var(--neon-red)] rounded-full mt-2"></span>' : ''}
-                            </div>
-                        `;
-                        div.addEventListener('click', () => {
-                            notifications[index].read = true;
-                            renderNotifications();
-                            checkUnread();
-                        });
-                        notificationList.appendChild(div);
-                    });
-                };
-
-                const checkUnread = () => {
-                    const unreadCount = notifications.filter(n => !n.read).length;
-                    hasUnread = unreadCount > 0;
-                    if (hasUnread) {
-                        notificationDot.classList.remove('hidden');
-                    } else {
-                        notificationDot.classList.add('hidden');
-                    }
-                };
-
-                if (notificationBtn && notificationDropdown) {
-                    notificationBtn.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        notificationDropdown.classList.toggle('hidden');
-                        if (!notificationDropdown.classList.contains('hidden')) {
-                            hasUnread = false;
-                            checkUnread();
-                            lucide.createIcons();
-                        }
-                    });
-
-                    document.addEventListener('click', (e) => {
-                        if (!notificationContainer.contains(e.target)) {
-                            notificationDropdown.classList.add('hidden');
-                        }
-                    });
-                }
-
-                const notificationContainer = document.getElementById('notification-container');
-                renderNotifications();
-                checkUnread();
-            })();
         })();
     </script>
 </body>
