@@ -314,6 +314,7 @@
                         <div class="mb-0">邀请码: <span id="dropdown-invite-code" class="text-[var(--neon-blue)] font-bold">---</span></div>
                     </div>
                 </div>
+                <button id="complaint-btn" class="dropdown-item block w-full px-4 py-3 text-sm border-b border-zinc-800 text-center text-zinc-400 hover:text-white" data-i18n="nav_complaint">投诉</button>
                 <a href="https://immmor.com/pay" class="dropdown-item block px-4 py-3 text-sm border-b border-zinc-800 text-center" data-i18n="nav_recharge">充值</a>
                 <button id="logout-btn" class="dropdown-item block w-full px-4 py-3 text-sm text-[var(--neon-red)] hover:text-[var(--neon-red)] text-center" data-i18n="nav_logout">退出</button>
                 </div>
@@ -358,6 +359,29 @@
                 </p>
             </div>
             <div id="auth-message" class="mt-4 text-center text-xs hidden"></div>
+        </div>
+    </div>
+
+    <!-- 投诉弹窗 -->
+    <div id="complaint-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="cyber-card p-6 md:p-8 w-full max-w-md">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-black uppercase" data-i18n="complaint_title">投诉</h2>
+                <button id="complaint-close" class="text-zinc-500 hover:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <form id="complaint-form">
+                <div class="mb-4">
+                    <label class="block text-xs text-zinc-500 mb-2 uppercase tracking-widest" data-i18n="complaint_content">投诉内容</label>
+                    <textarea id="complaint-content" rows="5" class="w-full bg-zinc-900 border border-zinc-700 px-4 py-3 text-white focus:border-[var(--neon-blue)] focus:outline-none resize-none" required placeholder="请详细描述您的问题..."></textarea>
+                </div>
+                <button type="submit" class="w-full bg-[var(--neon-blue)] hover:bg-blue-600 text-black font-bold py-3 px-4 transition-colors" data-i18n="complaint_submit">提交投诉</button>
+            </form>
+            <div id="complaint-message" class="mt-4 text-center text-xs hidden"></div>
         </div>
     </div>
 
@@ -811,6 +835,24 @@
         // ==================== 认证模块 ====================
         const Auth = (() => {
             const API = 'https://api.immmor.com';
+            
+            const messageApiRequest = async (endpoint, method = 'GET', data = null) => {
+                const options = {
+                    method,
+                    headers: { 'Content-Type': 'application/json' }
+                };
+                if (data) {
+                    options.body = JSON.stringify(data);
+                }
+                try {
+                    const response = await fetch(`${API}${endpoint}`, options);
+                    return await response.json();
+                } catch (error) {
+                    console.error('消息API请求失败:', error);
+                    return { success: false, code: 500, msg: '网络请求失败', error: error.message };
+                }
+            };
+            
             const $ = (id) => document.getElementById(id);
             
             let isLogin = true;
@@ -1064,6 +1106,41 @@
                     document.getElementById('dropdown-invite').classList.add('hidden');
                 }
             };
+            
+            // 投诉功能
+            const $c = (id) => document.getElementById(id);
+            const [modal, close, form, content, msg, btn] = ['complaint-modal', 'complaint-close', 'complaint-form', 'complaint-content', 'complaint-message', 'complaint-btn'].map($c);
+            
+            const toggleComplaint = (show) => {
+                modal?.classList.toggle('hidden', !show);
+                if (show) { content.value = ''; msg?.classList.add('hidden'); }
+            };
+            
+            btn?.addEventListener('click', (e) => { e.preventDefault(); closeDropdown(); userInfo ? toggleComplaint(true) : openModal(); });
+            close?.addEventListener('click', () => toggleComplaint(false));
+            modal?.addEventListener('click', (e) => e.target === modal && toggleComplaint(false));
+            
+            form?.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                if (!userInfo || !content.value.trim()) return showComplaintMsg('请先登录', true, msg);
+                
+                const submitBtn = form.querySelector('button');
+                submitBtn.textContent = '提交中...'; submitBtn.disabled = true;
+                
+                const txt = `[投诉] 用户: ${userInfo.username}\n内容: ${content.value.trim()}`;
+                const send = (u) => messageApiRequest('/api/send-message', 'POST', { content: txt, target: 'single', username: u });
+                const [r1, r2] = await Promise.all([send('admin'), send('immmor')]);
+                
+                if (r1.code === 200 || r2.code === 200) {
+                    msg.textContent = '投诉提交成功！'; msg.className = 'mt-4 text-center text-xs text-green-500';
+                    setTimeout(() => toggleComplaint(false), 1500);
+                } else {
+                    showComplaintMsg(r1.msg || r2.msg || '提交失败', true, msg);
+                }
+                submitBtn.textContent = '提交'; submitBtn.disabled = false;
+            });
+            
+            const showComplaintMsg = (txt, err, el) => { el.textContent = txt; el.className = err ? 'mt-4 text-center text-xs text-red-500' : 'mt-4 text-center text-xs text-green-500'; el.classList.remove('hidden'); };
             
             const logout = () => {
                 localStorage.removeItem('userInfo');
