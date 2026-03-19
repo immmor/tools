@@ -141,15 +141,50 @@
                 order: 3; padding: 0; justify-content: space-around;
                 box-shadow: 0 -5px 15px var(--shadow-dark);
             }
-            main { flex: none; height: calc(100vh - 70px); }
+            main { flex: none; height: calc(100vh - 70px); position: relative; }
             .content-panel {
                 position: absolute; bottom: 0; width: 100%; 
                 height: 100%; border-radius: 25px 25px 0 0;
+                z-index: 100;
             }
-            #home.content-panel { height: 50%; }
-            #map { height: 50%; }
+            #home.content-panel { 
+                height: 50%; 
+                transition: height 0.3s ease;
+            }
+            #home.content-panel.expanded { height: calc(100% - 70px); } /* 减去tab栏高度 */
+            #home.content-panel.collapsed { height: 30%; }
+            #map { height: 50%; transition: height 0.3s ease; }
+            #map.expanded { height: 0; }
+            #map.collapsed { height: 70%; }
             #trips #map, #msg #map, #profile #map { display: none; }
             #trips .content-panel, #msg .content-panel, #profile .content-panel { height: 100%; }
+            
+            /* 拖拽手柄 - 只在首页显示 */
+            #home .drag-handle {
+                position: absolute;
+                top: 8px;
+                left: 50%;
+                transform: translateX(-50%);
+                width: 40px;
+                height: 4px;
+                background: #ccc;
+                border-radius: 2px;
+                cursor: ns-resize;
+                z-index: 101;
+            }
+            #home .drag-handle::before {
+                content: '';
+                position: absolute;
+                top: -8px;
+                left: 0;
+                width: 100%;
+                height: 20px;
+                background: transparent;
+            }
+            /* 其他tab隐藏拖拽手柄 */
+            #trips .drag-handle, #msg .drag-handle, #profile .drag-handle {
+                display: none;
+            }
         }
 
         /* --- 模式切换开关 --- */
@@ -202,10 +237,10 @@
             color: #a0aec0;
         }
         .switch-toggle span.passenger {
-            left: 8px;
+            left: 7px;
         }
         .switch-toggle span.driver {
-            right: 10px;
+            right: 7px;
         }
 
         /* 隐藏滚动条 */
@@ -222,7 +257,7 @@
             z-index: 9999;
             opacity: 0;
             pointer-events: none;
-            transition: opacity 1s ease;
+            transition: opacity 1s ease, background 1s ease;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -236,14 +271,27 @@
         
         .fade-overlay.fade-out {
             opacity: 0;
+            transition: opacity 0.8s ease, background 0.8s ease;
         }
         
         .fade-overlay::after {
-            content: '切换至 ' attr(data-mode);
+            content: '';
             color: white;
             font-size: 48px;
             font-weight: 800;
             animation: fadeInOut 2s ease-in-out;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+        
+        .fade-overlay[data-mode="乘客模式"]::after {
+            content: '切换至 乘客模式';
+        }
+        
+        .fade-overlay[data-mode="车主模式"]::after {
+            content: '切换至 车主模式';
         }
         
         @keyframes fadeInOut {
@@ -279,6 +327,7 @@
 
     <main>
         <div id="home" class="content-panel active">
+            <div class="drag-handle"></div>
             <h2 style="font-weight: 800; margin-bottom: 10px;" id="homeTitle">SleekRide</h2>
             
             <div class="neu-card">
@@ -317,6 +366,7 @@
         </div>
 
         <div id="trips" class="content-panel">
+            <div class="drag-handle"></div>
             <h2 style="font-weight: 800; margin-bottom: 10px;" id="tripsTitle">我的行程</h2>
             <div class="neu-card" style="margin-bottom: 15px;">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
@@ -337,6 +387,7 @@
         </div>
 
         <div id="msg" class="content-panel">
+            <div class="drag-handle"></div>
             <h2 style="font-weight: 800; margin-bottom: 10px;" id="msgTitle">消息</h2>
             <div class="neu-card" style="display: flex; gap: 15px; margin-bottom: 15px;">
                 <div style="width: 50px; height: 50px; border-radius: 50%; background: #e6fffa; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
@@ -377,6 +428,7 @@
         </div>
 
         <div id="profile" class="content-panel">
+            <div class="drag-handle"></div>
             <div class="neu-card" style="text-align: center; padding: 40px 20px;">
                 <div style="width: 80px; height: 80px; border-radius: 50%; box-shadow: 5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light); margin: 0 auto 15px; overflow: hidden;">
                     <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Mrok" width="100%">
@@ -667,9 +719,11 @@
             const overlay = document.getElementById('fadeOverlay');
             const targetMode = userMode === 'passenger' ? 'driver' : 'passenger';
             const targetModeText = targetMode === 'passenger' ? '乘客模式' : '车主模式';
+            const iconClass = targetMode === 'passenger' ? 'fa-user' : 'fa-car';
             
-            // 设置转场动画文字
-            overlay.setAttribute('data-mode', targetModeText);
+            // 先清理之前的动画状态
+            overlay.classList.remove('active', 'fade-out');
+            overlay.innerHTML = '';
             
             // 先更新主题颜色
             if (targetMode === 'driver') {
@@ -677,6 +731,15 @@
             } else {
                 document.documentElement.classList.remove('mode-driver');
             }
+            
+            // 设置转场动画内容
+            overlay.innerHTML = `<div style="display: flex; flex-direction: column; align-items: center; gap: 20px;">
+                <i class="fas ${iconClass}" style="font-size: 64px;"></i>
+                <span style="font-size: 36px; font-weight: 800;">切换至 ${targetModeText}</span>
+            </div>`;
+            
+            // 强制重绘
+            void overlay.offsetWidth;
             
             // 开始转场动画
             overlay.classList.add('active');
@@ -686,9 +749,17 @@
                 userMode = targetMode;
                 updateUIForMode();
                 
-                // 结束转场动画
-                overlay.classList.remove('active');
-            }, 2000);
+                // 结束转场动画 - 添加 fade-out 类以获得平滑过渡
+                overlay.classList.add('fade-out');
+                
+                // 监听消失动画结束事件，清理内容
+                const handleFadeOutEnd = () => {
+                    overlay.classList.remove('active', 'fade-out');
+                    overlay.innerHTML = '';
+                    overlay.removeEventListener('transitionend', handleFadeOutEnd);
+                };
+                overlay.addEventListener('transitionend', handleFadeOutEnd);
+            }, 3000);
         });
 
         // 3. 车型选择逻辑
@@ -755,6 +826,21 @@
                     if(p.id === target) p.classList.add('active');
                 });
 
+                // 切换Tab时重置地图和面板状态
+                const map = document.getElementById('map');
+                if (target === 'home') {
+                    // 首页：显示地图，重置拖拽状态
+                    map.style.display = 'block';
+                    const homePanel = document.getElementById('home');
+                    homePanel.classList.remove('expanded', 'collapsed');
+                    map.classList.remove('expanded', 'collapsed');
+                    homePanel.style.height = '';
+                    map.style.height = '';
+                } else {
+                    // 其他tab：隐藏地图，面板全屏
+                    map.style.display = 'none';
+                }
+
                 // 切换后刷新地图布局
                 setTimeout(() => map.invalidateSize(), 300);
                 // 切换Tab时也更新UI内容
@@ -765,6 +851,108 @@
         // 定位按钮事件
         const locateBtn = document.getElementById('locateBtn');
         locateBtn.addEventListener('click', locateUserPosition);
+
+        // 6. 拖拽功能实现（只在首页生效）
+        let isDragging = false;
+        let startY = 0;
+        let startHeight = 0;
+        let currentPanel = null;
+        let currentMap = null;
+
+        // 添加拖拽事件监听器（只在首页生效）
+        const dragHandles = document.querySelectorAll('.drag-handle');
+        dragHandles.forEach(handle => {
+            handle.addEventListener('touchstart', handleDragStart);
+            handle.addEventListener('mousedown', handleDragStart);
+        });
+
+        function handleDragStart(e) {
+            if (window.innerWidth > 900) return; // 只在移动端生效
+            
+            const panel = e.target.closest('.content-panel');
+            if (panel.id !== 'home') return; // 只在首页生效
+            
+            e.preventDefault();
+            isDragging = true;
+            startY = e.type === 'touchstart' ? e.touches[0].clientY : e.clientY;
+            currentPanel = panel;
+            currentMap = document.getElementById('map');
+            startHeight = currentPanel.offsetHeight;
+            
+            // 添加拖拽状态样式
+            currentPanel.style.transition = 'none';
+            currentMap.style.transition = 'none';
+            
+            // 添加事件监听器
+            document.addEventListener('touchmove', handleDragMove);
+            document.addEventListener('mousemove', handleDragMove);
+            document.addEventListener('touchend', handleDragEnd);
+            document.addEventListener('mouseup', handleDragEnd);
+        }
+
+        function handleDragMove(e) {
+            if (!isDragging) return;
+            
+            e.preventDefault();
+            const currentY = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY;
+            const deltaY = startY - currentY; // 向上拖拽为正值
+            const newHeight = Math.max(70, Math.min(window.innerHeight - 70, startHeight + deltaY));
+            
+            // 实时更新高度
+            currentPanel.style.height = newHeight + 'px';
+            currentMap.style.height = (window.innerHeight - 70 - newHeight) + 'px'; // 70px是tab栏高度
+        }
+
+        function handleDragEnd(e) {
+            if (!isDragging) return;
+            
+            e.preventDefault();
+            isDragging = false;
+            
+            // 恢复过渡效果
+            currentPanel.style.transition = '';
+            currentMap.style.transition = '';
+            
+            // 根据最终高度决定是展开还是收起
+            const finalHeight = currentPanel.offsetHeight;
+            const screenHeight = window.innerHeight;
+            
+            // 移除之前的类
+            currentPanel.classList.remove('expanded', 'collapsed');
+            currentMap.classList.remove('expanded', 'collapsed');
+            
+            if (finalHeight > screenHeight * 0.6) {
+                // 展开状态
+                currentPanel.classList.add('expanded');
+                currentMap.classList.add('expanded');
+            } else if (finalHeight < screenHeight * 0.4) {
+                // 收起状态
+                currentPanel.classList.add('collapsed');
+                currentMap.classList.add('collapsed');
+            }
+            // 中间状态保持当前高度
+            
+            // 移除事件监听器
+            document.removeEventListener('touchmove', handleDragMove);
+            document.removeEventListener('mousemove', handleDragMove);
+            document.removeEventListener('touchend', handleDragEnd);
+            document.removeEventListener('mouseup', handleDragEnd);
+        }
+
+        // 窗口大小变化时重新计算布局
+        window.addEventListener('resize', () => {
+            if (window.innerWidth > 900) {
+                // 桌面端：重置所有样式
+                const panels = document.querySelectorAll('.content-panel');
+                const map = document.getElementById('map');
+                panels.forEach(panel => {
+                    panel.classList.remove('expanded', 'collapsed');
+                    panel.style.height = '';
+                });
+                map.classList.remove('expanded', 'collapsed');
+                map.style.height = '';
+            }
+        });
 
         // 模拟车辆缓慢移动
         setInterval(() => {
