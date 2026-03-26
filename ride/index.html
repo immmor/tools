@@ -63,9 +63,11 @@
             overflow-y: auto;
             background: var(--bg);
             z-index: 100;
-            display: none; /* 默认隐藏，JS控制切换 */
+            display: none;
+            box-sizing: border-box;
         }
         .content-panel.active { display: flex; flex-direction: column; gap: 20px; }
+        .content-panel.dragging { overflow: hidden; }
 
         /* --- 凹凸组件 --- */
         .neu-card {
@@ -79,10 +81,12 @@
             background: var(--bg);
             border-radius: 12px;
             box-shadow: inset 5px 5px 10px var(--shadow-dark), inset -5px -5px 10px var(--shadow-light);
-            padding: 12px;
+            padding: 16px;
             display: flex;
             align-items: center;
             gap: 10px;
+            width: 90%;
+            margin: 0 auto;
         }
 
         .neu-input-box input {
@@ -333,16 +337,38 @@
             <div class="neu-card">
                 <p style="font-size: 14px; margin-bottom: 15px; font-weight: 600;" id="homeSubtitle">要去哪里？</p>
                 <div style="display: flex; flex-direction: column; gap: 12px;">
-                    <div class="neu-input-box">
-                        <i class="fas fa-dot-circle" style="color: #48bb78; width: 20px; text-align: center;"></i>
-                        <input type="text" id="originInput" placeholder="输入起点">
-                        <button id="locateBtn" style="background: none; border: none; cursor: pointer; color: #48bb78; width: 20px; text-align: center;">
+                    <div style="display: flex; gap: 12px; align-items: center;">
+                        <div class="neu-input-box" style="flex: 1; padding-right: 12px;">
+                            <i class="fas fa-dot-circle" style="color: #48bb78; width: 20px; text-align: center;"></i>
+                            <input type="text" id="originInput" placeholder="输入起点" autocomplete="off" style="flex: 1;">
+                        </div>
+                        <button id="locateBtn" style="background: var(--bg); border: none; cursor: pointer; color: #48bb78; width: 40px; height: 40px; border-radius: 12px; box-shadow: 3px 3px 6px var(--shadow-dark), -3px -3px 6px var(--shadow-light); display: flex; align-items: center; justify-content: center;">
                             <i class="fas fa-location-arrow"></i>
                         </button>
                     </div>
-                    <div class="neu-input-box">
-                        <i class="fas fa-map-marker-alt" style="color: #f56565; width: 18px; text-align: center;"></i>
-                        <input type="text" id="destinationInput" placeholder="输入终点">
+                    <div style="display: flex; gap: 12px; align-items: center;">
+                        <div class="neu-input-box" style="flex: 1; padding-right: 12px;">
+                            <i class="fas fa-map-marker-alt" style="color: #f56565; width: 18px; text-align: center;"></i>
+                            <input type="text" id="destinationInput" placeholder="输入终点" autocomplete="off" style="flex: 1;">
+                        </div>
+                        <button id="searchDestBtn" style="background: var(--bg); border: none; cursor: pointer; color: #f56565; width: 40px; height: 40px; border-radius: 12px; box-shadow: 3px 3px 6px var(--shadow-dark), -3px -3px 6px var(--shadow-light); display: flex; align-items: center; justify-content: center;">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="neu-card" id="routeInfo" style="display: none; padding: 15px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span style="font-size: 12px; color: #888;">路线距离</span>
+                            <span style="font-size: 12px; color: #888;">预计时间</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 24px; font-weight: bold; color: var(--accent);" id="routeDistance">0.0 km</span>
+                            <span style="font-size: 24px; font-weight: bold; color: var(--accent);" id="routeDuration">0 min</span>
+                        </div>
+                        <div style="margin-top: 8px; font-size: 12px; color: #888; text-align: center;">
+                            <span style="color: #3a86ff; margin-right: 10px;"><i class="fas fa-expand-arrows-alt"></i> 直线: <span id="straightDistance">0.0 km</span></span>
+                            <span style="color: #f56565;"><i class="fas fa-road"></i> 驾车: <span id="drivingDistance">0.0 km</span></span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -429,27 +455,73 @@
 
         <div id="profile" class="content-panel">
             <div class="drag-handle"></div>
-            <div class="neu-card" style="text-align: center; padding: 40px 20px;">
-                <div style="width: 80px; height: 80px; border-radius: 50%; box-shadow: 5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light); margin: 0 auto 15px; overflow: hidden;">
-                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Mrok" width="100%">
+            
+            <!-- 登录/注册表单 -->
+            <div class="neu-card" id="loginForm" style="padding: 30px 20px;">
+                <h3 style="text-align: center; margin-bottom: 25px;">登录 SleekRide</h3>
+                <div style="display: flex; flex-direction: column; gap: 15px; align-items: center;">
+                    <div class="neu-input-box">
+                        <i class="fas fa-user"></i>
+                        <input type="text" id="loginUsername" placeholder="用户名" autocomplete="username">
+                    </div>
+                    <div class="neu-input-box">
+                        <i class="fas fa-lock"></i>
+                        <input type="password" id="loginPassword" placeholder="密码" autocomplete="current-password">
+                    </div>
+                    <button class="btn-primary" id="loginBtn" style="margin-top: 10px; width: 90%; margin-left: auto; margin-right: auto;">登录</button>
+                    <p style="text-align: center; font-size: 13px; color: #888;">
+                        还没有账号？<a href="#" id="showRegisterLink" style="color: var(--accent); text-decoration: none;">立即注册</a>
+                    </p>
                 </div>
-                <h3>Mrok De Engineer</h3>
-                <p style="font-size: 12px; color: #888;">系统工程师 | 信用极好 780</p>
             </div>
             
-            <div class="neu-card mode-switch">
-                <span class="mode-switch-label">当前身份</span>
-                <div class="switch-toggle active" id="modeToggle">
-                    <span class="passenger">车主</span>
-                    <span class="driver">乘客</span>
+            <!-- 注册表单（默认隐藏） -->
+            <div class="neu-card" id="registerForm" style="padding: 30px 20px; display: none;">
+                <h3 style="text-align: center; margin-bottom: 25px;">注册账号</h3>
+                <div style="display: flex; flex-direction: column; gap: 15px; align-items: center;">
+                    <div class="neu-input-box">
+                        <i class="fas fa-user"></i>
+                        <input type="text" id="regUsername" placeholder="用户名">
+                    </div>
+                    <div class="neu-input-box">
+                        <i class="fas fa-lock"></i>
+                        <input type="password" id="regPassword" placeholder="密码">
+                    </div>
+                    <div class="neu-input-box">
+                        <i class="fas fa-key"></i>
+                        <input type="text" id="regPasswordConfirm" placeholder="确认密码">
+                    </div>
+                    <button class="btn-primary" id="registerBtn" style="margin-top: 10px; width: 90%; margin-left: auto; margin-right: auto;">注册</button>
+                    <p style="text-align: center; font-size: 13px; color: #888;">
+                        已有账号？<a href="#" id="showLoginLink" style="color: var(--accent); text-decoration: none;">立即登录</a>
+                    </p>
                 </div>
             </div>
             
-            <div class="neu-card" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                <div class="btn-primary" style="text-align: center; font-size: 13px;">钱包余额<br><b>¥1250.00</b></div>
-                <div class="btn-primary" style="text-align: center; font-size: 13px;">优惠券<br><b>12 张</b></div>
+            <!-- 用户信息面板（默认隐藏） -->
+            <div class="neu-card" id="userInfoPanel" style="text-align: center; padding: 40px 20px; display: none;">
+                <div style="width: 80px; height: 80px; border-radius: 50%; box-shadow: 5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light); margin: 0 auto 15px; overflow: hidden; background: var(--bg);">
+                    <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=UserProfile" width="100%">
+                </div>
+                <h3 id="usernameDisplay">用户</h3>
+                <p style="font-size: 12px; color: #888;">信用极好 780</p>
             </div>
-            <button class="btn-primary" style="color: #f56565;">退出登录</button>
+            
+            <div class="neu-card" id="userActions" style="display: none;">
+                <div class="neu-card mode-switch">
+                    <span class="mode-switch-label">当前身份</span>
+                    <div class="switch-toggle active" id="modeToggle">
+                        <span class="passenger">车主</span>
+                        <span class="driver">乘客</span>
+                    </div>
+                </div>
+                
+                <div class="neu-card" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px;">
+                    <div class="btn-primary" style="text-align: center; font-size: 13px;">钱包余额<br><b id="balanceDisplay">¥0.00</b></div>
+                    <div class="btn-primary" style="text-align: center; font-size: 13px;">优惠券<br><b>12 张</b></div>
+                </div>
+                <button class="btn-primary" id="logoutBtn" style="width: 100%; margin-top: 15px; color: #f56565;">退出登录</button>
+            </div>
         </div>
 
         <div id="map"></div>
@@ -609,6 +681,7 @@
                 
                 const drivingDist = routeData.distance / 1000;
                 const straightDist = calculateStraightDistance(origin.lat, origin.lng, dest.lat, dest.lng);
+                const duration = Math.round(routeData.duration / 60);
                 
                 const dLon = (dest.lng - origin.lng) * Math.PI / 180;
                 const y = Math.sin(dLon) * Math.cos(dest.lat * Math.PI / 180);
@@ -631,6 +704,22 @@
                 
                 const bounds = routeLine.getBounds();
                 map.fitBounds(bounds, { padding: [50, 50] });
+                
+                // 更新路线信息显示
+                const routeInfo = document.getElementById('routeInfo');
+                if (routeInfo) {
+                    routeInfo.style.display = 'block';
+                    document.getElementById('routeDistance').textContent = `${drivingDist.toFixed(1)} km`;
+                    document.getElementById('routeDuration').textContent = `${duration} min`;
+                    document.getElementById('straightDistance').textContent = `${straightDist.toFixed(1)} km`;
+                    document.getElementById('drivingDistance').textContent = `${drivingDist.toFixed(1)} km`;
+                }
+            } else {
+                // 如果没有路线数据，隐藏信息
+                const routeInfo = document.getElementById('routeInfo');
+                if (routeInfo) {
+                    routeInfo.style.display = 'none';
+                }
             }
             
             if (!map.hasLayer(routeLine)) map.addLayer(routeLine);
@@ -660,6 +749,9 @@
                         
                         // 设置地图视野到当前位置
                         map.setView(userLatLng, 14);
+                        
+                        // 在起点周边显示车辆
+                        showCarsNearOrigin();
                     },
                     function(error) {
                         console.error('定位错误:', error);
@@ -690,6 +782,8 @@
                         originMarker.setLatLng(latLng);
                         updateRoute();
                         this.value = result.displayName;
+                        // 在起点周边显示车辆
+                        showCarsNearOrigin();
                     } else {
                         alert('未找到该地址，请尝试更详细的地址');
                     }
@@ -709,6 +803,8 @@
                         originMarker.setLatLng(latLng);
                         updateRoute();
                         this.value = result.displayName;
+                        // 在起点周边显示车辆
+                        showCarsNearOrigin();
                     }
                 }, 800);
             }
@@ -759,7 +855,7 @@
         // 2. 模拟司机图标
         const carIcon = L.divIcon({
             className: 'car-marker',
-            html: `<div style="background: white; border: 2px solid var(--accent); width: 14px; height: 14px; border-radius: 50%; box-shadow: 2px 2px 5px rgba(0,0,0,0.2);"></div>`
+            html: `<i class="fas fa-car" style="color: var(--accent); font-size: 20px; text-shadow: 2px 2px 5px rgba(0,0,0,0.3);"></i>`
         });
 
         const drivers = [
@@ -1025,6 +1121,30 @@
         // 定位按钮事件
         const locateBtn = document.getElementById('locateBtn');
         locateBtn.addEventListener('click', locateUserPosition);
+        
+        // 搜索按钮事件
+        const searchDestBtn = document.getElementById('searchDestBtn');
+        searchDestBtn.addEventListener('click', () => {
+            const address = document.getElementById('destinationInput').value.trim();
+            if (address) {
+                geocodeAddress(address).then(result => {
+                    if (result) {
+                        const latLng = [result.lat, result.lng];
+                        if (!map.hasLayer(destMarker)) {
+                            map.addLayer(destMarker);
+                        }
+                        destMarker.setLatLng(latLng);
+                        updateRoute();
+                        document.getElementById('destinationInput').value = result.displayName;
+                    } else {
+                        alert('未找到该地址，请尝试更详细的地址');
+                    }
+                });
+            }
+        });
+        
+        // 页面加载时在初始位置显示车辆
+        showCarsNearOrigin();
 
         // 6. 拖拽功能实现（只在首页生效）
         let isDragging = false;
@@ -1055,6 +1175,7 @@
             
             // 添加拖拽状态样式
             currentPanel.style.transition = 'none';
+            currentPanel.classList.add('dragging');
             currentMap.style.transition = 'none';
             
             // 添加事件监听器
@@ -1092,7 +1213,7 @@
             const screenHeight = window.innerHeight;
             
             // 移除之前的类
-            currentPanel.classList.remove('expanded', 'collapsed');
+            currentPanel.classList.remove('expanded', 'collapsed', 'dragging');
             currentMap.classList.remove('expanded', 'collapsed');
             
             if (finalHeight > screenHeight * 0.6) {
@@ -1128,13 +1249,194 @@
             }
         });
 
-        // 模拟车辆缓慢移动
+        // 在起点周边显示可用车辆
+        function showCarsNearOrigin() {
+            const origin = originMarker.getLatLng();
+            
+            // 移除旧的车辆标记（保留drivers数组中的原始标记、起点和目的地标记）
+            map.eachLayer((layer) => {
+                if (layer instanceof L.Marker && 
+                    !drivers.includes(layer) && 
+                    layer !== originMarker && 
+                    layer !== destMarker) {
+                    map.removeLayer(layer);
+                }
+            });
+            
+            // 在起点周边生成3-5辆随机车辆
+            const numCars = Math.floor(Math.random() * 3) + 3;
+            for (let i = 0; i < numCars; i++) {
+                const lat = origin.lat + (Math.random() - 0.5) * 0.02;
+                const lng = origin.lng + (Math.random() - 0.5) * 0.02;
+                const car = L.marker([lat, lng], {icon: carIcon}).addTo(map);
+                drivers.push(car);
+            }
+        }
+
+        // 模拟车辆缓慢移动（随机方向）
         setInterval(() => {
             drivers.forEach(d => {
                 const pos = d.getLatLng();
-                d.setLatLng([pos.lat + 0.0001, pos.lng + 0.0001]);
+                // 随机生成移动方向（0-360度）
+                const angle = Math.random() * Math.PI * 2;
+                // 随机生成移动距离
+                const distance = 0.00005 + Math.random() * 0.0001;
+                const newLat = pos.lat + Math.sin(angle) * distance;
+                const newLng = pos.lng + Math.cos(angle) * distance;
+                d.setLatLng([newLat, newLng]);
             });
         }, 2000);
+
+        // 当起点改变时，在新位置周边显示车辆
+        originMarker.on('dragend', function() {
+            showCarsNearOrigin();
+        });
+
+        // ========== 登录注册功能 ==========
+        const API_BASE = 'https://api.immmor.com';
+        
+        let currentUser = null;
+        
+        // 检查本地存储的登录状态
+        function checkAuth() {
+            const storedUser = localStorage.getItem('sleekride_user');
+            if (storedUser) {
+                currentUser = JSON.parse(storedUser);
+                showUserInfo(currentUser);
+            } else {
+                showLoginForm();
+            }
+        }
+        
+        // 保存用户信息到本地存储
+        function saveUser(user) {
+            localStorage.setItem('sleekride_user', JSON.stringify(user));
+        }
+        
+        // 清除本地存储的用户信息
+        function clearUser() {
+            localStorage.removeItem('sleekride_user');
+        }
+        
+        // 切换到登录表单
+        function showLoginForm() {
+            document.getElementById('loginForm').style.display = 'block';
+            document.getElementById('registerForm').style.display = 'none';
+            document.getElementById('userInfoPanel').style.display = 'none';
+            document.getElementById('userActions').style.display = 'none';
+        }
+        
+        // 切换到注册表单
+        function showRegisterForm() {
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('registerForm').style.display = 'block';
+        }
+        
+        // 显示用户信息
+        function showUserInfo(user) {
+            document.getElementById('loginForm').style.display = 'none';
+            document.getElementById('registerForm').style.display = 'none';
+            document.getElementById('userInfoPanel').style.display = 'block';
+            document.getElementById('userActions').style.display = 'block';
+            document.getElementById('usernameDisplay').textContent = user.username;
+            document.getElementById('balanceDisplay').textContent = `¥${user.balance.toFixed(2)}`;
+        }
+        
+        // 登录按钮
+        document.getElementById('loginBtn').addEventListener('click', async () => {
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value.trim();
+            
+            if (!username || !password) {
+                alert('请输入用户名和密码');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    currentUser = data.userInfo;
+                    saveUser(currentUser);
+                    showUserInfo(currentUser);
+                    alert('登录成功！');
+                } else {
+                    alert(data.message || '登录失败');
+                }
+            } catch (error) {
+                console.error('登录错误:', error);
+                alert('网络错误，请重试');
+            }
+        });
+        
+        // 注册按钮
+        document.getElementById('registerBtn').addEventListener('click', async () => {
+            const username = document.getElementById('regUsername').value.trim();
+            const password = document.getElementById('regPassword').value.trim();
+            const confirmPassword = document.getElementById('regPasswordConfirm').value.trim();
+            
+            if (!username || !password) {
+                alert('请输入用户名和密码');
+                return;
+            }
+            
+            if (password !== confirmPassword) {
+                alert('两次密码不一致');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    currentUser = data.userInfo;
+                    saveUser(currentUser);
+                    showUserInfo(currentUser);
+                    alert('注册成功！');
+                } else {
+                    alert(data.message || '注册失败');
+                }
+            } catch (error) {
+                console.error('注册错误:', error);
+                alert('网络错误，请重试');
+            }
+        });
+        
+        // 切换链接
+        document.getElementById('showRegisterLink').addEventListener('click', (e) => {
+            e.preventDefault();
+            showRegisterForm();
+        });
+        
+        document.getElementById('showLoginLink').addEventListener('click', (e) => {
+            e.preventDefault();
+            showLoginForm();
+        });
+        
+        // 退出登录
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            clearUser();
+            currentUser = null;
+            showLoginForm();
+            document.getElementById('loginUsername').value = '';
+            document.getElementById('loginPassword').value = '';
+            alert('已退出登录');
+        });
+        
+        // 初始化：检查登录状态
+        checkAuth();
     </script>
 </body>
 </html>
