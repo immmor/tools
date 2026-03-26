@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Aurora Trade | 极光毛玻璃系统</title>
+    <style>
+        :root {
+            --primary-glass: rgba(255, 255, 255, 0.12);
+            --border-light: rgba(255, 255, 255, 0.25);
+            --accent: #7000ff;
+            --success: #00e676;
+            --danger: #ff5252;
+            --text-p: rgba(255, 255, 255, 0.9);
+            --text-s: rgba(255, 255, 255, 0.5);
+        }
+
+        * {
+            margin: 0; padding: 0; box-sizing: border-box;
+            font-family: 'Outfit', 'PingFang SC', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background: #0a0a1a;
+            color: #fff;
+            min-height: 100vh;
+            overflow-x: hidden;
+            padding-bottom: 90px;
+        }
+
+        /* 动态极光背景 */
+        .aurora-container {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: -1; overflow: hidden; background: #050510;
+        }
+        .aurora {
+            position: absolute; width: 800px; height: 800px; border-radius: 50%;
+            filter: blur(120px); opacity: 0.4; animation: move 20s infinite alternate;
+        }
+        .aurora-1 { background: #00f2fe; top: -200px; left: -200px; }
+        .aurora-2 { background: #7000ff; bottom: -200px; right: -200px; animation-delay: -5s; }
+        .aurora-3 { background: #ff00de; top: 20%; right: -100px; animation-duration: 15s; }
+        @keyframes move { from { transform: translate(0,0) rotate(0deg); } to { transform: translate(100px, 100px) rotate(30deg); } }
+
+        /* 噪点质感叠加 */
+        body::before {
+            content: ""; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: url('https://grainy-gradients.vercel.app/noise.svg');
+            opacity: 0.04; pointer-events: none; z-index: 1;
+        }
+
+        /* 极光毛玻璃基类 */
+        .glass-card {
+            background: var(--primary-glass);
+            backdrop-filter: blur(30px);
+            -webkit-backdrop-filter: blur(30px);
+            border: 1.5px solid var(--border-light);
+            border-radius: 30px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.3), inset 0 0 20px rgba(255,255,255,0.05);
+            position: relative; overflow: hidden;
+        }
+
+        /* 侧滑菜单 */
+        .side-menu {
+            position: fixed; top: 0; left: -300px; width: 280px; height: 100%;
+            z-index: 2000; transition: 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+            padding: 40px 20px;
+        }
+        .side-menu.open { left: 0; box-shadow: 50px 0 100px rgba(0,0,0,0.5); }
+
+        /* 布局 */
+        .wrapper {
+            max-width: 1200px; margin: 0 auto; padding: 20px;
+            display: grid; grid-template-columns: 280px 1fr; gap: 24px;
+        }
+
+        /* 资产概览卡片 */
+        .balance-card {
+            padding: 30px; background: linear-gradient(135deg, rgba(255,255,255,0.15), rgba(255,255,255,0.05));
+            margin-bottom: 24px;
+        }
+
+        /* 交易输入区 */
+        .trade-input-group {
+            background: rgba(0,0,0,0.2); padding: 15px; border-radius: 20px;
+            border: 1px solid rgba(255,255,255,0.1); margin-bottom: 15px;
+        }
+        .trade-input-group label { color: var(--text-s); font-size: 12px; }
+        .trade-input-group input { 
+            background: transparent; border: none; color: #fff; width: 100%; 
+            font-size: 20px; font-weight: 600; outline: none; margin-top: 5px;
+        }
+
+        /* 历史记录列表 */
+        .history-list { margin-top: 20px; }
+        .history-item {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        /* 底部导航 (Tabbar) */
+        .nav-bar {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            width: 90%; max-width: 400px; height: 70px; display: flex;
+            justify-content: space-around; align-items: center; z-index: 1500;
+        }
+        .nav-link { 
+            width: 50px; height: 50px; display: flex; align-items: center; 
+            justify-content: center; border-radius: 15px; transition: 0.3s;
+            font-size: 22px; cursor: pointer; color: var(--text-s);
+        }
+        .nav-link.active { background: #fff; color: #000; box-shadow: 0 0 20px #fff; }
+
+        /* 响应式适配 */
+        @media (max-width: 900px) {
+            .wrapper { grid-template-columns: 1fr; }
+            .desktop-only { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="aurora-container">
+        <div class="aurora aurora-1"></div>
+        <div class="aurora aurora-2"></div>
+        <div class="aurora aurora-3"></div>
+    </div>
+
+    <div id="sideMenu" class="side-menu glass-card">
+        <h3 style="margin-bottom: 30px;">选择币种</h3>
+        <div style="display:grid; gap:15px;">
+            <div style="padding:15px; background:rgba(255,255,255,0.1); border-radius:15px; cursor:pointer;">Bitcoin (BTC)</div>
+            <div style="padding:15px; background:rgba(255,255,255,0.05); border-radius:15px; cursor:pointer;">Ethereum (ETH)</div>
+            <div style="padding:15px; background:rgba(255,255,255,0.05); border-radius:15px; cursor:pointer;">Solana (SOL)</div>
+        </div>
+        <button onclick="toggleMenu()" style="margin-top:40px; background:none; border:none; color:#fff; cursor:pointer;">← 返回</button>
+    </div>
+
+    <div class="wrapper">
+        <aside class="desktop-only">
+            <div class="glass-card balance-card">
+                <p style="font-size:14px; color:var(--text-s);">总资产估值</p>
+                <h1 style="margin:10px 0; font-size:32px;">$124,560.00</h1>
+                <span style="color:var(--success); font-size:14px;">+12.5% 今日收益</span>
+            </div>
+            
+            <div class="glass-card" style="padding:20px;">
+                <h4 style="margin-bottom:15px;">快捷操作</h4>
+                <button style="width:100%; padding:12px; border-radius:15px; border:none; background:#fff; color:#000; font-weight:bold; margin-bottom:10px;">充值</button>
+                <button style="width:100%; padding:12px; border-radius:15px; border:1px solid var(--border-light); background:none; color:#fff;">提现</button>
+            </div>
+        </aside>
+
+        <main>
+            <div class="glass-card" style="padding:25px; margin-bottom:24px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                    <div onclick="toggleMenu()" style="cursor:pointer; display:flex; align-items:center; gap:10px;">
+                        <div style="width:32px; height:32px; background:orange; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:bold;">₿</div>
+                        <span style="font-size:18px; font-weight:bold;">BTC/USDT ▾</span>
+                    </div>
+                    <div style="text-align:right;">
+                        <h2 style="color:var(--success);">$64,231.50</h2>
+                        <p style="font-size:12px; opacity:0.5;">≈ ￥458,120.20</p>
+                    </div>
+                </div>
+
+                <div class="trade-input-group">
+                    <label>买入价格</label>
+                    <input type="text" value="64231.50">
+                </div>
+                <div class="trade-input-group">
+                    <label>买入数量</label>
+                    <input type="text" placeholder="0.00">
+                </div>
+
+                <button style="width:100%; padding:18px; border-radius:20px; border:none; background:linear-gradient(90deg, #7000ff, #ff00de); color:#fff; font-size:18px; font-weight:bold; box-shadow: 0 10px 30px rgba(112,0,255,0.3); cursor:pointer;">立即买入 BTC</button>
+            </div>
+
+            <div class="glass-card" style="padding:25px;">
+                <h4 style="margin-bottom:15px;">最近成交记录</h4>
+                <div class="history-list">
+                    <div class="history-item">
+                        <div><p>买入 BTC</p><small style="color:var(--text-s)">2026-03-26 14:20</small></div>
+                        <b style="color:var(--success)">+0.052 BTC</b>
+                    </div>
+                    <div class="history-item">
+                        <div><p>卖出 ETH</p><small style="color:var(--text-s)">2026-03-25 09:12</small></div>
+                        <b style="color:var(--danger)">-1.200 ETH</b>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <nav class="nav-bar glass-card">
+        <div class="nav-link active">🏠</div>
+        <div class="nav-link">📊</div>
+        <div class="nav-link">🔄</div>
+        <div class="nav-link">👛</div>
+    </nav>
+
+    <script>
+        function toggleMenu() {
+            document.getElementById('sideMenu').classList.toggle('open');
+        }
+
+        // 简单的 Tab 切换视觉效果
+        const links = document.querySelectorAll('.nav-link');
+        links.forEach(link => {
+            link.addEventListener('click', () => {
+                links.forEach(l => l.classList.remove('active'));
+                link.classList.add('active');
+            });
+        });
+    </script>
+</body>
+</html>

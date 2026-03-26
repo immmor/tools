@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>GlassEx | 深度磨砂交易系统</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --glass-strong: rgba(255, 255, 255, 0.08);
+            --glass-light: rgba(255, 255, 255, 0.04);
+            --glass-border: rgba(255, 255, 255, 0.12);
+            --accent-cyan: #00f2fe;
+            --accent-pink: #ff00de;
+            --price-up: #00ffa3;
+            --price-down: #ff4d4d;
+        }
+
+        * {
+            margin: 0; padding: 0; box-sizing: border-box;
+            font-family: 'Inter', -apple-system, sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body {
+            background: linear-gradient(120deg, #1a1a2e, #16213e, #0f0c29, #1a1a2e);
+            background-size: 200% 200%;
+            color: #fff;
+            min-height: 100vh;
+            padding-bottom: 80px;
+            overflow-x: hidden;
+            animation: gradientShift 10s ease-in-out infinite;
+        }
+
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        /* 背景流体装饰 */
+        .bg-glow {
+            position: fixed; width: 60vw; height: 60vw; border-radius: 50%;
+            filter: blur(100px); z-index: -1; opacity: 0.2; pointer-events: none;
+        }
+        .glow-1 { top: -20%; left: -10%; background: var(--accent-cyan); animation: float 15s infinite alternate; }
+        .glow-2 { bottom: -10%; right: -10%; background: var(--accent-pink); animation: float 20s infinite alternate-reverse; }
+        @keyframes float { from { transform: translate(0,0); } to { transform: translate(100px, 50px); } }
+
+        /* 统一毛玻璃样式 */
+        .glass {
+            background: var(--glass-strong);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            border-radius: 24px;
+        }
+
+        /* 顶部栏 */
+        header {
+            padding: 20px 5%;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .balance-chip {
+            padding: 8px 16px; border-radius: 50px; font-size: 13px;
+            background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border);
+        }
+
+        /* 布局容器 */
+        .main-layout {
+            max-width: 1400px; margin: 0 auto; padding: 0 20px;
+            display: grid; grid-template-columns: 1fr 350px 300px; gap: 20px;
+        }
+
+        /* 行情图表区 */
+        .chart-section { padding: 24px; }
+        .price-hero { font-size: 32px; font-weight: 800; margin: 10px 0; }
+        
+        /* 订单簿 (Order Book) */
+        .order-book { padding: 20px; font-size: 12px; }
+        .ob-row { display: flex; justify-content: space-between; margin: 4px 0; position: relative; }
+        .ob-bar { position: absolute; right: 0; height: 100%; opacity: 0.2; border-radius: 2px; }
+
+        /* 交易面板 */
+        .trade-panel { padding: 24px; display: flex; flex-direction: column; gap: 15px; }
+        .input-box {
+            background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border);
+            border-radius: 12px; padding: 12px;
+        }
+        .input-box label { font-size: 10px; color: #888; display: block; }
+        .input-box input { background: transparent; border: none; color: white; width: 100%; outline: none; font-size: 16px; margin-top: 4px; }
+
+        /* 仓位快捷选择 */
+        .percent-group { display: flex; gap: 8px; }
+        .percent-btn {
+            flex: 1; padding: 6px; border-radius: 8px; font-size: 10px;
+            background: var(--glass-light); border: 1px solid var(--glass-border);
+            color: #ccc; cursor: pointer; text-align: center;
+        }
+        .percent-btn:hover { background: var(--accent-cyan); color: #000; }
+
+        /* 资产页 */
+        .asset-list { margin-top: 15px; }
+        .asset-item {
+            display: flex; justify-content: space-between; padding: 12px;
+            border-bottom: 1px solid var(--glass-border);
+        }
+        .asset-item:first-child { border-radius: 12px 12px 0 0; }
+        .asset-item:last-child { border-bottom: none; border-radius: 0 0 12px 12px; }
+
+        /* 行情页扩展 */
+        .market-stats {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 20px;
+        }
+        .stat-card {
+            background: var(--glass-light); padding: 15px; border-radius: 12px;
+            border: 1px solid var(--glass-border);
+        }
+        .stat-label { font-size: 11px; color: #888; margin-bottom: 5px; }
+        .stat-value { font-size: 16px; font-weight: 600; }
+        .stat-value.up { color: var(--price-up); }
+        .stat-value.down { color: var(--price-down); }
+        .price-change { font-size: 14px; font-weight: 600; margin-top: 5px; }
+
+        /* 交易页扩展 */
+        .trade-tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+        .trade-tab {
+            flex: 1; padding: 12px; border-radius: 12px; border: none; background: var(--glass-light);
+            color: #888; cursor: pointer; font-weight: 600; transition: 0.3s;
+        }
+        .trade-tab.active {
+            background: var(--glass-strong); color: white; box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        .position-info {
+            margin-top: 20px; padding: 15px; background: var(--glass-light);
+            border-radius: 12px; border: 1px solid var(--glass-border);
+        }
+        .pos-row { display: flex; justify-content: space-between; margin: 8px 0; font-size: 13px; }
+        .pos-label { color: #888; }
+        .pos-value { font-weight: 600; }
+        .pos-value.green { color: var(--price-up); }
+        .pos-value.red { color: var(--price-down); }
+
+        /* 底部导航 (移动端) */
+        .tab-bar {
+            position: fixed; bottom: 15px; left: 50%; transform: translateX(-50%);
+            width: 92%; max-width: 500px; height: 65px;
+            display: none; grid-template-columns: repeat(4, 1fr);
+            padding: 0 10px; z-index: 1000; border-radius: 35px;
+        }
+        .tab-item {
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            color: #888; font-size: 10px; cursor: pointer;
+        }
+        .tab-item.active { color: var(--accent-cyan); text-shadow: 0 0 10px var(--accent-cyan); }
+        .tab-icon { font-size: 20px; margin-bottom: 2px; }
+
+        /* 响应式优化 */
+        @media (max-width: 1100px) {
+            .main-layout { grid-template-columns: 1fr 300px; }
+            .desktop-hide { display: none; }
+        }
+
+        @media (max-width: 768px) {
+            .main-layout { grid-template-columns: 1fr; }
+            .tab-bar { display: grid; }
+            .page { display: none; }
+            .page.active { display: block; }
+            .desktop-hide { display: block; }
+            header { justify-content: space-between; }
+            .top-balance { display: none; }
+            .price-hero { font-size: 24px; }
+            .market-stats { grid-template-columns: 1fr; }
+            .trade-panel { padding: 16px; }
+            .order-book { padding: 16px; }
+            .asset-list .asset-item { padding: 10px; }
+        }
+
+        @media (min-width: 769px) and (max-width: 1024px) {
+            .main-layout { grid-template-columns: 1fr 320px; }
+            .order-book { display: none; }
+        }
+
+        .btn-action:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+        .btn-action:active {
+            transform: translateY(0);
+        }
+        .percent-btn:hover {
+            background: var(--accent-cyan);
+            color: #000;
+            transform: scale(1.05);
+        }
+        .trade-tab:hover {
+            background: var(--glass-strong);
+        }
+        .asset-item:hover {
+            background: var(--glass-light);
+        }
+
+        .btn-action {
+            padding: 16px; border-radius: 16px; border: none; font-weight: bold;
+            cursor: pointer; transition: 0.3s;
+        }
+        .buy { background: var(--price-up); color: #003322; }
+        .sell { background: var(--price-down); color: #fff; }
+    </style>
+</head>
+<body>
+
+    <div class="bg-glow glow-1"></div>
+    <div class="bg-glow glow-2"></div>
+
+    <header>
+        <h2 style="letter-spacing: -1px;">GLASS<span style="color:var(--accent-cyan)">EX</span></h2>
+        <div class="balance-chip top-balance">钱包: 42,904.50 USDT</div>
+    </header>
+
+    <div class="main-layout">
+        <div id="market-page" class="page active">
+            <section class="chart-section glass">
+                <div style="display:flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <span style="opacity:0.6; font-size:14px;">BTC / USDT</span>
+                        <div class="price-hero" id="live-price">64,231.50</div>
+                        <div class="price-change" id="price-change">+3.42% (+2185.50)</div>
+                    </div>
+                    <div style="text-align:right">
+                        <div style="font-size:12px; opacity:0.5;">24h 高: <span id="high-24h">65,100</span></div>
+                        <div style="font-size:12px; opacity:0.5;">24h 低: <span id="low-24h">61,800</span></div>
+                        <div style="font-size:12px; opacity:0.5;">24h 量: <span id="volume-24h">12,450</span> BTC</div>
+                    </div>
+                </div>
+                <div style="height:250px; margin-top:20px; border-left:1px solid var(--glass-border); border-bottom:1px solid var(--glass-border); position:relative; overflow:hidden;">
+                    <svg width="100%" height="100%" preserveAspectRatio="none">
+                        <path d="M0 150 Q 50 120, 100 180 T 200 100 T 300 150 T 400 50 T 500 120" fill="none" stroke="var(--accent-cyan)" stroke-width="3" />
+                        <path d="M0 150 Q 50 120, 100 180 T 200 100 T 300 150 T 400 50 T 500 120 L 500 250 L 0 250 Z" fill="var(--accent-cyan)" fill-opacity="0.1" />
+                    </svg>
+                </div>
+                <div class="market-stats">
+                    <div class="stat-card">
+                        <div class="stat-label">买盘压力</div>
+                        <div class="stat-value up">中等</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">卖盘压力</div>
+                        <div class="stat-value down">较低</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">市场情绪</div>
+                        <div class="stat-value up">乐观</div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <div id="trade-page" class="page">
+            <section class="trade-panel glass">
+                <div class="trade-tabs">
+                    <div class="trade-tab active">限价单</div>
+                    <div class="trade-tab">市价单</div>
+                </div>
+                <div style="display:flex; gap:10px;">
+                    <button class="btn-action buy" style="flex:1">买入</button>
+                    <button class="btn-action sell" style="flex:1">卖出</button>
+                </div>
+                <div class="input-box">
+                    <label>价格 (USDT)</label>
+                    <input type="number" id="price-input" value="64231.50">
+                </div>
+                <div class="input-box">
+                    <label>数量 (BTC)</label>
+                    <input type="number" id="amount-input" placeholder="0.00">
+                </div>
+                <div class="input-box">
+                    <label>总额 (USDT)</label>
+                    <input type="number" id="total-input" placeholder="0.00">
+                </div>
+                <div class="percent-group">
+                    <div class="percent-btn" onclick="setPercent(25)">25%</div>
+                    <div class="percent-btn" onclick="setPercent(50)">50%</div>
+                    <div class="percent-btn" onclick="setPercent(75)">75%</div>
+                    <div class="percent-btn" onclick="setPercent(100)">100%</div>
+                </div>
+                <button class="btn-action buy" style="margin-top:10px;" onclick="placeOrder()">立即下单</button>
+                <div class="position-info">
+                    <div style="font-size:14px; font-weight:600; margin-bottom:10px;">当前持仓</div>
+                    <div class="pos-row"><span class="pos-label">持仓方向</span><span class="pos-value green">多仓</span></div>
+                    <div class="pos-row"><span class="pos-label">持仓数量</span><span class="pos-value">0.15 BTC</span></div>
+                    <div class="pos-row"><span class="pos-label">开仓价格</span><span class="pos-value">63,800</span></div>
+                    <div class="pos-row"><span class="pos-label">持仓保证金</span><span class="pos-value">9,570 USDT</span></div>
+                    <div class="pos-row"><span class="pos-label">未实现盈亏</span><span class="pos-value green">+647.50 USDT</span></div>
+                </div>
+            </section>
+        </div>
+
+        <div id="ob-page" class="page desktop-only-content">
+            <section class="order-book glass">
+                <h4 style="margin-bottom:15px; opacity:0.7;">订单簿 <i class="fas fa-info-circle" style="font-size:12px; opacity:0.5; margin-left:5px;"></i></h4>
+                <div style="background:var(--glass-light); padding:10px; border-radius:8px; margin-bottom:10px;">
+                    <div style="display:flex; justify-content:space-between; font-size:12px;">
+                        <span style="color:var(--price-down)">卖盘 (Asks)</span>
+                        <span style="color:var(--price-up)">买盘 (Bids)</span>
+                    </div>
+                </div>
+                <div style="display:flex; gap:10px;">
+                    <div style="flex:1;">
+                        <div style="font-size:11px; color:#888; margin-bottom:5px;">卖盘 (Asks)</div>
+                        <div id="ob-asks"></div>
+                    </div>
+                    <div style="flex:1;">
+                        <div style="font-size:11px; color:#888; margin-bottom:5px;">买盘 (Bids)</div>
+                        <div id="ob-bids"></div>
+                    </div>
+                </div>
+                <div style="margin:15px 0; font-size:16px; font-weight:bold; color:var(--price-up); text-align:center;">
+                    <span id="ob-current-price">64,231.50</span> ↓
+                </div>
+                <div style="display:flex; justify-content:space-between; font-size:12px; opacity:0.7;">
+                    <span>总量: <span id="ob-total-ask">12.45</span> BTC</span>
+                    <span>总量: <span id="ob-total-bid">8.32</span> BTC</span>
+                </div>
+            </section>
+        </div>
+
+        <div id="assets-page" class="page">
+            <section class="glass" style="padding:24px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                    <h4>我的资产</h4>
+                    <button style="padding:8px 16px; border-radius:8px; border:none; background:var(--accent-cyan); color:#000; font-weight:600; cursor:pointer;">
+                        <i class="fas fa-plus" style="margin-right:5px;"></i>充值
+                    </button>
+                </div>
+                <div class="asset-list">
+                    <div class="asset-item">
+                        <span>BTC</span>
+                        <div style="text-align:right">
+                            <b>0.4215</b>
+                            <div style="font-size:11px; color:#888;">≈ 27,070 USDT</div>
+                        </div>
+                    </div>
+                    <div class="asset-item">
+                        <span>ETH</span>
+                        <div style="text-align:right">
+                            <b>5.2210</b>
+                            <div style="font-size:11px; color:#888;">≈ 16,210 USDT</div>
+                        </div>
+                    </div>
+                    <div class="asset-item">
+                        <span>USDT</span>
+                        <div style="text-align:right">
+                            <b>12,450.00</b>
+                            <div style="font-size:11px; color:#888;">≈ 12,450 USDT</div>
+                        </div>
+                    </div>
+                    <div class="asset-item">
+                        <span>SOL</span>
+                        <div style="text-align:right">
+                            <b>84.20</b>
+                            <div style="font-size:11px; color:#888;">≈ 4,210 USDT</div>
+                        </div>
+                    </div>
+                </div>
+                <div style="margin-top:20px; padding-top:15px; border-top:1px solid var(--glass-border);">
+                    <div style="display:flex; justify-content:space-between; font-size:14px;">
+                        <span style="color:#888;">总资产</span>
+                        <b style="font-size:18px; color:var(--accent-cyan);">59,940 USDT</b>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <div id="profile-page" class="page">
+            <section class="glass" style="padding:24px;">
+                <div style="text-align:center; margin-bottom:20px;">
+                    <div style="width:80px; height:80px; border-radius:50%; background:linear-gradient(135deg, var(--accent-cyan), var(--accent-pink)); margin:0 auto 15px; display:flex; align-items:center; justify-content:center; font-size:32px; color:white; font-weight:bold;">
+                        JD
+                    </div>
+                    <h4 style="margin-bottom:5px;">John Doe</h4>
+                    <p style="font-size:12px; color:#888;">ID: 82349102</p>
+                </div>
+                <div class="asset-list">
+                    <div class="asset-item">
+                        <span><i class="fas fa-user-secret" style="margin-right:8px;"></i>实名认证</span>
+                        <span style="color:var(--price-up); font-size:12px;">已认证</span>
+                    </div>
+                    <div class="asset-item">
+                        <span><i class="fas fa-shield-alt" style="margin-right:8px;"></i>资金安全</span>
+                        <span style="color:var(--price-up); font-size:12px;">已开启</span>
+                    </div>
+                    <div class="asset-item">
+                        <span><i class="fas fa-key" style="margin-right:8px;"></i>API密钥</span>
+                        <span style="color:var(--price-down); font-size:12px;">未开启</span>
+                    </div>
+                </div>
+                <div style="margin-top:20px;">
+                    <div style="display:flex; align-items:center; padding:12px; background:var(--glass-light); border-radius:12px; margin-bottom:10px; cursor:pointer; transition:0.3s;" onmouseover="this.style.background='var(--glass-strong)'" onmouseout="this.style.background='var(--glass-light)'">
+                        <i class="fas fa-cog" style="margin-right:12px; color:var(--accent-cyan);"></i>
+                        <span>设置</span>
+                    </div>
+                    <div style="display:flex; align-items:center; padding:12px; background:var(--glass-light); border-radius:12px; margin-bottom:10px; cursor:pointer; transition:0.3s;" onmouseover="this.style.background='var(--glass-strong)'" onmouseout="this.style.background='var(--glass-light)'">
+                        <i class="fas fa-question-circle" style="margin-right:12px; color:var(--accent-cyan);"></i>
+                        <span>帮助中心</span>
+                    </div>
+                    <div style="display:flex; align-items:center; padding:12px; background:var(--glass-light); border-radius:12px; cursor:pointer; transition:0.3s;" onmouseover="this.style.background='var(--glass-strong)'" onmouseout="this.style.background='var(--glass-light)'">
+                        <i class="fas fa-sign-out-alt" style="margin-right:12px; color:var(--price-down);"></i>
+                        <span style="color:var(--price-down);">退出登录</span>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <nav class="tab-bar glass">
+        <div class="tab-item active" onclick="switchPage('market-page', this)">
+            <i class="fas fa-chart-line tab-icon"></i><span>行情</span>
+        </div>
+        <div class="tab-item" onclick="switchPage('trade-page', this)">
+            <i class="fas fa-exchange-alt tab-icon"></i><span>交易</span>
+        </div>
+        <div class="tab-item" onclick="switchPage('assets-page', this)">
+            <i class="fas fa-wallet tab-icon"></i><span>资产</span>
+        </div>
+        <div class="tab-item" onclick="switchPage('profile-page', this)">
+            <i class="fas fa-user tab-icon"></i><span>我的</span>
+        </div>
+    </nav>
+
+    <script>
+        // 1. 模拟实时价格变动
+        setInterval(() => {
+            const priceEl = document.getElementById('live-price');
+            const currentPrice = parseFloat(priceEl.innerText.replace(',',''));
+            const change = (Math.random() - 0.5) * 10;
+            const newPrice = (currentPrice + change).toFixed(2);
+            priceEl.innerText = newPrice.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+            priceEl.style.color = change > 0 ? 'var(--price-up)' : 'var(--price-down)';
+        }, 2000);
+
+        // 2. 生成模拟订单簿
+        function genOB() {
+            const asks = document.getElementById('ob-asks');
+            const bids = document.getElementById('ob-bids');
+            let askHtml = '', bidHtml = '';
+            let totalAsk = 0, totalBid = 0;
+            for(let i=0; i<10; i++) {
+                const askPrice = (64250 + i*2).toFixed(1);
+                const askAmount = (Math.random()*2).toFixed(3);
+                totalAsk += parseFloat(askAmount);
+                askHtml += `<div class="ob-row"><span style="color:var(--price-down)">${askPrice}</span><span>${askAmount}</span><div class="ob-bar" style="width:${Math.random()*100}%; background:var(--price-down)"></div></div>`;
+                
+                const bidPrice = (64220 - i*2).toFixed(1);
+                const bidAmount = (Math.random()*2).toFixed(3);
+                totalBid += parseFloat(bidAmount);
+                bidHtml += `<div class="ob-row"><span style="color:var(--price-up)">${bidPrice}</span><span>${bidAmount}</span><div class="ob-bar" style="width:${Math.random()*100}%; background:var(--price-up)"></div></div>`;
+            }
+            document.getElementById('ob-total-ask').innerText = totalAsk.toFixed(2);
+            document.getElementById('ob-total-bid').innerText = totalBid.toFixed(2);
+            asks.innerHTML = askHtml;
+            bids.innerHTML = bidHtml;
+        }
+        genOB();
+        setInterval(genOB, 3000);
+
+        // 3. 页面切换逻辑
+        function switchPage(pageId, el) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.getElementById(pageId).classList.add('active');
+            
+            if(el) {
+                document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+                el.classList.add('active');
+            }
+        }
+
+        // 4. 交易页百分比选择
+        function setPercent(percent) {
+            const price = parseFloat(document.getElementById('price-input').value);
+            const total = document.getElementById('total-input');
+            const amount = document.getElementById('amount-input');
+            const walletBalance = 42904.50;
+            const totalValue = walletBalance * (percent / 100);
+            total.value = totalValue.toFixed(2);
+            amount.value = (totalValue / price).toFixed(4);
+        }
+
+        // 5. 交易输入联动
+        document.getElementById('amount-input').addEventListener('input', function() {
+            const amount = parseFloat(this.value) || 0;
+            const price = parseFloat(document.getElementById('price-input').value) || 0;
+            document.getElementById('total-input').value = (amount * price).toFixed(2);
+        });
+
+        document.getElementById('total-input').addEventListener('input', function() {
+            const total = parseFloat(this.value) || 0;
+            const price = parseFloat(document.getElementById('price-input').value) || 0;
+            document.getElementById('amount-input').value = (total / price).toFixed(4);
+        });
+
+        // 6. 下单模拟
+        function placeOrder() {
+            const btn = document.querySelector('.btn-action.buy');
+            const originalText = btn.innerText;
+            btn.innerText = '下单中...';
+            setTimeout(() => {
+                btn.innerText = originalText;
+                alert('下单成功！');
+            }, 1500);
+        }
+
+        // 7. 实时价格联动更新
+        setInterval(() => {
+            const priceEl = document.getElementById('live-price');
+            const changeEl = document.getElementById('price-change');
+            const currentPrice = parseFloat(priceEl.innerText.replace(',',''));
+            const change = (Math.random() - 0.5) * 10;
+            const newPrice = (currentPrice + change).toFixed(2);
+            const changeValue = change.toFixed(2);
+            const changePercent = ((change / currentPrice) * 100).toFixed(2);
+            
+            priceEl.innerText = newPrice.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+            changeEl.innerText = (change > 0 ? '+' : '') + changePercent + '% (' + (change > 0 ? '+' : '') + changeValue + ')';
+            changeEl.style.color = change > 0 ? 'var(--price-up)' : 'var(--price-down)';
+            priceEl.style.color = change > 0 ? 'var(--price-up)' : 'var(--price-down)';
+            
+            document.getElementById('price-input').value = newPrice;
+            document.getElementById('ob-current-price').innerText = newPrice.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+        }, 2000);
+    </script>
+</body>
+</html>
