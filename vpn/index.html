@@ -653,14 +653,6 @@
 
         // ==================== 开通VIP功能 ====================
         const openVip = async (username, duration = 30, price = 10.00) => {
-            const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
-            if (userInfo.balance < price) {
-                if (confirm(`余额不足！当前余额：¥${userInfo.balance.toFixed(2)}，是否前往充值？`)) {
-                    window.location.href = 'https://immmor.com/pay';
-                }
-                return;
-            }
-            
             if (!confirm(`确定要开通VIP吗？将从您的余额中扣除¥${price.toFixed(2)}。`)) {
                 return;
             }
@@ -674,25 +666,22 @@
                     body: JSON.stringify({ username, duration, price })
                 });
                 
-                // 检查HTTP状态码
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                
                 const data = await response.json();
                 
-                if (data.code === 200) {
+                if (response.ok && data.code === 200) {
                     alert('VIP开通成功！');
-                    // 更新本地存储的用户信息
                     const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
                     userInfo.balance = data.data.balance;
                     localStorage.setItem('userInfo', JSON.stringify(userInfo));
                     
-                    // 直接关闭所有弹窗，不重新打开
                     const modals = document.querySelectorAll('.fixed');
                     modals.forEach(modal => modal.remove());
                 } else {
-                    alert(`开通VIP失败：${data.msg}${data.balance ? `，当前余额：¥${data.balance}` : ''}`);
+                    if (data.balance !== undefined) {
+                        alert(`开通VIP失败：${data.msg}，当前余额：¥${data.balance}`);
+                    } else {
+                        alert(`开通VIP失败：${data.msg}`);
+                    }
                 }
             } catch (error) {
                 console.error('开通VIP失败详情:', error);
