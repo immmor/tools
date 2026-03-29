@@ -113,8 +113,8 @@ export default {
 
         // 插入新用户（默认余额0，VIP过期时间为null，流量限制相关字段）
         const result = await DB
-          .prepare('INSERT INTO user (username, password, balance, v_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code, v_link_clash, v_link_v2ray) VALUES (?, ?, ?, NULL, 307200, 0, ?, ?, ?)')
-          .bind(username, password, finalBalance, new Date().toISOString().slice(0, 19).replace('T', ' '), userInviteCode, '', '')
+          .prepare('INSERT INTO user (username, password, balance, v_expire_date, learn_vip_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code, v_token, v_link_clash, v_link_v2ray) VALUES (?, ?, ?, NULL, NULL, 307200, 0, ?, ?, ?, ?, ?)')
+          .bind(username, password, finalBalance, new Date().toISOString().slice(0, 19).replace('T', ' '), userInviteCode, '', '', '')
           .run();
 
         if (result.success) {
@@ -129,6 +129,16 @@ export default {
           await DB
             .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
             .bind('admin', msg, now)
+            .run();
+
+          await DB
+            .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
+            .bind(username, '欢迎加入phantom', now)
+            .run();
+          
+          await DB
+            .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
+            .bind(username, '免费节点链接和付费节点链接不一样！！！！！', now)
             .run();
           
           return resJson({ 
