@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pretext 真实库 · 单文件 Demo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: system-ui, sans-serif; background: #0a0a0a; color: #fff; }
+        .card { transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1); }
+    </style>
+</head>
+<body class="min-h-screen py-12">
+    <div class="max-w-3xl mx-auto px-6">
+        <div class="text-center mb-12">
+            <h1 class="text-6xl font-bold tracking-tighter mb-2">Pretext</h1>
+            <p class="text-emerald-400 text-xl">Cheng Lou 的真实库已通过 esm.sh 直接引入</p>
+            <p class="text-zinc-500 text-sm mt-2">无需构建工具 · 支持中文 · 零 reflow 测量</p>
+        </div>
+
+        <div class="bg-zinc-900 rounded-3xl p-10">
+            <h2 class="text-2xl font-semibold mb-8">智能手风琴（真实 Pretext 高度测量）</h2>
+            <div id="accordion" class="space-y-6"></div>
+        </div>
+
+        <div class="mt-12 text-center text-xs text-zinc-500">
+            库来源：https://esm.sh/@chenglou/pretext@latest<br>
+            GitHub: <a href="https://github.com/chenglou/pretext" target="_blank" class="underline hover:text-white">chenglou/pretext</a>
+        </div>
+    </div>
+
+    <script type="module">
+        import * as Pretext from "https://esm.sh/@chenglou/pretext@latest";
+
+        let pretextInstance;
+
+        async function init() {
+            try {
+                pretextInstance = await Pretext.create();
+                console.log("✅ Pretext 加载成功");
+                renderAccordion();
+            } catch (err) {
+                console.error("Pretext 加载失败", err);
+                document.getElementById('accordion').innerHTML = `
+                    <div class="p-8 bg-red-950/50 rounded-2xl text-center">
+                        <p class="text-red-400">Pretext 加载失败（可能是网络问题）</p>
+                        <p class="text-zinc-400 mt-2">请刷新页面或检查网络</p>
+                    </div>`;
+            }
+        }
+
+        const items = [
+            {
+                title: "Pretext 是什么？",
+                content: "一个纯 JavaScript/TypeScript 库，用于在不接触真实 DOM 的情况下，精确测量多行文本的高度、行数和换行位置。它使用浏览器的 Canvas 字体引擎作为基准，避免了 getBoundingClientRect 等会触发 reflow 的操作，速度极快且支持复杂语言（包括中文）。"
+            },
+            {
+                title: "核心优势",
+                content: "• 零布局抖动（提前知道高度）\n• 支持中文、日文、阿拉伯文等\n• 可用于聊天气泡、手风琴、Masonry、杂志排版等\n• 比传统 DOM 测量快数百倍"
+            },
+            {
+                title: "使用场景",
+                content: "任何需要动态文本高度的场景：虚拟滚动列表、实时生成的内容卡片、AI 生成的排版、聊天界面自动气泡高度等。"
+            }
+        ];
+
+        async function renderAccordion() {
+            const container = document.getElementById('accordion');
+            container.innerHTML = '';
+
+            for (const item of items) {
+                let computedHeight = 140; // 默认 fallback
+
+                if (pretextInstance) {
+                    try {
+                        const result = pretextInstance.measure({
+                            text: item.content,
+                            width: 620,
+                            font: {
+                                family: "system-ui",
+                                size: 16,
+                                lineHeight: 1.65
+                            }
+                        });
+                        computedHeight = result.height + 80; // padding + 标题空间
+                    } catch (e) {
+                        console.warn("measure 失败，使用默认高度", e);
+                    }
+                }
+
+                const div = document.createElement('div');
+                div.className = "card bg-zinc-800 border border-zinc-700 rounded-2xl overflow-hidden";
+                div.innerHTML = `
+                    <div onclick="toggle(this)" class="px-7 py-6 flex justify-between items-center cursor-pointer hover:bg-zinc-700 transition-colors">
+                        <span class="font-medium text-lg">${item.title}</span>
+                        <span class="text-3xl transition-transform duration-300 icon">›</span>
+                    </div>
+                    <div class="content px-7 pb-7 text-zinc-300 leading-relaxed overflow-hidden transition-all" 
+                         style="max-height: 0px; padding-top: 0;">
+                        ${item.content.replace(/\n/g, '<br><br>')}
+                    </div>
+                `;
+                container.appendChild(div);
+            }
+        }
+
+        window.toggle = function(el) {
+            const content = el.nextElementSibling;
+            const icon = el.querySelector('.icon');
+            
+            if (content.style.maxHeight && content.style.maxHeight !== '0px') {
+                content.style.maxHeight = '0px';
+                icon.style.transform = 'rotate(0deg)';
+            } else {
+                content.style.maxHeight = content.scrollHeight + 'px';
+                icon.style.transform = 'rotate(90deg)';
+            }
+        };
+
+        // 启动
+        init();
+    </script>
+</body>
+</html>
