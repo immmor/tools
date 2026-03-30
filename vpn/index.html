@@ -7,7 +7,6 @@
     <!-- <script src="../ai.js"></script> -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap');
 
@@ -335,7 +334,7 @@
                     </svg>
                 </button>
             </div>
-            <form id="auth-form" class="max-w-md mx-auto">
+            <form id="auth-form">
                 <div class="mb-6">
                     <label class="block text-xs text-zinc-500 mb-2 uppercase tracking-widest" data-i18n="modal_username">邮箱</label>
                     <input type="text" id="username" class="w-full bg-zinc-900 border border-zinc-700 px-4 py-3 text-white focus:border-[var(--neon-blue)] focus:outline-none" required>
@@ -348,9 +347,6 @@
                 <div id="invite-code-container" class="mb-6 hidden">
                     <label class="block text-xs text-zinc-500 mb-2 uppercase tracking-widest" data-i18n="modal_invite_optional">邀请码（可选）</label>
                     <input type="text" id="invite-code" class="w-full bg-zinc-900 border border-zinc-700 px-4 py-3 text-white focus:border-[var(--neon-blue)] focus:outline-none" placeholder="输入有效邀请码可获2元奖励">
-                </div>
-                <div class="mb-6">
-                    <div id="turnstile-widget" class="w-full"></div>
                 </div>
                 <button type="submit" class="w-full btn-cyber py-4">
                     <span id="submit-text" data-i18n="modal_submit_login">登录</span>
@@ -924,8 +920,7 @@
                 msg: $('auth-message'),
                 dropdown: $('dropdown-menu'),
                 balance: $('user-balance'),
-                logout: $('logout-btn'),
-                turnstile: $('turnstile-widget')
+                logout: $('logout-btn')
             };
             
             const config = {
@@ -971,9 +966,6 @@
                 const passwordRequirements = document.getElementById('password-requirements');
                 if (passwordRequirements) {
                     passwordRequirements.classList.add('hidden');
-                }
-                if (window.turnstile) {
-                    window.turnstile.reset();
                 }
             };
             
@@ -1256,14 +1248,6 @@
             
             const handleSubmit = async (e) => {
                 e.preventDefault();
-                
-                if (window.turnstile) {
-                    const token = await window.turnstile.getResponse();
-                    if (!token) {
-                        return showMsg('请完成人机验证', true);
-                    }
-                }
-                
                 const [user, pass] = [els.user.value.trim(), els.pass.value.trim()];
                 if (!user || !pass) return showMsg('请填写用户名和密码', true);
                 
@@ -1299,7 +1283,7 @@
                     const res = await fetch(`${API}${isLogin ? '/api/login' : '/api/register'}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ username: user, password: pass, inviteCode: inviteCode, turnstile: window.turnstile ? await window.turnstile.getResponse() : null })
+                        body: JSON.stringify({ username: user, password: pass, inviteCode: inviteCode })
                     });
                     
                     const data = await res.json();
@@ -1343,14 +1327,6 @@
                 document.addEventListener('click', (e) => !e.target.closest('#user-menu-container') && closeDropdown());
                 checkAuth();
                 startQuotaPolling();
-                
-                if (window.turnstile) {
-                    window.turnstile.render(els.turnstile, {
-                        sitekey: '0x4AAAAAACyAE5Z2G27GetkW',
-                        theme: 'dark',
-                        size: 'flexible'
-                    });
-                }
             };
             
             const showCustomNode = () => {

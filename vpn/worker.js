@@ -41,28 +41,10 @@ export default {
       // ========== 注册接口（核心）→ 用户名密码注册 ==========
       if (path === '/api/register' && request.method === 'POST') {
         const params = await request.json();
-        const { username, password, inviteCode, turnstile } = params;
+        const { username, password, inviteCode } = params;
         
         if (!username || !password) {
           return resJson({ success: false, message: '用户名和密码不能为空！' }, 400);
-        }
-        
-        if (turnstile) {
-          try {
-            const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: `secret=${env.TURNSTILE_SECRET_KEY}&response=${turnstile}`
-            });
-            
-            const data = await response.json();
-            if (!data.success) {
-              return resJson({ success: false, message: '人机验证失败' }, 400);
-            }
-          } catch (err) {
-            console.error('Turnstile验证错误:', err);
-            return resJson({ success: false, message: '人机验证服务不可用' }, 500);
-          }
         }
 
         // 检查用户名是否已存在
@@ -248,28 +230,10 @@ export default {
       // ========== 登录接口（核心）→ 用户名密码登录 ==========
       if (path === '/api/login' && request.method === 'POST') {
         const params = await request.json();
-        const { username, password, turnstile } = params;
+        const { username, password } = params;
         
         if (!username || !password) {
           return resJson({ success: false, message: '用户名和密码不能为空！' }, 400);
-        }
-        
-        if (turnstile) {
-          try {
-            const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: `secret=${env.TURNSTILE_SECRET_KEY}&response=${turnstile}`
-            });
-            
-            const data = await response.json();
-            if (!data.success) {
-              return resJson({ success: false, message: '人机验证失败' }, 400);
-            }
-          } catch (err) {
-            console.error('Turnstile验证错误:', err);
-            return resJson({ success: false, message: '人机验证服务不可用' }, 500);
-          }
         }
 
         // 查询账号：包含余额和VIP信息
