@@ -41,10 +41,28 @@ export default {
       // ========== 注册接口（核心）→ 用户名密码注册 ==========
       if (path === '/api/register' && request.method === 'POST') {
         const params = await request.json();
-        const { username, password, inviteCode } = params;
+        const { username, password, inviteCode, turnstile } = params;
         
         if (!username || !password) {
           return resJson({ success: false, message: '用户名和密码不能为空！' }, 400);
+        }
+        
+        if (turnstile) {
+          try {
+            const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: `secret=${env.TURNSTILE_SECRET_KEY}&response=${turnstile}`
+            });
+            
+            const data = await response.json();
+            if (!data.success) {
+              return resJson({ success: false, message: '人机验证失败' }, 400);
+            }
+          } catch (err) {
+            console.error('Turnstile验证错误:', err);
+            return resJson({ success: false, message: '人机验证服务不可用' }, 500);
+          }
         }
 
         // 检查用户名是否已存在
@@ -190,13 +208,68 @@ export default {
         }
       }
 
+      // ========== 更新用户链接接口（仅immmor和admin可操作） ==========
+      if (path === '/api/update-link' && request.method === 'POST') {
+        try {
+          const params = await request.json();
+          const { username, v_link_clash, v_link_v2ray } = params;
+          
+          if (!username) {
+            return resJson({ code: 400, msg: '请提供用户名' }, 400);
+          }
+          
+          if (!v_link_clash && !v_link_v2ray) {
+            return resJson({ code: 400, msg: '请至少提供一个链接' }, 400);
+          }
+          
+          const allowedUsers = ['immmor', 'admin'];
+          const currentUser = params.currentUser;
+          
+          if (!currentUser || !allowedUsers.includes(currentUser)) {
+            return resJson({ code: 403, msg: '无权限操作' }, 403);
+          }
+          
+          const result = await DB
+            .prepare('UPDATE user SET v_link_clash = ?, v_link_v2ray = ? WHERE username = ?')
+            .bind(v_link_clash || '', v_link_v2ray || '', username)
+            .run();
+          
+          if (result.success && result.meta.changes > 0) {
+            return resJson({ code: 200, msg: '链接更新成功' });
+          } else {
+            return resJson({ code: 404, msg: '用户不存在' }, 404);
+          }
+        } catch (err) {
+          console.error('更新链接错误:', err);
+          return resJson({ code: 500, msg: '更新失败', error: err.message }, 500);
+        }
+      }
+
       // ========== 登录接口（核心）→ 用户名密码登录 ==========
       if (path === '/api/login' && request.method === 'POST') {
         const params = await request.json();
-        const { username, password } = params;
+        const { username, password, turnstile } = params;
         
         if (!username || !password) {
           return resJson({ success: false, message: '用户名和密码不能为空！' }, 400);
+        }
+        
+        if (turnstile) {
+          try {
+            const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: `secret=${env.TURNSTILE_SECRET_KEY}&response=${turnstile}`
+            });
+            
+            const data = await response.json();
+            if (!data.success) {
+              return resJson({ success: false, message: '人机验证失败' }, 400);
+            }
+          } catch (err) {
+            console.error('Turnstile验证错误:', err);
+            return resJson({ success: false, message: '人机验证服务不可用' }, 500);
+          }
         }
 
         // 查询账号：包含余额和VIP信息
@@ -498,7 +571,7 @@ export default {
           const month = String(now.getMonth() + 1).padStart(2, '0');
           const day = String(now.getDate()).padStart(2, '0');
           
-          const vipUrl = user.v_link_clash || `https://ocons.no-mad-world.club/link/Nmno563qEF341Iah?clash=3&extend=1`;
+          const vipUrl = user.v_link_clash || `https://7zl9d.no-mad-world.club/link/jyKqfN5alnAaPXbQ?clash=3&extend=1`;
           
           // 获取VIP Clash配置
           const response = await fetch(vipUrl);
@@ -546,7 +619,7 @@ export default {
             return resJson({ code: 403, msg: 'VIP已过期或未开通' }, 403);
           }
           
-          const vipV2rayUrl = user.v_link_v2ray || `https://6x3t8.no-mad-world.club/link/Nmno563qEF341Iah?sub=3&extend=1`;
+          const vipV2rayUrl = user.v_link_v2ray || `https://7zl9d.no-mad-world.club/link/jyKqfN5alnAaPXbQ?sub=3&extend=1`;
           
           const response = await fetch(vipV2rayUrl);
           

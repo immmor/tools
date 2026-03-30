@@ -7,6 +7,7 @@
     <!-- <script src="../ai.js"></script> -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap');
 
@@ -336,16 +337,20 @@
             </div>
             <form id="auth-form">
                 <div class="mb-6">
-                    <label class="block text-xs text-zinc-500 mb-2 uppercase tracking-widest" data-i18n="modal_username">用户名</label>
+                    <label class="block text-xs text-zinc-500 mb-2 uppercase tracking-widest" data-i18n="modal_username">邮箱</label>
                     <input type="text" id="username" class="w-full bg-zinc-900 border border-zinc-700 px-4 py-3 text-white focus:border-[var(--neon-blue)] focus:outline-none" required>
                 </div>
                 <div class="mb-6">
                     <label class="block text-xs text-zinc-500 mb-2 uppercase tracking-widest" data-i18n="modal_password">密码</label>
                     <input type="password" id="password" class="w-full bg-zinc-900 border border-zinc-700 px-4 py-3 text-white focus:border-[var(--neon-blue)] focus:outline-none" required>
+                    <label id="password-requirements" class="block text-xs text-zinc-500 mt-2 uppercase tracking-widest hidden" data-i18n="modal_password">密码必须同时包含：大写字母，小写字母，数字和特殊字符</label>
                 </div>
                 <div id="invite-code-container" class="mb-6 hidden">
                     <label class="block text-xs text-zinc-500 mb-2 uppercase tracking-widest" data-i18n="modal_invite_optional">邀请码（可选）</label>
                     <input type="text" id="invite-code" class="w-full bg-zinc-900 border border-zinc-700 px-4 py-3 text-white focus:border-[var(--neon-blue)] focus:outline-none" placeholder="输入有效邀请码可获2元奖励">
+                </div>
+                <div class="mb-6 flex justify-center">
+                    <div id="turnstile-widget" class="transform scale-75 origin-center"></div>
                 </div>
                 <button type="submit" class="w-full btn-cyber py-4">
                     <span id="submit-text" data-i18n="modal_submit_login">登录</span>
@@ -919,7 +924,8 @@
                 msg: $('auth-message'),
                 dropdown: $('dropdown-menu'),
                 balance: $('user-balance'),
-                logout: $('logout-btn')
+                logout: $('logout-btn'),
+                turnstile: $('turnstile-widget')
             };
             
             const config = {
@@ -942,18 +948,33 @@
                 els.switch.textContent = c.switch;
                 els.msg.classList.add('hidden');
                 els.inviteCodeContainer.classList.toggle('hidden', isLogin);
+                const passwordRequirements = document.getElementById('password-requirements');
+                if (passwordRequirements) {
+                    passwordRequirements.classList.toggle('hidden', isLogin);
+                }
             };
             
             const openModal = () => {
                 isLogin = true;
                 els.modal.classList.remove('hidden');
                 els.inviteCodeContainer.classList.add('hidden');
+                const passwordRequirements = document.getElementById('password-requirements');
+                if (passwordRequirements) {
+                    passwordRequirements.classList.add('hidden');
+                }
             };
             const closeModal = () => {
                 els.modal.classList.add('hidden');
                 els.form.reset();
                 els.msg.classList.add('hidden');
                 els.inviteCodeContainer.classList.add('hidden');
+                const passwordRequirements = document.getElementById('password-requirements');
+                if (passwordRequirements) {
+                    passwordRequirements.classList.add('hidden');
+                }
+                if (window.turnstile) {
+                    window.turnstile.reset();
+                }
             };
             
             const toggleDropdown = () => els.dropdown.classList.toggle('hidden');
@@ -1235,10 +1256,37 @@
             
             const handleSubmit = async (e) => {
                 e.preventDefault();
+                
+                if (window.turnstile) {
+                    const token = await window.turnstile.getResponse();
+                    if (!token) {
+                        return showMsg('请完成人机验证', true);
+                    }
+                }
+                
                 const [user, pass] = [els.user.value.trim(), els.pass.value.trim()];
                 if (!user || !pass) return showMsg('请填写用户名和密码', true);
                 
-                // 从URL获取邀请码参数
+                if (!isLogin) {
+                    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                    if (!emailRegex.test(user)) {
+                        return showMsg('用户名必须是有效的邮箱格式', true);
+                    }
+                    
+                    if (pass.length < 8) {
+                        return showMsg('密码长度至少为8位', true);
+                    }
+                    
+                    const hasUpper = /[A-Z]/.test(pass);
+                    const hasLower = /[a-z]/.test(pass);
+                    const hasNumber = /[0-9]/.test(pass);
+                    const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pass);
+                    
+                    if (!hasUpper || !hasLower || !hasNumber || !hasSpecial) {
+                        return showMsg('密码必须包含大小写字母、数字和特殊字符', true);
+                    }
+                }
+                
                 const urlParams = new URLSearchParams(window.location.search);
                 const urlInviteCode = urlParams.get('invite');
                 const inputInviteCode = els.inviteCode.value.trim();
@@ -1251,7 +1299,7 @@
                     const res = await fetch(`${API}${isLogin ? '/api/login' : '/api/register'}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ username: user, password: pass, inviteCode: inviteCode })
+                        body: JSON.stringify({ username: user, password: pass, inviteCode: inviteCode, turnstile: window.turnstile ? await window.turnstile.getResponse() : null })
                     });
                     
                     const data = await res.json();
@@ -1261,7 +1309,6 @@
                         if (isLogin) {
                             localStorage.setItem('userInfo', JSON.stringify(data.userInfo));
                             updateNav(data.userInfo);
-                            // 登录后查询邀请码
                             fetch(`${API}/api/get-user?name=${encodeURIComponent(data.userInfo.username)}`)
                                 .then(res => res.json())
                                 .then(userData => {
