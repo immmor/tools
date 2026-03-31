@@ -1,0 +1,1461 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>以墨钱包</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --neon-pink: #ff00ff;
+            --neon-blue: #00f2ff;
+            --neon-green: #0aff99;
+            --bg-dark: #050505;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg-dark);
+            font-family: 'Orbitron', 'Microsoft YaHei', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            color: #fff;
+            overflow: hidden;
+            touch-action: auto; /* 允许所有触摸操作 */
+            overscroll-behavior: none;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* 背景流光线条 */
+        body::before {
+            content: "";
+            position: fixed;
+            width: 200%;
+            height: 200%;
+            background-image: repeating-linear-gradient(0deg, transparent, transparent 1px, rgba(0, 242, 255, 0.05) 1px, rgba(0, 242, 255, 0.05) 2px);
+            background-size: 100% 4px;
+            animation: move-bg 20s linear infinite;
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        @keyframes move-bg {
+            from { transform: translateY(0); }
+            to { transform: translateY(-50%); }
+        }
+
+        /* 核心卡片 */
+        .neon-card {
+            position: relative;
+            width: 380px;
+            max-width: 90vw;
+            max-height: 90vh;
+            padding: 40px;
+            background: rgba(10, 10, 10, 0.9);
+            border: 2px solid var(--neon-blue);
+            box-shadow: 0 0 15px var(--neon-blue), inset 0 0 10px var(--neon-blue);
+            border-radius: 5px;
+            clip-path: polygon(0 0, 90% 0, 100% 10%, 100% 100%, 10% 100%, 0 90%);
+            overflow: hidden;
+            touch-action: pan-y;
+        }
+
+        .header {
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 5px;
+            margin-bottom: 30px;
+            color: var(--neon-blue);
+            text-shadow: 0 0 10px var(--neon-blue);
+            font-size: 28px;
+        }
+
+        /* 余额区 */
+        .balance-display {
+            border-left: 4px solid var(--neon-pink);
+            padding-left: 15px;
+            margin-bottom: 30px;
+            background: rgba(255, 0, 255, 0.05);
+        }
+
+        .balance-label { font-size: 12px; color: var(--neon-pink); }
+        .balance-val { font-size: 32px; font-weight: 800; color: #fff; }
+
+        /* 输入框 */
+        .input-box {
+            position: relative;
+            margin-bottom: 25px;
+        }
+
+        .input-box input {
+            width: 100%;
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid var(--neon-blue);
+            color: var(--neon-blue);
+            font-size: 24px;
+            padding: 10px 5px;
+            outline: none;
+            box-sizing: border-box;
+        }
+
+        /* 支付方式下拉框 */
+        .pay-select {
+            width: 100%;
+            background: rgba(0, 242, 255, 0.1);
+            border: 2px solid var(--neon-blue);
+            color: var(--neon-blue);
+            padding: 12px;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 30px;
+            font-family: 'Orbitron', 'Microsoft YaHei', sans-serif;
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300f2ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            background-size: 16px;
+        }
+
+        .pay-select:focus {
+            outline: none;
+            box-shadow: 0 0 15px var(--neon-blue);
+            background-color: var(--neon-blue);
+            color: #000;
+        }
+
+        .pay-select option {
+            background: #1a1a1a;
+            color: var(--neon-blue);
+            padding: 10px;
+        }
+        
+        /* 金额选择器 */
+        .amount-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 25px;
+        }
+
+        .amount-btn {
+            background: rgba(0, 242, 255, 0.1);
+            border: 2px solid var(--neon-blue);
+            color: var(--neon-blue);
+            padding: 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 16px;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .amount-btn:hover {
+            background: var(--neon-blue);
+            color: #000;
+            box-shadow: 0 0 15px var(--neon-blue);
+        }
+
+        .amount-btn.active {
+            background: var(--neon-pink);
+            border-color: var(--neon-pink);
+            color: #fff;
+            box-shadow: 0 0 15px var(--neon-pink);
+        }
+
+        .custom-btn {
+            border-color: var(--neon-pink);
+            color: var(--neon-pink);
+        }
+
+        .custom-btn:hover {
+            background: var(--neon-pink);
+            color: #fff;
+        }
+
+        .custom-input {
+            background: rgba(0, 242, 255, 0.1);
+            border: 2px solid var(--neon-pink);
+            color: var(--neon-pink);
+            padding: 12px;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: bold;
+            text-align: center;
+            width: 100%;
+            box-sizing: border-box;
+            font-family: 'Orbitron', 'Microsoft YaHei', sans-serif;
+        }
+
+        .custom-input:focus {
+            outline: none;
+            background: var(--neon-pink);
+            color: #fff;
+            box-shadow: 0 0 15px var(--neon-pink);
+        }
+
+        /* 按钮 */
+        .glitch-btn {
+            width: 100%;
+            height: 50px;
+            background: var(--neon-blue);
+            border: none;
+            color: #000;
+            font-weight: bold;
+            text-transform: uppercase;
+            cursor: pointer;
+            position: relative;
+            transition: 0.2s;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        .glitch-btn:hover {
+            background: var(--neon-pink);
+            box-shadow: 0 0 20px var(--neon-pink);
+            color: #fff;
+        }
+        
+        .glitch-btn.login-btn:hover {
+            background: var(--neon-blue);
+            box-shadow: 0 0 20px var(--neon-blue);
+            color: #000;
+        }
+        
+        .glitch-btn.confirm-register-btn:hover,
+        .glitch-btn.cancel-btn:hover {
+            background: inherit;
+            box-shadow: none;
+            color: inherit;
+        }
+
+        .glitch-btn::before {
+            content: "确认交易";
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .glitch-btn.login-btn::before {
+            content: "登录";
+        }
+        .glitch-btn.register-btn::before {
+            content: "注册";
+        }
+        .glitch-btn.confirm-register-btn::before {
+            content: "确认注册";
+        }
+        .glitch-btn.cancel-btn::before {
+            content: "返回";
+        }
+
+        /* 装饰点缀 */
+        .corner-tag {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            font-size: 10px;
+            color: var(--neon-blue);
+            opacity: 0.5;
+        }
+        
+        /* 导航标签样式 */
+        .nav-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--neon-blue);
+        }
+        
+        .nav-tab {
+            background: transparent;
+            border: none;
+            color: #666;
+            padding: 8px 16px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.3s;
+        }
+        
+        .nav-tab.active {
+            color: var(--neon-blue);
+            border-bottom-color: var(--neon-blue);
+        }
+        
+        /* 筛选器样式 */
+        .filter-section {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .filter-select {
+            background: rgba(0, 242, 255, 0.1);
+            border: 1px solid var(--neon-blue);
+            color: var(--neon-blue);
+            padding: 5px 10px;
+            border-radius: 3px;
+            flex: 1;
+        }
+        
+        /* 订单项样式 - 优化移动端触摸 */
+        .order-item {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid #333;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 10px;
+            transition: all 0.3s;
+            cursor: pointer;
+            user-select: none; /* 禁止文本选择 */
+        }
+        
+        .order-item:hover {
+            border-color: var(--neon-blue);
+            box-shadow: 0 0 10px rgba(0, 242, 255, 0.3);
+        }
+        
+        .order-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .order-no {
+            font-size: 12px;
+            color: var(--neon-blue);
+            font-family: monospace;
+        }
+        
+        .order-amount {
+            font-size: 18px;
+            font-weight: bold;
+            color: #fff;
+        }
+        
+        .order-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            font-size: 11px;
+            color: #999;
+        }
+        
+        .order-status {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: bold;
+        }
+        
+        .status-pending { background: #ffa500; color: #000; }
+        .status-paid { background: #07c160; color: #fff; }
+        .status-failed { background: #ff4757; color: #fff; }
+        
+        /* 订单列表容器 - 优化移动端滑动 */
+        .orders-container {
+            max-height: 300px;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch; /* 启用iOS弹性滚动 */
+            scroll-behavior: smooth; /* 平滑滚动 */
+            touch-action: pan-y; /* 仅允许垂直滑动 */
+        }
+
+        /* 分页按钮 */
+        .page-btn {
+            background: var(--neon-blue);
+            border: none;
+            color: #000;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+        
+        .page-btn:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+
+        /* 用户下拉菜单 */
+        .user-dropdown {
+            position: relative;
+            margin-left: auto;
+        }
+
+        .user-btn {
+            background: transparent;
+            border: none;
+            color: var(--neon-pink);
+            padding: 8px 16px;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .dropdown-menu {
+            position: absolute;
+            right: 0;
+            top: 100%;
+            background: rgba(10, 10, 10, 0.95);
+            border: 1px solid var(--neon-blue);
+            border-radius: 5px;
+            min-width: 90px;
+            display: none;
+            z-index: 100;
+        }
+
+        .dropdown-menu.show {
+            display: block;
+        }
+
+        .dropdown-item {
+            padding: 10px 15px;
+            color: #ff4757;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+<div class="neon-card">
+        <div class="header">以墨钱包</div>
+        
+        <!-- 导航菜单 -->
+        <div id="nav-tabs-container" class="nav-tabs" style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid var(--neon-blue);">
+            <button id="pay-tab" class="nav-tab active" onclick="switchTab('pay')">充值</button>
+            <button id="orders-tab" class="nav-tab" onclick="switchTab('orders')">订单记录</button>
+            <div class="user-dropdown">
+                <button class="user-btn" onclick="toggleDropdown()">
+                    <span id="username-display"></span>
+                </button>
+                <div class="dropdown-menu" id="user-dropdown-menu">
+                    <div class="dropdown-item" onclick="logout()">退出登录</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 登录/注册表单 -->
+        <div id="login-form">
+            <div class="input-box">
+                <input type="text" placeholder="用户名" id="username">
+            </div>
+            <div class="input-box">
+                <input type="password" placeholder="密码" id="password">
+            </div>
+            <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                <button class="glitch-btn login-btn" onclick="login()" style="flex: 1;"></button>
+                <button class="glitch-btn register-btn" onclick="showRegister()" style="flex: 1; background: var(--neon-pink);"></button>
+            </div>
+        </div>
+        
+        <!-- 注册表单 -->
+        <div id="register-form" style="display: none;">
+            <div class="input-box">
+                <input type="text" placeholder="用户名" id="reg-username">
+            </div>
+            <div class="input-box">
+                <input type="password" placeholder="密码" id="reg-password">
+            </div>
+            <div class="input-box">
+                <input type="password" placeholder="确认密码" id="reg-confirm-password">
+            </div>
+            <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                <button class="glitch-btn confirm-register-btn" onclick="register()" style="flex: 1; background: var(--neon-green);"></button>
+                <button class="glitch-btn cancel-btn" onclick="showLogin()" style="flex: 1; background: #666;"></button>
+            </div>
+        </div>
+        
+        <!-- 支付界面 -->
+        <div id="pay-interface">
+            <div class="balance-display">
+                <div class="balance-label">可用余额</div>
+                <div class="balance-val">0.00</div>
+            </div>
+
+            <div class="amount-grid">
+                <button class="amount-btn" onclick="selectAmount(10)">¥10</button>
+                <button class="amount-btn" onclick="selectAmount(20)">¥20</button>
+                <button class="amount-btn" onclick="selectAmount(50)">¥30</button>
+                <button class="amount-btn" onclick="selectAmount(50)">¥50</button>
+                <button class="amount-btn" onclick="selectAmount(100)">¥100</button>
+                <button class="amount-btn custom-btn" id="custom-amount-btn" onclick="showCustomAmount()">自定义</button>
+            </div>
+
+            <select class="pay-select" id="pay-method" onchange="selectPayMethod(this.value)">
+                <option value="wechat">微信支付 (回调)</option>
+                <option value="alipay">支付宝 (回调)</option>
+                <option value="usdt">USDT</option>
+                <option value="wechat_static">微信支付 (人工审核)</option>
+                <option value="alipay_static">支付宝 (人工审核)</option>
+            </select>
+
+            <button class="glitch-btn" onclick="pay()"></button>
+            
+            <div class="corner-tag">安全连接已激活</div>
+        </div>
+        
+        <!-- 订单记录界面 -->
+        <div id="orders-interface" style="display: none;">
+            <div class="balance-display">
+                <div class="balance-label">订单总数</div>
+                <div class="balance-val" id="total-orders">0</div>
+            </div>
+            
+            <!-- 订单筛选 -->
+            <div class="filter-section" style="margin-bottom: 20px; display: none;">
+                <select id="status-filter" class="filter-select" onchange="loadOrders()">
+                    <option value="">全部状态</option>
+                    <option value="pending">待支付</option>
+                    <option value="paid">已支付</option>
+                    <option value="failed">支付失败</option>
+                </select>
+                <select id="type-filter" class="filter-select" onchange="loadOrders()">
+                    <option value="">全部类型</option>
+                    <option value="alipay">支付宝</option>
+                    <option value="wxpay">微信支付</option>
+                </select>
+            </div>
+            
+            <!-- 订单列表 -->
+            <div id="orders-list" class="orders-container" style="max-height: 300px; overflow-y: auto;">
+                <div class="loading" style="text-align: center; padding: 20px; color: var(--neon-blue);">
+                    加载中...
+                </div>
+            </div>
+            
+            <!-- 分页 -->
+            <div class="pagination" style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px;">
+                <button id="prev-page" class="page-btn" onclick="changePage(-1)" disabled>上一页</button>
+                <span id="page-info" style="font-size: 12px;">第 1/1 页</span>
+                <button id="next-page" class="page-btn" onclick="changePage(1)" disabled>下一页</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+        document.addEventListener('touchmove', function(e) {
+            // 允许订单列表滑动
+            if (e.target.closest('.orders-container')) {
+                return;
+            }
+            // 其他区域阻止默认行为
+            if (e.target.tagName !== 'INPUT') {
+                e.preventDefault();
+            }
+        }, { passive: false });
+        
+        document.addEventListener('dblclick', function(e) {
+            e.preventDefault();
+        });
+        let mode = 'wechat'; // 默认选择微信支付
+        let currentUser = JSON.parse(localStorage.getItem('currentUser'));
+        let currentPage = 1;
+        let totalPages = 1;
+        let selectedAmount = null;
+        
+        // 检查是否有自动登录信息
+        const autoLoginInfo = localStorage.getItem('autoLoginInfo');
+        if (autoLoginInfo) {
+            try {
+                const info = JSON.parse(autoLoginInfo);
+                document.getElementById('username').value = info.username;
+                document.getElementById('password').value = info.password;
+                localStorage.removeItem('autoLoginInfo');
+                
+                // 自动登录
+                await login();
+            } catch (e) {
+                console.error('自动登录失败:', e);
+            }
+        }
+        
+        if (currentUser) {
+            document.getElementById('login-form').style.display = 'none';
+            document.getElementById('nav-tabs-container').style.display = 'flex';
+            document.getElementById('pay-interface').style.display = 'block';
+            document.getElementById('username-display').textContent = currentUser.username;
+            updateBalance();
+        } else {
+            document.getElementById('login-form').style.display = 'block';
+            document.getElementById('nav-tabs-container').style.display = 'none';
+            document.getElementById('pay-interface').style.display = 'none';
+            document.getElementById('orders-interface').style.display = 'none';
+        }
+        
+        async function updateBalance() {
+            if (!currentUser) return;
+            
+            try {
+                const balanceData = await (await fetch(`https://immmor.com/api/balance?username=${currentUser.username}`)).json();
+                if (balanceData.code === 200) {
+                    document.querySelector('.balance-val').textContent = balanceData.balance.toFixed(2);
+                }
+            } catch (error) {
+                console.error('查询余额失败:', error);
+            }
+        }
+        
+        function showRegister() {
+            document.getElementById('login-form').style.display = 'none';
+            document.getElementById('register-form').style.display = 'block';
+        }
+        
+        function showLogin() {
+            document.getElementById('register-form').style.display = 'none';
+            document.getElementById('login-form').style.display = 'block';
+        }
+        
+        async function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            if (!username || !password) return alert('用户名和密码不能为空');
+            
+            try {
+                const data = await (await fetch('https://immmor.com/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                })).json();
+                
+                if (data.success) {
+                    localStorage.setItem('currentUser', JSON.stringify(data.userInfo));
+                    location.reload();
+                } else {
+                    alert('登录失败：' + data.message);
+                }
+            } catch (error) {
+                alert('网络错误，请稍后重试');
+            }
+        }
+        
+        async function register() {
+            const username = document.getElementById('reg-username').value;
+            const password = document.getElementById('reg-password').value;
+            const confirmPassword = document.getElementById('reg-confirm-password').value;
+            
+            if (!username || !password) return alert('用户名和密码不能为空');
+            if (password !== confirmPassword) return alert('两次输入的密码不一致');
+            
+            try {
+                const data = await (await fetch('https://immmor.com/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                })).json();
+                
+                if (data.success) {
+                    alert('注册成功！请登录');
+                    showLogin();
+                    // 清空注册表单
+                    document.getElementById('reg-username').value = '';
+                    document.getElementById('reg-password').value = '';
+                    document.getElementById('reg-confirm-password').value = '';
+                } else {
+                    alert('注册失败：' + data.message);
+                }
+            } catch (error) {
+                alert('网络错误，请稍后重试');
+            }
+        }
+
+        function selectPayMethod(m) {
+            mode = m;
+        }
+
+        function selectAmount(amount) {
+            selectedAmount = amount;
+            document.querySelectorAll('.amount-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // 恢复自定义金额按钮
+            const customBtn = document.getElementById('custom-amount-btn');
+            if (customBtn) {
+                customBtn.style.display = 'block';
+                customBtn.textContent = '自定义';
+                customBtn.onclick = showCustomAmount;
+            }
+        }
+
+        function showCustomAmount() {
+            selectedAmount = null;
+            document.querySelectorAll('.amount-btn').forEach(btn => btn.classList.remove('active'));
+            
+            // 将按钮变为输入框
+            const customBtn = document.getElementById('custom-amount-btn');
+            if (customBtn) {
+                customBtn.outerHTML = '<input type="number" class="custom-input" id="amt" placeholder="请输入" min="0.01" step="0.01">';
+                
+                // 自动聚焦
+                document.getElementById('amt').focus();
+                
+                // 添加输入事件监听，当输入完成时恢复为按钮
+                const amtInput = document.getElementById('amt');
+                amtInput.addEventListener('blur', function() {
+                    if (!this.value) {
+                        restoreCustomButton();
+                    }
+                });
+                
+                amtInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        this.blur();
+                    }
+                });
+            }
+        }
+        
+        function restoreCustomButton() {
+            const amtInput = document.getElementById('amt');
+            if (amtInput) {
+                amtInput.outerHTML = '<button class="amount-btn custom-btn" id="custom-amount-btn" onclick="showCustomAmount()">自定义</button>';
+            }
+        }
+
+        async function pay() {
+            let amount = selectedAmount;
+            if (!amount) {
+                amount = document.getElementById('amt').value;
+            }
+            if (!amount || amount <= 0) return alert('请输入有效金额');
+            if (amount < 10) return alert('自定义支付额度最低需10元');
+            
+            // 静态支付特殊处理
+            if (mode === 'wechat_static' || mode === 'alipay_static') {
+                if (amount < 10) return alert('自定义支付额度最低需10元');
+                showStaticPayment(mode, amount);
+                return;
+            }
+            
+            // USDT支付特殊处理
+            if (mode === 'usdt') {
+                if (amount < 10) return alert('自定义支付额度最低需10元');
+                createUSDTOrder(amount);
+                return;
+            }
+            
+            try {
+                const payData = await (await fetch('https://immmor.com/api/pay/build-url', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        type: mode,
+                        order_no: Date.now().toString(),
+                        amount: parseFloat(amount),
+                        description: '以墨钱包充值',
+                        username: currentUser.username
+                    })
+                })).json();
+                
+                if (payData.code === 200) {
+                    window.location.href = payData.data.pay_url;
+                } else {
+                    alert('支付URL构建失败：' + payData.msg);
+                }
+            } catch (error) {
+                alert('网络错误，请稍后重试');
+            }
+        }
+        
+        // 静态支付功能
+        function showStaticPayment(paymentType, amount) {
+            const paymentName = paymentType === 'wechat_static' ? '微信' : '支付宝';
+            const imagePath = paymentType === 'wechat_static' ? 'static/pay/weixin.jpg' : 'static/pay/zfb.jpg';
+            
+            // 生成订单号（使用用户名开头） 
+            const orderNo = currentUser.username + '_' + Date.now();
+            
+            // 创建遮罩层
+            const overlay = document.createElement('div');
+            overlay.style.cssText = `
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                background: rgba(0, 0, 0, 0.8); z-index: 9998;
+            `;
+            
+            // 创建支付展示容器
+            const paymentContainer = document.createElement('div');
+            paymentContainer.style.cssText = `
+                position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+                background: #1a1a1a; padding: 20px; border-radius: 12px; 
+                border: 2px solid var(--neon-blue); box-shadow: 0 0 30px var(--neon-blue);
+                z-index: 9999; text-align: center; width: min(350px, 95vw);
+                max-height: 90vh; overflow-y: auto; box-sizing: border-box;
+                font-family: inherit;
+            `;
+            
+            // 保存当前body的overflow属性并禁止背景滚动
+            const originalBodyOverflow = document.body.style.overflow;
+            document.body.style.overflow = 'hidden';
+            
+            // 标题
+            const title = document.createElement('h3');
+            title.textContent = `${paymentName}静态支付`;
+            title.style.margin = '0 0 20px 0';
+            title.style.color = 'var(--neon-blue)';
+            title.style.fontSize = '20px';
+            
+            // 订单号显示
+            const orderNoDisplay = document.createElement('div');
+            orderNoDisplay.innerHTML = `
+                <div style="color: #999; font-size: 12px; margin-bottom: 5px;">订单号</div>
+                <div style="background: rgba(0, 242, 255, 0.1); padding: 8px 12px; border-radius: 6px; font-family: monospace; font-size: 13px; word-break: break-all; margin-bottom: 15px;">${orderNo}</div>
+            `;
+            
+            // 金额显示
+            const amountDisplay = document.createElement('div');
+            amountDisplay.textContent = `支付金额：¥${amount}`;
+            amountDisplay.style.fontSize = '18px';
+            amountDisplay.style.color = 'var(--neon-green)';
+            amountDisplay.style.marginBottom = '15px';
+            amountDisplay.style.fontWeight = 'bold';
+            
+            // 二维码图片
+            const qrImg = document.createElement('img');
+            qrImg.src = imagePath;
+            qrImg.alt = `${paymentName}收款码`;
+            qrImg.style.width = '200px';
+            qrImg.style.height = '200px';
+            qrImg.style.borderRadius = '8px';
+            qrImg.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+            qrImg.style.margin = '0 auto 20px auto';
+            qrImg.style.display = 'block';
+            
+            // 说明文字
+            const instruction = document.createElement('div');
+            instruction.innerHTML = `
+                <div style="color: #999; font-size: 12px; line-height: 1.5; margin: 0px 50px 20px 50px; text-align: left;">
+                    <strong>支付说明：</strong><br>
+                    1. 请使用${paymentName}扫描或下载上方二维码<br>
+                    2. 支付金额：<strong>¥${amount}</strong><br>
+                    3. 支付时请务必备注订单号<br>
+                </div>
+            `;
+            
+            // 按钮容器
+            const buttonContainer = document.createElement('div');
+            buttonContainer.style.display = 'flex';
+            buttonContainer.style.gap = '10px';
+            
+            // 确认充值按钮
+            const confirmBtn = document.createElement('button');
+            confirmBtn.id = 'confirm-recharge-btn';
+            confirmBtn.style.cssText = `
+                flex: 1; padding: 12px; background: #666; color: white;
+                border: none; border-radius: 8px; cursor: not-allowed; font-size: 14px;
+                font-weight: 600; opacity: 0.5;
+            `;
+            confirmBtn.disabled = true;
+            
+            // 关闭按钮
+            const closeBtn = document.createElement('button');
+            closeBtn.textContent = '关闭';
+            closeBtn.style.cssText = `
+                flex: 1; padding: 12px; background: #666; color: white;
+                border: none; border-radius: 8px; cursor: pointer; font-size: 14px;
+                font-weight: 600;
+            `;
+            closeBtn.onclick = () => {
+                document.body.removeChild(overlay);
+                document.body.removeChild(paymentContainer);
+                document.body.style.overflow = originalBodyOverflow;
+            };
+            
+            // 组装容器
+            buttonContainer.appendChild(confirmBtn);
+            buttonContainer.appendChild(closeBtn);
+            
+            // 启动计时器
+            startRechargeTimer(confirmBtn, orderNo, amount, paymentType);
+            
+            paymentContainer.appendChild(title);
+            paymentContainer.appendChild(orderNoDisplay);
+            paymentContainer.appendChild(amountDisplay);
+            paymentContainer.appendChild(qrImg);
+            paymentContainer.appendChild(instruction);
+            paymentContainer.appendChild(buttonContainer);
+            
+            document.body.appendChild(overlay);
+            document.body.appendChild(paymentContainer);
+            
+            // 自动生成订单记录
+            createStaticOrderRecord(paymentType, amount, orderNo);
+        }
+        
+        // 创建静态支付订单记录
+        async function createStaticOrderRecord(paymentType, amount, orderNo) {
+            const orderData = {
+                order_no: orderNo,
+                username: currentUser.username,
+                amount: amount,
+                payment_type: paymentType,
+                status: 'pending',
+                description: '钱包充值(人工审核)'
+            };
+            
+            // 保存到Supabase
+            try {
+                const response = await fetch('https://immmor.com/api/order/create-static', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(orderData)
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.warn('静态订单保存到Supabase失败:', response.status, errorText);
+                } else {
+                    console.log('静态订单已成功保存到Supabase');
+                }
+            } catch (error) {
+                console.warn('网络错误，静态订单保存失败:', error);
+            }
+            
+            console.log('静态支付订单已创建:', orderData);
+        }
+        
+        // 启动充值计时器
+        function startRechargeTimer(confirmBtn, orderNo, amount, paymentType) {
+            // 检查上次充值时间
+            const lastRechargeTime = localStorage.getItem('lastRechargeTime');
+            const now = Date.now();
+            
+            // 如果距离上次充值不足1小时，直接置灰1小时
+            if (lastRechargeTime && (now - parseInt(lastRechargeTime)) < 3600000) {
+                const remainingTime = 3600000 - (now - parseInt(lastRechargeTime));
+                startCooldownTimer(confirmBtn, remainingTime, '下次充值');
+                return;
+            }
+            
+            // 否则启动30秒倒计时
+            let countdown = 30;
+            const countdownInterval = setInterval(() => {
+                confirmBtn.textContent = `请稍等${countdown}s`;
+                countdown--;
+                
+                if (countdown < 0) {
+                    clearInterval(countdownInterval);
+                    confirmBtn.style.cssText = `
+                        flex: 1; padding: 12px; background: var(--neon-pink); color: #000;
+                        border: none; border-radius: 8px; cursor: pointer; font-size: 14px;
+                        font-weight: 600;
+                    `;
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = '确认充值';
+                    confirmBtn.onclick = () => {
+                        confirmRecharge(orderNo, amount, paymentType, confirmBtn);
+                    };
+                }
+            }, 1000);
+        }
+        
+        // 启动冷却计时器
+        function startCooldownTimer(confirmBtn, remainingTime, label) {
+            const interval = setInterval(() => {
+                const minutes = Math.floor(remainingTime / 60000);
+                const seconds = Math.floor((remainingTime % 60000) / 1000);
+                confirmBtn.textContent = `${label} (${minutes}:${seconds.toString().padStart(2, '0')})`;
+                remainingTime -= 1000;
+                
+                if (remainingTime < 0) {
+                    clearInterval(interval);
+                    confirmBtn.style.cssText = `
+                        flex: 1; padding: 12px; background: var(--neon-pink); color: #000;
+                        border: none; border-radius: 8px; cursor: pointer; font-size: 14px;
+                        font-weight: 600;
+                    `;
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = '确认充值';
+                    confirmBtn.onclick = () => {
+                        confirmRecharge(orderNo, amount, paymentType, confirmBtn);
+                    };
+                }
+            }, 1000);
+        }
+        
+        // 确认充值
+        async function confirmRecharge(orderNo, amount, paymentType, confirmBtn) {
+            try {
+                const requestBody = {
+                    username: currentUser.username,
+                    order_no: orderNo,
+                    amount: parseFloat(amount),
+                    payment_type: paymentType
+                };
+                
+                console.log('确认充值请求参数:', requestBody);
+                
+                const response = await fetch('https://immmor.com/api/recharge/confirm', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    // 记录最后一次充值时间
+                    localStorage.setItem('lastRechargeTime', Date.now().toString());
+                    
+                    // 更新本地订单状态
+                    updateLocalOrderStatus(orderNo, 'paid');
+                    
+                    // 更新余额显示
+                    await updateBalance();
+                    
+                    alert('充值成功！余额已更新。');
+                    
+                    // 置灰按钮1小时
+                    confirmBtn.style.cssText = `
+                        flex: 1; padding: 12px; background: #666; color: white;
+                        border: none; border-radius: 8px; cursor: not-allowed; font-size: 14px;
+                        font-weight: 600; opacity: 0.5;
+                    `;
+                    confirmBtn.disabled = true;
+                    confirmBtn.onclick = null;
+                    
+                    startCooldownTimer(confirmBtn, 3600000, '下次充值');
+                } else {
+                    alert('充值失败：' + result.message);
+                    console.error('充值失败详情:', result);
+                }
+            } catch (error) {
+                alert('网络错误：' + error.message);
+                console.error('充值错误详情:', error);
+            }
+        }
+        
+        // 更新本地订单状态
+        function updateLocalOrderStatus(orderNo, status) {
+            let staticOrders = JSON.parse(localStorage.getItem('staticOrders') || '[]');
+            const orderIndex = staticOrders.findIndex(order => order.order_no === orderNo);
+            if (orderIndex !== -1) {
+                staticOrders[orderIndex].status = status;
+                staticOrders[orderIndex].paid_at = new Date().toISOString();
+                localStorage.setItem('staticOrders', JSON.stringify(staticOrders));
+            }
+        }
+        
+        // USDT汇率：1 USDT = 7 RMB
+        const USDT_RATE = 7;
+        
+        // USDT支付功能
+        async function createUSDTOrder(rmbAmount) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
+            
+            // RMB转USDT
+            const usdtAmount = (rmbAmount / USDT_RATE).toFixed(2);
+            
+            try {
+                // 使用TRON钱包地址作为name参数，与energy.js保持一致
+                const tronAddress = 'TKxnwudYzov8ztHchjE6VZCCGAuDft8jQV';
+                const response = await fetch("https://tronusdt.xyz/?way=pay&jump=-&product=wallet_recharge&name=" + tronAddress + "&type=usdt&value=" + usdtAmount, {
+                    method: 'GET',
+                    signal: controller.signal
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                
+                const data = await response.json();
+                clearTimeout(timeoutId);
+                console.log('创建USDT订单结果:', data);
+                
+                if (data.oid) {
+                    // 保存订单信息到本地存储
+                    localStorage.setItem('usdtOrder_' + data.oid, JSON.stringify({
+                        username: currentUser.username,
+                        rmbAmount: rmbAmount,
+                        usdtAmount: usdtAmount
+                    }));
+                    
+                    // 立即创建订单记录到后端
+                    try {
+                        await fetch('https://immmor.com/api/order/create-static', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                order_no: currentUser.username + '_' + Date.now(),
+                                username: currentUser.username,
+                                amount: parseFloat(rmbAmount),
+                                payment_type: 'usdt',
+                                status: 'pending',
+                                description: 'USDT充值 '
+                            })
+                        });
+                    } catch (e) {
+                        console.error('创建订单记录失败:', e);
+                    }
+                    
+                    showUSDTQRCode(data, usdtAmount, rmbAmount);
+                } else {
+                    alert("创建USDT订单失败：" + (data.msg || '未知错误'));
+                }
+            } catch (error) {
+                clearTimeout(timeoutId);
+                if (error.name === 'AbortError') {
+                    alert("请求超时，请稍后重试。");
+                } else {
+                    alert("网络请求失败，请稍后重试。");
+                }
+            }
+        }
+        
+        function showUSDTQRCode(data, usdtAmount, rmbAmount) {
+            // 创建遮罩层
+            const overlay = document.createElement('div');
+            overlay.style.cssText = `
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                background: rgba(0, 0, 0, 0.8); z-index: 9998;
+            `;
+            
+            // 创建二维码展示容器
+            const qrContainer = document.createElement('div');
+            qrContainer.style.cssText = `
+                position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+                background: #1a1a1a; padding: 20px; border-radius: 12px; 
+                border: 2px solid var(--neon-blue); box-shadow: 0 0 30px var(--neon-blue);
+                z-index: 9999; text-align: center; width: min(350px, 95vw);
+                max-height: 90vh; overflow-y: auto; box-sizing: border-box;
+                font-family: inherit;
+            `;
+            
+            // 保存当前body的overflow属性并禁止背景滚动
+            const originalBodyOverflow = document.body.style.overflow;
+            document.body.style.overflow = 'hidden';
+            
+            // 标题
+            const title = document.createElement('h3');
+            title.textContent = 'USDT支付';
+            title.style.margin = '0 0 20px 0';
+            title.style.color = 'var(--neon-blue)';
+            title.style.fontSize = '20px';
+            
+            // 生成二维码
+            const qrImg = document.createElement('img');
+            const address = data.address || 'TKxnwudYzov8ztHchjE6VZCCGAuDft8jQV';
+            qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`tron:${address}?amount=${usdtAmount}`)}`;
+            qrImg.alt = 'USDT支付二维码';
+            qrImg.style.width = '200px';
+            qrImg.style.height = '200px';
+            qrImg.style.borderRadius = '8px';
+            qrImg.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+            qrImg.style.margin = '0 auto 20px auto';
+            qrImg.style.display = 'block';
+            
+            // 支付信息容器
+            const infoContainer = document.createElement('div');
+            infoContainer.style.margin = '20px 0';
+            infoContainer.style.textAlign = 'left';
+            infoContainer.style.fontSize = '14px';
+            
+            // 订单ID
+            const oidDiv = document.createElement('div');
+            oidDiv.style.margin = '10px 0';
+            oidDiv.innerHTML = `
+                <div style="color: #999; font-size: 12px; margin-bottom: 4px;">订单ID</div>
+                <div style="background: rgba(0, 242, 255, 0.1); padding: 8px 12px; border-radius: 6px; font-family: monospace; font-size: 12px; word-break: break-all;">${data.oid}</div>
+            `;
+            
+            // 收款地址
+            const addressDiv = document.createElement('div');
+            addressDiv.style.margin = '10px 0';
+            addressDiv.innerHTML = `
+                <div style="color: #999; font-size: 12px; margin-bottom: 4px;">收款地址</div>
+                <div style="background: rgba(0, 242, 255, 0.1); padding: 8px 12px; border-radius: 6px; font-family: monospace; font-size: 12px; word-break: break-all;">${address}</div>
+            `;
+            
+            // 金额（显示RMB和USDT）
+            const amountDiv = document.createElement('div');
+            amountDiv.style.margin = '10px 0';
+            amountDiv.innerHTML = `
+                <div style="color: #999; font-size: 12px; margin-bottom: 4px;">支付金额</div>
+                <div style="background: rgba(10, 255, 153, 0.1); padding: 8px 12px; border-radius: 6px; font-weight: 600; color: var(--neon-green);">
+                    ${usdtAmount} USDT
+                    <span style="color: #999; font-size: 12px; font-weight: normal;">(≈ ¥${rmbAmount})</span>
+                </div>
+                <div style="color: #666; font-size: 11px; margin-top: 4px;">汇率：1 USDT = ${USDT_RATE} RMB</div>
+            `;
+            
+            // 按钮容器
+            const buttonContainer = document.createElement('div');
+            buttonContainer.style.display = 'flex';
+            buttonContainer.style.gap = '10px';
+            buttonContainer.style.marginTop = '20px';
+            
+            // 添加支付确认按钮
+            const checkPaymentBtn = document.createElement('button');
+            checkPaymentBtn.textContent = '确认支付完成';
+            checkPaymentBtn.style.cssText = `
+                flex: 1; padding: 12px; background: var(--neon-green); color: #000;
+                border: none; border-radius: 8px; cursor: pointer; font-size: 14px;
+                font-weight: 600;
+            `;
+            checkPaymentBtn.onclick = () => {
+                checkUSDTOrder(data.oid);
+            };
+            
+            // 添加关闭按钮
+            const closeBtn = document.createElement('button');
+            closeBtn.textContent = '关闭';
+            closeBtn.style.cssText = `
+                flex: 1; padding: 12px; background: #666; color: white;
+                border: none; border-radius: 8px; cursor: pointer; font-size: 14px;
+                font-weight: 600;
+            `;
+            closeBtn.onclick = () => {
+                document.body.removeChild(overlay);
+                document.body.removeChild(qrContainer);
+                document.body.style.overflow = originalBodyOverflow;
+            };
+            
+            // 组装容器
+            infoContainer.appendChild(oidDiv);
+            infoContainer.appendChild(addressDiv);
+            infoContainer.appendChild(amountDiv);
+            
+            buttonContainer.appendChild(checkPaymentBtn);
+            buttonContainer.appendChild(closeBtn);
+            
+            qrContainer.appendChild(title);
+            qrContainer.appendChild(qrImg);
+            qrContainer.appendChild(infoContainer);
+            qrContainer.appendChild(buttonContainer);
+            
+            document.body.appendChild(overlay);
+            document.body.appendChild(qrContainer);
+        }
+        
+        async function checkUSDTOrder(orderId) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
+            
+            try {
+                const response = await fetch(`https://tronusdt.xyz/?way=paycheck&oid=${orderId}`, {
+                    method: 'GET',
+                    signal: controller.signal
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                
+                const data = await response.json();
+                clearTimeout(timeoutId);
+                console.log('支付检查结果:', data);
+                
+                // 使用code字段判断支付状态，与energy.js保持一致
+                if (data.code === 1) {
+                    // 支付成功，调用后端充值接口
+                    const orderInfo = localStorage.getItem('usdtOrder_' + orderId);
+                    if (orderInfo) {
+                        const { username, rmbAmount } = JSON.parse(orderInfo);
+                        await confirmUSDTRecharge(orderId, username, rmbAmount);
+                    } else {
+                        alert('支付成功！但无法找到订单信息，请联系客服');
+                    }
+                    
+                    // 关闭支付窗口
+                    const qrContainer = document.querySelector('[style*="z-index: 9999"]');
+                    if (qrContainer) {
+                        document.body.removeChild(qrContainer.previousElementSibling); // 移除遮罩层
+                        document.body.removeChild(qrContainer);
+                        document.body.style.overflow = '';
+                    }
+                    
+                    // 清理本地存储
+                    localStorage.removeItem('usdtOrder_' + orderId);
+                } else {
+                    alert('支付未完成。刚转币请等待大约30秒即可！');
+                }
+            } catch (error) {
+                clearTimeout(timeoutId);
+                if (error.name === 'AbortError') {
+                    alert('请求超时，请稍后重试。');
+                } else {
+                    alert('网络请求失败，请稍后重试。');
+                }
+            }
+        }
+        
+        // USDT支付成功后确认充值
+        async function confirmUSDTRecharge(orderId, username, rmbAmount) {
+            try {
+                const response = await fetch('https://immmor.com/api/recharge/confirm', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: username,
+                        order_no: 'USDT_' + orderId,
+                        amount: parseFloat(rmbAmount),
+                        payment_type: 'usdt'
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    alert('支付成功！余额已到账');
+                    await updateBalance();
+                } else {
+                    alert('充值确认失败：' + result.message);
+                }
+            } catch (error) {
+                console.error('确认充值失败:', error);
+                alert('充值确认失败，请联系客服处理');
+            }
+        }
+        
+        // 订单簿功能
+        function switchTab(tab) {
+            document.querySelectorAll('.nav-tab').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('pay-interface').style.display = 'none';
+            document.getElementById('orders-interface').style.display = 'none';
+            
+            if (tab === 'pay') {
+                document.getElementById('pay-tab').classList.add('active');
+                document.getElementById('pay-interface').style.display = 'block';
+            } else {
+                document.getElementById('orders-tab').classList.add('active');
+                document.getElementById('orders-interface').style.display = 'block';
+                loadOrders();
+            }
+        }
+        
+        async function loadOrders() {
+            if (!currentUser) return;
+            
+            const statusFilter = document.getElementById('status-filter').value;
+            const typeFilter = document.getElementById('type-filter').value;
+            
+            try {
+                const ordersData = await (await fetch(`https://immmor.com/api/orders?username=${currentUser.username}&page=${currentPage}&limit=5`)).json();
+                
+                if (ordersData.code === 200) {
+                    displayOrders(ordersData.data.orders, ordersData.data.pagination);
+                } else {
+                    alert('加载订单失败：' + ordersData.msg);
+                }
+            } catch (error) {
+                console.error('加载订单失败:', error);
+                document.getElementById('orders-list').innerHTML = '<div style="text-align: center; padding: 20px; color: #ff4757;">加载失败，请重试</div>';
+            }
+        }
+        
+        function displayOrders(orders, pagination) {
+            const ordersList = document.getElementById('orders-list');
+            const totalOrders = document.getElementById('total-orders');
+            
+            totalOrders.textContent = pagination.total;
+            totalPages = pagination.pages;
+            if (orders.length === 0) {
+                ordersList.innerHTML = '<div style="text-align: center; padding: 20px; color: #666;">暂无订单记录</div>';
+                updatePagination();
+                return;
+            }
+            
+            let html = '';
+            orders.forEach(order => {
+                const statusClass = `status-${order.status}`;
+                const statusText = {
+                    'pending': '待支付',
+                    'paid': '已支付',
+                    'failed': '支付失败'
+                }[order.status] || order.status;
+                
+                const typeText = {
+                    'alipay': '支付宝',
+                    'wxpay': '微信支付',
+                    'usdt': 'USDT',
+                    'wechat_static': '微信支付(人工)',
+                    'alipay_static': '支付宝(人工)'
+                }[order.payment_type] || order.payment_type;
+                
+                html += `
+                    <div class="order-item" onclick="showOrderDetail('${order.order_no}')">
+                        <div class="order-header">
+                            <div class="order-no">${order.order_no}</div>
+                            <div class="order-amount">¥${parseFloat(order.amount).toFixed(2)}</div>
+                        </div>
+                        <div class="order-details">
+                            <div><strong>支付方式:</strong> ${typeText}</div>
+                            <div><strong>状态:</strong> <span class="order-status ${statusClass}">${statusText}</span></div>
+                            <div><strong>创建时间:</strong> ${formatDate(order.created_at)}</div>
+                            <div><strong>支付时间:</strong> ${order.paid_at ? formatDate(order.paid_at) : '-'}</div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            ordersList.innerHTML = html;
+            updatePagination();
+        }
+        
+        function updatePagination() {
+            document.getElementById('page-info').textContent = `第 ${currentPage}/${totalPages} 页`;
+            document.getElementById('prev-page').disabled = currentPage <= 1;
+            document.getElementById('next-page').disabled = currentPage >= totalPages;
+        }
+        
+        function changePage(delta) {
+            const newPage = currentPage + delta;
+            if (newPage >= 1 && newPage <= totalPages) {
+                currentPage = newPage;
+                loadOrders();
+            }
+        }
+        
+        function formatDate(dateString) {
+            if (!dateString) return '-';
+            const date = new Date(dateString);
+            return date.toLocaleString('zh-CN');
+        }
+        
+        function showOrderDetail(orderNo) {
+            alert(`订单详情：${orderNo}\n点击确定查看完整信息`);
+            // 这里可以扩展为显示详细订单信息的模态框
+        }
+        
+        function toggleDropdown() {
+            document.getElementById('user-dropdown-menu').classList.toggle('show');
+        }
+
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.user-dropdown')) {
+                document.getElementById('user-dropdown-menu').classList.remove('show');
+            }
+        });
+
+        function logout() {
+            localStorage.removeItem('currentUser');
+            location.reload();
+        }
+        
+        // 自动刷新订单列表（每30秒）
+        setInterval(() => {
+            if (document.getElementById('orders-interface').style.display !== 'none') {
+                loadOrders();
+            }
+        }, 30000);
+    </script>
+
+</body>
+</html>
