@@ -108,6 +108,20 @@ export default {
               .prepare('UPDATE user SET balance = balance + 2 WHERE username = ?')
               .bind(inviterUser.username)
               .run();
+            
+            const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+            
+            // 给被邀请人发送奖励通知
+            await DB
+              .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
+              .bind(username, `[系统通知] 您使用邀请码 ${inviteCode} 注册成功，获得奖励 2 元`, now)
+              .run();
+            
+            // 给邀请人发送奖励通知
+            await DB
+              .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
+              .bind(inviterUser.username, `[系统通知] 您的邀请用户 ${username} 已注册，您获得奖励 2 元`, now)
+              .run();
           }
         }
 
