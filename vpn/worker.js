@@ -549,7 +549,7 @@ export default {
           const month = String(now.getMonth() + 1).padStart(2, '0');
           const day = String(now.getDate()).padStart(2, '0');
           
-          const vipUrl = user.v_link_clash || `https://7zl9d.no-mad-world.club/link/jyKqfN5alnAaPXbQ?clash=3&extend=1`;
+          const vipUrl = user.v_link_clash || `https://wgzdb.no-mad-sub.one/link/jyKqfN5alnAaPXbQ?clash=3&extend=1`;
           
           // 获取VIP Clash配置
           const response = await fetch(vipUrl);
@@ -597,7 +597,7 @@ export default {
             return resJson({ code: 403, msg: 'VIP已过期或未开通' }, 403);
           }
           
-          const vipV2rayUrl = user.v_link_v2ray || `https://7zl9d.no-mad-world.club/link/jyKqfN5alnAaPXbQ?sub=3&extend=1`;
+          const vipV2rayUrl = user.v_link_v2ray || `https://wgzdb.no-mad-sub.one/link/jyKqfN5alnAaPXbQ?sub=3&extend=1`;
           
           const response = await fetch(vipV2rayUrl);
           
