@@ -330,9 +330,13 @@ export default {
           
           const vToken = generateVToken();
           
+          const isYearly = duration === 365;
+          const vLinkClash = isYearly ? 'https://p5jli.no-mad-sub.one/link/R4eay53N8l0ooeQn?clash=3&extend=1' : (user.v_link_clash || 'https://wgzdb.no-mad-sub.one/link/jyKqfN5alnAaPXbQ?clash=3&extend=1');
+          const vLinkV2ray = isYearly ? 'https://p5jli.no-mad-sub.one/link/R4eay53N8l0ooeQn?sub=3&extend=1' : (user.v_link_v2ray || 'https://wgzdb.no-mad-sub.one/link/jyKqfN5alnAaPXbQ?sub=3&extend=1');
+          
           const result = await DB
             .prepare('UPDATE user SET balance = balance - ?, v_expire_date = ?, v_token = ?, v_link_clash = ?, v_link_v2ray = ? WHERE username = ?')
-            .bind(vipPrice, newExpireDate.toISOString().slice(0, 19).replace('T', ' '), vToken, '', '', username)
+            .bind(vipPrice, newExpireDate.toISOString().slice(0, 19).replace('T', ' '), vToken, vLinkClash, vLinkV2ray, username)
             .run();
           
           if (result.success && result.meta.changes > 0) {
@@ -457,6 +461,47 @@ export default {
         }
       }
 
+      // ========== 修改余额接口 ==========
+      if (path === '/api/balance/edit' && request.method === 'POST') {
+        try {
+          const params = await request.json();
+          const { username, balance } = params;
+          
+          if (!username) {
+            return resJson({ code: 400, msg: '缺少username参数' }, 400);
+          }
+          
+          if (balance === undefined || balance === null || isNaN(parseFloat(balance))) {
+            return resJson({ code: 400, msg: '缺少有效的balance参数' }, 400);
+          }
+          
+          const newBalance = parseFloat(balance);
+          
+          const user = await DB
+            .prepare('SELECT username FROM user WHERE username = ?')
+            .bind(username)
+            .first();
+          
+          if (!user) {
+            return resJson({ code: 404, msg: '用户不存在' }, 404);
+          }
+          
+          const result = await DB
+            .prepare('UPDATE user SET balance = ? WHERE username = ?')
+            .bind(newBalance, username)
+            .run();
+          
+          if (result.success && result.meta.changes > 0) {
+            return resJson({ code: 200, msg: '余额修改成功', balance: newBalance });
+          } else {
+            return resJson({ code: 500, msg: '余额修改失败' }, 500);
+          }
+        } catch (err) {
+          console.error('Balance edit error:', err);
+          return resJson({ code: 500, msg: '修改失败', error: err.message }, 500);
+        }
+      }
+
       // ========== 查询流量使用情况接口 ==========
       if (path === '/api/quota' && request.method === 'GET') {
         try {
@@ -549,7 +594,7 @@ export default {
           const month = String(now.getMonth() + 1).padStart(2, '0');
           const day = String(now.getDate()).padStart(2, '0');
           
-          const vipUrl = user.v_link_clash || `https://wgzdb.no-mad-sub.one/link/jyKqfN5alnAaPXbQ?clash=3&extend=1`;
+          const vipUrl = user.v_link_clash;
           
           // 获取VIP Clash配置
           const response = await fetch(vipUrl);
@@ -597,7 +642,7 @@ export default {
             return resJson({ code: 403, msg: 'VIP已过期或未开通' }, 403);
           }
           
-          const vipV2rayUrl = user.v_link_v2ray || `https://wgzdb.no-mad-sub.one/link/jyKqfN5alnAaPXbQ?sub=3&extend=1`;
+          const vipV2rayUrl = user.v_link_v2ray;
           
           const response = await fetch(vipV2rayUrl);
           
