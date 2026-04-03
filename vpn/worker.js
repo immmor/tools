@@ -331,8 +331,8 @@ export default {
           const vToken = generateVToken();
           
           const isYearly = duration === 365;
-          const vLinkClash = isYearly ? 'https://p5jli.no-mad-sub.one/link/R4eay53N8l0ooeQn?clash=3&extend=1' : (user.v_link_clash || 'https://wgzdb.no-mad-sub.one/link/jyKqfN5alnAaPXbQ?clash=3&extend=1');
-          const vLinkV2ray = isYearly ? 'https://p5jli.no-mad-sub.one/link/R4eay53N8l0ooeQn?sub=3&extend=1' : (user.v_link_v2ray || 'https://wgzdb.no-mad-sub.one/link/jyKqfN5alnAaPXbQ?sub=3&extend=1');
+          const vLinkClash = isYearly ? 'https://p5jli.no-mad-sub.one/link/R4eay53N8l0ooeQn?clash=3&extend=1' : (user.v_link_clash || 'https://lxlv9.no-mad-sub.one/link/Q8fwb1PCpjDpH1dK?clash=3&extend=1');
+          const vLinkV2ray = isYearly ? 'https://p5jli.no-mad-sub.one/link/R4eay53N8l0ooeQn?sub=3&extend=1' : (user.v_link_v2ray || 'https://lxlv9.no-mad-sub.one/link/Q8fwb1PCpjDpH1dK?sub=2&extend=1');
           
           const result = await DB
             .prepare('UPDATE user SET balance = balance - ?, v_expire_date = ?, v_token = ?, v_link_clash = ?, v_link_v2ray = ? WHERE username = ?')
