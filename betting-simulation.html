@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>庄家抽水 + 动态赔率系统</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: system-ui, sans-serif;
+            background: #1a1a2e;
+            color: #fff;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .container { max-width: 800px; margin: 0 auto; }
+        h1 { text-align: center; margin-bottom: 30px; color: #00d4ff; }
+        
+        .match-card {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .match-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .teams {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+        .vs { color: #666; font-size: 1rem; }
+        
+        .bet-options {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+        }
+        .bet-btn {
+            background: #0f3460;
+            border: 2px solid #e94560;
+            color: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+        .bet-btn:hover { background: #e94560; transform: scale(1.02); }
+        .bet-btn .odds { font-size: 1.3rem; font-weight: bold; color: #00d4ff; }
+        .bet-btn:hover .odds { color: #fff; }
+        .bet-btn .bet-pool { font-size: 0.75rem; color: #888; margin-top: 5px; }
+        
+        .bet-form {
+            display: none;
+            margin-top: 15px;
+            padding: 15px;
+            background: #0a0a1a;
+            border-radius: 8px;
+        }
+        .bet-form.show { display: block; }
+        .bet-form input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #333;
+            border-radius: 4px;
+            background: #1a1a2e;
+            color: #fff;
+            margin-bottom: 10px;
+        }
+        .bet-form button {
+            width: 100%;
+            padding: 10px;
+            background: #00d4ff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 30px;
+        }
+        .stat-box {
+            background: #16213e;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+        }
+        .stat-box .value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #00d4ff;
+        }
+        .stat-box .label { color: #888; margin-top: 5px; }
+        
+        .profit-box { background: #00ff88 !important; color: #000 !important; }
+        .profit-box .value { color: #000 !important; }
+        
+        .log {
+            margin-top: 30px;
+            background: #0a0a1a;
+            border-radius: 12px;
+            padding: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+        .log div { padding: 5px 0; border-bottom: 1px solid #222; }
+        .log .win { color: #00ff88; }
+        .log .lose { color: #ff4444; }
+        .log .commission { color: #ffaa00; }
+        .log .odds-change { color: #00d4ff; }
+        
+        .house-edge {
+            text-align: center;
+            margin-top: 20px;
+            padding: 15px;
+            background: #e94560;
+            border-radius: 8px;
+            font-weight: bold;
+        }
+        
+        .pool-tracker {
+            margin-top: 20px;
+            padding: 15px;
+            background: #16213e;
+            border-radius: 12px;
+        }
+        .pool-tracker h3 { color: #00d4ff; margin-bottom: 15px; }
+        .pool-bar {
+            display: flex;
+            height: 30px;
+            border-radius: 6px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+        .pool-bar .home { background: #00d4ff; }
+        .pool-bar .draw { background: #ffaa00; }
+        .pool-bar .away { background: #e94560; }
+        .pool-labels { display: flex; justify-content: space-between; font-size: 0.8rem; color: #888; }
+        
+        .odds-explain {
+            margin-top: 20px;
+            padding: 15px;
+            background: #16213e;
+            border-radius: 12px;
+            font-size: 0.9rem;
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏠 动态赔率 + 抽水系统</h1>
+        
+        <div class="match-card">
+            <div class="match-header">
+                <span>⚽ 足球比赛</span>
+                <span style="color: #888;">英超 第32轮</span>
+            </div>
+            <div class="teams">
+                <span>曼联</span>
+                <span class="vs">VS</span>
+                <span>利物浦</span>
+            </div>
+            
+            <div class="bet-options">
+                <div class="bet-btn" onclick="showBetForm('home')">
+                    <div>主胜</div>
+                    <div class="odds" id="odds-home">2.00</div>
+                    <div class="bet-pool" id="pool-home">奖池: ¥0</div>
+                </div>
+                <div class="bet-btn" onclick="showBetForm('draw')">
+                    <div>平局</div>
+                    <div class="odds" id="odds-draw">3.50</div>
+                    <div class="bet-pool" id="pool-draw">奖池: ¥0</div>
+                </div>
+                <div class="bet-btn" onclick="showBetForm('away')">
+                    <div>客胜</div>
+                    <div class="odds" id="odds-away">3.80</div>
+                    <div class="bet-pool" id="pool-away">奖池: ¥0</div>
+                </div>
+            </div>
+            
+            <div id="bet-form" class="bet-form">
+                <p id="bet-type-text" style="margin-bottom: 10px; color: #00d4ff;"></p>
+                <input type="number" id="bet-amount" placeholder="输入下注金额" min="1">
+                <button onclick="placeBet()">确认下注</button>
+            </div>
+        </div>
+        
+        <div class="pool-tracker">
+            <h3>📊 实时奖池分布</h3>
+            <div class="pool-bar">
+                <div class="home" id="bar-home" style="width: 33%"></div>
+                <div class="draw" id="bar-draw" style="width: 33%"></div>
+                <div class="away" id="bar-away" style="width: 34%"></div>
+            </div>
+            <div class="pool-labels">
+                <span>曼联 <span id="percent-home">33%</span></span>
+                <span>平局 <span id="percent-draw">33%</span></span>
+                <span>利物浦 <span id="percent-away">34%</span></span>
+            </div>
+        </div>
+        
+        <div class="house-edge">
+            抽水比例: <span>10%</span> | 赔率会根据下注情况<strong>动态调整</strong>
+        </div>
+        
+        <div class="stats">
+            <div class="stat-box">
+                <div class="value" id="total-bets">¥0</div>
+                <div class="label">玩家总下注</div>
+            </div>
+            <div class="stat-box">
+                <div class="value" id="total-commission">¥0</div>
+                <div class="label">庄家抽水收入</div>
+            </div>
+            <div class="stat-box">
+                <div class="value" id="total-payouts">¥0</div>
+                <div class="label">庄家派彩支出</div>
+            </div>
+            <div class="stat-box profit-box">
+                <div class="value" id="house-profit">¥0</div>
+                <div class="label">庄家净利润</div>
+            </div>
+        </div>
+        
+        <div class="log" id="log">
+            <div style="color: #888;">📜 下注记录...</div>
+        </div>
+        
+        <div style="text-align: center; margin-top: 20px;">
+            <button onclick="simulateRandomResult()" style="padding: 15px 40px; background: #e94560; border: none; border-radius: 8px; color: #fff; cursor: pointer; font-size: 1rem;">🎲 模拟比赛结果</button>
+        </div>
+        
+        <div class="odds-explain">
+            <strong>💡 动态赔率原理：</strong><br><br>
+            • 买主胜的人多 → 主胜赔率↓ 客胜赔率↑<br>
+            • 赔率调整使庄家始终保持优势<br>
+            • 赔率 = 基础赔率 × (1 - 倾斜系数 × 该选项占比)
+        </div>
+    </div>
+
+    <script>
+        const COMMISSION_RATE = 0.10;
+        const BASE_ODDS = { home: 2.00, draw: 3.50, away: 3.80 };
+        const ODDS_SENSITIVITY = 0.4;
+        
+        let currentOdds = { ...BASE_ODDS };
+        let pools = { home: 0, draw: 0, away: 0 };
+        let totalBets = 0;
+        let totalCommission = 0;
+        let totalPayouts = 0;
+        let currentBetType = null;
+        const bets = [];
+        
+        function calculateDynamicOdds() {
+            const totalPool = pools.home + pools.draw + pools.away;
+            if (totalPool === 0) return { ...BASE_ODDS };
+            
+            const weights = {
+                home: pools.home / totalPool,
+                draw: pools.draw / totalPool,
+                away: pools.away / totalPool
+            };
+            
+            const newOdds = {};
+            const keys = ['home', 'draw', 'away'];
+            
+            keys.forEach(key => {
+                const otherKeys = keys.filter(k => k !== key);
+                const avgOtherOdds = (currentOdds[otherKeys[0]] + currentOdds[otherKeys[1]]) / 2;
+                const deviation = weights[key] - 0.33;
+                const adjustment = 1 - (deviation * ODDS_SENSITIVITY);
+                newOdds[key] = Math.max(1.1, BASE_ODDS[key] * adjustment);
+            });
+            
+            return newOdds;
+        }
+        
+        function updateOddsDisplay() {
+            document.getElementById('odds-home').textContent = currentOdds.home.toFixed(2);
+            document.getElementById('odds-draw').textContent = currentOdds.draw.toFixed(2);
+            document.getElementById('odds-away').textContent = currentOdds.away.toFixed(2);
+            
+            const totalPool = pools.home + pools.draw + pools.away;
+            if (totalPool > 0) {
+                const homePct = (pools.home / totalPool * 100).toFixed(0);
+                const drawPct = (pools.draw / totalPool * 100).toFixed(0);
+                const awayPct = (pools.away / totalPool * 100).toFixed(0);
+                
+                document.getElementById('bar-home').style.width = homePct + '%';
+                document.getElementById('bar-draw').style.width = drawPct + '%';
+                document.getElementById('bar-away').style.width = awayPct + '%';
+                
+                document.getElementById('percent-home').textContent = homePct + '%';
+                document.getElementById('percent-draw').textContent = drawPct + '%';
+                document.getElementById('percent-away').textContent = awayPct + '%';
+            }
+            
+            document.getElementById('pool-home').textContent = '奖池: ¥' + pools.home.toFixed(0);
+            document.getElementById('pool-draw').textContent = '奖池: ¥' + pools.draw.toFixed(0);
+            document.getElementById('pool-away').textContent = '奖池: ¥' + pools.away.toFixed(0);
+        }
+        
+        function showBetForm(type) {
+            document.getElementById('bet-form').classList.add('show');
+            const names = { home: '曼联胜', draw: '平局', away: '利物浦胜' };
+            document.getElementById('bet-type-text').textContent = `下注: ${names[type]} @ ${currentOdds[type].toFixed(2)}`;
+            currentBetType = type;
+        }
+        
+        function placeBet() {
+            const amount = parseFloat(document.getElementById('bet-amount').value);
+            if (!amount || amount <= 0) {
+                alert('请输入有效金额');
+                return;
+            }
+            
+            const commission = amount * COMMISSION_RATE;
+            const poolAmount = amount - commission;
+            const effectiveOdds = currentOdds[currentBetType];
+            const potentialWin = poolAmount * effectiveOdds;
+            
+            bets.push({ 
+                type: currentBetType, 
+                amount: amount,
+                commission: commission,
+                poolAmount: poolAmount,
+                odds: effectiveOdds,
+                potentialWin: potentialWin 
+            });
+            
+            pools[currentBetType] += poolAmount;
+            currentOdds = calculateDynamicOdds();
+            
+            totalBets += amount;
+            totalCommission += commission;
+            
+            const names = { home: '曼联', draw: '平局', away: '利物浦' };
+            addLog(`💰 下注 ${names[currentBetType]} ¥${amount}`, '');
+            addLog(`💎 抽水 ¥${commission.toFixed(2)}`, 'commission');
+            addLog(`📉 赔率变化: ${currentOdds.home.toFixed(2)} / ${currentOdds.draw.toFixed(2)} / ${currentOdds.away.toFixed(2)}`, 'odds-change');
+            
+            updateOddsDisplay();
+            updateStats();
+            document.getElementById('bet-amount').value = '';
+            document.getElementById('bet-form').classList.remove('show');
+            
+            alert(`下注成功!\n庄家已抽取 ¥${commission.toFixed(2)}\n当前赔率: ${currentOdds.home.toFixed(2)} / ${currentOdds.draw.toFixed(2)} / ${currentOdds.away.toFixed(2)}`);
+        }
+        
+        function simulateRandomResult() {
+            if (bets.length === 0) {
+                alert('请先下注!');
+                return;
+            }
+            
+            const rand = Math.random();
+            let result;
+            if (rand < 0.40) result = 'home';
+            else if (rand < 0.65) result = 'away';
+            else result = 'draw';
+            
+            const resultNames = { home: '曼联', draw: '平局', away: '利物浦' };
+            alert(`🏆 比赛结果: ${resultNames[result]}`);
+            
+            let payout = 0;
+            bets.forEach(bet => {
+                if (bet.type === result) {
+                    payout += bet.potentialWin;
+                    addLog(`✅ ${resultNames[bet.type]} 获胜! 玩家赢 ¥${bet.potentialWin.toFixed(2)}`, 'win');
+                } else {
+                    addLog(`❌ ${resultNames[bet.type]} 失败! 玩家损失 ¥${bet.amount}`, 'lose');
+                }
+            });
+            
+            totalPayouts += payout;
+            updateStats();
+            
+            const profit = totalCommission - payout;
+            alert(`📊 本轮结算:\n\n玩家总下注: ¥${totalBets}\n庄家抽水: ¥${totalCommission.toFixed(2)}\n庄家派彩: ¥${payout.toFixed(2)}\n\n🤑 庄家净利润: ¥${profit.toFixed(2)}`);
+            
+            bets.length = 0;
+            pools = { home: 0, draw: 0, away: 0 };
+            currentOdds = { ...BASE_ODDS };
+            updateOddsDisplay();
+            totalBets = 0;
+            totalCommission = 0;
+            totalPayouts = 0;
+            updateStats();
+        }
+        
+        function addLog(text, type) {
+            const log = document.getElementById('log');
+            const div = document.createElement('div');
+            div.textContent = text;
+            if (type) div.className = type;
+            log.insertBefore(div, log.firstChild);
+        }
+        
+        function updateStats() {
+            document.getElementById('total-bets').textContent = '¥' + totalBets.toFixed(0);
+            document.getElementById('total-commission').textContent = '¥' + totalCommission.toFixed(0);
+            document.getElementById('total-payouts').textContent = '¥' + totalPayouts.toFixed(0);
+            document.getElementById('house-profit').textContent = '¥' + (totalCommission - totalPayouts).toFixed(0);
+        }
+        
+        updateOddsDisplay();
+    </script>
+</body>
+</html>
