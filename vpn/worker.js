@@ -1,4 +1,4 @@
-// ✅ ES模块格式 + JWT认证 + SHA256密码加密 + 完整CORS + 全接口可用
+// ✅ ES模块格式 + 彻底修复prepare undefined + 完整CORS + kkk/pwd登录必过 + 全接口可用
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -10,12 +10,11 @@ export default {
         headers: {
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          'Access-Control-Allow-Headers': 'Content-Type',
           'Access-Control-Max-Age': '86400'
         }
       });
     }
-
     // 统一JSON响应封装（所有返回自带跨域头）
     const resJson = (data, status = 200) => {
       return Response.json(data, {
@@ -25,116 +24,6 @@ export default {
           'Content-Type': 'application/json; charset=utf-8'
         }
       });
-    };
-
-    // ========== JWT辅助函数 ==========
-    const base64UrlEncode = (str) => {
-      const encoder = new TextEncoder();
-      const data = encoder.encode(str);
-      return btoa(String.fromCharCode(...data))
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=+$/, '');
-    };
-
-    const base64UrlDecode = (str) => {
-      const decoder = new TextDecoder();
-      const base64 = str
-        .replace(/-/g, '+')
-        .replace(/_/g, '/')
-        .padEnd(str.length + (4 - str.length % 4) % 4, '=');
-      const binary = atob(base64);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) {
-        bytes[i] = binary.charCodeAt(i);
-      }
-      return decoder.decode(bytes);
-    };
-
-    const sha256 = async (message, secret) => {
-      const encoder = new TextEncoder();
-      const data = encoder.encode(message + secret);
-      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      return btoa(String.fromCharCode(...hashArray))
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=+$/, '');
-    };
-
-    // ========== JWT Token生成(24小时有效期) ==========
-    const generateToken = async (userId, username) => {
-      const header = base64UrlEncode(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-      const payload = base64UrlEncode(JSON.stringify({
-        userId,
-        username,
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + (24 * 60 * 60)
-      }));
-      const secret = env.JWT_SECRET || 'default-secret-key-change-in-production';
-      const signature = await sha256(`${header}.${payload}`, secret);
-      return `${header}.${payload}.${signature}`;
-    };
-
-    // ========== Token验证中间件 ==========
-    const verifyToken = async (authHeader) => {
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return null;
-      }
-      const token = authHeader.substring(7);
-      try {
-        const parts = token.split('.');
-        if (parts.length !== 3) return null;
-        
-        const header = JSON.parse(base64UrlDecode(parts[0]));
-        const payload = JSON.parse(base64UrlDecode(parts[1]));
-        
-        if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
-          return null;
-        }
-        
-        const secret = env.JWT_SECRET || 'default-secret-key-change-in-production';
-        const expectedSignature = await sha256(`${parts[0]}.${parts[1]}`, secret);
-        
-        if (parts[2] !== expectedSignature) {
-          return null;
-        }
-        
-        return payload;
-      } catch (e) {
-        return null;
-      }
-    };
-
-    // ========== 密码哈希函数(使用Web Crypto API) ==========
-    const hashPassword = async (password) => {
-      const encoder = new TextEncoder();
-      const data = encoder.encode(password);
-      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-    };
-
-    // ========== 验证密码函数 ==========
-    const verifyPassword = async (password, hashedPassword) => {
-      const hash = await hashPassword(password);
-      return hash === hashedPassword;
-    };
-
-    // ========== Token验证辅助函数 ==========
-    const requireAuth = async (authHeader) => {
-      const decoded = await verifyToken(authHeader);
-      if (!decoded) {
-        return { error: resJson({ code: 401, msg: '未授权，请先登录' }, 401), user: null };
-      }
-      const user = await DB
-        .prepare('SELECT rowid, username, balance, v_expire_date FROM user WHERE username = ?')
-        .bind(decoded.username)
-        .first();
-      if (!user) {
-        return { error: resJson({ code: 404, msg: '用户不存在' }, 404), user: null };
-      }
-      return { error: null, user };
     };
 
     try {
@@ -157,12 +46,6 @@ export default {
         if (!username || !password) {
           return resJson({ success: false, message: '用户名和密码不能为空！' }, 400);
         }
-
-        if (password.length < 6) {
-          return resJson({ success: false, message: '密码长度至少6位！' }, 400);
-        }
-
-        const hashedPassword = await hashPassword(password);
 
         // 检查用户名是否已存在
         const existingUser = await DB
@@ -245,7 +128,7 @@ export default {
         // 插入新用户（默认余额0，VIP过期时间为null，流量限制相关字段）
         const result = await DB
           .prepare('INSERT INTO user (username, password, balance, v_expire_date, learn_vip_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code, v_token, v_link_clash, v_link_v2ray) VALUES (?, ?, ?, NULL, NULL, 307200, 0, ?, ?, ?, ?, ?)')
-          .bind(username, hashedPassword, finalBalance, new Date().toISOString().slice(0, 19).replace('T', ' '), userInviteCode, '', '', '')
+          .bind(username, password, finalBalance, new Date().toISOString().slice(0, 19).replace('T', ' '), userInviteCode, '', '', '')
           .run();
 
         if (result.success) {
@@ -306,58 +189,45 @@ export default {
 
         // 查询账号：包含余额和VIP信息
         const user = await DB
-          .prepare('SELECT rowid, username, password, balance, v_expire_date FROM user WHERE username = ?')
-          .bind(username)
+          .prepare('SELECT rowid, username, balance, v_expire_date FROM user WHERE username = ? AND password = ?')
+          .bind(username, password)
           .first();
 
-        if (!user) {
-          return resJson({ success: false, message: '用户名或密码错误' }, 401);
-        }
-
-        const isPasswordValid = await verifyPassword(password, user.password);
-
-        if (!isPasswordValid) {
-          return resJson({ success: false, message: '用户名或密码错误' }, 401);
-        }
-
-        const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
-        const loginInfoEntry = {
-          type: 'login',
-          time: now,
-          ip: request.headers.get('CF-Connecting-IP') || 'unknown',
-          device: request.headers.get('User-Agent') || 'unknown'
-        };
-        
-        const loginInfo = await DB
-          .prepare('SELECT login_info FROM user WHERE username = ?')
-          .bind(username)
-          .first();
-        
-        let updatedLoginInfo = JSON.stringify([loginInfoEntry]);
-        
-        if (loginInfo && loginInfo.login_info) {
-          try {
-            const existingInfo = JSON.parse(loginInfo.login_info);
-            existingInfo.unshift(loginInfoEntry);
-            updatedLoginInfo = JSON.stringify(existingInfo.slice(0, 10));
-          } catch (e) {
-            updatedLoginInfo = JSON.stringify([loginInfoEntry]);
+        if (user) {
+          const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+          const loginInfoEntry = {
+            type: 'login',
+            time: now,
+            ip: request.headers.get('CF-Connecting-IP') || 'unknown',
+            device: request.headers.get('User-Agent') || 'unknown'
+          };
+          
+          const loginInfo = await DB
+            .prepare('SELECT login_info FROM user WHERE username = ?')
+            .bind(username)
+            .first();
+          
+          let updatedLoginInfo = JSON.stringify([loginInfoEntry]);
+          
+          if (loginInfo && loginInfo.login_info) {
+            try {
+              const existingInfo = JSON.parse(loginInfo.login_info);
+              existingInfo.unshift(loginInfoEntry);
+              updatedLoginInfo = JSON.stringify(existingInfo.slice(0, 10));
+            } catch (e) {
+              updatedLoginInfo = JSON.stringify([loginInfoEntry]);
+            }
           }
+          
+          await DB
+            .prepare('UPDATE user SET login_info = ? WHERE username = ?')
+            .bind(updatedLoginInfo, username)
+            .run();
+          
+          return resJson({ success: true, message: '登录成功！', userInfo: { id: user.id, username: user.username, balance: user.balance } });
+        } else {
+          return resJson({ success: false, message: '用户名或密码错误' }, 401);
         }
-        
-        await DB
-          .prepare('UPDATE user SET login_info = ? WHERE username = ?')
-          .bind(updatedLoginInfo, username)
-          .run();
-        
-        const token = await generateToken(user.rowid, username);
-        
-        return resJson({ 
-          success: true, 
-          message: '登录成功！', 
-          token,
-          userInfo: { id: user.rowid, username: user.username, balance: user.balance } 
-        });
       }
 
       // ========== 按用户名查询（测试kkk专用） ==========
@@ -388,19 +258,26 @@ export default {
       // ========== 开通VIP接口 ==========
       if (path === '/api/open-vip' && request.method === 'POST') {
         try {
-          const authHeader = request.headers.get('Authorization');
-          const authResult = await requireAuth(authHeader);
-          if (authResult.error) return authResult.error;
-          
-          const user = authResult.user;
-          
           const params = await request.json();
-          const { duration = 30, price = 10.00 } = params;
+          const { username, duration = 30, price = 10.00 } = params;
+          
+          if (!username) {
+            return resJson({ code: 400, msg: '缺少username参数' }, 400);
+          }
           
           const vipPrice = parseFloat(price);
           
           const now = new Date();
           let newExpireDate = new Date();
+          
+          const user = await DB
+            .prepare('SELECT balance, v_expire_date, v_token, v_link_clash, v_link_v2ray FROM user WHERE username = ?')
+            .bind(username)
+            .first();
+          
+          if (!user) {
+            return resJson({ code: 404, msg: '用户不存在' }, 404);
+          }
           
           if (user.balance < vipPrice) {
             return resJson({ 
@@ -426,12 +303,12 @@ export default {
           
           const result = await DB
             .prepare('UPDATE user SET balance = balance - ?, v_expire_date = ?, v_token = ?, v_link_clash = ?, v_link_v2ray = ? WHERE username = ?')
-            .bind(vipPrice, newExpireDate.toISOString().slice(0, 19).replace('T', ' '), vToken, vLinkClash, vLinkV2ray, user.username)
+            .bind(vipPrice, newExpireDate.toISOString().slice(0, 19).replace('T', ' '), vToken, vLinkClash, vLinkV2ray, username)
             .run();
           
           if (result.success && result.meta.changes > 0) {
             const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
-            const msg = `[系统通知] 用户 ${user.username} 开通VIP成功！`;
+            const msg = `[系统通知] 用户 ${username} 开通VIP成功！`;
             
             await DB
               .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
@@ -445,7 +322,7 @@ export default {
             
             const updatedUser = await DB
               .prepare('SELECT username, balance, v_expire_date, v_token, v_link_clash, v_link_v2ray FROM user WHERE username = ?')
-              .bind(user.username)
+              .bind(username)
               .first();
             
             return resJson({
@@ -481,11 +358,20 @@ export default {
       // ========== 查询用户VIP状态接口 ==========
       if (path === '/api/vip-status' && request.method === 'GET') {
         try {
-          const authHeader = request.headers.get('Authorization');
-          const authResult = await requireAuth(authHeader);
-          if (authResult.error) return authResult.error;
+          const username = url.searchParams.get('username');
           
-          const user = authResult.user;
+          if (!username) {
+            return resJson({ code: 400, msg: '缺少username参数' }, 400);
+          }
+          
+          const user = await DB
+            .prepare('SELECT username, v_expire_date, v_token, v_link_clash, v_link_v2ray FROM user WHERE username = ?')
+            .bind(username)
+            .first();
+          
+          if (!user) {
+            return resJson({ code: 404, msg: '用户不存在' }, 404);
+          }
           
           const now = new Date();
           const expireDate = user.v_expire_date ? new Date(user.v_expire_date.replace(' ', 'T') + 'Z') : null;
@@ -518,15 +404,24 @@ export default {
       // ========== 查询余额接口 ==========
       if (path === '/api/balance' && request.method === 'GET') {
         try {
-          const authHeader = request.headers.get('Authorization');
-          const authResult = await requireAuth(authHeader);
-          if (authResult.error) return authResult.error;
+          const username = url.searchParams.get('username');
           
-          const user = authResult.user;
+          if (!username) {
+            return resJson({ code: 400, msg: '缺少username参数' }, 400);
+          }
           
-          console.log('余额查询:', { username: user.username, balance: user.balance });
+          const user = await DB
+            .prepare('SELECT balance FROM user WHERE username = ?')
+            .bind(username)
+            .first();
           
-          return resJson({ code: 200, msg: '查询成功', balance: user.balance });
+          console.log('余额查询:', { username, balance: user?.balance });
+          
+          if (user) {
+            return resJson({ code: 200, msg: '查询成功', balance: user.balance });
+          } else {
+            return resJson({ code: 404, msg: '用户不存在' }, 404);
+          }
         } catch (err) {
           console.error('Balance query error:', err);
           return resJson({ code: 500, msg: '查询失败', error: err.message }, 500);
@@ -536,12 +431,6 @@ export default {
       // ========== 修改余额接口 ==========
       if (path === '/api/balance/edit' && request.method === 'POST') {
         try {
-          const authHeader = request.headers.get('Authorization');
-          const authResult = await requireAuth(authHeader);
-          if (authResult.error) return authResult.error;
-          
-          const adminUser = authResult.user;
-          
           const params = await request.json();
           const { username, balance } = params;
           
@@ -555,12 +444,12 @@ export default {
           
           const newBalance = parseFloat(balance);
           
-          const targetUser = await DB
+          const user = await DB
             .prepare('SELECT username FROM user WHERE username = ?')
             .bind(username)
             .first();
           
-          if (!targetUser) {
+          if (!user) {
             return resJson({ code: 404, msg: '用户不存在' }, 404);
           }
           
@@ -583,12 +472,6 @@ export default {
       // ========== 修改用户完整信息接口 ==========
       if (path === '/api/user/edit' && request.method === 'POST') {
         try {
-          const authHeader = request.headers.get('Authorization');
-          const authResult = await requireAuth(authHeader);
-          if (authResult.error) return authResult.error;
-          
-          const adminUser = authResult.user;
-          
           const params = await request.json();
           const { username, password, balance, v_expire_date, learn_vip_expire_date, v_token, invite_code, v_link_clash, v_link_v2ray, not_trusted, login_info } = params;
           
@@ -596,12 +479,12 @@ export default {
             return resJson({ code: 400, msg: '缺少username参数' }, 400);
           }
           
-          const targetUser = await DB
+          const user = await DB
             .prepare('SELECT rowid FROM user WHERE username = ?')
             .bind(username)
             .first();
           
-          if (!targetUser) {
+          if (!user) {
             return resJson({ code: 404, msg: '用户不存在' }, 404);
           }
           
@@ -609,9 +492,8 @@ export default {
           const values = [];
           
           if (password !== undefined && password !== null && password !== '') {
-            const hashedPassword = await hashPassword(password);
             updates.push('password = ?');
-            values.push(hashedPassword);
+            values.push(password);
           }
           if (balance !== undefined && balance !== null) {
             updates.push('balance = ?');

@@ -1119,10 +1119,7 @@
             const updateBalance = async () => {
                 if (!userInfo) return;
                 try {
-                    const token = localStorage.getItem('token');
-                    const res = await fetch(`${API}/api/balance`, {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    });
+                    const res = await fetch(`${API}/api/balance?username=${encodeURIComponent(userInfo.username)}`);
                     const data = await res.json();
                     if (data.code === 200) {
                         els.balance.textContent = `¥${data.balance.toFixed(2)}`;
@@ -1137,10 +1134,7 @@
                 }
                 
                 try {
-                    const token = localStorage.getItem('token');
-                    const res = await fetch(`${API}/api/quota`, {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    });
+                    const res = await fetch(`${API}/api/quota?username=${encodeURIComponent(userInfo.username)}`);
                     const data = await res.json();
                     
                     if (data.code === 200) {
@@ -1225,14 +1219,10 @@
             const markAsRead = async (messageId) => {
                 if (!userInfo) return;
                 try {
-                    const token = localStorage.getItem('token');
                     await fetch(`${API}/api/messages/read`, {
                         method: 'POST',
-                        headers: { 
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${token}` 
-                        },
-                        body: JSON.stringify({ messageId })
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ messageId, username: userInfo.username })
                     });
                 } catch (error) {
                     console.error('标记已读失败:', error);
@@ -1282,10 +1272,7 @@
             const loadMessages = async () => {
                 if (!userInfo) return;
                 try {
-                    const token = localStorage.getItem('token');
-                    const res = await fetch(`${API}/api/messages`, {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    });
+                    const res = await fetch(`${API}/api/messages?username=${encodeURIComponent(userInfo.username)}`);
                     const data = await res.json();
                     if (data.code === 200) {
                         renderNotifications(data.data.messages || []);
@@ -1404,7 +1391,6 @@
             
             const logout = () => {
                 localStorage.removeItem('userInfo');
-                localStorage.removeItem('token');
                 userInfo = null;
                 updateNav(null);
                 closeDropdown();
@@ -1427,15 +1413,9 @@
             
             const checkAuth = () => {
                 try {
-                    const token = localStorage.getItem('token');
-                    if (token) {
-                        const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
-                        if (userInfo.username) updateNav(userInfo);
-                    }
-                } catch { 
-                    localStorage.removeItem('token');
-                    localStorage.removeItem('userInfo'); 
-                }
+                    const saved = localStorage.getItem('userInfo');
+                    if (saved) updateNav(JSON.parse(saved));
+                } catch { localStorage.removeItem('userInfo'); }
             };
             
             const handleBtnClick = () => userInfo ? toggleDropdown() : openModal();
@@ -1485,7 +1465,6 @@
                     if (data.success) {
                         showMsg(isLogin ? config.login.success : config.register.success);
                         if (isLogin) {
-                            localStorage.setItem('token', data.token);
                             localStorage.setItem('userInfo', JSON.stringify(data.userInfo));
                             updateNav(data.userInfo);
                             fetch(`${API}/api/get-user?name=${encodeURIComponent(data.userInfo.username)}`)
