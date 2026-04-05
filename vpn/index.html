@@ -1391,6 +1391,7 @@
             
             const logout = () => {
                 localStorage.removeItem('userInfo');
+                localStorage.removeItem('loginTime');
                 userInfo = null;
                 updateNav(null);
                 closeDropdown();
@@ -1414,8 +1415,26 @@
             const checkAuth = () => {
                 try {
                     const saved = localStorage.getItem('userInfo');
-                    if (saved) updateNav(JSON.parse(saved));
-                } catch { localStorage.removeItem('userInfo'); }
+                    const loginTime = localStorage.getItem('loginTime');
+                    
+                    if (saved && loginTime) {
+                        const now = new Date().getTime();
+                        const twentyFourHours = 24 * 60 * 60 * 1000;
+                        
+                        if (now - loginTime > twentyFourHours) {
+                            localStorage.removeItem('userInfo');
+                            localStorage.removeItem('loginTime');
+                            userInfo = null;
+                            updateNav(null);
+                            closeDropdown();
+                            return;
+                        }
+                        updateNav(JSON.parse(saved));
+                    }
+                } catch { 
+                    localStorage.removeItem('userInfo');
+                    localStorage.removeItem('loginTime');
+                }
             };
             
             const handleBtnClick = () => userInfo ? toggleDropdown() : openModal();
@@ -1466,6 +1485,7 @@
                         showMsg(isLogin ? config.login.success : config.register.success);
                         if (isLogin) {
                             localStorage.setItem('userInfo', JSON.stringify(data.userInfo));
+                            localStorage.setItem('loginTime', new Date().getTime());
                             updateNav(data.userInfo);
                             fetch(`${API}/api/get-user?name=${encodeURIComponent(data.userInfo.username)}`)
                                 .then(res => res.json())
