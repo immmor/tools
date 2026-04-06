@@ -194,7 +194,7 @@ export default {
           .first();
 
         if (user) {
-          const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+          const now = new Date(new Date().getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
           const loginInfoEntry = {
             type: 'login',
             time: now,
