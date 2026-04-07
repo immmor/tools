@@ -25,6 +25,26 @@
             stroke-dashoffset: 100;
         }
         
+        @keyframes ecg-first {
+            0% { stroke-dashoffset: 100; }
+            100% { stroke-dashoffset: 0; }
+        }
+        .animate-ecg-first {
+            animation: ecg-first 1.7s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+            stroke-dasharray: 100;
+            stroke-dashoffset: 100;
+        }
+        
+        @keyframes ripple {
+            0% { transform: scale(1); opacity: 0.8; }
+            100% { transform: scale(5); opacity: 0; }
+        }
+        
+        .animate-ripple {
+            animation: ripple 1.5s ease-out infinite;
+            opacity: 0;
+        }
+        
         .deck-container {
             position: relative;
             width: 400px;
@@ -84,7 +104,7 @@
         /* 电脑端适配 */
         @media (min-width: 768px) {
             body { background: #fce7f3; }
-            #verification-interface, #chat-setting, #privacy-interface, #vip-interface, #chat-list-interface, #chat-interface, #profile-interface, #user-detail-interface, #account-center-interface, #square-interface, #login-interface, #register-interface, #about-interface, .history-content {
+            #likes-received-interface, #verification-interface, #chat-setting, #privacy-interface, #vip-interface, #chat-list-interface, #chat-interface, #profile-interface, #user-detail-interface, #account-center-interface, #square-interface, #login-interface, #register-interface, #about-interface, .history-content {
                 max-width: 480px;
                 left: 50%;
                 transform: translateX(-50%);
@@ -1165,6 +1185,7 @@
         }
 
         function showMatchEffect() {
+            playMatchSound();
             const matchDiv = document.createElement('div');
             matchDiv.style.cssText = `
                 position: fixed;
@@ -1181,8 +1202,14 @@
                 <div style="text-align: center;">
                     <div style="display: flex; justify-content: center; align-items: center; gap: 2rem; margin-bottom: 3rem; flex-wrap: wrap;">
                         <div style="display: flex; flex-direction: column; justify-content: center; align-items: center; color: #ec4899; min-width: 100px;">
-                            <div style="font-size: 12rem; opacity: 0.9;">
-                                <svg class="w-72 h-72 animate-ecg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <div style="font-size: 12rem; opacity: 0.9; position: relative;">
+                                <svg class="w-72 h-72 animate-ecg-first" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M2 12h2l2-6 4 12 4-12 3 6h5"/>
+                                </svg>
+                                <svg class="w-72 h-72 animate-ripple" style="position: absolute; top: 0; left: 0; opacity: 0; animation-delay: 1.7s;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M2 12h2l2-6 4 12 4-12 3 6h5"/>
+                                </svg>
+                                <svg class="w-72 h-72 animate-ripple" style="position: absolute; top: 0; left: 0; opacity: 0; animation-delay: 2.2s;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M2 12h2l2-6 4 12 4-12 3 6h5"/>
                                 </svg>
                             </div>
@@ -1228,7 +1255,7 @@
                         </div>
                     `;
                 }
-            }, 1500);
+            }, 2200);
         }
 
         function closeMatch() {
@@ -1275,6 +1302,7 @@
         let fromChatList = false;
         let fromAccountCenter = false;
         let fromHistory = false;
+        let fromLikes = false;
 
         function startChatFromMatch() {
             fromMatch = true;
@@ -1335,8 +1363,11 @@
         function openChat(userId) {
             const chatListInterface = document.getElementById('chat-list-interface');
             fromHistory = document.getElementById('history-modal') !== null;
+            const likesInterface = document.getElementById('likes-received-interface');
+            fromLikes = likesInterface.style.display !== 'none';
 
             chatListInterface.style.display = 'none';
+            if (fromLikes) likesInterface.style.display = 'none';
 
             const historyModal = document.getElementById('history-modal');
             if (historyModal) historyModal.remove();
@@ -1365,6 +1396,10 @@
 
             const historyModal = document.getElementById('history-modal');
             if (historyModal) historyModal.style.display = 'none';
+
+            const likesInterface = document.getElementById('likes-received-interface');
+            fromLikes = likesInterface.style.display !== 'none';
+            if (fromLikes) likesInterface.style.display = 'none';
 
             const userDetailInterface = document.getElementById('user-detail-interface');
             userDetailInterface.style.display = 'flex';
@@ -1407,6 +1442,9 @@
             } else if (fromAccountCenter) {
                 fromAccountCenter = false;
                 document.getElementById('account-center-interface').style.display = 'flex';
+            } else if (fromLikes) {
+                fromLikes = false;
+                openLikesReceived();
             } else {
                 const historyModal = document.getElementById('history-modal');
                 if (historyModal) historyModal.style.display = 'flex';
@@ -1430,6 +1468,9 @@
             } else if (fromHistory) {
                 fromHistory = false;
                 openSwipeHistory();
+            } else if (fromLikes) {
+                fromLikes = false;
+                openLikesReceived();
             } else {
                 document.getElementById('chat-list-interface').style.display = 'flex';
             }
@@ -1520,6 +1561,37 @@
             document.querySelector('header').style.display = 'none';
             document.querySelector('main').style.display = 'none';
             document.querySelector('footer').style.display = 'none';
+
+            const likesContent = likesInterface.querySelector('.flex-grow');
+            const emptyLikes = likesContent.querySelector('#empty-likes');
+            if (emptyLikes) emptyLikes.remove();
+
+            const mockLikes = [
+                { name: '阿泽', age: 25, job: '程序员', photo: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100' },
+                { name: '琳达', age: 28, job: '设计师', photo: 'https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=100' },
+                { name: '小明', age: 23, job: '学生', photo: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100' }
+            ];
+
+            mockLikes.forEach(user => {
+                const likeDiv = document.createElement('div');
+                likeDiv.className = 'flex items-center gap-3 p-3 bg-white rounded-2xl shadow-sm hover:bg-pink-50 transition cursor-pointer';
+                likeDiv.onclick = function() {
+                    openChat(4);
+                };
+                likeDiv.innerHTML = `
+                    <div class="w-12 h-12 flex-shrink-0 rounded-full bg-pink-200 overflow-hidden cursor-pointer" onclick="event.stopPropagation(); openUserProfile(4)">
+                        <img src="${user.photo}" class="w-full h-full object-cover">
+                    </div>
+                    <div class="flex-grow min-w-0">
+                        <div class="flex items-center justify-between gap-2">
+                            <h3 class="font-bold text-gray-800 truncate">${user.name}</h3>
+                            <span class="text-xs text-gray-400 whitespace-nowrap">刚刚</span>
+                        </div>
+                        <p class="text-sm text-gray-500 truncate">${user.age}岁 · ${user.job}</p>
+                    </div>
+                `;
+                likesContent.insertBefore(likeDiv, likesContent.firstChild);
+            });
         }
 
         function closeLikesReceived() {
@@ -2064,7 +2136,7 @@
                     <h2 class="text-2xl font-bold">${user.name}, ${user.age}</h2>
                     <p class="text-sm opacity-80 mb-1">${user.job}</p>
                     <p class="text-xs mb-1">${user.height}cm · ${user.constellation} · ${user.bloodType}</p>
-                    <p class="text-xs mb-1">${user.education}</p>
+                    <p class="text-xs mb-1">教育: ${user.education}</p>
                     <p class="text-xs mb-1">收入: ${user.income}</p>
                     <p class="text-xs mb-1">家乡: ${user.hometown}</p>
                     <p class="text-xs mb-1">学校: ${user.school}</p>
@@ -2111,6 +2183,38 @@
         };
 
         loadUserData();
+
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function playMatchSound() {
+            if (audioContext.state === 'suspended') audioContext.resume();
+            
+            const now = audioContext.currentTime;
+            
+            const oscillator1 = audioContext.createOscillator();
+            const gainNode1 = audioContext.createGain();
+            oscillator1.type = 'sine';
+            oscillator1.frequency.setValueAtTime(120, now);
+            oscillator1.frequency.exponentialRampToValueAtTime(80, now + 0.15);
+            gainNode1.gain.setValueAtTime(0.5, now);
+            gainNode1.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+            oscillator1.connect(gainNode1);
+            gainNode1.connect(audioContext.destination);
+            oscillator1.start(now);
+            oscillator1.stop(now + 0.25);
+            
+            const oscillator2 = audioContext.createOscillator();
+            const gainNode2 = audioContext.createGain();
+            oscillator2.type = 'sine';
+            oscillator2.frequency.setValueAtTime(120, now + 0.35);
+            oscillator2.frequency.exponentialRampToValueAtTime(80, now + 0.5);
+            gainNode2.gain.setValueAtTime(0.5, now + 0.35);
+            gainNode2.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
+            oscillator2.connect(gainNode2);
+            gainNode2.connect(audioContext.destination);
+            oscillator2.start(now + 0.35);
+            oscillator2.stop(now + 0.6);
+        }
     </script>
 </body>
 </html>
