@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>Three.js 重力球：赛博脉冲</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Orbitron', sans-serif; }
+        #ui {
+            position: absolute; top: 20px; left: 20px; color: #fff;
+            background: rgba(0,0,0,0.5); padding: 15px; border-left: 5px solid #00f2ff;
+            pointer-events: none;
+        }
+        #score { font-size: 2.5em; color: #00f2ff; font-weight: bold; }
+        #msg { 
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: #fff; text-align: center; display: none; background: rgba(10, 10, 30, 0.95);
+            padding: 40px; border: 1px solid #00f2ff; box-shadow: 0 0 30px #00f2ff;
+        }
+        button { background: #00f2ff; border: none; padding: 12px 30px; cursor: pointer; font-size: 1.2em; font-weight: bold; margin-top: 20px; transition: 0.3s; }
+        button:hover { background: #fff; box-shadow: 0 0 20px #fff; }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="ui">
+        <div>SCORE: <span id="score">0</span></div>
+        <div style="font-size: 0.8em; opacity: 0.7; margin-top: 5px;">WASD 控制球体滚动</div>
+    </div>
+    
+    <div id="msg">
+        <h1 style="color: #00f2ff; margin-top: 0;">连接中断</h1>
+        <p>你的小球坠入了虚拟深渊...</p>
+        <button onclick="location.reload()">重新连接</button>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        // --- 核心变量 ---
+        let scene, camera, renderer, player;
+        let platforms = [];
+        let score = 0;
+        let isGameOver = false;
+        
+        // 物理变量
+        let velocity = new THREE.Vector3();
+        const acceleration = 0.02;
+        const friction = 0.95;
+        const keys = { w: false, a: false, s: false, d: false };
+
+        init();
+        animate();
+
+        function init() {
+            // 场景
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x020205);
+            scene.fog = new THREE.FogExp2(0x020205, 0.08);
+
+            // 相机
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 5, 8);
+
+            // 渲染器
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            // 灯光
+            const ambient = new THREE.AmbientLight(0x404040, 2);
+            scene.add(ambient);
+
+            const spotLight = new THREE.SpotLight(0x00f2ff, 10);
+            spotLight.position.set(0, 10, 5);
+            spotLight.castShadow = true;
+            scene.add(spotLight);
+
+            // 玩家（发光球）
+            const ballGeo = new THREE.SphereGeometry(0.5, 32, 32);
+            const ballMat = new THREE.MeshStandardMaterial({ 
+                color: 0x00f2ff, 
+                emissive: 0x00f2ff, 
+                emissiveIntensity: 0.5,
+                roughness: 0.2,
+                metalness: 0.8
+            });
+            player = new THREE.Mesh(ballGeo, ballMat);
+            player.position.y = 1;
+            player.castShadow = true;
+            scene.add(player);
+
+            // 初始化地板
+            createPlatform(0, 0, 0, 10, 10);
+            for(let i=1; i<15; i++) {
+                spawnRandomPlatform(i * -12);
+            }
+
+            // 事件
+            window.addEventListener('keydown', e => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = true; });
+            window.addEventListener('keyup', e => { if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = false; });
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function createPlatform(x, y, z, w, d) {
+            const geo = new THREE.BoxGeometry(w, 0.5, d);
+            const mat = new THREE.MeshStandardMaterial({ 
+                color: 0x111122, 
+                roughness: 0.1, 
+                metalness: 0.5 
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(x, y, z);
+            mesh.receiveShadow = true;
+
+            // 边缘发光线
+            const edges = new THREE.EdgesGeometry(geo);
+            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x00f2ff }));
+            mesh.add(line);
+
+            scene.add(mesh);
+            platforms.push(mesh);
+        }
+
+        function spawnRandomPlatform(z) {
+            const w = 4 + Math.random() * 6;
+            const d = 6 + Math.random() * 4;
+            const x = (Math.random() - 0.5) * 10;
+            createPlatform(x, 0, z, w, d);
+        }
+
+        function animate() {
+            if (isGameOver) return;
+            requestAnimationFrame(animate);
+
+            // 1. 物理引擎 (手动实现惯性)
+            if (keys.w) velocity.z -= acceleration;
+            if (keys.s) velocity.z += acceleration;
+            if (keys.a) velocity.x -= acceleration;
+            if (keys.d) velocity.x += acceleration;
+
+            velocity.multiplyScalar(friction); // 阻力
+            player.position.add(velocity);
+
+            // 球体滚动动画 (视觉)
+            player.rotation.x += velocity.z * 2;
+            player.rotation.z -= velocity.x * 2;
+
+            // 2. 碰撞与下落检测
+            let onGround = false;
+            for (let p of platforms) {
+                const dx = Math.abs(player.position.x - p.position.x);
+                const dz = Math.abs(player.position.z - p.position.z);
+                if (dx < p.geometry.parameters.width/2 + 0.4 && dz < p.geometry.parameters.depth/2 + 0.4) {
+                    onGround = true;
+                    // 简单的模拟 Z 轴循环
+                    if (p.position.z > player.position.z + 15) {
+                        const lastZ = platforms[platforms.length-1].position.z;
+                        p.position.z = lastZ - 12;
+                        p.position.x = (Math.random() - 0.5) * 10;
+                        score += 10;
+                        document.getElementById('score').innerText = score;
+                    }
+                    break;
+                }
+            }
+
+            if (!onGround && player.position.y > -0.1) {
+                player.position.y -= 0.15; // 坠落
+            }
+
+            if (player.position.y < -5) {
+                gameOver();
+            }
+
+            // 3. 相机平滑跟随
+            const targetCamPos = new THREE.Vector3(player.position.x * 0.5, player.position.y + 5, player.position.z + 8);
+            camera.position.lerp(targetCamPos, 0.1);
+            camera.lookAt(player.position.x, player.position.y, player.position.z - 2);
+
+            renderer.render(scene, camera);
+        }
+
+        function gameOver() {
+            isGameOver = true;
+            document.getElementById('msg').style.display = 'block';
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+    </script>
+</body>
+</html>
