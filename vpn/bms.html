@@ -148,6 +148,8 @@
             flex: 1;
             display: flex;
             flex-direction: column;
+            min-width: 0;
+            overflow-x: auto;
         }
 
         /* 顶部导航栏 */
@@ -390,7 +392,9 @@
             .sidebar {
                 width: 100%;
                 height: auto;
-                position: relative;
+                position: sticky;
+                top: 0;
+                z-index: 100;
             }
 
             .main-container {
@@ -407,6 +411,10 @@
             }
 
             .dashboard-grid {
+                grid-template-columns: 1fr !important;
+            }
+
+            .link-config-grid {
                 grid-template-columns: 1fr !important;
             }
 
@@ -700,7 +708,7 @@
                             <h3>默认订阅链接配置</h3>
                         </div>
                         <div style="padding: 1.5rem;">
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;" class="link-config-grid">
                                 <div style="background-color: #f7fafc; padding: 1rem; border-radius: 8px;">
                                     <label style="display: block; margin-bottom: 0.5rem; font-weight: 500; color: #4a5568;">Clash 月度链接</label>
                                     <input type="text" id="linkClashMonthly" style="width: 100%; padding: 0.5rem; border: 1px solid #e2e8f0; border-radius: 4px;">
@@ -724,27 +732,43 @@
                             </div>
                         </div>
                     </div>
-                    
-                    <div class="data-table" style="margin-top: 1rem;">
-                        <div class="table-header">
-                            <h3>订阅链接说明</h3>
-                        </div>
-                        <div style="padding: 1.5rem;">
-                            <div style="background-color: #f7fafc; padding: 1rem; border-radius: 8px; font-size: 0.875rem; line-height: 1.8;">
-                                <p><strong>Clash 订阅链接：</strong> <code>/vip/clash?v={v_token}</code></p>
-                                <p><strong>V2Ray 订阅链接：</strong> <code>/vip/v2ray?v={v_token}</code></p>
-                                <p><strong>免费 Clash 订阅：</strong> <code>/free/clash</code></p>
-                                <p><strong>免费 V2Ray 订阅：</strong> <code>/free/v2ray</code></p>
-                                <p style="color: #718096; margin-top: 1rem;">
-                                    <strong>说明：</strong> VIP 用户需要提供有效的 v_token 参数，免费节点每天更新一次。
-                                </p>
-                            </div>
-                        </div>
-                    </div>
                 </div>
 
                 <!-- 系统设置页面 -->
                 <div id="settingsPage" class="page-section" style="display: none;">
+                    <div class="data-table" style="margin-bottom: 2rem;">
+                        <div class="table-header">
+                            <h3>价格配置</h3>
+                        </div>
+                        <div style="padding: 2rem;">
+                            <form id="pricePlanForm" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                                <div class="form-group">
+                                    <label>月付原价</label>
+                                    <input type="number" step="0.01" id="price_monthly_original" style="width: 100%; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 4px;">
+                                </div>
+                                <div class="form-group">
+                                    <label>月付折扣价</label>
+                                    <input type="number" step="0.01" id="price_monthly_discount" style="width: 100%; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 4px;">
+                                </div>
+                                <div class="form-group">
+                                    <label>年付原价</label>
+                                    <input type="number" step="0.01" id="price_annual_original" style="width: 100%; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 4px;">
+                                </div>
+                                <div class="form-group">
+                                    <label>年付折扣价</label>
+                                    <input type="number" step="0.01" id="price_annual_discount" style="width: 100%; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 4px;">
+                                </div>
+                                <div class="form-group">
+                                    <label>年付节省金额</label>
+                                    <input type="number" step="0.01" id="price_savings" style="width: 100%; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 4px;">
+                                </div>
+                                <div class="form-group" style="display: flex; align-items: flex-end;">
+                                    <button type="button" class="btn" onclick="savePricePlan()" style="width: 100%;">保存价格</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
                     <div class="data-table" style="margin-bottom: 2rem;">
                         <div class="table-header">
                             <h3>网站配置</h3>
@@ -767,7 +791,7 @@
                             </form>
                         </div>
                     </div>
-                    
+
                     <div class="data-table" style="margin-bottom: 2rem;">
                         <div class="table-header">
                             <h3>支付配置</h3>
@@ -1186,11 +1210,46 @@
                 await loadOrders();
             } else if (pageName === 'traffic') {
                 await loadTraffic();
+            } else if (pageName === 'settings') {
+                await loadPricePlan();
             } else if (pageName === 'nodes') {
                 // 节点订阅页面不需要加载数据
             } else if (pageName === 'messages') {
                 // 消息管理页面不需要加载数据
             }
+        }
+
+        async function loadPricePlan() {
+            try {
+                const res = await fetch(API + '/api/price-plan');
+                const data = await res.json();
+                if (data.code === 200 && data.data) {
+                    document.getElementById('price_monthly_original').value = data.data.monthly_original || '';
+                    document.getElementById('price_monthly_discount').value = data.data.monthly_discount || '';
+                    document.getElementById('price_annual_original').value = data.data.annual_original || '';
+                    document.getElementById('price_annual_discount').value = data.data.annual_discount || '';
+                    document.getElementById('price_savings').value = data.data.savings || '';
+                }
+            } catch (err) { console.error('加载价格失败:', err); }
+        }
+
+        async function savePricePlan() {
+            const plan = {
+                monthly_original: parseFloat(document.getElementById('price_monthly_original').value) || 0,
+                monthly_discount: parseFloat(document.getElementById('price_monthly_discount').value) || 0,
+                annual_original: parseFloat(document.getElementById('price_annual_original').value) || 0,
+                annual_discount: parseFloat(document.getElementById('price_annual_discount').value) || 0,
+                savings: parseFloat(document.getElementById('price_savings').value) || 0
+            };
+            try {
+                const res = await fetch(API + '/api/price-plan/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(plan)
+                });
+                const data = await res.json();
+                alert(data.code === 200 ? '保存成功' : '保存失败: ' + data.msg);
+            } catch (err) { alert('保存失败'); }
         }
 
         // 显示订单页面
@@ -1758,7 +1817,7 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
         
         // 加载订阅链接配置
         async function loadLinkConfig() {
-            const result = await apiRequest('/api/link/config', 'GET');
+            const result = await newApiRequest('/api/link/config', 'GET');
             
             if (result.code === 200) {
                 const config = result.data;
@@ -1789,7 +1848,7 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
             }
             
             const promises = Object.entries(links).map(([key, value]) => 
-                apiRequest('/api/link/update', 'POST', { key, value })
+                newApiRequest('/api/link/update', 'POST', { key, value })
             );
             
             try {

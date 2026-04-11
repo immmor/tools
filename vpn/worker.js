@@ -182,49 +182,44 @@ export default {
       if (path === '/api/login' && request.method === 'POST') {
         const params = await request.json();
         const { username, password } = params;
-        
+
         if (!username || !password) {
           return resJson({ success: false, message: '用户名和密码不能为空！' }, 400);
         }
 
-        // 查询账号：包含余额和VIP信息
         const user = await DB
-          .prepare('SELECT rowid, username, balance, v_expire_date FROM user WHERE username = ? AND password = ?')
+          .prepare('SELECT rowid, username, balance, v_expire_date, price_plan FROM user WHERE username = ? AND password = ?')
           .bind(username, password)
           .first();
 
         if (user) {
           const now = new Date(new Date().getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
-          const loginInfoEntry = {
-            type: 'login',
-            time: now,
-            ip: request.headers.get('CF-Connecting-IP') || 'unknown',
-            device: request.headers.get('User-Agent') || 'unknown'
-          };
-          
-          const loginInfo = await DB
-            .prepare('SELECT login_info FROM user WHERE username = ?')
-            .bind(username)
-            .first();
-          
+          const loginInfoEntry = { type: 'login', time: now, ip: request.headers.get('CF-Connecting-IP') || 'unknown', device: request.headers.get('User-Agent') || 'unknown' };
+
+          const loginInfo = await DB.prepare('SELECT login_info FROM user WHERE username = ?').bind(username).first();
           let updatedLoginInfo = JSON.stringify([loginInfoEntry]);
-          
-          if (loginInfo && loginInfo.login_info) {
+          if (loginInfo?.login_info) {
             try {
               const existingInfo = JSON.parse(loginInfo.login_info);
               existingInfo.unshift(loginInfoEntry);
               updatedLoginInfo = JSON.stringify(existingInfo.slice(0, 10));
-            } catch (e) {
-              updatedLoginInfo = JSON.stringify([loginInfoEntry]);
-            }
+            } catch (e) {}
           }
-          
-          await DB
-            .prepare('UPDATE user SET login_info = ? WHERE username = ?')
-            .bind(updatedLoginInfo, username)
-            .run();
-          
-          return resJson({ success: true, message: '登录成功！', userInfo: { id: user.id, username: user.username, balance: user.balance } });
+          await DB.prepare('UPDATE user SET login_info = ? WHERE username = ?').bind(updatedLoginInfo, username).run();
+
+          const defaultPrice = { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
+          const linkRows = await DB.prepare('SELECT key, value FROM link WHERE key LIKE ?').bind('price_%').all();
+          linkRows.results.forEach(r => { if (r.value) defaultPrice[r.key.replace('price_', '')] = parseFloat(r.value); });
+
+          let pricePlan = { ...defaultPrice };
+          if (user.price_plan) {
+            try {
+              const userPlan = JSON.parse(user.price_plan);
+              Object.keys(userPlan).forEach(k => { if (userPlan[k] != null) pricePlan[k] = userPlan[k]; });
+            } catch (e) {}
+          }
+
+          return resJson({ success: true, message: '登录成功！', userInfo: { id: user.rowid, username: user.username, balance: user.balance }, pricePlan });
         } else {
           return resJson({ success: false, message: '用户名或密码错误' }, 401);
         }
@@ -1193,18 +1188,12 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
         }
       }
 
-      // ========== 默认接口提示 ==========
-      return resJson({
-        code: 200,
-        msg: 'Worker+D1 服务正常 ✅'
-      });
-
       // ========== 获取订阅链接配置 ==========
       if (path === '/api/link/config' && request.method === 'GET') {
         try {
           const links = await DB
             .prepare('SELECT key, value FROM link WHERE key IN (?, ?, ?, ?)')
-            .bind('clash_default', 'v2ray_default', 'clash_yearly', 'v2ray_yearly')
+            .bind('clash_monthly', 'v2ray_monthly', 'clash_yearly', 'v2ray_yearly')
             .all();
           
           const config = {};
@@ -1227,18 +1216,18 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
         try {
           const params = await request.json();
           const { key, value } = params;
-          
+
           if (!key || !value) {
             return resJson({ code: 400, msg: '缺少必要参数' }, 400);
           }
-          
+
           const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
-          
+
           const result = await DB
             .prepare('UPDATE link SET value = ?, updated_at = ? WHERE key = ?')
             .bind(value, now, key)
             .run();
-          
+
           if (result.success && result.meta.changes > 0) {
             return resJson({ code: 200, msg: '更新成功' });
           } else {
@@ -1249,6 +1238,43 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           return resJson({ code: 500, msg: '更新失败', error: err.message }, 500);
         }
       }
+
+      // ========== 获取价格计划 ==========
+      if (path === '/api/price-plan' && request.method === 'GET') {
+        try {
+          const rows = await DB.prepare('SELECT key, value FROM link WHERE key LIKE ?').bind('price_%').all();
+          const plan = {};
+          rows.results.forEach(r => plan[r.key.replace('price_', '')] = parseFloat(r.value) || 0);
+          return resJson({ code: 200, data: plan });
+        } catch (err) {
+          return resJson({ code: 500, msg: '获取失败', error: err.message }, 500);
+        }
+      }
+
+      // ========== 更新价格计划 ==========
+      if (path === '/api/price-plan/update' && request.method === 'POST') {
+        try {
+          const params = await request.json();
+          const { monthly_original, monthly_discount, annual_original, annual_discount, savings } = params;
+          const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+          const prices = { monthly_original, monthly_discount, annual_original, annual_discount, savings };
+          for (const [key, value] of Object.entries(prices)) {
+            if (value !== undefined) {
+              await DB.prepare('INSERT OR REPLACE INTO link (key, value, updated_at) VALUES (?, ?, ?)')
+                .bind(`price_${key}`, String(value), now).run();
+            }
+          }
+          return resJson({ code: 200, msg: '更新成功' });
+        } catch (err) {
+          return resJson({ code: 500, msg: '更新失败', error: err.message }, 500);
+        }
+      }
+
+      // ========== 默认接口提示 ==========
+      return resJson({
+        code: 200,
+        msg: 'Worker+D1 服务正常 ✅'
+      });
 
     } catch (err) {
       return resJson({
