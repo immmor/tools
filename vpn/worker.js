@@ -126,9 +126,14 @@ export default {
         }
 
         // 插入新用户（默认余额0，VIP过期时间为null，流量限制相关字段）
+        const defaultPrice = { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
+        const linkRows = await DB.prepare('SELECT key, value FROM link WHERE key LIKE ?').bind('price_%').all();
+        linkRows.results.forEach(r => { if (r.value) defaultPrice[r.key.replace('price_', '')] = parseFloat(r.value); });
+        const pricePlanStr = JSON.stringify(defaultPrice);
+
         const result = await DB
-          .prepare('INSERT INTO user (username, password, balance, v_expire_date, learn_vip_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code, v_token, v_link_clash, v_link_v2ray) VALUES (?, ?, ?, NULL, NULL, 307200, 0, ?, ?, ?, ?, ?)')
-          .bind(username, password, finalBalance, new Date().toISOString().slice(0, 19).replace('T', ' '), userInviteCode, '', '', '')
+          .prepare('INSERT INTO user (username, password, balance, v_expire_date, learn_vip_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code, v_token, v_link_clash, v_link_v2ray, price_plan) VALUES (?, ?, ?, NULL, NULL, 307200, 0, ?, ?, ?, ?, ?, ?)')
+          .bind(username, password, finalBalance, new Date().toISOString().slice(0, 19).replace('T', ' '), userInviteCode, '', '', '', pricePlanStr)
           .run();
 
         if (result.success) {
@@ -207,17 +212,7 @@ export default {
           }
           await DB.prepare('UPDATE user SET login_info = ? WHERE username = ?').bind(updatedLoginInfo, username).run();
 
-          const defaultPrice = { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
-          const linkRows = await DB.prepare('SELECT key, value FROM link WHERE key LIKE ?').bind('price_%').all();
-          linkRows.results.forEach(r => { if (r.value) defaultPrice[r.key.replace('price_', '')] = parseFloat(r.value); });
-
-          let pricePlan = { ...defaultPrice };
-          if (user.price_plan) {
-            try {
-              const userPlan = JSON.parse(user.price_plan);
-              Object.keys(userPlan).forEach(k => { if (userPlan[k] != null) pricePlan[k] = userPlan[k]; });
-            } catch (e) {}
-          }
+          const pricePlan = user.price_plan ? JSON.parse(user.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
 
           return resJson({ success: true, message: '登录成功！', userInfo: { id: user.rowid, username: user.username, balance: user.balance }, pricePlan });
         } else {
