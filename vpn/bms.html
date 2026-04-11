@@ -697,17 +697,30 @@
                     
                     <div class="data-table" style="margin-top: 1rem;">
                         <div class="table-header">
-                            <h3>更新用户订阅链接（仅管理员）</h3>
-                            <div style="display: flex; gap: 10px;">
-                                <input type="text" id="updateLinkUser" placeholder="用户名" style="padding: 0.5rem; border: 1px solid #e2e8f0; border-radius: 4px;">
-                                <input type="text" id="updateLinkClash" placeholder="Clash链接" style="padding: 0.5rem; border: 1px solid #e2e8f0; border-radius: 4px;">
-                                <input type="text" id="updateLinkV2ray" placeholder="V2Ray链接" style="padding: 0.5rem; border: 1px solid #e2e8f0; border-radius: 4px;">
-                                <button class="add-btn" onclick="updateUserLink()" style="background-color: #ed8936;">更新链接</button>
-                            </div>
+                            <h3>默认订阅链接配置</h3>
                         </div>
                         <div style="padding: 1.5rem;">
-                            <div style="background-color: #fffbeb; padding: 1rem; border-radius: 8px; font-size: 0.875rem; line-height: 1.8; border-left: 4px solid #ed8936;">
-                                <p style="margin: 0;"><strong>说明：</strong> 仅 immmor 和 admin 用户可以更新其他用户的订阅链接。填写要更新的用户名和对应的 Clash 或 V2Ray 链接（可选）。</p>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                                <div style="background-color: #f7fafc; padding: 1rem; border-radius: 8px;">
+                                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500; color: #4a5568;">Clash 月度链接</label>
+                                    <input type="text" id="linkClashMonthly" style="width: 100%; padding: 0.5rem; border: 1px solid #e2e8f0; border-radius: 4px;">
+                                </div>
+                                <div style="background-color: #f7fafc; padding: 1rem; border-radius: 8px;">
+                                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500; color: #4a5568;">V2Ray 月度链接</label>
+                                    <input type="text" id="linkV2rayMonthly" style="width: 100%; padding: 0.5rem; border: 1px solid #e2e8f0; border-radius: 4px;">
+                                </div>
+                                <div style="background-color: #f7fafc; padding: 1rem; border-radius: 8px;">
+                                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500; color: #4a5568;">Clash 年度链接</label>
+                                    <input type="text" id="linkClashYearly" style="width: 100%; padding: 0.5rem; border: 1px solid #e2e8f0; border-radius: 4px;">
+                                </div>
+                                <div style="background-color: #f7fafc; padding: 1rem; border-radius: 8px;">
+                                    <label style="display: block; margin-bottom: 0.5rem; font-weight: 500; color: #4a5568;">V2Ray 年度链接</label>
+                                    <input type="text" id="linkV2rayYearly" style="width: 100%; padding: 0.5rem; border: 1px solid #e2e8f0; border-radius: 4px;">
+                                </div>
+                            </div>
+                            <div style="margin-top: 1rem;">
+                                <button class="add-btn" onclick="saveLinkConfig()" style="background-color: #667eea;">保存配置</button>
+                                <button class="add-btn" onclick="loadLinkConfig()" style="background-color: #48bb78;">加载配置</button>
                             </div>
                         </div>
                     </div>
@@ -1743,39 +1756,55 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
             }
         }
         
-        // 更新用户订阅链接
-        async function updateUserLink() {
-            const username = document.getElementById('updateLinkUser').value.trim();
-            const clashLink = document.getElementById('updateLinkClash').value.trim();
-            const v2rayLink = document.getElementById('updateLinkV2ray').value.trim();
-            
-            if (!username) {
-                alert('请输入用户名');
-                return;
-            }
-            
-            if (!clashLink && !v2rayLink) {
-                alert('请至少填写一个链接（Clash 或 V2Ray）');
-                return;
-            }
-            
-            const result = await newApiRequest('/api/update-link', 'POST', {
-                username: username,
-                v_link_clash: clashLink || null,
-                v_link_v2ray: v2rayLink || null,
-                currentUser: document.getElementById('currentUser').textContent
-            });
+        // 加载订阅链接配置
+        async function loadLinkConfig() {
+            const result = await apiRequest('/api/link/config', 'GET');
             
             if (result.code === 200) {
-                alert('链接更新成功！');
-                document.getElementById('updateLinkUser').value = '';
-                document.getElementById('updateLinkClash').value = '';
-                document.getElementById('updateLinkV2ray').value = '';
+                const config = result.data;
+                document.getElementById('linkClashMonthly').value = config.clash_monthly || '';
+                document.getElementById('linkV2rayMonthly').value = config.v2ray_monthly || '';
+                document.getElementById('linkClashYearly').value = config.clash_yearly || '';
+                document.getElementById('linkV2rayYearly').value = config.v2ray_yearly || '';
+                alert('配置加载成功');
             } else {
-                alert(result.msg || '更新失败');
+                alert('加载失败: ' + result.msg);
             }
         }
         
+        // 保存订阅链接配置
+        async function saveLinkConfig() {
+            const links = {
+                clash_monthly: document.getElementById('linkClashMonthly').value,
+                v2ray_monthly: document.getElementById('linkV2rayMonthly').value,
+                clash_yearly: document.getElementById('linkClashYearly').value,
+                v2ray_yearly: document.getElementById('linkV2rayYearly').value
+            };
+            
+            for (const [key, value] of Object.entries(links)) {
+                if (!value) {
+                    alert(`请填写完整的 ${key} 链接`);
+                    return;
+                }
+            }
+            
+            const promises = Object.entries(links).map(([key, value]) => 
+                apiRequest('/api/link/update', 'POST', { key, value })
+            );
+            
+            try {
+                const results = await Promise.all(promises);
+                const success = results.every(r => r.code === 200);
+                if (success) {
+                    alert('配置保存成功');
+                } else {
+                    alert('部分配置保存失败');
+                }
+            } catch (err) {
+                alert('保存失败: ' + err.message);
+            }
+        }
+
         // 复制邀请码
         function copyInviteCode(inviteCode) {
             if (!inviteCode || inviteCode === '-') {

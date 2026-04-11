@@ -270,6 +270,16 @@ export default {
           const now = new Date();
           let newExpireDate = new Date();
           
+          const linkConfig = await DB
+            .prepare('SELECT key, value FROM link WHERE key IN (?, ?, ?, ?)')
+            .bind('clash_monthly', 'v2ray_monthly', 'clash_yearly', 'v2ray_yearly')
+            .all();
+          
+          const config = {};
+          linkConfig.results.forEach(row => {
+            config[row.key] = row.value;
+          });
+          
           const user = await DB
             .prepare('SELECT balance, v_expire_date, v_token, v_link_clash, v_link_v2ray FROM user WHERE username = ?')
             .bind(username)
@@ -298,8 +308,8 @@ export default {
           const vToken = generateVToken();
           
           const isYearly = duration === 365;
-          const vLinkClash = isYearly ? 'https://p5jli.no-mad-sub.one/link/R4eay53N8l0ooeQn?clash=3&extend=1' : (user.v_link_clash || 'https://9alh9.no-mad-sub.one/link/CE3VhuOL5JWxjurX?clash=3&extend=1');
-          const vLinkV2ray = isYearly ? 'https://p5jli.no-mad-sub.one/link/R4eay53N8l0ooeQn?sub=3&extend=1' : (user.v_link_v2ray || 'https://9alh9.no-mad-sub.one/link/CE3VhuOL5JWxjurX?sub=3&extend=1');
+          const vLinkClash = isYearly ? config.clash_yearly : (user.v_link_clash || config.clash_monthly);
+          const vLinkV2ray = isYearly ? config.v2ray_yearly : (user.v_link_v2ray || config.v2ray_monthly);
           
           const result = await DB
             .prepare('UPDATE user SET balance = balance - ?, v_expire_date = ?, v_token = ?, v_link_clash = ?, v_link_v2ray = ? WHERE username = ?')
@@ -986,6 +996,16 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           
           const now = new Date();
           
+          const linkConfig = await DB
+            .prepare('SELECT key, value FROM link WHERE key IN (?, ?, ?, ?)')
+            .bind('clash_monthly', 'v2ray_monthly', 'clash_yearly', 'v2ray_yearly')
+            .all();
+          
+          const config = {};
+          linkConfig.results.forEach(row => {
+            config[row.key] = row.value;
+          });
+          
           const user = await DB
             .prepare('SELECT username, v_expire_date, v_token, v_link_clash, v_link_v2ray FROM user WHERE username = ?')
             .bind(username)
@@ -1003,7 +1023,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           
           const result = await DB
             .prepare('UPDATE user SET v_token = ?, v_link_clash = ?, v_link_v2ray = ? WHERE username = ?')
-            .bind(newVToken, '', '', username)
+            .bind(newVToken, config.clash_monthly, config.v2ray_monthly, username)
             .run();
           
           if (result.success && result.meta.changes > 0) {
@@ -1178,6 +1198,57 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
         code: 200,
         msg: 'Worker+D1 服务正常 ✅'
       });
+
+      // ========== 获取订阅链接配置 ==========
+      if (path === '/api/link/config' && request.method === 'GET') {
+        try {
+          const links = await DB
+            .prepare('SELECT key, value FROM link WHERE key IN (?, ?, ?, ?)')
+            .bind('clash_default', 'v2ray_default', 'clash_yearly', 'v2ray_yearly')
+            .all();
+          
+          const config = {};
+          links.results.forEach(row => {
+            config[row.key] = row.value;
+          });
+          
+          return resJson({
+            code: 200,
+            data: config
+          });
+        } catch (err) {
+          console.error('获取链接配置错误:', err);
+          return resJson({ code: 500, msg: '获取失败', error: err.message }, 500);
+        }
+      }
+
+      // ========== 更新订阅链接配置 ==========
+      if (path === '/api/link/update' && request.method === 'POST') {
+        try {
+          const params = await request.json();
+          const { key, value } = params;
+          
+          if (!key || !value) {
+            return resJson({ code: 400, msg: '缺少必要参数' }, 400);
+          }
+          
+          const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+          
+          const result = await DB
+            .prepare('UPDATE link SET value = ?, updated_at = ? WHERE key = ?')
+            .bind(value, now, key)
+            .run();
+          
+          if (result.success && result.meta.changes > 0) {
+            return resJson({ code: 200, msg: '更新成功' });
+          } else {
+            return resJson({ code: 500, msg: '更新失败' }, 500);
+          }
+        } catch (err) {
+          console.error('更新链接配置错误:', err);
+          return resJson({ code: 500, msg: '更新失败', error: err.message }, 500);
+        }
+      }
 
     } catch (err) {
       return resJson({
