@@ -164,7 +164,9 @@ export default {
             type: 'register',
             time: now,
             ip: request.headers.get('CF-Connecting-IP') || 'unknown',
-            device: request.headers.get('User-Agent') || 'unknown'
+            device: request.headers.get('User-Agent') || 'unknown',
+            acceptLanguage: request.headers.get('Accept-Language') || 'unknown',
+            country: request.headers.get('CF-IPCountry') || 'unknown'
           }]);
           
           await DB
@@ -199,7 +201,7 @@ export default {
 
         if (user) {
           const now = new Date(new Date().getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
-          const loginInfoEntry = { type: 'login', time: now, ip: request.headers.get('CF-Connecting-IP') || 'unknown', device: request.headers.get('User-Agent') || 'unknown' };
+          const loginInfoEntry = { type: 'login', time: now, ip: request.headers.get('CF-Connecting-IP') || 'unknown', device: request.headers.get('User-Agent') || 'unknown', acceptLanguage: request.headers.get('Accept-Language') || 'unknown', country: request.headers.get('CF-IPCountry') || 'unknown' };
 
           const loginInfo = await DB.prepare('SELECT login_info FROM user WHERE username = ?').bind(username).first();
           let updatedLoginInfo = JSON.stringify([loginInfoEntry]);
@@ -473,7 +475,7 @@ export default {
       if (path === '/api/user/edit' && request.method === 'POST') {
         try {
           const params = await request.json();
-          const { username, password, balance, v_expire_date, learn_vip_expire_date, v_token, invite_code, v_link_clash, v_link_v2ray, not_trusted, login_info } = params;
+          const { username, password, balance, v_expire_date, learn_vip_expire_date, v_token, invite_code, v_link_clash, v_link_v2ray, not_trusted, login_info, price_plan } = params;
           
           if (!username) {
             return resJson({ code: 400, msg: '缺少username参数' }, 400);
@@ -526,6 +528,10 @@ export default {
           if (not_trusted !== undefined) {
             updates.push('not_trusted = ?');
             values.push(not_trusted);
+          }
+          if (price_plan !== undefined) {
+            updates.push('price_plan = ?');
+            values.push(price_plan);
           }
           if (login_info !== undefined) {
             updates.push('login_info = ?');
@@ -1059,28 +1065,35 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
           
           if (target === 'all') {
-            // 获取所有用户
             const users = await DB
               .prepare('SELECT username FROM user')
               .all();
-            
+
             if (!users.results || users.results.length === 0) {
               return resJson({ code: 404, msg: '暂无用户' }, 404);
             }
-            
-            // 为每个用户插入消息
-            for (const user of users.results) {
+
+            const BATCH_SIZE = 30;
+            let totalInserted = 0;
+
+            for (let i = 0; i < users.results.length; i += BATCH_SIZE) {
+              const batch = users.results.slice(i, i + BATCH_SIZE);
+              const placeholders = batch.map(() => '(?, ?, ?, 0)').join(', ');
+              const values = batch.flatMap(user => [user.username, content, now]);
+              
               await DB
-                .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
-                .bind(user.username, content, now)
+                .prepare(`INSERT INTO messages (username, content, created_at, is_read) VALUES ${placeholders}`)
+                .bind(...values)
                 .run();
+              
+              totalInserted += batch.length;
             }
-            
+
             return resJson({
               code: 200,
               msg: '发送成功',
               data: {
-                total: users.results.length,
+                total: totalInserted,
                 content
               }
             });
