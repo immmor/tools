@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小透明 | 遇见美好</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --cream: #FAF7F2;     /* 奶油色 */
+            --sage: #9CAD9A;      /* 鼠尾草绿 */
+            --clay: #D4A373;      /* 陶土色 */
+            --glass: rgba(255, 255, 255, 0.75);
+            --ink: #3D405B;       /* 深青石色（文字） */
+        }
+
+        body {
+            background-color: var(--cream);
+            color: var(--ink);
+            font-family: "PingFang SC", "STHeiti", sans-serif;
+            overflow: hidden;
+            letter-spacing: 0.02em;
+        }
+
+        /* 响应式栅格系统 */
+        .main-layout {
+            display: grid;
+            height: 100vh;
+            grid-template-columns: 1fr;
+        }
+
+        @media (min-width: 1024px) {
+            .main-layout {
+                grid-template-columns: 320px 1fr 380px;
+                background-image: radial-gradient(circle at 15% 15%, #E9EDC9 0%, transparent 35%);
+            }
+        }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* 卡片切换动画 */
+        .content-view {
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .content-view.hidden-view {
+            display: none;
+            opacity: 0;
+            transform: translateY(10px);
+        }
+
+        /* 呼吸感卡片 */
+        .img-container {
+            width: 100%;
+            height: 100vh;
+            clip-path: inset(0 0 0 0);
+            transition: all 0.8s ease;
+        }
+
+        @media (min-width: 1024px) {
+            .img-container {
+                width: 90%;
+                height: 80vh;
+                margin: 5vh auto;
+                border-radius: 40px;
+                clip-path: inset(0 0 0 0 round 40px);
+            }
+        }
+
+        /* 浮动标签 */
+        .vibe-tag {
+            padding: 4px 14px;
+            background: var(--glass);
+            backdrop-filter: blur(8px);
+            border: 0.5px solid rgba(255,255,255,0.4);
+            border-radius: 100px;
+            font-size: 11px;
+            color: var(--sage);
+            margin: 0 6px 6px 0;
+            display: inline-block;
+        }
+
+        /* 底部详情面板（移动端） */
+        .envelope-panel {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(20px);
+            border-radius: 32px 32px 0 0;
+            padding: 2.5rem 1.5rem 8rem;
+            transform: translateY(100%);
+            transition: transform 0.6s cubic-bezier(0.19, 1, 0.22, 1);
+            z-index: 60;
+        }
+        .envelope-panel.active { transform: translateY(0); }
+
+        /* PC端侧边栏 Tab 样式 */
+        .nav-link.active .marker { width: 40px; background: black; }
+        .nav-link.active { color: black; }
+
+        /* 手机端 Tab 样式 */
+        .mobile-tab.active { color: var(--sage); }
+
+        /* 极简按钮 */
+        .btn-action {
+            width: 55px; height: 55px;
+            border-radius: 50%;
+            background: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid rgba(0,0,0,0.05);
+            transition: all 0.3s;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+        .btn-action:active { transform: scale(0.9); }
+
+        .glow {
+            position: absolute;
+            width: 300px; height: 300px;
+            background: var(--sage);
+            filter: blur(100px);
+            opacity: 0.12;
+            z-index: -1;
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="main-layout">
+        
+        <aside class="hidden lg:flex flex-col p-10 bg-white/30 backdrop-blur-sm border-r border-white/20">
+            <h1 class="text-2xl font-light tracking-[0.2em] mb-16">遇见 / <span class="text-stone-400 font-extralight">MEET</span></h1>
+            <nav class="space-y-10">
+                <div onclick="switchTab('daily')" class="nav-link active cursor-pointer group transition-all" id="pc-tab-daily">
+                    <span class="text-[10px] text-gray-400 block mb-1">01</span>
+                    <span class="text-sm tracking-widest block">每日精选</span>
+                    <div class="marker h-[1px] w-0 bg-stone-300 mt-2 transition-all duration-500"></div>
+                </div>
+                <div onclick="switchTab('match')" class="nav-link text-stone-300 hover:text-black cursor-pointer group transition-all" id="pc-tab-match">
+                    <span class="text-[10px] block mb-1">02</span>
+                    <span class="text-sm tracking-widest block">灵魂匹配</span>
+                    <div class="marker h-[1px] w-0 bg-stone-300 mt-2 transition-all duration-500"></div>
+                </div>
+                <div onclick="switchTab('nearby')" class="nav-link text-stone-300 hover:text-black cursor-pointer group transition-all" id="pc-tab-nearby">
+                    <span class="text-[10px] block mb-1">03</span>
+                    <span class="text-sm tracking-widest block">附近动态</span>
+                    <div class="marker h-[1px] w-0 bg-stone-300 mt-2 transition-all duration-500"></div>
+                </div>
+            </nav>
+            
+            <div class="mt-auto">
+                <p class="text-[10px] text-gray-400 tracking-[0.3em] uppercase mb-4">Filtering</p>
+                <div class="flex flex-wrap gap-2">
+                    <span class="vibe-tag">杭州</span><span class="vibe-tag">170cm+</span><span class="vibe-tag">猫派</span>
+                </div>
+            </div>
+        </aside>
+
+        <main class="relative overflow-hidden flex items-center justify-center">
+            <div class="glow top-20 right-20"></div>
+            
+            <div id="view-daily" class="content-view w-full h-full flex items-center justify-center">
+                <div class="hero-card relative w-full h-full" id="card">
+                    <div class="img-container shadow-sm">
+                        <img id="main-img" src="https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=1200" class="w-full h-full object-cover">
+                    </div>
+                    
+                    <div class="absolute bottom-32 left-8 right-8 text-white lg:hidden pointer-events-none">
+                        <h2 class="text-4xl font-light mb-2 drop-shadow-md">苏青野</h2>
+                        <div class="flex gap-2">
+                            <span class="text-xs backdrop-blur-md bg-black/10 px-2 py-1 rounded">24岁</span>
+                            <span class="text-xs backdrop-blur-md bg-black/10 px-2 py-1 rounded">UX Designer</span>
+                        </div>
+                    </div>
+
+                    <div class="envelope-panel lg:hidden" id="mobile-drawer">
+                        <div class="w-12 h-1.5 bg-stone-200 rounded-full mx-auto mb-8 cursor-pointer" onclick="toggleDrawer()"></div>
+                        <div class="flex justify-between items-end mb-6">
+                            <div>
+                                <h2 class="text-3xl font-extralight tracking-tight">苏青野 <span class="text-sm text-stone-300 ml-2">24</span></h2>
+                                <p class="text-xs text-stone-400 mt-2 tracking-widest uppercase">UX Designer · 杭州</p>
+                            </div>
+                            <div class="text-right">
+                                <span class="text-xs font-mono text-sage block">89.5%</span>
+                                <span class="text-[10px] text-stone-300 uppercase">Match</span>
+                            </div>
+                        </div>
+                        <p class="text-sm leading-relaxed text-stone-500 font-light italic mb-8">
+                            “万物皆有裂痕，那是光照进来的地方。”
+                        </p>
+                        <div class="space-y-4 border-t border-stone-100 pt-6">
+                            <div class="flex justify-between text-xs"><span class="text-stone-400">身高</span><span>168cm</span></div>
+                            <div class="flex justify-between text-xs"><span class="text-stone-400">学历</span><span>浙大硕士</span></div>
+                            <div class="flex justify-between text-xs"><span class="text-stone-400">宠物</span><span>三只猫</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="absolute bottom-10 lg:bottom-12 flex items-center gap-6 z-[70]">
+                    <button onclick="nextUser()" class="btn-action text-stone-300"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+                    <button onclick="toggleDrawer()" class="btn-action text-stone-400"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></button>
+                    <button onclick="nextUser()" class="btn-action bg-stone-800 text-white border-none shadow-xl"><svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></button>
+                </div>
+            </div>
+
+            <div id="view-match" class="content-view hidden-view w-full h-full p-8 flex flex-col items-center justify-center text-center">
+                <div class="w-48 h-48 rounded-full border-2 border-dashed border-stone-200 flex items-center justify-center animate-[spin_20s_linear_infinite] mb-8">
+                    <div class="w-32 h-32 rounded-full bg-stone-100 flex items-center justify-center animate-[pulse_3s_ease-in-out_infinite]">
+                        <svg class="w-10 h-10 text-stone-300" fill="currentColor" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                    </div>
+                </div>
+                <h2 class="text-xl font-light tracking-widest mb-4">正在感知灵魂共鸣...</h2>
+                <p class="text-sm text-stone-400 font-light max-w-[200px]">基于您的 12 个性格维度正在为您寻找同频旅伴</p>
+            </div>
+
+            <div id="view-nearby" class="content-view hidden-view w-full h-full overflow-y-auto no-scrollbar p-6 lg:p-12">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-4">
+                        <div class="rounded-3xl overflow-hidden shadow-sm"><img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=400" alt=""></div>
+                        <div class="rounded-3xl overflow-hidden shadow-sm"><img src="https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=400" alt=""></div>
+                    </div>
+                    <div class="space-y-4 pt-8">
+                        <div class="rounded-3xl overflow-hidden shadow-sm"><img src="https://images.unsplash.com/photo-1529626455594-4ff0802cfb7e?w=400" alt=""></div>
+                        <div class="rounded-3xl overflow-hidden shadow-sm"><img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400" alt=""></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <aside class="hidden lg:flex flex-col bg-white p-12 overflow-y-auto no-scrollbar border-l border-stone-100">
+            <section class="mb-12">
+                <h3 class="text-[10px] tracking-[0.4em] text-gray-300 uppercase mb-6">Introduction</h3>
+                <h2 class="text-4xl font-extralight mb-4">苏青野</h2>
+                <div class="flex gap-4 text-xs text-gray-400 mb-8">
+                    <span>24岁</span><span>/</span><span>168cm</span><span>/</span><span>浙大硕士</span>
+                </div>
+                <p class="text-sm leading-loose text-gray-500 font-light">
+                    比起热闹的社交，更倾向于在雨后的下午读一本旧书。正在寻找那个可以一起安静发呆，也能一起深度交流的灵魂。
+                </p>
+            </section>
+
+            <section class="mb-12">
+                <h3 class="text-[10px] tracking-[0.4em] text-gray-300 uppercase mb-6">Lifestyle</h3>
+                <div class="space-y-4">
+                    <div class="flex justify-between items-center pb-2 border-b border-stone-50">
+                        <span class="text-xs text-gray-400">生活作息</span><span class="text-xs text-stone-600">早起鸟</span>
+                    </div>
+                    <div class="flex justify-between items-center pb-2 border-b border-stone-50">
+                        <span class="text-xs text-gray-400">宠物</span><span class="text-xs text-stone-600">三只性格迥异的猫</span>
+                    </div>
+                    <div class="flex justify-between items-center pb-2 border-b border-stone-50">
+                        <span class="text-xs text-gray-400">性格色彩</span><span class="text-xs text-stone-600">淡绿 (温润包容)</span>
+                    </div>
+                </div>
+            </section>
+
+            <div class="mt-auto flex items-center gap-4 group cursor-pointer pt-8">
+                <div class="w-10 h-10 rounded-full border border-stone-100 flex items-center justify-center group-hover:bg-stone-50 transition">
+                    <svg class="w-4 h-4 text-stone-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
+                </div>
+                <span class="text-xs tracking-widest uppercase text-stone-400 group-hover:text-stone-800 transition">发送私信</span>
+            </div>
+        </aside>
+
+        <div class="lg:hidden fixed bottom-0 left-0 right-0 h-20 bg-white/80 backdrop-blur-xl border-t border-stone-100 flex items-center justify-around px-6 z-[100]">
+            <div onclick="switchTab('daily')" class="mobile-tab active flex flex-col items-center gap-1" id="mb-tab-daily">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                <span class="text-[10px] tracking-tighter">精选</span>
+            </div>
+            <div onclick="switchTab('match')" class="mobile-tab text-stone-300 flex flex-col items-center gap-1" id="mb-tab-match">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="1.5" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg>
+                <span class="text-[10px] tracking-tighter">匹配</span>
+            </div>
+            <div onclick="switchTab('nearby')" class="mobile-tab text-stone-300 flex flex-col items-center gap-1" id="mb-tab-nearby">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="1.5" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-width="1.5" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                <span class="text-[10px] tracking-tighter">动态</span>
+            </div>
+            <div class="mobile-tab text-stone-300 flex flex-col items-center gap-1">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                <span class="text-[10px] tracking-tighter">我的</span>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // 切换页面逻辑
+        function switchTab(tabName) {
+            // 隐藏所有视图
+            document.querySelectorAll('.content-view').forEach(view => {
+                view.classList.add('hidden-view');
+            });
+            // 显示对应视图
+            document.getElementById('view-' + tabName).classList.remove('hidden-view');
+
+            // 更新PC端导航状态
+            document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
+            document.getElementById('pc-tab-' + tabName).classList.add('active');
+
+            // 更新手机端导航状态
+            document.querySelectorAll('.mobile-tab').forEach(link => link.classList.remove('active', 'text-sage'));
+            document.querySelectorAll('.mobile-tab').forEach(link => link.classList.add('text-stone-300'));
+            
+            const activeMobileTab = document.getElementById('mb-tab-' + tabName);
+            activeMobileTab.classList.add('active');
+            activeMobileTab.classList.remove('text-stone-300');
+
+            // 切换时自动关闭抽屉
+            const drawer = document.getElementById('mobile-drawer');
+            drawer.classList.remove('active');
+        }
+
+        // 手机端抽屉开关
+        function toggleDrawer() {
+            const drawer = document.getElementById('mobile-drawer');
+            drawer.classList.toggle('active');
+        }
+
+        // 下一个用户逻辑
+        function nextUser() {
+            const card = document.getElementById('card');
+            const img = document.getElementById('main-img');
+
+            card.style.opacity = '0';
+            card.style.transform = 'translateY(-20px)';
+
+            setTimeout(() => {
+                // 随机切换图片模拟翻牌
+                const randomId = Math.floor(Math.random() * 1000);
+                img.src = `https://images.unsplash.com/photo-1517841905240-472988babdf9?w=1200&t=${randomId}`;
+                card.style.opacity = '1';
+                card.style.transform = 'translateY(0)';
+            }, 400);
+        }
+
+        // 手机端上滑手势模拟（增强版交互）
+        let touchstartY = 0;
+        let touchendY = 0;
+        
+        document.addEventListener('touchstart', e => {
+            touchstartY = e.changedTouches[0].screenY;
+        });
+
+        document.addEventListener('touchend', e => {
+            touchendY = e.changedTouches[0].screenY;
+            handleGesture();
+        });
+
+        function handleGesture() {
+            if (touchendY < touchstartY - 50) { // 向上滑动
+                document.getElementById('mobile-drawer').classList.add('active');
+            }
+            if (touchendY > touchstartY + 50) { // 向下滑动
+                document.getElementById('mobile-drawer').classList.remove('active');
+            }
+        }
+    </script>
+</body>
+</html>
