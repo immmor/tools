@@ -684,7 +684,7 @@ export default {
             headers: {
               'Content-Type': 'text/yaml; charset=utf-8',
               'Access-Control-Allow-Origin': '*',
-              'Content-Disposition': `attachment; filename="vip-clash-${year}${month}${day}.yaml"`
+              'Content-Disposition': `attachment; filename="phantom.yaml"`
             }
           });
         } catch (err) {
@@ -734,7 +734,7 @@ export default {
             headers: {
               'Content-Type': 'text/plain; charset=utf-8',
               'Access-Control-Allow-Origin': '*',
-              'Content-Disposition': `attachment; filename="vip-v2ray-${year}${month}${day}.txt"`
+              'Content-Disposition': `attachment; filename="phantom.txt"`
             }
           });
         } catch (err) {
@@ -766,7 +766,7 @@ export default {
             headers: {
               'Content-Type': 'text/yaml; charset=utf-8',
               'Access-Control-Allow-Origin': '*',
-              'Content-Disposition': `attachment; filename="clash-${year}${month}${day}.yaml"`
+              'Content-Disposition': `attachment; filename="phantom-free.yaml"`
             }
           });
         } catch (err) {
@@ -797,7 +797,7 @@ export default {
             headers: {
               'Content-Type': 'text/plain; charset=utf-8',
               'Access-Control-Allow-Origin': '*',
-              'Content-Disposition': `attachment; filename="v2ray-${year}${month}${day}.txt"`
+              'Content-Disposition': `attachment; filename="phantom-free.txt"`
             }
           });
         } catch (err) {
@@ -1292,6 +1292,23 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
         } catch (err) {
           return resJson({ code: 500, msg: '更新失败', error: err.message }, 500);
         }
+      }
+
+      // ========== 检测用户Clash链接 ==========
+      if (path === '/api/clash-links' && request.method === 'GET') {
+        const users = await DB.prepare('SELECT username, v_link_clash FROM user WHERE v_link_clash IS NOT NULL AND v_link_clash != ""').all();
+        const results = [];
+        for (const u of users.results || []) {
+          if (!u.v_link_clash) continue;
+          try {
+            const res = await fetch(u.v_link_clash);
+            const info = res.headers.get('subscription-userinfo');
+            results.push({ username: u.username, link: u.v_link_clash, subscription_userinfo: info, ok: res.ok, status: res.status });
+          } catch (err) {
+            results.push({ username: u.username, link: u.v_link_clash, error: err.message });
+          }
+        }
+        return resJson({ code: 200, data: results });
       }
 
       // ========== 默认接口提示 ==========
