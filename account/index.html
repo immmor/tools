@@ -58,7 +58,7 @@
             padding: 1rem;
             transition: all 0.3s ease;
             position: relative;
-            height: 120px;
+            height: 130px;
             display: flex;
             flex-direction: column;
         }
@@ -100,6 +100,40 @@
 
         .offset-1 { margin-top: 4rem; }
         .offset-2 { margin-top: 8rem; }
+
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: #fff;
+            padding: 2rem;
+            width: 100%;
+            max-width: 320px;
+            position: relative;
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            cursor: pointer;
+            font-size: 1.5rem;
+            line-height: 1;
+        }
     </style>
 </head>
 <body class="p-6 md:p-16 lg:px-48">
@@ -110,8 +144,15 @@
         <div>
             <h1 class="text-4xl font-bold tracking-tighter">账号小卖部</h1>
         </div>
-        <nav class="flex gap-8 text-[11px] font-bold uppercase tracking-widest">
-            <a href="#" class="text-gray-300 hover:text-black transition-colors">我的</a>
+        <nav class="flex gap-8 text-[11px] font-bold uppercase tracking-widest relative">
+            <a href="#" id="loginBtn" class="text-gray-300 hover:text-black transition-colors">登录</a>
+            <div id="userDropdown" class="hidden absolute right-0 top-full mt-2 bg-white border border-gray-200 shadow-lg min-w-[100px]">
+                <div class="px-4 text-xs text-center flex items-center justify-center h-10 border-b">
+                    <div class="font-bold text-lg" id="userBalance">¥0.00</div>
+                </div>
+                <button id="orderHistoryBtn" class="w-full text-center px-4 text-xs hover:bg-gray-50 h-10 flex items-center justify-center border-b">购买记录</button>
+                <button id="logoutBtn" class="w-full text-center px-4 text-xs hover:bg-gray-50 text-red-500 h-10 flex items-center justify-center">退出登录</button>
+            </div>
         </nav>
     </header>
 
@@ -133,6 +174,76 @@
 
     </main>
 
+    <div class="modal-overlay" id="loginModal">
+        <div class="modal">
+            <span class="modal-close" id="closeModal">&times;</span>
+            <div class="flex gap-4 mb-6 border-b">
+                <button class="flex-1 pb-2 font-bold border-b-2 border-black" id="showLogin">登录</button>
+                <button class="flex-1 pb-2 text-gray-400" id="showRegister">注册</button>
+            </div>
+            <form id="loginForm">
+                <input type="text" placeholder="用户名" class="w-full mb-4 px-4 py-2 border border-gray-200 text-sm focus:outline-none focus:border-black" required>
+                <input type="password" placeholder="密码" class="w-full mb-6 px-4 py-2 border border-gray-200 text-sm focus:outline-none focus:border-black" required>
+                <button type="submit" class="w-full bg-black text-white py-2 text-sm font-bold hover:bg-gray-800 transition-colors">登录</button>
+            </form>
+            <form id="registerForm" style="display:none;">
+                <input type="text" placeholder="用户名" class="w-full mb-4 px-4 py-2 border border-gray-200 text-sm focus:outline-none focus:border-black" required>
+                <input type="email" placeholder="邮箱" class="w-full mb-4 px-4 py-2 border border-gray-200 text-sm focus:outline-none focus:border-black" required>
+                <input type="password" placeholder="密码" class="w-full mb-6 px-4 py-2 border border-gray-200 text-sm focus:outline-none focus:border-black" required>
+                <button type="submit" class="w-full bg-black text-white py-2 text-sm font-bold hover:bg-gray-800 transition-colors">注册</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="buyModal">
+        <div class="modal">
+            <span class="modal-close" id="closeBuyModal">&times;</span>
+            <h3 class="text-xl font-bold mb-4">确认购买</h3>
+            <div class="mb-4 text-sm">
+                <div class="text-gray-400 mb-2">商品：<span id="buyItemName" class="text-black font-bold"></span></div>
+                <div class="text-gray-400">价格：<span id="buyItemPrice" class="text-black font-bold"></span></div>
+            </div>
+            <div class="flex gap-2">
+                <button id="cancelBuy" class="flex-1 border border-gray-200 py-2 text-sm hover:bg-gray-50">取消</button>
+                <button id="confirmBuy" class="flex-1 bg-black text-white py-2 text-sm font-bold hover:bg-gray-800">确认购买</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="successModal">
+        <div class="modal">
+            <span class="modal-close" id="closeSuccessModal">&times;</span>
+            <h3 class="text-xl font-bold mb-4">购买成功</h3>
+            <div class="mb-4 text-sm space-y-2">
+                <div class="flex justify-between">
+                    <span class="text-gray-400">订单号：</span>
+                    <span id="successOrderId" class="font-mono"></span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-400">商品：</span>
+                    <span id="successItemName" class="font-bold"></span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-400">账号：</span>
+                    <span id="successAccount" class="font-mono"></span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-400">密码：</span>
+                    <span id="successPassword" class="font-mono"></span>
+                </div>
+            </div>
+            <button id="closeSuccess" class="w-full bg-black text-white py-2 text-sm font-bold hover:bg-gray-800">完成</button>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="historyModal">
+        <div class="modal" style="max-width:500px;">
+            <span class="modal-close" id="closeHistoryModal">&times;</span>
+            <h3 class="text-xl font-bold mb-4">购买记录</h3>
+            <div id="historyList" class="space-y-3 max-h-80 overflow-y-auto"></div>
+        </div>
+    </div>
+
     <script>
         let allAccounts = [];
 
@@ -147,8 +258,8 @@
                         <h3 class="text-xl font-bold mb-2">${acc.name}</h3>
                         <p class="text-xs text-gray-400 mb-2 leading-relaxed line-clamp-2">${acc.description}</p>
                         <div class="flex justify-between items-center">
-                            <span class="text-[10px] uppercase tracking-widest font-bold">库存: ${acc.stock}</span>
-                            <button class="text-xs border-b border-black pb-1 hover:text-gray-400 transition-colors">购买 ↗</button>
+                            <span class="text-[10px] uppercase tracking-widest font-bold">库存：${acc.stock}</span>
+                            <button class="text-xs border-b border-black pb-1 hover:text-gray-400 transition-colors buy-btn" data-name="${acc.name}" data-price="${acc.price}">购买 ↗</button>
                         </div>
                     </div>
                 `;
@@ -170,6 +281,295 @@
                 acc.description.toLowerCase().includes(keyword)
             );
             renderAccounts(filtered);
+        });
+
+        const loginModal = document.getElementById('loginModal');
+        const loginBtn = document.getElementById('loginBtn');
+        const closeModal = document.getElementById('closeModal');
+        const loginForm = document.getElementById('loginForm');
+        const registerForm = document.getElementById('registerForm');
+        const showLogin = document.getElementById('showLogin');
+        const showRegister = document.getElementById('showRegister');
+        const userDropdown = document.getElementById('userDropdown');
+        const userBalance = document.getElementById('userBalance');
+        const logoutBtn = document.getElementById('logoutBtn');
+        const orderHistoryBtn = document.getElementById('orderHistoryBtn');
+        const historyModal = document.getElementById('historyModal');
+        const closeHistoryModal = document.getElementById('closeHistoryModal');
+        const historyList = document.getElementById('historyList');
+        let currentUser = null;
+        let orderHistory = JSON.parse(localStorage.getItem('orderHistory') || '[]');
+
+        // 从 localStorage 恢复登录状态
+        const savedUser = localStorage.getItem('currentUser');
+        if (savedUser) {
+            currentUser = JSON.parse(savedUser);
+            const displayUsername = currentUser.username.length > 6 ? currentUser.username.slice(0, 6) + '*' : currentUser.username;
+            loginBtn.textContent = displayUsername;
+            loginBtn.classList.remove('text-gray-300');
+            loginBtn.classList.add('text-black');
+            userBalance.textContent = '¥' + currentUser.balance.toFixed(2);
+        }
+
+        loginBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (currentUser) {
+                userDropdown.classList.toggle('hidden');
+            } else {
+                loginModal.classList.add('active');
+            }
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!loginBtn.contains(e.target) && !userDropdown.contains(e.target)) {
+                userDropdown.classList.add('hidden');
+            }
+        });
+
+        logoutBtn.addEventListener('click', () => {
+            currentUser = null;
+            localStorage.removeItem('currentUser');
+            loginBtn.textContent = '登录';
+            loginBtn.classList.remove('text-black');
+            loginBtn.classList.add('text-gray-300');
+            userDropdown.classList.add('hidden');
+        });
+
+        orderHistoryBtn.addEventListener('click', () => {
+            if (!orderHistory.length) {
+                historyList.innerHTML = '<div class="text-center text-gray-400 py-8">暂无购买记录</div>';
+            } else {
+                historyList.innerHTML = orderHistory.map((o, i) => `
+                    <div class="border-b pb-2 text-xs cursor-pointer hover:bg-gray-50 -mx-2 px-2 py-1" onclick="showOrderDetail(${i})">
+                        <div class="flex justify-between mb-1">
+                            <span class="font-bold">${o.name}</span>
+                            <span class="text-gray-400">${o.date}</span>
+                        </div>
+                        <div class="text-gray-400">账号：${o.account}</div>
+                    </div>
+                `).join('');
+            }
+            historyModal.classList.add('active');
+            userDropdown.classList.add('hidden');
+        });
+
+        closeHistoryModal.addEventListener('click', () => {
+            historyModal.classList.remove('active');
+        });
+
+        historyModal.addEventListener('click', (e) => {
+            if (e.target === historyModal) {
+                historyModal.classList.remove('active');
+            }
+        });
+
+        window.showOrderDetail = (index) => {
+            const order = orderHistory[index];
+            document.getElementById('successOrderId').textContent = order.orderId;
+            document.getElementById('successItemName').textContent = order.name;
+            document.getElementById('successAccount').textContent = order.account;
+            document.getElementById('successPassword').textContent = order.password;
+            historyModal.classList.remove('active');
+            successModal.classList.add('active');
+        };
+
+        closeModal.addEventListener('click', () => {
+            loginModal.classList.remove('active');
+        });
+
+        loginModal.addEventListener('click', (e) => {
+            if (e.target === loginModal) {
+                loginModal.classList.remove('active');
+            }
+        });
+
+        showLogin.addEventListener('click', () => {
+            loginForm.style.display = 'block';
+            registerForm.style.display = 'none';
+            showLogin.classList.add('font-bold', 'border-b-2', 'border-black');
+            showLogin.classList.remove('text-gray-400');
+            showRegister.classList.remove('font-bold', 'border-b-2', 'border-black');
+            showRegister.classList.add('text-gray-400');
+        });
+
+        showRegister.addEventListener('click', () => {
+            loginForm.style.display = 'none';
+            registerForm.style.display = 'block';
+            showRegister.classList.add('font-bold', 'border-b-2', 'border-black');
+            showRegister.classList.remove('text-gray-400');
+            showLogin.classList.remove('font-bold', 'border-b-2', 'border-black');
+            showLogin.classList.add('text-gray-400');
+        });
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(loginForm);
+            const username = loginForm.querySelector('input[type="text"]').value;
+            const password = loginForm.querySelector('input[type="password"]').value;
+            
+            try {
+                 const res = await fetch('https://api.immmor.com/api/login', {
+                     method: 'POST',
+                     headers: { 'Content-Type': 'application/json' },
+                     body: JSON.stringify({ username, password })
+                 });
+                 const data = await res.json();
+                 if (data.success) {
+                     alert('登录成功！');
+                     loginModal.classList.remove('active');
+                     currentUser = { username, balance: data.userInfo?.balance || 0 };
+                     localStorage.setItem('currentUser', JSON.stringify(currentUser));
+                     const displayUsername = username.length > 6 ? username.slice(0, 6) + '*' : username;
+                     loginBtn.textContent = displayUsername;
+                     loginBtn.classList.remove('text-gray-300');
+                     loginBtn.classList.add('text-black');
+                     userBalance.textContent = '¥' + currentUser.balance.toFixed(2);
+                 } else {
+                    alert(data.message || '登录失败');
+                }
+            } catch (err) {
+                alert('登录失败，请稍后重试');
+            }
+        });
+
+        registerForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = registerForm.querySelector('input[type="text"]').value;
+            const email = registerForm.querySelector('input[type="email"]').value;
+            const password = registerForm.querySelector('input[type="password"]').value;
+            
+            try {
+                const res = await fetch('https://api.immmor.com/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('注册成功！');
+                    loginModal.classList.remove('active');
+                    const displayUsername = username.length > 6 ? username.slice(0, 6) + '*' : username;
+                    loginBtn.textContent = displayUsername;
+                } else {
+                    alert(data.message || '注册失败');
+                }
+            } catch (err) {
+                alert('注册失败，请稍后重试');
+            }
+        });
+
+        // 购买功能
+        const buyModal = document.getElementById('buyModal');
+        const closeBuyModal = document.getElementById('closeBuyModal');
+        const buyItemName = document.getElementById('buyItemName');
+        const buyItemPrice = document.getElementById('buyItemPrice');
+        const cancelBuy = document.getElementById('cancelBuy');
+        const confirmBuy = document.getElementById('confirmBuy');
+        const successModal = document.getElementById('successModal');
+        const closeSuccessModal = document.getElementById('closeSuccessModal');
+        const closeSuccess = document.getElementById('closeSuccess');
+        let selectedItem = null;
+
+        // 使用事件委托处理动态生成的购买按钮
+        document.querySelector('main').addEventListener('click', (e) => {
+            if (e.target.classList.contains('buy-btn')) {
+                if (!currentUser) {
+                    alert('请先登录');
+                    loginModal.classList.add('active');
+                    return;
+                }
+                selectedItem = {
+                    name: e.target.dataset.name,
+                    price: e.target.dataset.price
+                };
+                buyItemName.textContent = selectedItem.name;
+                buyItemPrice.textContent = selectedItem.price;
+                buyModal.classList.add('active');
+            }
+        });
+
+        closeBuyModal.addEventListener('click', () => {
+            buyModal.classList.remove('active');
+        });
+
+        cancelBuy.addEventListener('click', () => {
+            buyModal.classList.remove('active');
+        });
+
+        buyModal.addEventListener('click', (e) => {
+            if (e.target === buyModal) {
+                buyModal.classList.remove('active');
+            }
+        });
+
+        closeSuccessModal.addEventListener('click', () => {
+            successModal.classList.remove('active');
+        });
+
+        closeSuccess.addEventListener('click', () => {
+            successModal.classList.remove('active');
+        });
+
+        successModal.addEventListener('click', (e) => {
+            if (e.target === successModal) {
+                successModal.classList.remove('active');
+            }
+        });
+
+        confirmBuy.addEventListener('click', async () => {
+            if (!selectedItem) return;
+            const price = parseFloat(selectedItem.price.replace('¥', ''));
+            if (currentUser.balance < price) {
+                alert('余额不足，请先充值');
+                buyModal.classList.remove('active');
+                return;
+            }
+            try {
+                const res = await fetch('https://api.immmor.com/api/balance/edit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: currentUser.username,
+                        balance: currentUser.balance - price
+                    })
+                });
+                const data = await res.json();
+                console.log('Balance update response:', data);
+                if (data.code === 200) {
+                    currentUser.balance = data.balance;
+                    localStorage.setItem('currentUser', JSON.stringify(currentUser));
+                    userBalance.textContent = '¥' + currentUser.balance.toFixed(2);
+                    
+                    const orderId = 'ORD-' + Date.now() + '-' + Math.random().toString(36).slice(-4).toUpperCase();
+                    const account = 'user' + Math.floor(Math.random() * 10000);
+                    const password = Math.random().toString(36).slice(-8);
+                    
+                    document.getElementById('successOrderId').textContent = orderId;
+                    document.getElementById('successItemName').textContent = selectedItem.name;
+                    document.getElementById('successAccount').textContent = account;
+                    document.getElementById('successPassword').textContent = password;
+                    
+                    const order = {
+                        orderId: orderId,
+                        name: selectedItem.name,
+                        account: account,
+                        password: password,
+                        price: price,
+                        date: new Date().toLocaleString('zh-CN')
+                    };
+                    orderHistory.unshift(order);
+                    if (orderHistory.length > 50) orderHistory.pop();
+                    localStorage.setItem('orderHistory', JSON.stringify(orderHistory));
+                    
+                    buyModal.classList.remove('active');
+                    successModal.classList.add('active');
+                } else {
+                    alert('购买失败，请稍后重试');
+                }
+            } catch (err) {
+                console.error('Purchase error:', err);
+                alert('购买失败，请稍后重试');
+            }
         });
     </script>
 
