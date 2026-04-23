@@ -862,7 +862,8 @@
 
         // ==================== 开通VIP功能 ====================
         const openVip = async (username, duration = 30, price = 10.00) => {
-            if (!confirm(`确定要开通VIP吗？将从您的余额中扣除¥${price.toFixed(2)}。`)) {
+            const confirmOpenVip = translations[currentLang]?.alert_confirm_open_vip || '确定要开通VIP吗？将从您的余额中扣除¥{price}。';
+            if (!confirm(confirmOpenVip.replace('{price}', price.toFixed(2)))) {
                 return;
             }
             
@@ -876,25 +877,29 @@
                 });
                 
                 const data = await response.json();
-                
+
                 if (response.ok && data.code === 200) {
-                    alert('VIP开通成功！');
+                    const openSuccess = translations[currentLang]?.alert_open_success || 'VIP开通成功！';
+                    alert(openSuccess);
                     const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
                     userInfo.balance = data.data.balance;
                     localStorage.setItem('userInfo', JSON.stringify(userInfo));
-                    
+
                     const modals = document.querySelectorAll('.fixed');
                     modals.forEach(modal => modal.remove());
                 } else {
                     if (data.balance !== undefined) {
-                        alert(`开通VIP失败：${data.msg}，当前余额：¥${data.balance}`);
+                        const openFailed = translations[currentLang]?.alert_open_failed || '开通VIP失败';
+                        alert(`${openFailed}：${data.msg}，当前余额：¥${data.balance}`);
                     } else {
-                        alert(`开通VIP失败：${data.msg}`);
+                        const openFailed = translations[currentLang]?.alert_open_failed || '开通VIP失败';
+                        alert(`${openFailed}：${data.msg}`);
                     }
                 }
             } catch (error) {
                 console.error('开通VIP失败详情:', error);
-                alert(`网络错误：${error.message}，请检查控制台查看详细错误信息`);
+                const networkErr = translations[currentLang]?.alert_network_error?.replace('{error}', error.message) || '网络错误';
+                alert(networkErr);
             }
         };
 
@@ -903,7 +908,8 @@
             const userInfo = JSON.parse(localStorage.getItem('userInfo') || 'null');
 
             if (!userInfo) {
-                alert('请先登录！');
+                const loginAlert = translations[currentLang]?.alert_please_login || '请先登录！';
+                alert(loginAlert);
                 document.getElementById('auth-toggle').click();
                 return;
             }
@@ -924,14 +930,15 @@
                     const vipV2rayUrl = `https://api.immmor.com/vip/v2ray?v=${encodeURIComponent(vipInfo.v_token)}`;
                     const renewUrl = 'https://tools.immmor.com/pay';
                     
+                    const dict = translations[currentLang] || {};
                     const html = `
-                        <div class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                        <div class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" id="vip-modal">
                             <div class="cyber-card p-6 md:p-8 max-w-md w-full max-h-[80vh] overflow-y-auto">
                                 <div class="flex justify-between items-start mb-3">
                                     <div>
-                                        <h2 class="text-xl md:text-2xl font-black uppercase">VIP节点</h2>
-                                        <div class="text-xs text-zinc-500 mt-1">${duration === 30 ? '月付' : '年付'}套餐 • ¥${price.toFixed(2)}</div>
-                                        <div class="text-[10px] text-zinc-500">*价格会随着服务器维护成本而有所波动，请互相理解*</div>
+                                        <h2 class="text-xl md:text-2xl font-black uppercase" data-i18n="vip_nodes_title">VIP节点</h2>
+                                        <div class="text-xs text-zinc-500 mt-1">${duration === 30 ? (dict.vip_plan_monthly || '月付') : (dict.vip_plan_annual || '年付')} ${dict.vip_plan_suffix || '套餐'} • ¥${price.toFixed(2)}</div>
+                                        <div class="text-[10px] text-zinc-500" data-i18n="vip_price_fluctuate">*价格会随着服务器维护成本而有所波动，请互相理解*</div>
                                     </div>
                                     <button onclick="this.closest('.fixed').remove()" class="text-zinc-500 hover:text-white">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -942,58 +949,64 @@
                                 </div>
                                 <div class="mb-2 md:mb-3 p-2 md:p-3 bg-zinc-900 rounded border border-zinc-700">
                                     <div class="text-center">
-                                        <div class="text-lg font-bold text-[var(--neon-blue)] mb-2">VIP状态</div>
-                                        ${vipInfo.is_vip_valid ? 
+                                        <div class="text-lg font-bold text-[var(--neon-blue)] mb-2" data-i18n="vip_status">VIP状态</div>
+                                        ${vipInfo.is_vip_valid ?
                                             `<div class="text-[var(--neon-green)] text-sm">
-                                                <div>有效期至: ${new Date(vipInfo.v_expire_date).toLocaleDateString()}</div>
-                                                <div>剩余天数: ${vipInfo.days_remaining} 天</div>
-                                                <div>可用流量: 150GB(30天重置)</div>
+                                                <div><span data-i18n="vip_valid_until_label">有效期至</span>: ${new Date(vipInfo.v_expire_date).toLocaleDateString()}</div>
+                                                <div><span data-i18n="vip_remaining_days_label">剩余天数</span>: ${vipInfo.days_remaining} 天</div>
+                                                <div><span data-i18n="vip_available_quota">可用流量</span>: 150GB(<span data-i18n="vip_quota_reset">30天重置</span>)</div>
                                                 <div class="mt-4 flex gap-2 justify-center">
                                                     <button onclick="window.location.href='download.html'" class="bg-[var(--neon-green)] text-black px-4 py-2 text-sm font-bold hover:opacity-90" data-i18n="nav_install">安装</button>
-                                                    <button onclick="resetVToken('${userInfo.username}')" class="bg-[var(--neon-orange)] text-black px-4 py-2 text-sm font-bold hover:opacity-90">重置链接，慎点！！</button>
-                                                    <button onclick="document.getElementById('complaint-modal').classList.remove('hidden')" class="bg-zinc-700 text-white px-4 py-2 text-sm font-bold hover:opacity-90">投诉</button>
+                                                    <button onclick="resetVToken('${userInfo.username}')" class="bg-[var(--neon-orange)] text-black px-4 py-2 text-sm font-bold hover:opacity-90" data-i18n="vip_reset_link_caution">重置链接，慎点！！</button>
+                                                    <button onclick="document.getElementById('complaint-modal').classList.remove('hidden')" class="bg-zinc-700 text-white px-4 py-2 text-sm font-bold hover:opacity-90" data-i18n="vip_complaint">投诉</button>
                                                 </div>
-                                            </div>` : 
-                                            `<div class="text-[var(--neon-red)] text-sm">VIP已过期或未开通</div>`
+                                            </div>` :
+                                            `<div class="text-[var(--neon-red)] text-sm" data-i18n="vip_expired">VIP已过期或未开通</div>`
                                         }
                                     </div>
                                 </div>
                                 ${vipInfo.is_vip_valid ? `
                                     <div class="space-y-4">
                                         <div class="border border-[var(--neon-blue)] p-4 rounded">
-                                            <h3 class="text-lg font-bold text-[var(--neon-blue)] mb-2">VIP Clash 配置</h3>
+                                            <h3 class="text-lg font-bold text-[var(--neon-blue)] mb-2">${dict.vip_clash_config || 'VIP Clash 配置'}</h3>
                                             <input type="text" value="${vipClashUrl}" readonly class="w-full bg-zinc-900 border border-zinc-600 px-3 py-2 text-xs md:text-sm text-white mb-2 vip-clash-input">
                                             <div class="flex gap-2">
-                                                <button onclick="copyToClipboard('${vipClashUrl}', this)" class="flex-1 bg-[var(--neon-blue)] text-black py-2 text-xs md:text-sm font-bold hover:opacity-90">复制</button>
-                                                <a href="${vipClashUrl}" download="vip-clash-${dateStr}.yaml" class="flex-1 bg-[var(--neon-green)] text-black py-2 text-xs md:text-sm font-bold hover:opacity-90 text-center">下载</a>
+                                                <button onclick="copyToClipboard('${vipClashUrl}', this)" class="flex-1 bg-[var(--neon-blue)] text-black py-2 text-xs md:text-sm font-bold hover:opacity-90">${dict.free_copy || '复制'}</button>
+                                                <a href="${vipClashUrl}" download="vip-clash-${dateStr}.yaml" class="flex-1 bg-[var(--neon-green)] text-black py-2 text-xs md:text-sm font-bold hover:opacity-90 text-center">${dict.free_download || '下载'}</a>
                                             </div>
                                         </div>
                                         <div class="border border-[var(--neon-blue)] p-4 rounded">
-                                            <h3 class="text-lg font-bold text-[var(--neon-blue)] mb-2">VIP V2Ray 配置</h3>
+                                            <h3 class="text-lg font-bold text-[var(--neon-blue)] mb-2">${dict.vip_v2ray_config || 'VIP V2Ray 配置'}</h3>
                                             <input type="text" value="${vipV2rayUrl}" readonly class="w-full bg-zinc-900 border border-zinc-600 px-3 py-2 text-xs md:text-sm text-white mb-2 vip-v2ray-input">
                                             <div class="flex gap-2">
-                                                <button onclick="copyToClipboard('${vipV2rayUrl}', this)" class="flex-1 bg-[var(--neon-blue)] text-black py-2 text-xs md:text-sm font-bold hover:opacity-90">复制</button>
-                                                <a href="${vipV2rayUrl}" download="vip-v2ray-${dateStr}.txt" class="flex-1 bg-[var(--neon-green)] text-black py-2 text-xs md:text-sm font-bold hover:opacity-90 text-center">下载</a>
+                                                <button onclick="copyToClipboard('${vipV2rayUrl}', this)" class="flex-1 bg-[var(--neon-blue)] text-black py-2 text-xs md:text-sm font-bold hover:opacity-90">${dict.free_copy || '复制'}</button>
+                                                <a href="${vipV2rayUrl}" download="vip-v2ray-${dateStr}.txt" class="flex-1 bg-[var(--neon-green)] text-black py-2 text-xs md:text-sm font-bold hover:opacity-90 text-center">${dict.free_download || '下载'}</a>
                                             </div>
                                         </div>
                                     </div>
                                 ` : ''}
                                 <div class="mt-6">
                                     <button onclick="openVip('${userInfo.username}', ${duration}, ${price})" class="w-full bg-[var(--neon-blue)] text-black py-3 px-4 font-bold text-center hover:opacity-90">
-                                        ${vipInfo.is_vip_valid ? '续费VIP' : '开通VIP'}
+                                        ${vipInfo.is_vip_valid ? (dict.vip_renew || '续费VIP') : (dict.vip_open || '开通VIP')}
                                     </button>
                                 </div>
                             </div>
                         </div>
                     `;
-                    
+
                     document.body.insertAdjacentHTML('beforeend', html);
+                    document.getElementById('vip-modal').querySelectorAll('[data-i18n]').forEach(el => {
+                        const key = el.getAttribute('data-i18n');
+                        if (dict[key]) el.textContent = dict[key];
+                    });
                 } else {
-                    alert('查询VIP状态失败：' + data.msg);
+                    const queryFailed = translations[currentLang]?.alert_query_failed || '查询VIP状态失败：';
+                    alert(queryFailed + data.msg);
                 }
             } catch (error) {
                 console.error('VIP状态查询失败:', error);
-                alert('网络错误，请稍后重试');
+                const networkError = translations[currentLang]?.network_error || '网络错误，请稍后重试';
+                alert(networkError);
             }
         };
 
@@ -1006,11 +1019,12 @@
                     },
                     body: JSON.stringify({ username })
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.code === 200) {
-                    alert('Token重置成功！新Token: ' + data.data.v_token);
+                    const resetSuccess = translations[currentLang]?.alert_reset_success || 'Token重置成功！新Token: ';
+                    alert(resetSuccess + data.data.v_token);
                     
                     const vipClashUrl = `https://api.immmor.com/vip/clash?v=${encodeURIComponent(data.data.v_token)}`;
                     const vipV2rayUrl = `https://api.immmor.com/vip/v2ray?v=${encodeURIComponent(data.data.v_token)}`;
@@ -1026,11 +1040,13 @@
                         v2rayInput.value = vipV2rayUrl;
                     }
                 } else {
-                    alert('重置失败：' + data.msg);
+                    const resetFailed = translations[currentLang]?.alert_reset_failed || '重置失败';
+                    alert(resetFailed + '：' + data.msg);
                 }
             } catch (error) {
                 console.error('重置Token失败:', error);
-                alert('网络错误，请稍后重试');
+                const networkError = translations[currentLang]?.network_error || '网络错误，请稍后重试';
+                alert(networkError);
             }
         };
 
@@ -1830,6 +1846,18 @@
                     }
                 }
             });
+
+            if (!els.modal.classList.contains('hidden')) {
+                const d = translations[currentLang] || {};
+                const c = {
+                    login: { title: d.modal_title_login, btn: d.modal_submit_login, tip: d.modal_no_account, switch: d.modal_register },
+                    register: { title: d.modal_title_register, btn: d.modal_submit_register, tip: d.modal_have_account, switch: d.modal_login }
+                }[isLogin ? 'login' : 'register'];
+                els.title.textContent = c.title || (isLogin ? '登录' : '注册');
+                els.submit.textContent = c.btn || els.submit.textContent;
+                els.switchText.textContent = c.tip || (isLogin ? '还没有账号？' : '已有账号？');
+                els.switch.textContent = c.switch || (isLogin ? '注册' : '登录');
+            }
 
             document.documentElement.lang = lang;
         }
