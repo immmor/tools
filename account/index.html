@@ -101,6 +101,63 @@
         .offset-1 { margin-top: 4rem; }
         .offset-2 { margin-top: 8rem; }
 
+        .tab-btn {
+            padding: 6px 16px;
+            border: 1px solid #e5e5e5;
+            font-size: 11px;
+            font-weight: bold;
+            letter-spacing: 0.1em;
+            transition: all 0.2s;
+        }
+        .tab-btn.active {
+            background: #1a1a1a;
+            color: #fff;
+            border-color: #1a1a1a;
+        }
+        .tab-btn:not(.active):hover {
+            border-color: #1a1a1a;
+        }
+
+        .market-card {
+            background: #fff;
+            border: 1px solid #eee;
+            padding: 1rem;
+            transition: all 0.3s ease;
+            position: relative;
+            height: 130px;
+            display: flex;
+            flex-direction: column;
+        }
+        .market-card:hover {
+            border-color: #000;
+            transform: translateY(-2px);
+        }
+        .market-card h3 { min-height: 1.5rem; margin-bottom: 0.5rem; }
+        .market-card p { flex-grow: 1; margin-bottom: 0.5rem; }
+
+        .price-tag {
+            position: absolute;
+            top: 8px;
+            right: 12px;
+            background: #000;
+            color: #fff;
+            padding: 4px 12px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .want-tag {
+            position: absolute;
+            top: 8px;
+            right: 12px;
+            background: #fff;
+            color: #1a1a1a;
+            border: 1px solid #1a1a1a;
+            padding: 4px 12px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
         .modal-overlay {
             display: none;
             position: fixed;
@@ -140,7 +197,7 @@
 
     <div class="vertical-label">数字账号 / 批发零售</div>
 
-    <header class="flex justify-between items-end mb-10">
+    <header class="flex justify-between items-end mb-4">
         <div>
             <h1 class="text-2xl font-bold tracking-tighter">账号小卖部</h1>
         </div>
@@ -156,14 +213,14 @@
         </nav>
     </header>
 
-    <div class="mb-10">
+    <div class="mb-6">
         <h2 class="text-4xl font-light leading-tight mb-6">
             卖各种<b>便宜好用</b>的账号。
         </h2>
-        <!-- <div class="w-12 h-1 bg-black mb-6"></div>
-        <p class="text-sm text-gray-500 max-w-md leading-relaxed">
-            官方直充，代充包售后，有问题联系客服。
-        </p> -->
+        <div class="flex gap-2">
+            <button class="tab-btn active" id="tabSell">出售</button>
+            <button class="tab-btn" id="tabBuy">求购</button>
+        </div>
     </div>
 
     <div class="mb-10 flex justify-center">
@@ -246,6 +303,8 @@
 
     <script>
         let allAccounts = [];
+        let allMarketAccounts = [];
+        let currentTab = 'sell';
 
         function renderAccounts(accounts) {
             const main = document.querySelector('main');
@@ -267,6 +326,26 @@
             });
         }
 
+        function renderMarket(accounts) {
+            const main = document.querySelector('main');
+            main.innerHTML = '';
+            accounts.forEach((acc, i) => {
+                const div = document.createElement('div');
+                div.innerHTML = `
+                    <div class="market-card">
+                        <span class="want-tag mono">¥${acc.price}</span>
+                        <h3 class="text-xl font-bold mb-2">${acc.name}</h3>
+                        <p class="text-xs text-gray-400 mb-2 leading-relaxed line-clamp-2">${acc.description}</p>
+                        <div class="flex justify-between items-center">
+                            <span class="text-[10px] uppercase tracking-widest font-bold">${acc.contact}</span>
+                            <button class="text-xs border-b border-black pb-1 hover:text-gray-400 transition-colors">联系 ↗</button>
+                        </div>
+                    </div>
+                `;
+                main.appendChild(div);
+            });
+        }
+
         fetch('accounts.json')
             .then(res => res.json())
             .then(accounts => {
@@ -274,13 +353,51 @@
                 renderAccounts(accounts);
             });
 
-        document.getElementById('searchInput').addEventListener('input', (e) => {
-            const keyword = e.target.value.toLowerCase();
+        fetch('market.json')
+            .then(res => res.json())
+            .then(accounts => {
+                allMarketAccounts = accounts;
+            });
+
+        document.getElementById('tabSell').addEventListener('click', () => {
+            currentTab = 'sell';
+            document.getElementById('tabSell').classList.add('active');
+            document.getElementById('tabBuy').classList.remove('active');
+            const keyword = document.getElementById('searchInput').value.toLowerCase();
             const filtered = allAccounts.filter(acc =>
                 acc.name.toLowerCase().includes(keyword) ||
                 acc.description.toLowerCase().includes(keyword)
             );
             renderAccounts(filtered);
+        });
+
+        document.getElementById('tabBuy').addEventListener('click', () => {
+            currentTab = 'buy';
+            document.getElementById('tabBuy').classList.add('active');
+            document.getElementById('tabSell').classList.remove('active');
+            const keyword = document.getElementById('searchInput').value.toLowerCase();
+            const filtered = allMarketAccounts.filter(acc =>
+                acc.name.toLowerCase().includes(keyword) ||
+                acc.description.toLowerCase().includes(keyword)
+            );
+            renderMarket(filtered);
+        });
+
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            const keyword = e.target.value.toLowerCase();
+            if (currentTab === 'sell') {
+                const filtered = allAccounts.filter(acc =>
+                    acc.name.toLowerCase().includes(keyword) ||
+                    acc.description.toLowerCase().includes(keyword)
+                );
+                renderAccounts(filtered);
+            } else {
+                const filtered = allMarketAccounts.filter(acc =>
+                    acc.name.toLowerCase().includes(keyword) ||
+                    acc.description.toLowerCase().includes(keyword)
+                );
+                renderMarket(filtered);
+            }
         });
 
         const loginModal = document.getElementById('loginModal');
