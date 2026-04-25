@@ -370,7 +370,10 @@
 
         #password::placeholder,
         #invite-code::placeholder,
-        #security-answer::placeholder {
+        #security-answer::placeholder,
+        #forgot-new-password::placeholder,
+        #forgot-username::placeholder,
+        #forgot-security-answer::placeholder {
             font-size: 0.75rem;
         }
     </style>
@@ -507,15 +510,40 @@
                     <label class="block text-xs text-zinc-500 mb-2 uppercase tracking-widest" data-i18n="security_question_label">密保问题：你的宠物叫什么名字？</label>
                     <input type="text" id="security-answer" class="w-full bg-zinc-900 border border-zinc-700 px-4 py-3 text-white focus:border-[var(--neon-blue)] focus:outline-none" placeholder="请输入答案" data-i18n-placeholder="security_question_placeholder">
                 </div>
-                <button type="submit" class="w-full btn-cyber py-4">
+                <button type="submit" class="w-full btn-cyber py-4" id="auth-submit-btn">
                     <span id="submit-text" data-i18n="modal_submit_login">登录</span>
                     <span id="submit-loading" class="hidden" data-i18n="modal_submit_loading">处理中...</span>
                 </button>
             </form>
-            <div class="mt-6 text-center">
+            <div id="forgot-pwd-container" class="hidden">
+                <div class="mb-6">
+                    <label class="block text-xs text-zinc-500 mb-2 uppercase tracking-widest" data-i18n="forgot_username">用户名</label>
+                    <input type="text" id="forgot-username" class="w-full bg-zinc-900 border border-zinc-700 px-4 py-3 text-white focus:border-[var(--neon-blue)] focus:outline-none" data-i18n-placeholder="forgot_username_placeholder" placeholder="请输入用户名">
+                </div>
+                <div class="mb-6">
+                    <label class="block text-xs text-zinc-500 mb-2 uppercase tracking-widest" data-i18n="forgot_security_answer">你的宠物叫什么名字？</label>
+                    <input type="text" id="forgot-security-answer" class="w-full bg-zinc-900 border border-zinc-700 px-4 py-3 text-white focus:border-[var(--neon-blue)] focus:outline-none" data-i18n-placeholder="forgot_security_answer_placeholder" placeholder="请输入答案">
+                </div>
+                <div class="mb-6 relative">
+                    <label class="block text-xs text-zinc-500 mb-2 uppercase tracking-widest" data-i18n="forgot_new_password">新密码</label>
+                    <div class="relative flex items-center">
+                        <input type="password" id="forgot-new-password" class="w-full bg-zinc-900 border border-zinc-700 px-4 py-3 pr-12 text-white focus:border-[var(--neon-blue)] focus:outline-none" data-i18n-placeholder="forgot_new_password_placeholder" placeholder="请输入新密码">
+                        <button type="button" id="toggle-forgot-password" class="absolute right-3 text-zinc-500 hover:text-white flex gap-2">
+                            <i data-lucide="unlock" class="w-5 h-5 eye-open hidden"></i>
+                            <i data-lucide="lock" class="w-5 h-5 eye-closed"></i>
+                        </button>
+                    </div>
+                </div>
+                <button type="button" id="forgot-submit-btn" class="w-full btn-cyber py-4" data-i18n="forgot_submit_btn">重置密码</button>
+                <div class="mt-3 text-center">
+                    <button type="button" id="back-to-login" class="text-zinc-500 text-xs hover:text-[var(--neon-blue)]" data-i18n="forgot_back_login">返回登录</button>
+                </div>
+            </div>
+            <div class="mt-4 text-center">
                 <p class="text-zinc-500 text-xs">
                     <span id="switch-text" data-i18n="modal_no_account">还没有账号？</span>
-                    <button id="switch-mode" class="text-[var(--neon-blue)] hover:underline ml-1" data-i18n="modal_register">注册</button>
+                    <button id="switch-mode" class="text-[var(--neon-blue)] hover:underline" data-i18n="modal_register">注册</button>
+                    <button id="forgot-pwd" class="text-zinc-500 text-xs hover:text-[var(--neon-blue)] ml-1" data-i18n="modal_forgot_password">忘记密码？</button>
                 </p>
             </div>
             <div id="auth-message" class="mt-4 text-center text-xs hidden"></div>
@@ -1181,7 +1209,14 @@
             dropdown: $('dropdown-menu'),
             balance: $('user-balance'),
             logout: $('logout-btn'),
-            recharge: $('recharge-btn')
+            recharge: $('recharge-btn'),
+            forgotPwdBtn: $('forgot-pwd'),
+            forgotPwdContainer: $('forgot-pwd-container'),
+            forgotUsername: $('forgot-username'),
+            forgotSecurityAnswer: $('forgot-security-answer'),
+            forgotNewPassword: $('forgot-new-password'),
+            forgotSubmitBtn: $('forgot-submit-btn'),
+            backToLogin: $('back-to-login')
         };
 
         // ==================== 认证模块 ====================
@@ -1226,6 +1261,7 @@
                 els.msg.classList.add('hidden');
                 els.inviteCodeContainer.classList.toggle('hidden', isLogin);
                 els.securityAnswerContainer.classList.toggle('hidden', isLogin);
+                els.forgotPwdBtn.classList.toggle('hidden', !isLogin);
                 if (!isLogin) {
                     const urlParams = new URLSearchParams(window.location.search);
                     const urlInviteCode = urlParams.get('invite');
@@ -1258,6 +1294,13 @@
                 els.submit.textContent = c.btn;
                 els.switchText.textContent = c.tip;
                 els.switch.textContent = c.switch;
+                els.form.classList.remove('hidden');
+                els.switch.closest('p').classList.remove('hidden');
+                els.forgotPwdBtn.classList.remove('hidden');
+                els.forgotPwdContainer.classList.add('hidden');
+                els.forgotUsername.value = '';
+                els.forgotSecurityAnswer.value = '';
+                els.forgotNewPassword.value = '';
             };
             
             const toggleDropdown = () => els.dropdown.classList.toggle('hidden');
@@ -1707,7 +1750,20 @@
                 }
             };
             
-            const init = () => {
+            const resetToLogin = () => {
+                    isLogin = true;
+                    els.form.classList.remove('hidden');
+                    els.switch.closest('div').classList.remove('hidden');
+                    els.forgotPwdContainer.classList.add('hidden');
+                    els.forgotUsername.value = '';
+                    els.forgotSecurityAnswer.value = '';
+                    els.forgotNewPassword.value = '';
+                    els.title.textContent = translations[currentLang]?.modal_title_login || '登录';
+                    els.submit.textContent = translations[currentLang]?.modal_submit_login || '登录';
+                    els.msg.classList.add('hidden');
+                    els.forgotSubmitBtn.classList.remove('hidden');
+                };
+                const init = () => {
                 els.btn.addEventListener('click', handleBtnClick);
                 els.close.addEventListener('click', closeModal);
                 els.modal.addEventListener('click', (e) => e.target === els.modal && closeModal());
@@ -1715,10 +1771,10 @@
                 els.form.addEventListener('submit', handleSubmit);
                 els.logout.addEventListener('click', logout);
                 els.recharge.addEventListener('click', handleRecharge);
-                document.getElementById('toggle-password').addEventListener('click', () => {
-                    const p = document.getElementById('password');
-                    const eyeOpen = document.querySelector('#toggle-password .eye-open');
-                    const eyeClosed = document.querySelector('#toggle-password .eye-closed');
+                const togglePasswordVisibility = (btnId, inputId) => {
+                    const p = document.getElementById(inputId);
+                    const eyeOpen = document.querySelector(`#${btnId} .eye-open`);
+                    const eyeClosed = document.querySelector(`#${btnId} .eye-closed`);
                     if (p.type === 'password') {
                         p.type = 'text';
                         eyeOpen.classList.remove('hidden');
@@ -1728,8 +1784,50 @@
                         eyeOpen.classList.add('hidden');
                         eyeClosed.classList.remove('hidden');
                     }
-                });
+                };
+                document.getElementById('toggle-password').addEventListener('click', () => togglePasswordVisibility('toggle-password', 'password'));
+                document.getElementById('toggle-forgot-password').addEventListener('click', () => togglePasswordVisibility('toggle-forgot-password', 'forgot-new-password'));
                 document.addEventListener('click', (e) => !e.target.closest('#user-menu-container') && closeDropdown());
+                els.forgotPwdBtn.addEventListener('click', () => {
+                    els.form.classList.add('hidden');
+                    els.switch.closest('div').classList.add('hidden');
+                    els.forgotPwdContainer.classList.remove('hidden');
+                    els.msg.classList.add('hidden');
+                    applyTranslation(currentLang);
+                    els.title.textContent = '重置密码';
+                });
+                els.forgotSubmitBtn.addEventListener('click', async () => {
+                    const username = els.forgotUsername.value.trim();
+                    const answer = els.forgotSecurityAnswer.value.trim();
+                    const newPass = els.forgotNewPassword.value;
+                    if (!username || !answer || !newPass) { els.msg.textContent = translations[currentLang]?.forgot_fill_all || '请填写所有字段'; els.msg.className = 'mt-4 text-center text-xs text-[var(--neon-red)]'; els.msg.classList.remove('hidden'); return; }
+                    els.forgotSubmitBtn.classList.add('hidden');
+                    try {
+                        const res = await fetch(`${API}/api/reset-password`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username, securityAnswer: answer, newPassword: newPass })
+                        });
+                        const data = await res.json();
+                        if (data.success) {
+                            els.msg.textContent = translations[currentLang]?.forgot_success || '密码重置成功，请登录';
+                            els.msg.className = 'mt-4 text-center text-xs text-[var(--neon-green)]';
+                            els.msg.classList.remove('hidden');
+                            setTimeout(() => { resetToLogin(); }, 1500);
+                        } else {
+                            els.msg.textContent = data.message || (translations[currentLang]?.forgot_failed || '重置失败'); els.msg.className = 'mt-4 text-center text-xs text-[var(--neon-red)]'; els.msg.classList.remove('hidden');
+                            els.forgotSubmitBtn.classList.remove('hidden');
+                        }
+                    } catch { els.msg.textContent = translations[currentLang]?.network_error || '网络错误'; els.msg.className = 'mt-4 text-center text-xs text-[var(--neon-red)]'; els.msg.classList.remove('hidden'); els.forgotSubmitBtn.classList.remove('hidden'); }
+                });
+                els.backToLogin.addEventListener('click', () => {
+                    els.forgotPwdContainer.classList.add('hidden');
+                    els.form.classList.remove('hidden');
+                    els.switch.closest('div').classList.remove('hidden');
+                    els.title.textContent = translations[currentLang]?.modal_title_login || '登录';
+                    els.msg.classList.add('hidden');
+                    els.forgotSubmitBtn.classList.remove('hidden');
+                });
                 checkAuth();
             };
             

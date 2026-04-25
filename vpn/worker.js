@@ -238,6 +238,25 @@ export default {
         }
       }
 
+      if (path === '/api/check-security' && request.method === 'GET') {
+        const username = url.searchParams.get('username');
+        if (!username) return resJson({ code: 400, msg: '缺少username参数' }, 400);
+        const user = await DB.prepare('SELECT security_answer FROM user WHERE username = ?').bind(username).first();
+        if (!user) return resJson({ code: 404, msg: '用户不存在' }, 404);
+        if (!user.security_answer) return resJson({ code: 400, msg: '该用户未设置密保问题' }, 400);
+        return resJson({ code: 200, msg: '需要验证密保' });
+      }
+
+      if (path === '/api/reset-password' && request.method === 'POST') {
+        const { username, securityAnswer, newPassword } = await request.json();
+        if (!username || !securityAnswer || !newPassword) return resJson({ success: false, message: '参数不完整' }, 400);
+        const user = await DB.prepare('SELECT security_answer FROM user WHERE username = ?').bind(username).first();
+        if (!user) return resJson({ success: false, message: '用户不存在' }, 404);
+        if (user.security_answer !== securityAnswer) return resJson({ success: false, message: '密保答案错误' }, 401);
+        await DB.prepare('UPDATE user SET password = ? WHERE username = ?').bind(newPassword, username).run();
+        return resJson({ success: true, message: '密码重置成功' });
+      }
+
       // ========== 按用户名查询（测试kkk专用） ==========
       if (path === '/api/get-user' && request.method === 'GET') {
         const name = url.searchParams.get('name');
