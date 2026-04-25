@@ -41,7 +41,7 @@ export default {
       // ========== 注册接口（核心）→ 用户名密码注册 ==========
       if (path === '/api/register' && request.method === 'POST') {
         const params = await request.json();
-        const { username, password, inviteCode } = params;
+        const { username, password, inviteCode, securityAnswer } = params;
         
         if (!username || !password) {
           return resJson({ success: false, message: '用户名和密码不能为空！' }, 400);
@@ -112,7 +112,7 @@ export default {
               .bind(inviterUser.username)
               .run();
             
-            const now = new Date(new Date().getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+            const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
             
             // 给被邀请人发送奖励通知
             await DB
@@ -134,14 +134,13 @@ export default {
         linkRows.results.forEach(r => { if (r.value) defaultPrice[r.key.replace('price_', '')] = parseFloat(r.value); });
         const pricePlanStr = JSON.stringify(defaultPrice);
 
-        const now = new Date(new Date().getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
-
         const result = await DB
-          .prepare('INSERT INTO user (username, password, balance, v_expire_date, learn_vip_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code, v_token, v_link_clash, v_link_v2ray, price_plan, survey) VALUES (?, ?, ?, NULL, NULL, 307200, 0, ?, ?, ?, ?, ?, ?, ?)')
-          .bind(username, password, finalBalance, now, userInviteCode, '', '', '', pricePlanStr, '{}')
+          .prepare('INSERT INTO user (username, password, balance, v_expire_date, learn_vip_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code, v_token, v_link_clash, v_link_v2ray, price_plan, survey, security_answer) VALUES (?, ?, ?, NULL, NULL, 307200, 0, ?, ?, ?, ?, ?, ?, ?, ?)')
+          .bind(username, password, finalBalance, new Date().toISOString().slice(0, 19).replace('T', ' '), userInviteCode, '', '', '', pricePlanStr, '{}', securityAnswer || '')
           .run();
 
         if (result.success) {
+          const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
           const msg = `[系统通知] 用户 ${username} 注册成功！`;
           
           await DB
@@ -186,7 +185,8 @@ export default {
                 invitedUsers = JSON.parse(inviter.invited_user);
               } catch (e) {}
             }
-            invitedUsers.unshift({ username: username, registerTime: now });
+            const registerTime = new Date(new Date().getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+            invitedUsers.unshift({ username: username, registerTime: registerTime });
             await DB.prepare('UPDATE user SET invited_user = ? WHERE username = ?').bind(JSON.stringify(invitedUsers), inviterUsername).run();
           }
           
