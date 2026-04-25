@@ -272,8 +272,11 @@ export default {
       }
 
       if (path === '/api/reset-password' && request.method === 'POST') {
-        const { username, securityAnswer, newPassword } = await request.json();
+        const { username, securityAnswer, newPassword, turnstileToken } = await request.json();
         if (!username || !securityAnswer || !newPassword) return resJson({ success: false, message: '参数不完整' }, 400);
+        if (!turnstileToken || !(await verifyTurnstile(turnstileToken, request))) {
+          return resJson({ success: false, message: '人机验证失败，请重试' }, 403);
+        }
         const user = await DB.prepare('SELECT security_answer FROM user WHERE username = ?').bind(username).first();
         if (!user) return resJson({ success: false, message: '用户不存在' }, 404);
         if (user.security_answer !== securityAnswer) return resJson({ success: false, message: '密保答案错误' }, 401);

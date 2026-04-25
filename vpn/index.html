@@ -376,11 +376,6 @@
         #forgot-security-answer::placeholder {
             font-size: 0.75rem;
         }
-
-        .cf-turnstile iframe {
-            width: 100% !important;
-            height: 48px !important;
-        }
     </style>
     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 </head>
@@ -516,7 +511,7 @@
                     <label class="block text-xs text-zinc-500 mb-2 uppercase tracking-widest" data-i18n="security_question_label">密保问题：你的宠物叫什么名字？</label>
                     <input type="text" id="security-answer" class="w-full bg-zinc-900 border border-zinc-700 px-4 py-3 text-white focus:border-[var(--neon-blue)] focus:outline-none" placeholder="请输入答案" data-i18n-placeholder="security_question_placeholder">
                 </div>
-                <div class="cf-turnstile mb-6" id="turnstile-container" data-sitekey="0x4AAAAAACyAE5Z2G27GetkW" data-callback="onTurnstileSuccess" data-expired-callback="onTurnstileExpired" data-error-callback="onTurnstileError"></div>
+                <div class="cf-turnstile mb-6" id="turnstile-container" data-sitekey="0x4AAAAAACyAE5Z2G27GetkW" data-callback="onTurnstileSuccess" data-expired-callback="onTurnstileExpired" data-error-callback="onTurnstileError" data-size="flexible"></div>
                 <button type="submit" class="w-full btn-cyber py-4" id="auth-submit-btn">
                     <span id="submit-text" data-i18n="modal_submit_login">登录</span>
                     <span id="submit-loading" class="hidden" data-i18n="modal_submit_loading">处理中...</span>
@@ -541,6 +536,7 @@
                         </button>
                     </div>
                 </div>
+                <div class="cf-turnstile mb-6" id="turnstile-forgot-container" data-sitekey="0x4AAAAAACyAE5Z2G27GetkW" data-callback="onTurnstileForgotSuccess" data-expired-callback="onTurnstileExpired" data-error-callback="onTurnstileError" data-size="flexible"></div>
                 <button type="button" id="forgot-submit-btn" class="w-full btn-cyber py-4" data-i18n="forgot_submit_btn">重置密码</button>
                 <div class="mt-3 text-center">
                     <button type="button" id="back-to-login" class="text-zinc-500 text-xs hover:text-[var(--neon-blue)]" data-i18n="forgot_back_login">返回登录</button>
@@ -1239,18 +1235,25 @@
         };
 
         let turnstileToken = null;
+        let turnstileForgotToken = null;
 
         window.onTurnstileSuccess = (token) => {
             turnstileToken = token;
         };
 
+        window.onTurnstileForgotSuccess = (token) => {
+            turnstileForgotToken = token;
+        };
+
         window.onTurnstileError = () => {
             turnstileToken = null;
+            turnstileForgotToken = null;
             showMsg('人机验证失败，请重试', true);
         };
 
         window.onTurnstileExpired = () => {
             turnstileToken = null;
+            turnstileForgotToken = null;
             showMsg('人机验证已过期，请重新验证', true);
         };
 
@@ -1813,6 +1816,7 @@
                     els.submit.textContent = translations[currentLang]?.modal_submit_login || '登录';
                     els.msg.classList.add('hidden');
                     els.forgotSubmitBtn.classList.remove('hidden');
+                    turnstileForgotToken = null;
                 };
                 const init = () => {
                 els.btn.addEventListener('click', handleBtnClick);
@@ -1846,18 +1850,20 @@
                     els.msg.classList.add('hidden');
                     applyTranslation(currentLang);
                     els.title.textContent = '重置密码';
+                    turnstileForgotToken = null;
                 });
                 els.forgotSubmitBtn.addEventListener('click', async () => {
                     const username = els.forgotUsername.value.trim();
                     const answer = els.forgotSecurityAnswer.value.trim();
                     const newPass = els.forgotNewPassword.value;
                     if (!username || !answer || !newPass) { els.msg.textContent = translations[currentLang]?.forgot_fill_all || '请填写所有字段'; els.msg.className = 'mt-4 text-center text-xs text-[var(--neon-red)]'; els.msg.classList.remove('hidden'); return; }
+                    if (!turnstileForgotToken) { els.msg.textContent = '请先完成人机验证'; els.msg.className = 'mt-4 text-center text-xs text-[var(--neon-red)]'; els.msg.classList.remove('hidden'); return; }
                     els.forgotSubmitBtn.classList.add('hidden');
                     try {
                         const res = await fetch(`${API}/api/reset-password`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ username, securityAnswer: answer, newPassword: newPass })
+                            body: JSON.stringify({ username, securityAnswer: answer, newPassword: newPass, turnstileToken: turnstileForgotToken })
                         });
                         const data = await res.json();
                         if (data.success) {
