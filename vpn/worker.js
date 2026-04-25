@@ -26,6 +26,22 @@ export default {
       });
     };
 
+    const verifyTurnstile = async (token, request) => {
+      const secretKey = env.TURNSTILE_SECRET_KEY;
+      if (!secretKey) return true;
+      try {
+        const verifyRes = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `secret=${encodeURIComponent(secretKey)}&response=${encodeURIComponent(token)}&remoteip=${request.headers.get('CF-Connecting-IP') || ''}`
+        });
+        const verifyData = await verifyRes.json();
+        return verifyData.success;
+      } catch {
+        return false;
+      }
+    };
+
     try {
       // ========== ✅ 核心修复：数据库实例兜底（解决prepare undefined） ==========
       // 【关键】这里的 DB 必须和你Worker绑定D1的「Variable name」完全一致！！！
@@ -41,10 +57,14 @@ export default {
       // ========== 注册接口（核心）→ 用户名密码注册 ==========
       if (path === '/api/register' && request.method === 'POST') {
         const params = await request.json();
-        const { username, password, inviteCode, securityAnswer } = params;
-        
+        const { username, password, inviteCode, securityAnswer, turnstileToken } = params;
+
         if (!username || !password) {
           return resJson({ success: false, message: '用户名和密码不能为空！' }, 400);
+        }
+
+        if (!turnstileToken || !(await verifyTurnstile(turnstileToken, request))) {
+          return resJson({ success: false, message: '人机验证失败，请重试' }, 403);
         }
 
         // 检查用户名是否已存在
@@ -204,10 +224,14 @@ export default {
       // ========== 登录接口（核心）→ 用户名密码登录 ==========
       if (path === '/api/login' && request.method === 'POST') {
         const params = await request.json();
-        const { username, password } = params;
+        const { username, password, turnstileToken } = params;
 
         if (!username || !password) {
           return resJson({ success: false, message: '用户名和密码不能为空！' }, 400);
+        }
+
+        if (!turnstileToken || !(await verifyTurnstile(turnstileToken, request))) {
+          return resJson({ success: false, message: '人机验证失败，请重试' }, 403);
         }
 
         const user = await DB

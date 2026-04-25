@@ -377,6 +377,7 @@
             font-size: 0.75rem;
         }
     </style>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 </head>
 <body>
 
@@ -510,6 +511,7 @@
                     <label class="block text-xs text-zinc-500 mb-2 uppercase tracking-widest" data-i18n="security_question_label">密保问题：你的宠物叫什么名字？</label>
                     <input type="text" id="security-answer" class="w-full bg-zinc-900 border border-zinc-700 px-4 py-3 text-white focus:border-[var(--neon-blue)] focus:outline-none" placeholder="请输入答案" data-i18n-placeholder="security_question_placeholder">
                 </div>
+                <div class="cf-turnstile mb-6" id="turnstile-container" data-sitekey="0x4AAAAAACyAE5Z2G27GetkW" data-callback="onTurnstileSuccess" data-expired-callback="onTurnstileExpired" data-error-callback="onTurnstileError"></div>
                 <button type="submit" class="w-full btn-cyber py-4" id="auth-submit-btn">
                     <span id="submit-text" data-i18n="modal_submit_login">登录</span>
                     <span id="submit-loading" class="hidden" data-i18n="modal_submit_loading">处理中...</span>
@@ -1231,6 +1233,22 @@
             backToLogin: $('back-to-login')
         };
 
+        let turnstileToken = null;
+
+        window.onTurnstileSuccess = (token) => {
+            turnstileToken = token;
+        };
+
+        window.onTurnstileError = () => {
+            turnstileToken = null;
+            showMsg('人机验证失败，请重试', true);
+        };
+
+        window.onTurnstileExpired = () => {
+            turnstileToken = null;
+            showMsg('人机验证已过期，请重新验证', true);
+        };
+
         // ==================== 认证模块 ====================
         const Auth = (() => {
             const API = 'https://api.immmor.com';
@@ -1293,6 +1311,10 @@
                 els.msg.classList.add('hidden');
                 els.inviteCodeContainer.classList.add('hidden');
                 els.securityAnswerContainer.classList.add('hidden');
+                turnstileToken = null;
+                if (window.turnstile) {
+                    window.turnstile.reset('turnstile-container');
+                }
                 const passwordRequirements = document.getElementById('password-requirements');
                 if (passwordRequirements) {
                     passwordRequirements.classList.add('hidden');
@@ -1693,6 +1715,10 @@
                 e.preventDefault();
                 const [user, pass] = [els.user.value.trim(), els.pass.value.trim()];
                 if (!user || !pass) return showMsg('请填写用户名和密码', true);
+
+                if (!turnstileToken) {
+                    return showMsg('请先完成人机验证', true);
+                }
                 
                 if (!isLogin) {
                     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -1734,7 +1760,7 @@
                     const res = await fetch(`${API}${isLogin ? '/api/login' : '/api/register'}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ username: user, password: pass, inviteCode: inviteCode, securityAnswer: els.securityAnswerContainer.classList.contains('hidden') ? '' : els.securityAnswer.value.trim() })
+                        body: JSON.stringify({ username: user, password: pass, inviteCode: inviteCode, securityAnswer: els.securityAnswerContainer.classList.contains('hidden') ? '' : els.securityAnswer.value.trim(), turnstileToken: turnstileToken })
                     });
                     
                     const data = await res.json();
