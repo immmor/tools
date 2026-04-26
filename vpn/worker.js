@@ -211,7 +211,7 @@ export default {
         }
 
         const user = await DB
-          .prepare('SELECT rowid, username, balance, v_expire_date, price_plan FROM user WHERE username = ? AND password = ?')
+          .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token FROM user WHERE username = ? AND password = ?')
           .bind(username, password)
           .first();
 
@@ -232,7 +232,7 @@ export default {
 
           const pricePlan = user.price_plan ? JSON.parse(user.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
 
-          return resJson({ success: true, message: '登录成功！', userInfo: { id: user.rowid, username: user.username, balance: user.balance }, pricePlan });
+          return resJson({ success: true, message: '登录成功！', userInfo: { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date }, pricePlan });
         } else {
           return resJson({ success: false, message: '用户名或密码错误' }, 401);
         }
@@ -1329,7 +1329,23 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
         }
       }
 
-      // ========== 检测用户Clash链接 ==========
+      // ========== 检测单个用户Clash链接 ==========
+      if (path === '/api/clash-link' && request.method === 'GET') {
+        const username = url.searchParams.get('username');
+        if (!username) return resJson({ code: 400, msg: '缺少username参数' }, 400);
+        const user = await DB.prepare('SELECT username, v_link_clash FROM user WHERE username = ?').bind(username).first();
+        if (!user) return resJson({ code: 404, msg: '用户不存在' }, 404);
+        if (!user.v_link_clash) return resJson({ code: 400, msg: '该用户无Clash链接' }, 400);
+        try {
+          const res = await fetch(user.v_link_clash);
+          const info = res.headers.get('subscription-userinfo');
+          return resJson({ code: 200, data: { username, link: user.v_link_clash, subscription_userinfo: info, ok: res.ok, status: res.status } });
+        } catch (err) {
+          return resJson({ code: 200, data: { username, link: user.v_link_clash, error: err.message } });
+        }
+      }
+
+      // ========== 检测所有用户Clash链接 ==========
       if (path === '/api/clash-links' && request.method === 'GET') {
         const users = await DB.prepare('SELECT username, v_link_clash FROM user WHERE v_link_clash IS NOT NULL AND v_link_clash != ""').all();
         const results = [];
