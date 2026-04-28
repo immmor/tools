@@ -135,8 +135,8 @@ export default {
         const pricePlanStr = JSON.stringify(defaultPrice);
 
         const result = await DB
-          .prepare('INSERT INTO user (username, password, balance, v_expire_date, learn_vip_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code, v_token, v_link_clash, v_link_v2ray, price_plan, survey, security_answer) VALUES (?, ?, ?, NULL, NULL, 307200, 0, ?, ?, ?, ?, ?, ?, ?, ?)')
-          .bind(username, password, finalBalance, new Date().toISOString().slice(0, 19).replace('T', ' '), userInviteCode, '', '', '', pricePlanStr, '{}', securityAnswer || '')
+          .prepare('INSERT INTO user (username, password, balance, v_expire_date, learn_vip_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code, v_token, v_link_clash, v_link_v2ray, price_plan, survey, security_answer, fetch_link) VALUES (?, ?, ?, NULL, NULL, 307200, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+          .bind(username, password, finalBalance, new Date().toISOString().slice(0, 19).replace('T', ' '), userInviteCode, '', '', '', pricePlanStr, '{}', securityAnswer || '', '[]')
           .run();
 
         if (result.success) {
@@ -335,8 +335,8 @@ export default {
           const vToken = generateVToken();
           
           const isYearly = duration === 365;
-          const vLinkClash = isYearly ? config.clash_yearly : (user.v_link_clash || config.clash_monthly);
-          const vLinkV2ray = isYearly ? config.v2ray_yearly : (user.v_link_v2ray || config.v2ray_monthly);
+          const vLinkClash = user.v_link_clash || (isYearly ? config.clash_yearly : config.clash_monthly);
+          const vLinkV2ray = user.v_link_v2ray || (isYearly ? config.v2ray_yearly : config.v2ray_monthly);
           
           const result = await DB
             .prepare('UPDATE user SET balance = balance - ?, v_expire_date = ?, v_token = ?, v_link_clash = ?, v_link_v2ray = ? WHERE username = ?')
@@ -715,6 +715,13 @@ export default {
           
           const configText = await response.text();
           
+          // 记录用户调用
+          const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+          const fetchLink = user.fetch_link ? JSON.parse(user.fetch_link) : [];
+          fetchLink.unshift({ type: 'vip', protocol: 'clash', fetchTime: beijingTime });
+          if (fetchLink.length > 50) fetchLink.pop();
+          await DB.prepare('UPDATE user SET fetch_link = ? WHERE username = ?').bind(JSON.stringify(fetchLink), user.username).run();
+          
           return new Response(configText, {
             headers: {
               'Content-Type': 'text/yaml; charset=utf-8',
@@ -765,6 +772,13 @@ export default {
           const month = String(now.getMonth() + 1).padStart(2, '0');
           const day = String(now.getDate()).padStart(2, '0');
           
+          // 记录用户调用
+          const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+          const fetchLink = user.fetch_link ? JSON.parse(user.fetch_link) : [];
+          fetchLink.unshift({ type: 'vip', protocol: 'v2ray', fetchTime: beijingTime });
+          if (fetchLink.length > 50) fetchLink.pop();
+          await DB.prepare('UPDATE user SET fetch_link = ? WHERE username = ?').bind(JSON.stringify(fetchLink), user.username).run();
+          
           return new Response(configText, {
             headers: {
               'Content-Type': 'text/plain; charset=utf-8',
@@ -780,6 +794,8 @@ export default {
       // ========== 免费节点接口 ==========
       if (path === '/free/clash' && request.method === 'GET') {
         try {
+          const username = url.searchParams.get('username');
+          
           // 根据当前日期生成链接
           const now = new Date();
           const year = now.getFullYear();
@@ -788,7 +804,7 @@ export default {
           
           const clashUrl = `https://node.clashnode.top/uploads/${year}/${month}/0-${year}${month}${day}.yaml`;
           
-          // 获取Clash配置
+          // 获取 Clash 配置
           const response = await fetch(clashUrl);
           
           if (!response.ok) {
@@ -796,6 +812,18 @@ export default {
           }
           
           const configText = await response.text();
+          
+          // 记录用户调用
+          if (username) {
+            const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+            const user = await DB.prepare('SELECT fetch_link FROM user WHERE username = ?').bind(username).first();
+            if (user) {
+              const fetchLink = user.fetch_link ? JSON.parse(user.fetch_link) : [];
+              fetchLink.unshift({ type: 'free', protocol: 'clash', fetchTime: beijingTime });
+              if (fetchLink.length > 50) fetchLink.pop();
+              await DB.prepare('UPDATE user SET fetch_link = ? WHERE username = ?').bind(JSON.stringify(fetchLink), username).run();
+            }
+          }
           
           return new Response(configText, {
             headers: {
@@ -811,6 +839,8 @@ export default {
 
       if (path === '/free/v2ray' && request.method === 'GET') {
         try {
+          const username = url.searchParams.get('username');
+          
           // 根据当前日期生成链接
           const now = new Date();
           const year = now.getFullYear();
@@ -819,7 +849,7 @@ export default {
           
           const v2rayUrl = `https://node.clashnode.top/uploads/${year}/${month}/0-${year}${month}${day}.txt`;
           
-          // 获取V2Ray配置
+          // 获取 V2Ray 配置
           const response = await fetch(v2rayUrl);
           
           if (!response.ok) {
@@ -827,6 +857,18 @@ export default {
           }
           
           const configText = await response.text();
+          
+          // 记录用户调用
+          if (username) {
+            const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+            const user = await DB.prepare('SELECT fetch_link FROM user WHERE username = ?').bind(username).first();
+            if (user) {
+              const fetchLink = user.fetch_link ? JSON.parse(user.fetch_link) : [];
+              fetchLink.unshift({ type: 'free', protocol: 'v2ray', fetchTime: beijingTime });
+              if (fetchLink.length > 50) fetchLink.pop();
+              await DB.prepare('UPDATE user SET fetch_link = ? WHERE username = ?').bind(JSON.stringify(fetchLink), username).run();
+            }
+          }
           
           return new Response(configText, {
             headers: {
