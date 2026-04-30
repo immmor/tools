@@ -41,8 +41,7 @@ export default {
       // ========== 注册接口（核心）→ 用户名密码注册 ==========
       if (path === '/api/register' && request.method === 'POST') {
         const params = await request.json();
-        const { username, password, inviteCode, securityAnswer } = params;
-        const source = url.searchParams.get('s') || null;
+        const { username, password, inviteCode, securityAnswer, source } = params;
         
         if (!username || !password) {
           return resJson({ success: false, message: '用户名和密码不能为空！' }, 400);
@@ -678,7 +677,7 @@ export default {
           }
           
           const user = await DB
-            .prepare('SELECT v_expire_date, v_token, monthly_quota, used_quota, quota_reset_date, username, v_link_clash FROM user WHERE v_token = ?')
+            .prepare('SELECT v_expire_date, v_token, monthly_quota, used_quota, quota_reset_date, username, v_link_clash, fetch_link FROM user WHERE v_token = ?')
             .bind(vToken)
             .first();
           
@@ -745,7 +744,7 @@ export default {
           }
           
           const user = await DB
-            .prepare('SELECT v_expire_date, v_token, username, v_link_v2ray FROM user WHERE v_token = ?')
+            .prepare('SELECT v_expire_date, v_token, username, v_link_v2ray, fetch_link FROM user WHERE v_token = ?')
             .bind(vToken)
             .first();
           
@@ -795,7 +794,24 @@ export default {
       // ========== 免费节点接口 ==========
       if (path === '/free/clash' && request.method === 'GET') {
         try {
-          const username = url.searchParams.get('username');
+          let username = url.searchParams.get('username');
+          
+          if (!username) {
+            return resJson({ code: 400, msg: '缺少 username 参数' }, 400);
+          }
+          
+          // URL 解码用户名（处理邮箱等特殊字符）
+          try {
+            username = decodeURIComponent(username);
+          } catch (e) {
+            // 如果解码失败，使用原始值
+          }
+          
+          // 验证用户是否存在
+          const user = await DB.prepare('SELECT fetch_link FROM user WHERE username = ?').bind(username).first();
+          if (!user) {
+            return resJson({ code: 404, msg: '用户不存在' }, 404);
+          }
           
           // 根据当前日期生成链接
           const now = new Date();
@@ -815,16 +831,11 @@ export default {
           const configText = await response.text();
           
           // 记录用户调用
-          if (username) {
-            const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
-            const user = await DB.prepare('SELECT fetch_link FROM user WHERE username = ?').bind(username).first();
-            if (user) {
-              const fetchLink = user.fetch_link ? JSON.parse(user.fetch_link) : [];
-              fetchLink.unshift({ type: 'free', protocol: 'clash', fetchTime: beijingTime });
-              if (fetchLink.length > 50) fetchLink.pop();
-              await DB.prepare('UPDATE user SET fetch_link = ? WHERE username = ?').bind(JSON.stringify(fetchLink), username).run();
-            }
-          }
+          const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+          const fetchLink = user.fetch_link ? JSON.parse(user.fetch_link) : [];
+          fetchLink.unshift({ type: 'free', protocol: 'clash', fetchTime: beijingTime });
+          if (fetchLink.length > 50) fetchLink.pop();
+          await DB.prepare('UPDATE user SET fetch_link = ? WHERE username = ?').bind(JSON.stringify(fetchLink), username).run();
           
           return new Response(configText, {
             headers: {
@@ -840,7 +851,24 @@ export default {
 
       if (path === '/free/v2ray' && request.method === 'GET') {
         try {
-          const username = url.searchParams.get('username');
+          let username = url.searchParams.get('username');
+          
+          if (!username) {
+            return resJson({ code: 400, msg: '缺少 username 参数' }, 400);
+          }
+          
+          // URL 解码用户名（处理邮箱等特殊字符）
+          try {
+            username = decodeURIComponent(username);
+          } catch (e) {
+            // 如果解码失败，使用原始值
+          }
+          
+          // 验证用户是否存在
+          const user = await DB.prepare('SELECT fetch_link FROM user WHERE username = ?').bind(username).first();
+          if (!user) {
+            return resJson({ code: 404, msg: '用户不存在' }, 404);
+          }
           
           // 根据当前日期生成链接
           const now = new Date();
@@ -860,16 +888,11 @@ export default {
           const configText = await response.text();
           
           // 记录用户调用
-          if (username) {
-            const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
-            const user = await DB.prepare('SELECT fetch_link FROM user WHERE username = ?').bind(username).first();
-            if (user) {
-              const fetchLink = user.fetch_link ? JSON.parse(user.fetch_link) : [];
-              fetchLink.unshift({ type: 'free', protocol: 'v2ray', fetchTime: beijingTime });
-              if (fetchLink.length > 50) fetchLink.pop();
-              await DB.prepare('UPDATE user SET fetch_link = ? WHERE username = ?').bind(JSON.stringify(fetchLink), username).run();
-            }
-          }
+          const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+          const fetchLink = user.fetch_link ? JSON.parse(user.fetch_link) : [];
+          fetchLink.unshift({ type: 'free', protocol: 'v2ray', fetchTime: beijingTime });
+          if (fetchLink.length > 50) fetchLink.pop();
+          await DB.prepare('UPDATE user SET fetch_link = ? WHERE username = ?').bind(JSON.stringify(fetchLink), username).run();
           
           return new Response(configText, {
             headers: {
