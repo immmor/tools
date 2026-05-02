@@ -9,7 +9,7 @@ export default {
       return new Response(null, {
         headers: {
           'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type',
           'Access-Control-Max-Age': '86400'
         }
@@ -1432,6 +1432,47 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           }
         }
         return resJson({ code: 200, data: results });
+      }
+
+      // ========== 获取所有节点链接 ==========
+      if (path === '/api/links' && request.method === 'GET') {
+        try {
+          const links = await DB.prepare("SELECT * FROM link WHERE key LIKE 'node%' ORDER BY id DESC").all();
+          return resJson({ code: 200, msg: '查询成功', data: links.results || [] });
+        } catch (err) {
+          return resJson({ code: 500, msg: '查询失败', error: err.message }, 500);
+        }
+      }
+
+      // ========== 添加或更新节点链接 ==========
+      if (path === '/api/links' && request.method === 'POST') {
+        try {
+          const { key, value } = await request.json();
+          if (!key || value === undefined) {
+            return resJson({ code: 400, msg: '缺少key或value参数' }, 400);
+          }
+          const existing = await DB.prepare('SELECT * FROM link WHERE key = ?').bind(key).first();
+          if (existing) {
+            await DB.prepare('UPDATE link SET value = ?, updated_at = ? WHERE key = ?').bind(value, new Date().toISOString().slice(0, 19).replace('T', ' '), key).run();
+          } else {
+            await DB.prepare('INSERT INTO link (key, value) VALUES (?, ?)').bind(key, value).run();
+          }
+          return resJson({ code: 200, msg: '保存成功' });
+        } catch (err) {
+          return resJson({ code: 500, msg: '保存失败', error: err.message }, 500);
+        }
+      }
+
+      // ========== 删除节点链接 ==========
+      if (path === '/api/links' && request.method === 'DELETE') {
+        try {
+          const { key } = await request.json();
+          if (!key) return resJson({ code: 400, msg: '缺少key参数' }, 400);
+          await DB.prepare('DELETE FROM link WHERE key = ?').bind(key).run();
+          return resJson({ code: 200, msg: '删除成功' });
+        } catch (err) {
+          return resJson({ code: 500, msg: '删除失败', error: err.message }, 500);
+        }
       }
 
       // ========== 默认接口提示 ==========
