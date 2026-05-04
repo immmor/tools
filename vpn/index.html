@@ -571,6 +571,13 @@
                     <label class="block text-xs text-zinc-500 mb-2 uppercase tracking-widest" data-i18n="security_question_label">密保问题：你的宠物叫什么名字？</label>
                     <input type="text" id="security-answer" class="w-full bg-zinc-900 border border-zinc-700 px-4 py-3 text-white focus:border-[var(--neon-blue)] focus:outline-none" placeholder="请输入答案" data-i18n-placeholder="security_question_placeholder">
                 </div>
+                <div id="turnstile-container" class="mb-6">
+                    <div id="turnstile-widget" class="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-3 flex items-center justify-center gap-3 cursor-pointer hover:border-[var(--neon-blue)] transition-colors h-[46px]">
+                        <div class="w-5 h-5 border-2 border-zinc-500 rounded-full flex items-center justify-center" id="turnstile-checkbox"></div>
+                        <span class="text-zinc-400 text-sm" id="turnstile-label">点击验证</span>
+                        <span class="text-zinc-600 text-xs" id="turnstile-timer">Phantom Security</span>
+                    </div>
+                </div>
                 <button type="submit" class="w-full btn-cyber py-4" id="auth-submit-btn">
                     <span id="submit-text" data-i18n="modal_submit_login">登录</span>
                     <span id="submit-loading" class="hidden" data-i18n="modal_submit_loading">处理中...</span>
@@ -1290,7 +1297,12 @@
             forgotSecurityAnswer: $('forgot-security-answer'),
             forgotNewPassword: $('forgot-new-password'),
             forgotSubmitBtn: $('forgot-submit-btn'),
-            backToLogin: $('back-to-login')
+            backToLogin: $('back-to-login'),
+            turnstileContainer: $('turnstile-container'),
+            turnstileWidget: $('turnstile-widget'),
+            turnstileCheckbox: $('turnstile-checkbox'),
+            turnstileLabel: $('turnstile-label'),
+            turnstileTimer: $('turnstile-timer')
         };
 
         // ==================== 认证模块 ====================
@@ -1318,6 +1330,48 @@
                 login: { title: 'modal_title_login', btn: 'modal_submit_login', tip: 'modal_no_account', switch: 'modal_register', success: 'login_success' },
                 register: { title: 'modal_title_register', btn: 'modal_submit_register', tip: 'modal_have_account', switch: 'modal_login', success: 'register_success' }
             };
+            
+            let isTurnstileVerified = false;
+            
+            const initTurnstile = () => {
+                isTurnstileVerified = false;
+                if (els.turnstileCheckbox) {
+                    els.turnstileCheckbox.classList.remove('border-[var(--neon-blue)]');
+                    els.turnstileCheckbox.innerHTML = '';
+                }
+                if (els.turnstileLabel) els.turnstileLabel.textContent = '点击验证';
+                if (els.turnstileTimer) els.turnstileTimer.textContent = 'Phantom Security';
+            };
+            
+            const startTurnstileVerification = () => {
+                if (isTurnstileVerified) return;
+                const totalSeconds = Math.floor(Math.random() * 4) + 1;
+                let seconds = 0;
+                if (els.turnstileLabel) els.turnstileLabel.textContent = '验证中...';
+                if (els.turnstileTimer) els.turnstileTimer.textContent = `${seconds}s`;
+                const interval = setInterval(() => {
+                    seconds++;
+                    if (els.turnstileTimer) els.turnstileTimer.textContent = `${seconds}s`;
+                    if (seconds >= totalSeconds) {
+                        clearInterval(interval);
+                        isTurnstileVerified = true;
+                        if (els.turnstileCheckbox) {
+                            els.turnstileCheckbox.classList.add('border-[var(--neon-blue)]');
+                            els.turnstileCheckbox.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-[var(--neon-blue)]"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+                        }
+                        if (els.turnstileLabel) els.turnstileLabel.textContent = '已验证';
+                        if (els.turnstileTimer) els.turnstileTimer.textContent = '';
+                    }
+                }, 1000);
+            };
+            
+            if (els.turnstileWidget) {
+                els.turnstileWidget.addEventListener('click', () => {
+                    if (!isTurnstileVerified) {
+                        startTurnstileVerification();
+                    }
+                });
+            }
             
             const showMsg = (text, error = false) => {
                 els.msg.textContent = text;
@@ -1358,6 +1412,7 @@
                 els.submit.textContent = dict ? dict[c.btn] : c.btn;
                 els.switchText.textContent = dict ? dict[c.tip] : c.tip;
                 els.switch.textContent = dict ? dict[c.switch] : c.switch;
+                initTurnstile();
             };
             const closeModal = () => {
                 isLogin = true;
@@ -1781,6 +1836,7 @@
                 const [user, pass] = [els.user.value.trim(), els.pass.value.trim()];
                 const dict = translations[currentLang];
                 if (!user || !pass) return showMsg(dict?.please_fill_credentials || '请填写用户名和密码', true);
+                if (!isTurnstileVerified) return showMsg(dict?.turnstile_verify_first || '请先完成人机验证', true);
                 
                 if (!isLogin) {
                     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
