@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CyberClash VPN</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
+
+        :root {
+            --neon-blue: #00f3ff;
+            --neon-pink: #ff00ff;
+            --bg-dark: #050505;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: white;
+            font-family: 'Orbitron', sans-serif;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        .cyber-border {
+            border: 1px solid var(--neon-blue);
+            box-shadow: 0 0 10px var(--neon-blue);
+        }
+
+        .glass-panel {
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            border-top: 2px solid var(--neon-pink);
+        }
+
+        .node-card {
+            background: linear-gradient(90deg, rgba(0,243,255,0.1), transparent);
+            border-left: 4px solid var(--neon-blue);
+            transition: all 0.3s ease;
+        }
+
+        .node-card.active {
+            background: linear-gradient(90deg, rgba(255,0,255,0.2), transparent);
+            border-left: 4px solid var(--neon-pink);
+        }
+
+        /* 呼吸灯效果 */
+        @keyframes pulse {
+            0% { opacity: 0.4; }
+            50% { opacity: 1; }
+            100% { opacity: 0.4; }
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--neon-blue);
+            box-shadow: 0 0 8px var(--neon-blue);
+            animation: pulse 2s infinite;
+        }
+
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 0;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Three.js 背景容器 -->
+    <div id="canvas-container"></div>
+
+    <!-- UI 层 -->
+    <div class="relative z-10 flex flex-col h-screen">
+        
+        <!-- 顶部状态栏 -->
+        <div class="p-6 pt-12 flex justify-between items-start">
+            <div>
+                <h1 class="text-2xl font-bold tracking-widest text-cyan-400">CYBER_CLASH</h1>
+                <p class="text-xs text-pink-500 opacity-80">PROTOCOL: Trojan-V2</p>
+            </div>
+            <div class="cyber-border px-3 py-1 text-xs bg-black/50">
+                PING: <span id="ping-val" class="text-green-400">24ms</span>
+            </div>
+        </div>
+
+        <!-- 页面切换容器 -->
+        <main class="flex-grow flex flex-col overflow-hidden">
+            
+            <!-- Tab 1: 连接页面 -->
+            <section id="page-connect" class="flex-grow flex flex-col items-center justify-center p-6">
+                <div class="relative mb-8">
+                    <!-- 核心连接按钮 -->
+                    <div id="connect-btn" class="w-40 h-40 rounded-full border-4 border-cyan-500 flex items-center justify-center cursor-pointer shadow-[0_0_30px_rgba(0,243,255,0.5)] active:scale-95 transition-transform">
+                        <div class="text-center">
+                            <span class="block text-sm opacity-60">STATUS</span>
+                            <span id="status-text" class="text-xl font-bold">CONNECTED</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="glass-panel p-4 rounded-lg w-full max-w-xs text-center">
+                    <p class="text-xs text-gray-400 uppercase">Current Location</p>
+                    <p id="current-node-display" class="text-lg text-cyan-300 mt-1">Tokyo - Edge 01</p>
+                </div>
+            </section>
+
+            <!-- Tab 2: 节点列表 (默认隐藏) -->
+            <section id="page-nodes" class="hidden flex-grow flex flex-col p-6 overflow-y-auto bg-black/40">
+                <h2 class="text-pink-500 mb-4 text-sm font-bold tracking-tighter">>>> SELECT_NODE</h2>
+                <div class="space-y-4 pb-20">
+                    <div class="node-card p-4 active" onclick="switchNode('Tokyo - Edge 01', 0x00f3ff)">
+                        <div class="flex justify-between items-center">
+                            <span>Tokyo - Edge 01</span>
+                            <span class="text-xs text-green-400">24ms</span>
+                        </div>
+                    </div>
+                    <div class="node-card p-4" onclick="switchNode('Los Angeles - US', 0xff00ff)">
+                        <div class="flex justify-between items-center">
+                            <span>Los Angeles - US</span>
+                            <span class="text-xs text-green-400">112ms</span>
+                        </div>
+                    </div>
+                    <div class="node-card p-4" onclick="switchNode('Singapore - Core', 0xffff00)">
+                        <div class="flex justify-between items-center">
+                            <span>Singapore - Core</span>
+                            <span class="text-xs text-yellow-400">68ms</span>
+                        </div>
+                    </div>
+                    <div class="node-card p-4" onclick="switchNode('London - Tower', 0x00ff00)">
+                        <div class="flex justify-between items-center">
+                            <span>London - Tower</span>
+                            <span class="text-xs text-red-400">230ms</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- 底部 Tab 栏 -->
+        <nav class="glass-panel grid grid-cols-2 h-20 items-center border-t border-cyan-900/50">
+            <button onclick="showPage('connect')" class="flex flex-col items-center gap-1">
+                <div id="nav-dot-connect" class="status-dot"></div>
+                <span class="text-[10px]">DASHBOARD</span>
+            </button>
+            <button onclick="showPage('nodes')" class="flex flex-col items-center gap-1">
+                <div id="nav-dot-nodes" class="status-dot bg-gray-600 shadow-none"></div>
+                <span class="text-[10px]">PROXY_LIST</span>
+            </button>
+        </nav>
+    </div>
+
+    <script>
+        // --- 1. Three.js 地球背景渲染 ---
+        let scene, camera, renderer, globe, points;
+        
+        function initGlobe() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            // 创建粒子地球
+            const geometry = new THREE.SphereGeometry(2, 64, 64);
+            const material = new THREE.PointsMaterial({
+                size: 0.02,
+                color: 0x00f3ff,
+                transparent: true,
+                opacity: 0.8
+            });
+
+            const globePoints = [];
+            const pos = geometry.attributes.position.array;
+            for (let i = 0; i < pos.length; i += 3) {
+                if (Math.random() > 0.4) { // 稀疏点阵感
+                    globePoints.push(pos[i], pos[i+1], pos[i+2]);
+                }
+            }
+            
+            const newGeo = new THREE.BufferGeometry();
+            newGeo.setAttribute('position', new THREE.Float32BufferAttribute(globePoints, 3));
+            globe = new THREE.Points(newGeo, material);
+            scene.add(globe);
+
+            // 外围光环
+            const ringGeo = new THREE.TorusGeometry(2.5, 0.01, 16, 100);
+            const ringMat = new THREE.MeshBasicMaterial({ color: 0xff00ff, transparent: true, opacity: 0.3 });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            ring.rotation.x = Math.PI / 2;
+            scene.add(ring);
+
+            camera.position.z = 5;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            globe.rotation.y += 0.002;
+            globe.rotation.x += 0.001;
+            renderer.render(scene, camera);
+        }
+
+        // --- 2. 交互逻辑 ---
+        function showPage(page) {
+            const pConnect = document.getElementById('page-connect');
+            const pNodes = document.getElementById('page-nodes');
+            const dotConnect = document.getElementById('nav-dot-connect');
+            const dotNodes = document.getElementById('nav-dot-nodes');
+
+            if (page === 'connect') {
+                pConnect.classList.remove('hidden');
+                pNodes.classList.add('hidden');
+                dotConnect.classList.add('bg-cyan-400', 'shadow-[0_0_8px_#00f3ff]');
+                dotNodes.classList.remove('bg-cyan-400', 'shadow-[0_0_8px_#00f3ff]');
+                dotNodes.classList.add('bg-gray-600');
+            } else {
+                pConnect.classList.add('hidden');
+                pNodes.classList.remove('hidden');
+                dotNodes.classList.remove('bg-gray-600');
+                dotNodes.classList.add('bg-cyan-400', 'shadow-[0_0_8px_#00f3ff]');
+                dotConnect.classList.remove('bg-cyan-400', 'shadow-[0_0_8px_#00f3ff]');
+                dotConnect.classList.add('bg-gray-600');
+            }
+        }
+
+        function switchNode(name, colorCode) {
+            // 更新 UI
+            document.getElementById('current-node-display').innerText = name;
+            document.getElementById('current-node-display').style.color = '#' + colorCode.toString(16).padStart(6, '0');
+            
+            // 地球变色联动
+            globe.material.color.setHex(colorCode);
+            
+            // 模拟点击后的视觉反馈
+            const cards = document.querySelectorAll('.node-card');
+            cards.forEach(c => c.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+
+            // 自动跳回首页
+            setTimeout(() => {
+                showPage('connect');
+            }, 300);
+        }
+
+        // 初始化
+        initGlobe();
+        animate();
+
+        // 窗口缩放适配
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>

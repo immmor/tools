@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>NEURAL_LINK VPN</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.9.1/gsap.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;700&display=swap');
+
+        :root {
+            --accent: #ff3e3e; /* 警示红 */
+            --bg-deep: #0a0a0a;
+        }
+
+        body {
+            background-color: var(--bg-deep);
+            color: #eeeeee;
+            font-family: 'JetBrains Mono', monospace;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        /* 顶部扫描线 */
+        .vignette {
+            position: fixed;
+            inset: 0;
+            background: radial-gradient(circle, transparent 20%, rgba(0,0,0,0.8) 100%);
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        /* 极简面板 */
+        .glass-blur {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* 底部导航 - 悬浮胶囊设计 */
+        .nav-capsule {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            background: rgba(20, 20, 20, 0.9);
+            padding: 5px;
+            border-radius: 50px;
+            border: 1px solid rgba(255, 62, 62, 0.3);
+            z-index: 100;
+            width: 80%;
+        }
+
+        .nav-item {
+            flex: 1;
+            padding: 12px;
+            text-align: center;
+            border-radius: 50px;
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            transition: 0.4s;
+            color: #666;
+        }
+
+        .nav-item.active {
+            background: var(--accent);
+            color: white;
+            box-shadow: 0 5px 15px rgba(255, 62, 62, 0.4);
+        }
+
+        /* 大圆形开关 */
+        .orb-outer {
+            width: 180px;
+            height: 180px;
+            border: 1px dashed rgba(255, 62, 62, 0.4);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: rotate 20s linear infinite;
+        }
+
+        @keyframes rotate { 100% { transform: rotate(360deg); } }
+
+        .page { display: none; height: 100vh; position: relative; z-index: 10; }
+        .page.active { display: flex; flex-direction: column; }
+    </style>
+</head>
+<body>
+    <div class="vignette"></div>
+    <div id="canvas-container" style="position: fixed; inset: 0; z-index: 1;"></div>
+
+    <!-- 首页: 连接控制 -->
+    <div id="page-home" class="page active px-8 pt-16">
+        <div class="space-y-1">
+            <h1 class="text-3xl font-black italic tracking-tighter">RED_VOID</h1>
+            <div class="flex items-center gap-2">
+                <span class="w-2 h-2 bg-red-600 animate-pulse"></span>
+                <p class="text-[10px] text-red-500 uppercase">Neural Link: Standby</p>
+            </div>
+        </div>
+
+        <div class="flex-grow flex flex-col items-center justify-center">
+            <div class="orb-outer" id="orb-animation">
+                <div onclick="toggleState()" class="w-32 h-32 bg-white/5 rounded-full border border-white/10 flex items-center justify-center cursor-pointer active:scale-90 transition-transform">
+                    <span id="pwr-label" class="text-sm font-bold tracking-widest text-red-500">INIT</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="mb-40 glass-blur p-6 rounded-2xl">
+            <div class="flex justify-between items-end">
+                <div>
+                    <p class="text-[9px] text-gray-500 mb-1">SELECTED_RELAY</p>
+                    <h2 id="node-name" class="text-2xl font-light tracking-widest">OSAKA_JP</h2>
+                </div>
+                <div class="text-right">
+                    <p class="text-[9px] text-red-500">PACKET_LOSS</p>
+                    <p class="text-lg font-bold italic">0.0%</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 节点页 -->
+    <div id="page-nodes" class="page px-6 pt-16 overflow-y-auto pb-40">
+        <h2 class="text-sm font-bold text-gray-500 mb-8 tracking-[0.5em] uppercase">Global_Nodes</h2>
+        
+        <div class="space-y-4">
+            <!-- 节点模板 -->
+            <div onclick="flyTo(34.69, 135.50, 'OSAKA_JP')" class="flex items-center justify-between p-5 border-b border-white/5 hover:bg-white/5 transition-colors">
+                <div class="flex items-center gap-4">
+                    <span class="text-xs text-red-600 font-bold">01</span>
+                    <span class="tracking-widest text-sm">OSAKA, JAPAN</span>
+                </div>
+                <span class="text-[10px] text-gray-500 font-mono">14ms</span>
+            </div>
+            
+            <div onclick="flyTo(40.71, -74.00, 'NEWYORK_US')" class="flex items-center justify-between p-5 border-b border-white/5 hover:bg-white/5 transition-colors">
+                <div class="flex items-center gap-4">
+                    <span class="text-xs text-red-600 font-bold">02</span>
+                    <span class="tracking-widest text-sm">NEW YORK, USA</span>
+                </div>
+                <span class="text-[10px] text-gray-500 font-mono">180ms</span>
+            </div>
+
+            <div onclick="flyTo(48.85, 2.35, 'PARIS_FR')" class="flex items-center justify-between p-5 border-b border-white/5 hover:bg-white/5 transition-colors">
+                <div class="flex items-center gap-4">
+                    <span class="text-xs text-red-600 font-bold">03</span>
+                    <span class="tracking-widest text-sm">PARIS, FRANCE</span>
+                </div>
+                <span class="text-[10px] text-gray-500 font-mono">210ms</span>
+            </div>
+
+            <div onclick="flyTo(-33.86, 151.20, 'SYDNEY_AU')" class="flex items-center justify-between p-5 border-b border-white/5 hover:bg-white/5 transition-colors">
+                <div class="flex items-center gap-4">
+                    <span class="text-xs text-red-600 font-bold">04</span>
+                    <span class="tracking-widest text-sm">SYDNEY, AU</span>
+                </div>
+                <span class="text-[10px] text-gray-500 font-mono">120ms</span>
+            </div>
+        </div>
+    </div>
+
+    <nav class="nav-capsule">
+        <div onclick="tab('home')" id="tab-home" class="nav-item active">STATUS</div>
+        <div onclick="tab('nodes')" id="tab-nodes" class="nav-item">LOCATION</div>
+    </nav>
+
+    <script>
+        let scene, camera, renderer, points;
+        const radius = 5;
+
+        function initGlobe() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            // 加载地球陆地形状数据
+            const loader = new THREE.TextureLoader();
+            loader.load('https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg', (texture) => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = 2048; canvas.height = 1024;
+                ctx.drawImage(texture.image, 0, 0);
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+                const positions = [];
+                const colors = [];
+                const step = 4; // 密度
+
+                for (let i = 0; i < imageData.data.length; i += 4 * step) {
+                    const r = imageData.data[i];
+                    const g = imageData.data[i+1];
+                    const b = imageData.data[i+2];
+                    
+                    // 只要亮度超过一定值的像素（代表陆地）
+                    if (r + g + b > 50) {
+                        const pixelIdx = i / 4;
+                        const x = pixelIdx % canvas.width;
+                        const y = Math.floor(pixelIdx / canvas.width);
+
+                        const phi = (y / canvas.height) * Math.PI;
+                        const theta = (x / canvas.width) * Math.PI * 2 + Math.PI;
+
+                        positions.push(
+                            -radius * Math.sin(phi) * Math.cos(theta),
+                            radius * Math.cos(phi),
+                            radius * Math.sin(phi) * Math.sin(theta)
+                        );
+                        colors.push(1, 1, 1);
+                    }
+                }
+
+                const geo = new THREE.BufferGeometry();
+                geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+                
+                const mat = new THREE.PointsMaterial({
+                    size: 0.015,
+                    color: 0x444444, // 默认陆地颜色
+                    transparent: true,
+                    opacity: 0.6
+                });
+
+                points = new THREE.Points(geo, mat);
+                scene.add(points);
+                
+                // 初始移动到大阪
+                flyTo(34.69, 135.50, 'OSAKA_JP', false);
+            });
+
+            camera.position.z = 15;
+            loop();
+        }
+
+        function loop() {
+            requestAnimationFrame(loop);
+            renderer.render(scene, camera);
+        }
+
+        function flyTo(lat, lon, name, moveTab = true) {
+            document.getElementById('node-name').innerText = name;
+            
+            const phi = (90 - lat) * (Math.PI / 180);
+            const theta = (lon + 180) * (Math.PI / 180);
+
+            gsap.to(points.rotation, {
+                duration: 2,
+                x: phi - Math.PI/2,
+                y: -theta + Math.PI/2,
+                ease: "power4.inOut"
+            });
+
+            // 变色效果
+            gsap.to(points.material.color, {
+                r: 1, g: 0.2, b: 0.2, duration: 0.5,
+                yoyo: true, repeat: 1
+            });
+
+            if(moveTab) tab('home');
+        }
+
+        function tab(name) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.getElementById('page-' + name).classList.add('active');
+            
+            document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+            document.getElementById('tab-' + name).classList.add('active');
+        }
+
+        let isOn = false;
+        function toggleState() {
+            isOn = !isOn;
+            const label = document.getElementById('pwr-label');
+            const orb = document.getElementById('orb-animation');
+            
+            if(isOn) {
+                label.innerText = "ACTIVE";
+                label.style.color = "#fff";
+                orb.style.animationDuration = "2s";
+                orb.style.borderColor = "#ff3e3e";
+                points.material.color.setHex(0xff3e3e);
+            } else {
+                label.innerText = "INIT";
+                label.style.color = "#ff3e3e";
+                orb.style.animationDuration = "20s";
+                orb.style.borderColor = "rgba(255, 62, 62, 0.4)";
+                points.material.color.setHex(0x444444);
+            }
+        }
+
+        window.onload = initGlobe;
+        window.onresize = () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        };
+    </script>
+</body>
+</html>

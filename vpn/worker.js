@@ -41,7 +41,7 @@ export default {
       // ========== 注册接口（核心）→ 用户名密码注册 ==========
       if (path === '/api/register' && request.method === 'POST') {
         const params = await request.json();
-        const { username, password, inviteCode, securityAnswer, source } = params;
+        const { username, password, inviteCode, securityAnswer, source, priceParam } = params;
         
         if (!username || !password) {
           return resJson({ success: false, message: '用户名和密码不能为空！' }, 400);
@@ -128,11 +128,24 @@ export default {
           }
         }
 
-        // 插入新用户（默认余额0，VIP过期时间为null，流量限制相关字段）
-        const defaultPrice = { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
-        const linkRows = await DB.prepare('SELECT key, value FROM link WHERE key LIKE ?').bind('price_%').all();
-        linkRows.results.forEach(r => { if (r.value) defaultPrice[r.key.replace('price_', '')] = parseFloat(r.value); });
-        const pricePlanStr = JSON.stringify(defaultPrice);
+        // 构建价格方案：如果提供了priceParam，使用对应的预定义价格
+        const pricePlans = {
+          'o': { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, annual_savings: 44 },
+          't': { monthly_original: 25, monthly_discount: 20, annual_original: 300, annual_discount: 200, annual_savings: 100 },
+          't3': { monthly_original: 37.5, monthly_discount: 30, annual_original: 450, annual_discount: 350, annual_savings: 100 },
+          'f4': { monthly_original: 50, monthly_discount: 40, annual_original: 600, annual_discount: 450, annual_savings: 150 },
+          'f': { monthly_original: 62.5, monthly_discount: 50, annual_original: 750, annual_discount: 550, annual_savings: 200 }
+        };
+        
+        let pricePlanStr;
+        if (priceParam && pricePlans[priceParam]) {
+          pricePlanStr = JSON.stringify(pricePlans[priceParam]);
+        } else {
+          const defaultPrice = { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, annual_savings: 44 };
+          const linkRows = await DB.prepare('SELECT key, value FROM link WHERE key LIKE ?').bind('price_%').all();
+          linkRows.results.forEach(r => { if (r.value) defaultPrice[r.key.replace('price_', '')] = parseFloat(r.value); });
+          pricePlanStr = JSON.stringify(defaultPrice);
+        }
 
         const result = await DB
           .prepare('INSERT INTO user (username, password, balance, v_expire_date, learn_vip_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code, v_token, v_link_clash, v_link_v2ray, price_plan, survey, security_answer, fetch_link, source) VALUES (?, ?, ?, NULL, NULL, 307200, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')

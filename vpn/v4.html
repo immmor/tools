@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CyberClash OS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.9.1/gsap.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+
+        :root {
+            --neon: #00f3ff;
+            --danger: #ff0055;
+            --bg: #050608;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: #fff;
+            font-family: 'Share Tech Mono', monospace;
+            margin: 0;
+            overflow: hidden;
+            -webkit-user-select: none;
+        }
+
+        /* 赛博网格背景 */
+        .grid-bg {
+            position: fixed;
+            inset: 0;
+            background-image: 
+                linear-gradient(rgba(0, 243, 255, 0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 243, 255, 0.05) 1px, transparent 1px);
+            background-size: 30px 30px;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        /* 毛玻璃容器 */
+        .glass-panel {
+            background: rgba(10, 12, 18, 0.85);
+            border: 1px solid rgba(0, 243, 255, 0.2);
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            clip-path: polygon(0 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%);
+        }
+
+        /* 底部导航 */
+        .nav-container {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            gap: 10px;
+            z-index: 100;
+        }
+
+        .nav-btn {
+            flex: 1;
+            padding: 15px;
+            text-align: center;
+            background: rgba(0, 243, 255, 0.05);
+            border: 1px solid rgba(0, 243, 255, 0.3);
+            color: rgba(0, 243, 255, 0.5);
+            font-size: 12px;
+            letter-spacing: 2px;
+            transition: all 0.3s;
+        }
+
+        .nav-btn.active {
+            background: var(--neon);
+            color: #000;
+            box-shadow: 0 0 15px var(--neon);
+        }
+
+        /* 动画连接按钮 */
+        .power-btn {
+            position: relative;
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: 0.5s;
+        }
+
+        .power-btn::before {
+            content: '';
+            position: absolute;
+            inset: -5px;
+            border: 2px solid var(--neon);
+            border-radius: 50%;
+            border-top-color: transparent;
+            animation: spin 2s linear infinite;
+        }
+
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        .page { display: none; height: 100vh; position: relative; z-index: 10; }
+        .page.active { display: block; }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--neon);
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+            box-shadow: 0 0 8px var(--neon);
+        }
+    </style>
+</head>
+<body>
+    <div class="grid-bg"></div>
+    <div id="canvas-container" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1;"></div>
+
+    <!-- UI Overlay: 连接页面 -->
+    <div id="page-home" class="page active px-6 pt-12">
+        <div class="flex justify-between items-start mb-8">
+            <div>
+                <h1 class="text-2xl font-bold tracking-tighter">PROTOCOL_V3</h1>
+                <p class="text-[10px] text-cyan-500 opacity-50">ENCRYPTION: AES-256-GCM</p>
+            </div>
+            <div class="text-right">
+                <p class="text-[10px] text-gray-500 uppercase tracking-widest">System Load</p>
+                <p class="text-xs text-cyan-400">12.4% / 44ms</p>
+            </div>
+        </div>
+
+        <div class="h-1/2 flex items-center justify-center">
+            <div onclick="toggleConnect()" id="main-trigger" class="power-btn">
+                <div class="text-center">
+                    <span id="pwr-status" class="block text-2xl mb-1">OFF</span>
+                    <span class="text-[9px] opacity-40">SECURE SHELL</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="absolute bottom-32 left-6 right-6 glass-panel p-5">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-[9px] text-cyan-400 mb-1 tracking-widest">ACTIVE GATEWAY</p>
+                    <h2 id="current-node-display" class="text-xl font-bold italic tracking-wider uppercase">TOKYO // JP</h2>
+                </div>
+                <div class="h-10 w-px bg-cyan-900 mx-4"></div>
+                <div class="flex flex-col items-end">
+                    <span class="text-[9px] text-gray-500">BANDWIDTH</span>
+                    <span class="text-cyan-400 text-sm">48.2 Mbps</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- UI Overlay: 节点列表 -->
+    <div id="page-proxy" class="page px-6 pt-12 overflow-y-auto pb-32">
+        <div class="flex items-center mb-8">
+            <div class="h-4 w-1 bg-cyan-500 mr-3"></div>
+            <h2 class="text-xl font-bold tracking-widest uppercase">Select Region</h2>
+        </div>
+
+        <div class="grid gap-3">
+            <div onclick="selectLocation(35.67, 139.65, 'TOKYO // JP')" class="glass-panel p-4 flex justify-between items-center group active:scale-95 transition-transform">
+                <div>
+                    <p class="text-xs text-gray-400 mb-1">JP-EAST-01</p>
+                    <p class="font-bold">东京 (TOKYO)</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-cyan-400 text-xs font-mono">18ms</p>
+                    <div class="w-12 h-1 bg-cyan-900 mt-2"><div class="w-10 h-full bg-cyan-400"></div></div>
+                </div>
+            </div>
+
+            <div onclick="selectLocation(34.05, -118.24, 'L-ANGELES // US')" class="glass-panel p-4 flex justify-between items-center active:scale-95 transition-transform">
+                <div>
+                    <p class="text-xs text-gray-400 mb-1">US-WEST-04</p>
+                    <p class="font-bold">洛杉矶 (L.A.)</p>
+                </div>
+                <div class="text-right font-mono text-xs text-purple-400">142ms</div>
+            </div>
+
+            <div onclick="selectLocation(51.50, -0.12, 'LONDON // UK')" class="glass-panel p-4 flex justify-between items-center active:scale-95 transition-transform">
+                <div>
+                    <p class="text-xs text-gray-400 mb-1">UK-PRO-02</p>
+                    <p class="font-bold">伦敦 (LONDON)</p>
+                </div>
+                <div class="text-right font-mono text-xs text-yellow-400">215ms</div>
+            </div>
+
+            <div onclick="selectLocation(1.35, 103.82, 'SINGAPORE // SG')" class="glass-panel p-4 flex justify-between items-center active:scale-95 transition-transform">
+                <div>
+                    <p class="text-xs text-gray-400 mb-1">SG-CORE-09</p>
+                    <p class="font-bold">新加坡 (SINGAPORE)</p>
+                </div>
+                <div class="text-right font-mono text-xs text-green-400">62ms</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 底部导航栏 -->
+    <div class="nav-container">
+        <div onclick="switchTab('home')" id="nav-home" class="nav-btn active">CONNECTION</div>
+        <div onclick="switchTab('proxy')" id="nav-proxy" class="nav-btn">NODES</div>
+    </div>
+
+    <script>
+        let scene, camera, renderer, earthGroup, earth;
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            earthGroup = new THREE.Group();
+            scene.add(earthGroup);
+
+            const loader = new THREE.TextureLoader();
+            // 使用黑色主题地球贴图，高反差陆地
+            const earthTex = loader.load('https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg');
+            const bumpTex = loader.load('https://threejs.org/examples/textures/planets/earth_specular_2048.jpg');
+
+            const geometry = new THREE.SphereGeometry(5, 64, 64);
+            const material = new THREE.MeshPhongMaterial({
+                map: earthTex,
+                specularMap: bumpTex,
+                specular: 0x00f3ff,
+                shininess: 5,
+                color: 0x111111,
+                transparent: true,
+                opacity: 0.9
+            });
+
+            earth = new THREE.Mesh(geometry, material);
+            earthGroup.add(earth);
+
+            // 外部发光层（数据层）
+            const outlineGeo = new THREE.SphereGeometry(5.02, 64, 64);
+            const outlineMat = new THREE.MeshBasicMaterial({
+                color: 0x00f3ff,
+                wireframe: true,
+                transparent: true,
+                opacity: 0.03
+            });
+            earthGroup.add(new THREE.Mesh(outlineGeo, outlineMat));
+
+            // 灯光：一侧冷光，一侧暖光
+            const light1 = new THREE.PointLight(0x00f3ff, 1.2);
+            light1.position.set(10, 5, 10);
+            scene.add(light1);
+
+            const light2 = new THREE.AmbientLight(0xffffff, 0.3);
+            scene.add(light2);
+
+            camera.position.z = 15;
+            
+            // 初始位置：对准日本
+            moveTo(35.67, 139.65, 0); 
+            
+            animate();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+
+        // 精确的位置移动逻辑
+        function moveTo(lat, lon, duration = 1.5) {
+            // 核心校准：
+            // 纬度 (phi): lat 转换为 弧度，并从 90° 偏移
+            // 经度 (theta): lon 转换为 弧度，并偏移 180° 以对应贴图中心点
+            const phi = (lat) * (Math.PI / 180);
+            const theta = (lon) * (Math.PI / 180);
+
+            gsap.to(earthGroup.rotation, {
+                duration: duration,
+                x: phi,
+                y: theta + Math.PI, // 修正贴图经度偏移
+                ease: "expo.out"
+            });
+        }
+
+        function selectLocation(lat, lon, name) {
+            document.getElementById('current-node-display').innerText = name;
+            moveTo(lat, lon);
+            switchTab('home');
+            if (navigator.vibrate) navigator.vibrate(20);
+        }
+
+        function switchTab(tab) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.getElementById('page-' + tab).classList.add('active');
+            
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('nav-' + tab).classList.add('active');
+        }
+
+        let connected = false;
+        function toggleConnect() {
+            connected = !connected;
+            const btn = document.getElementById('main-trigger');
+            const status = document.getElementById('pwr-status');
+            
+            if(connected) {
+                status.innerText = "ON";
+                status.style.color = "var(--neon)";
+                btn.style.boxShadow = "0 0 40px rgba(0, 243, 255, 0.4)";
+                document.body.style.boxShadow = "inset 0 0 100px rgba(0, 243, 255, 0.1)";
+            } else {
+                status.innerText = "OFF";
+                status.style.color = "#fff";
+                btn.style.boxShadow = "none";
+                document.body.style.boxShadow = "none";
+            }
+        }
+
+        window.onload = init;
+        window.onresize = () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        };
+    </script>
+</body>
+</html>
