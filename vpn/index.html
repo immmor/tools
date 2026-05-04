@@ -53,6 +53,7 @@
     <!-- <script src="../ai.js"></script> -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap');
 
@@ -571,6 +572,7 @@
                     <label class="block text-xs text-zinc-500 mb-2 uppercase tracking-widest" data-i18n="security_question_label">密保问题：你的宠物叫什么名字？</label>
                     <input type="text" id="security-answer" class="w-full bg-zinc-900 border border-zinc-700 px-4 py-3 text-white focus:border-[var(--neon-blue)] focus:outline-none" placeholder="请输入答案" data-i18n-placeholder="security_question_placeholder">
                 </div>
+                <div id="turnstile-container" class="mb-6 flex justify-center hidden" data-size="flexible"></div>
                 <button type="submit" class="w-full btn-cyber py-4" id="auth-submit-btn">
                     <span id="submit-text" data-i18n="modal_submit_login">登录</span>
                     <span id="submit-loading" class="hidden" data-i18n="modal_submit_loading">处理中...</span>
@@ -1290,7 +1292,8 @@
             forgotSecurityAnswer: $('forgot-security-answer'),
             forgotNewPassword: $('forgot-new-password'),
             forgotSubmitBtn: $('forgot-submit-btn'),
-            backToLogin: $('back-to-login')
+            backToLogin: $('back-to-login'),
+            turnstileContainer: $('turnstile-container')
         };
 
         // ==================== 认证模块 ====================
@@ -1358,6 +1361,21 @@
                 els.submit.textContent = dict ? dict[c.btn] : c.btn;
                 els.switchText.textContent = dict ? dict[c.tip] : c.tip;
                 els.switch.textContent = dict ? dict[c.switch] : c.switch;
+                els.turnstileContainer.classList.remove('hidden');
+                if (typeof turnstile !== 'undefined') {
+                    if (window.turnstileWidgetId) {
+                        turnstile.reset(window.turnstileWidgetId);
+                    } else if (!els.turnstileContainer.innerHTML) {
+                        window.turnstileWidgetId = turnstile.render(els.turnstileContainer, {
+                            sitekey: '0x4AAAAAACyAE5Z2G27GetkW',
+                            theme: 'dark',
+                            callback: (token) => { window.turnstileToken = token; },
+                            'error-callback': () => { window.turnstileToken = null; },
+                            'expired-callback': () => { window.turnstileToken = null; }
+                        });
+                    }
+                    window.turnstileToken = null;
+                }
             };
             const closeModal = () => {
                 isLogin = true;
@@ -1387,6 +1405,12 @@
                 els.forgotUsername.value = '';
                 els.forgotSecurityAnswer.value = '';
                 els.forgotNewPassword.value = '';
+                els.turnstileContainer.classList.add('hidden');
+                if (typeof turnstile !== 'undefined' && window.turnstileWidgetId) {
+                    turnstile.remove(window.turnstileWidgetId);
+                    window.turnstileWidgetId = null;
+                    window.turnstileToken = null;
+                }
             };
             
             const toggleDropdown = () => els.dropdown.classList.toggle('hidden');
@@ -1782,6 +1806,10 @@
                 const dict = translations[currentLang];
                 if (!user || !pass) return showMsg(dict?.please_fill_credentials || '请填写用户名和密码', true);
                 
+                if (isLogin && typeof turnstile !== 'undefined' && !window.turnstileToken) {
+                    return showMsg('请先完成人机验证', true);
+                }
+                
                 if (!isLogin) {
                     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
                     if (!emailRegex.test(user)) {
@@ -1824,6 +1852,7 @@
                     const registerData = { username: user, password: pass, inviteCode: inviteCode, securityAnswer: els.securityAnswerContainer.classList.contains('hidden') ? '' : els.securityAnswer.value.trim() };
                     if (source) registerData.source = source;
                     if (priceParam) registerData.priceParam = priceParam;
+                    if (isLogin && window.turnstileToken) registerData.turnstileToken = window.turnstileToken;
                     
                     const res = await fetch(`${API}${isLogin ? '/api/login' : '/api/register'}`, {
                         method: 'POST',
