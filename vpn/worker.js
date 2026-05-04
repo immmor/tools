@@ -217,28 +217,10 @@ export default {
       // ========== 登录接口（核心）→ 用户名密码登录 ==========
       if (path === '/api/login' && request.method === 'POST') {
         const params = await request.json();
-        const { username, password, turnstileToken } = params;
+        const { username, password } = params;
 
         if (!username || !password) {
           return resJson({ success: false, message: '用户名和密码不能为空！' }, 400);
-        }
-
-        if (!turnstileToken) {
-          return resJson({ success: false, message: '请先完成人机验证' }, 400);
-        }
-
-        if (!env.TURNSTILE_SECRET_KEY) {
-          return resJson({ success: false, message: '人机验证配置错误' }, 500);
-        }
-
-        const turnstileVerify = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: `secret=${env.TURNSTILE_SECRET_KEY}&response=${turnstileToken}`
-        });
-        const turnstileResult = await turnstileVerify.json();
-        if (!turnstileResult.success) {
-          return resJson({ success: false, message: '人机验证失败，请重试' }, 400);
         }
 
         const user = await DB
