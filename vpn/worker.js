@@ -224,7 +224,7 @@ export default {
         }
 
         const user = await DB
-          .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted FROM user WHERE username = ? AND password = ?')
+          .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link FROM user WHERE username = ? AND password = ?')
           .bind(username, password)
           .first();
 
@@ -242,6 +242,13 @@ export default {
             } catch (e) {}
           }
           await DB.prepare('UPDATE user SET login_info = ? WHERE username = ?').bind(updatedLoginInfo, username).run();
+
+          const fetchLinkArr = user.fetch_link ? JSON.parse(user.fetch_link) : [];
+          if (fetchLinkArr.length >= 3 && user.not_trusted === 'yes') {
+            await DB.prepare('UPDATE user SET not_trusted = ? WHERE username = ?').bind('', username).run();
+            user.not_trusted = '';
+          }
+
           const pricePlan = user.price_plan ? JSON.parse(user.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
 
           return resJson({ success: true, message: '登录成功！', userInfo: { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '' }, pricePlan });
@@ -357,7 +364,7 @@ export default {
           
           if (result.success && result.meta.changes > 0) {
             const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
-            const msg = `[系统通知] 用户 ${username} 开通VIP成功！`;
+            const msg = `[系统通知] 用户 ${username} 开通VIP成功！金额：${vipPrice}元，天数：${duration}天`;
             
             await DB
               .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
