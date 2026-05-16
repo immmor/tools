@@ -280,11 +280,23 @@ async function editorAction(action) {
                 const fullRange = editor.getModel().getFullModelRange();
                 editor.setSelection(fullRange);
             } else if (action === 'copy') {
-            const selection = editor.getSelection();
+            let selection = editor.getSelection();
+            if (!selection || selection.isEmpty()) {
+                const saved = editorTabs[activeEditorTab].lastSelection;
+                if (saved) {
+                    selection = new monaco.Selection(saved.startLineNumber, saved.startColumn, saved.endLineNumber, saved.endColumn);
+                }
+            }
             const selectedText = editor.getModel().getValueInRange(selection);
             await navigator.clipboard.writeText(selectedText);
         } else if (action === 'cut') {
-            const selection = editor.getSelection();
+            let selection = editor.getSelection();
+            if (!selection || selection.isEmpty()) {
+                const saved = editorTabs[activeEditorTab].lastSelection;
+                if (saved) {
+                    selection = new monaco.Selection(saved.startLineNumber, saved.startColumn, saved.endLineNumber, saved.endColumn);
+                }
+            }
             const selectedText = editor.getModel().getValueInRange(selection);
             await navigator.clipboard.writeText(selectedText);
             editor.executeEdits('', [{ range: selection, text: '' }]);
@@ -954,6 +966,16 @@ function getLanguageFromFileName(fileName) {
 
             // 编辑器失去焦点时清除选中和拉杆，避免切换到其他tab/点击外部后选区残留
             editor.onDidBlurEditorText(() => {
+                // 保存当前选区，供 copy/cut 等操作使用
+                const sel = editor.getSelection();
+                if (sel && !sel.isEmpty()) {
+                    editorTabs[fileName].lastSelection = {
+                        startLineNumber: sel.startLineNumber,
+                        startColumn: sel.startColumn,
+                        endLineNumber: sel.endLineNumber,
+                        endColumn: sel.endColumn
+                    };
+                }
                 // 将选区折叠到光标位置（清空选中）
                 const pos = editor.getPosition() || { lineNumber: 1, column: 1 };
                 editor.setSelection(new monaco.Selection(pos.lineNumber, pos.column, pos.lineNumber, pos.column));
