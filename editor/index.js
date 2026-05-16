@@ -952,6 +952,15 @@ function getLanguageFromFileName(fileName) {
                 updateHandles();
             });
 
+            // 编辑器失去焦点时清除选中和拉杆，避免切换到其他tab/点击外部后选区残留
+            editor.onDidBlurEditorText(() => {
+                // 将选区折叠到光标位置（清空选中）
+                const pos = editor.getPosition() || { lineNumber: 1, column: 1 };
+                editor.setSelection(new monaco.Selection(pos.lineNumber, pos.column, pos.lineNumber, pos.column));
+                startHandle.style.display = 'none';
+                endHandle.style.display = 'none';
+            });
+
             // 添加快捷键支持
             editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, function() {
                 saveCurrentFile();
