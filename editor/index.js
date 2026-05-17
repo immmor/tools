@@ -1614,10 +1614,24 @@ function switchWorkspace(workspaceId) {
     saveWorkspaces();
     saveSetting('currentWorkspaceId', currentWorkspaceId);
     
+    // 清除所有编辑器tab
+    Object.keys(editorTabs).forEach(fileName => {
+        const tabInfo = editorTabs[fileName];
+        if (tabInfo.editor && tabInfo.editor.dispose) {
+            tabInfo.editor.dispose();
+        }
+        if (tabInfo.container && tabInfo.container.parentNode) {
+            tabInfo.container.parentNode.removeChild(tabInfo.container);
+        }
+        delete editorTabs[fileName];
+    });
     const tabContainer = document.getElementById('editor-tabs');
     while (tabContainer.firstChild) {
         tabContainer.removeChild(tabContainer.firstChild);
     }
+    openedTabs = [];
+    localStorage.setItem('ind_console_opened_tabs', JSON.stringify(openedTabs));
+    activeEditorTab = null;
     renderFiles();
     document.getElementById('modal-overlay').style.display = 'none';
     addLog(`[SYSTEM]: SWITCHED_TO_WORKSPACE >> ${targetWorkspace.name}`, 'var(--term-green)');
