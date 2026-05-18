@@ -6,7 +6,7 @@
     let plugins = JSON.parse(localStorage.getItem('ind_console_plugins')) || [
         { 
             name: 'Matrix_Rain', 
-            code: 'const canvas = document.createElement(\'canvas\');const ctx = canvas.getContext(\'2d\');canvas.id = \'matrix-canvas\';canvas.style.cssText = \'position:fixed;top:0;left:0;width:100%;height:100%;z-index:2222;opacity:0.4;pointer-events:none;\';document.body.appendChild(canvas);let w = canvas.width = window.innerWidth;let h = canvas.height = window.innerHeight;const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ$+-*/=<>!%";const fontSize = 14;const columns = Math.floor(w / fontSize);const drops = new Array(columns).fill(1);function draw() { ctx.fillStyle = \'rgba(18, 16, 11, 0.05)\'; ctx.fillRect(0, 0, w, h); ctx.fillStyle = \'#ffb000\'; ctx.font = fontSize + \'px "Courier New"\'; for (let i = 0; i < drops.length; i++) { const text = chars[Math.floor(Math.random() * chars.length)]; ctx.fillText(text, i * fontSize, drops[i] * fontSize); if (drops[i] * fontSize > h && Math.random() > 0.975) drops[i] = 0; drops[i]++; } }const interval = setInterval(draw, 33);const resizeHandler = () => { w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight; };window.addEventListener(\'resize\', resizeHandler);return () => { clearInterval(interval); window.removeEventListener(\'resize\', resizeHandler); if (canvas.parentNode) canvas.parentNode.removeChild(canvas); };', 
+            code: 'const canvas = document.createElement(\'canvas\');const ctx = canvas.getContext(\'2d\');canvas.id = \'matrix-canvas\';canvas.style.cssText = \'position:fixed;top:0;left:0;width:100%;height:100%;z-index:2222;opacity:0.4;pointer-events:none;\';document.body.appendChild(canvas);let w = canvas.width = window.innerWidth;let h = canvas.height = window.innerHeight;const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ$+-*/=<>!%";const fontSize = 14;const columns = Math.floor(w / fontSize);const drops = new Array(columns).fill(1);function draw() { ctx.fillStyle = \'rgba(18, 16, 11, 0.05)\'; ctx.fillRect(0, 0, w, h); ctx.fillStyle = \'#00ff00\'; ctx.font = fontSize + \'px "Courier New"\'; for (let i = 0; i < drops.length; i++) { const text = chars[Math.floor(Math.random() * chars.length)]; ctx.fillText(text, i * fontSize, drops[i] * fontSize); if (drops[i] * fontSize > h && Math.random() > 0.975) drops[i] = 0; drops[i]++; } }const interval = setInterval(draw, 33);const resizeHandler = () => { w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight; };window.addEventListener(\'resize\', resizeHandler);return () => { clearInterval(interval); window.removeEventListener(\'resize\', resizeHandler); if (canvas.parentNode) canvas.parentNode.removeChild(canvas); };', 
             active: false 
         }
     ];
@@ -735,6 +735,8 @@ function getLanguageFromFileName(fileName) {
                 // 保存普通文件
                 storage[activeEditorTab] = content;
                 localStorage.setItem('ind_console_storage', JSON.stringify(storage));
+                // 同步到当前工作区的IndexedDB
+                syncWorkspaceFileToDb();
             }
             
             // 保存当前活动标签
@@ -1405,7 +1407,7 @@ function toggleWorkspace() {
                      style="padding: 10px; border: 1px solid ${ws.id === currentWorkspaceId ? 'var(--amber)' : 'var(--amber-dim)'}; border-radius: 3px; display: flex; align-items: center; background: ${ws.id === currentWorkspaceId ? 'rgba(255, 176, 0, 0.1)' : 'transparent'};">
                     <div onclick="switchWorkspace('${ws.id}')" style="flex: 1; cursor: pointer;">
                         <div style="font-weight: bold; color: var(--amber);">${ws.name}</div>
-                        <div style="font-size: 11px; color: var(--amber-dim);">${ws.path}</div>
+                        <div style="font-size: 11px; color: var(--amber); opacity: 0.6;">${ws.path}</div>
                     </div>
                     <div style="display: flex; align-items: center; gap: 5px; margin-left: 10px;">
                         ${ws.id !== 'default' ? `<span onclick="deleteWorkspace('${ws.id}'); event.stopPropagation();" style="color: #ff3e3e; cursor: pointer;" title="删除">×</span>` : ''}
@@ -1611,6 +1613,8 @@ function switchWorkspace(workspaceId) {
     });
     Object.assign(storage, targetWorkspace.files || {});
     
+    // 同步到localStorage和IndexedDB
+    localStorage.setItem('ind_console_storage', JSON.stringify(storage));
     saveWorkspaces();
     saveSetting('currentWorkspaceId', currentWorkspaceId);
     
@@ -1665,15 +1669,15 @@ function addWorkspace() {
     // 添加到workspaces列表
     workspaces.push(newWorkspace);
     
-    // 保存到localStorage
-    // localStorage.setItem('ind_console_workspaces', JSON.stringify(workspaces));
+    saveWorkspaces();
     
     // 清空输入框
     nameInput.value = '';
     pathInput.value = '';
     
-    // 重新打开workspace管理界面
+    // 关闭工作区管理面板，切换到新工作区
     toggleWorkspace();
+    switchWorkspace(newWorkspace.id);
     
     addLog(`[SYSTEM]: ADDED_WORKSPACE >> ${name}`, 'var(--term-green)');
 }
@@ -1770,8 +1774,9 @@ async function addGitHubWorkspace() {
         repoInput.value = '';
         branchInput.value = '';
         
-        // 重新打开workspace管理界面
+        // 关闭工作区管理面板，切换到新工作区
         toggleWorkspace();
+        switchWorkspace(targetWorkspace.id);
         
         addLog(`[SYSTEM]: 成功${existingWorkspace ? '更新' : '导入'}GitHub仓库: ${repoInfo.name} (${downloadedCount}个文件)`, 'var(--term-green)');
         
@@ -2010,7 +2015,7 @@ function toggleExplorerMax(sectionId) {
     let chatRequestStates = {}; // 存储每个聊天窗口的请求状态
     
     // workspace管理 - 使用IndexedDB存储
-    let workspaces = [{ id: 'default', name: '默认工作区', path: '/Users/mrok/Documents/Coding/Web/tools', files: {...storage} }];
+    let workspaces = [{ id: 'default', name: '默认工作区', path: '/code', files: {...storage} }];
     let currentWorkspaceId = 'default';
     let githubToken = localStorage.getItem('ind_console_github_token') || '';
     
@@ -2048,7 +2053,7 @@ function toggleExplorerMax(sectionId) {
         const request = store.getAll();
         
         request.onsuccess = (event) => {
-            workspaces = event.target.result.length > 0 ? event.target.result : [{ id: 'default', name: '默认工作区', path: '/Users/mrok/Documents/Coding/Web/tools', files: {...storage} }];
+            workspaces = event.target.result.length > 0 ? event.target.result : [{ id: 'default', name: '默认工作区', path: '/code', files: {...storage} }];
         };
     }
     
@@ -2093,6 +2098,17 @@ function toggleExplorerMax(sectionId) {
         const transaction = db.transaction('settings', 'readwrite');
         const store = transaction.objectStore('settings');
         store.put({ key, value });
+    }
+    
+    function syncWorkspaceFileToDb() {
+        const targetWorkspace = workspaces.find(ws => ws.id === currentWorkspaceId);
+        if (!targetWorkspace || !db.objectStoreNames.contains('workspaces')) return;
+        
+        targetWorkspace.files = {...storage};
+        
+        const transaction = db.transaction('workspaces', 'readwrite');
+        const store = transaction.objectStore('workspaces');
+        store.put(targetWorkspace);
     }
 
     function updateAiCtxOptions() {
