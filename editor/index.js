@@ -4028,11 +4028,16 @@ function scrollToAiTop(button) {
         openedTabs.forEach(fileName => {
             createEditorTab(fileName);
         });
-        setTimeout(() => {
+        let retryCount = 0;
+        function tryRestoreActiveTab() {
             if (activeTabName && editorTabs[activeTabName]) {
                 switchEditorTab(activeTabName);
+            } else if (retryCount < 50) {
+                retryCount++;
+                setTimeout(tryRestoreActiveTab, 100);
             }
-        }, 60);
+        }
+        setTimeout(tryRestoreActiveTab, 60);
     } else {
         activeFile = localStorage.getItem('ind_console_active');
         if (activeFile) {
