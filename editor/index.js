@@ -1480,6 +1480,11 @@ function deleteWorkspace(workspaceId) {
         }
         
         saveWorkspaces();
+        if (db && db.objectStoreNames.contains('workspaces')) {
+            const transaction = db.transaction('workspaces', 'readwrite');
+            const store = transaction.objectStore('workspaces');
+            store.delete(workspaceId);
+        }
         toggleWorkspace();
         alert('Workspace已删除');
     }
