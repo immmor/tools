@@ -26,6 +26,12 @@ export default {
       });
     };
 
+    // 多语言消息辅助函数
+    const LK = ['cn','en','jp','kr','es','vi','ar','ru'];
+    const t = (d) => JSON.stringify(Object.fromEntries(LK.map(k => [k, d[k] ?? ''])));
+    const NP = { cn:'[系统通知]', en:'[System Notification]', jp:'[システム通知]', kr:'[시스템 알림]', es:'[Notificación del Sistema]', vi:'[Thông báo Hệ thống]', ar:'[إشعار النظام]', ru:'[Системное уведомление]' };
+    const nt = (d) => t(Object.fromEntries(LK.map(k => [k, `${NP[k]} ${d[k] ?? ''}`])));
+
     try {
       // ========== ✅ 核心修复：数据库实例兜底（解决prepare undefined） ==========
       // 【关键】这里的 DB 必须和你Worker绑定D1的「Variable name」完全一致！！！
@@ -117,20 +123,47 @@ export default {
             // 给被邀请人发送奖励通知
             await DB
               .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
-              .bind(username, `[系统通知] 您使用邀请码 ${inviteCode} 注册成功，获得奖励 2 元`, now)
+              .bind(username, nt({
+                cn: `您使用邀请码 ${inviteCode} 注册成功，获得奖励 2 元`,
+                en: `You registered using invite code ${inviteCode} and received a ¥2 reward`,
+                jp: `招待コード ${inviteCode} を使用して登録し、2元の報酬を獲得しました`,
+                kr: `초대 코드 ${inviteCode}를 사용하여 등록하고 2위안 보상을 받았습니다`,
+                es: `Se registró con el código de invitación ${inviteCode} y recibió una recompensa de ¥2`,
+                vi: `Bạn đã đăng ký bằng mã mời ${inviteCode} và nhận được phần thưởng 2 ¥`,
+                ar: `لقد سجلت باستخدام رمز الدعوة ${inviteCode} وحصلت على مكافأة ¥2`,
+                ru: `Вы зарегистрировались с кодом приглашения ${inviteCode} и получили вознаграждение ¥2`
+              }), now)
               .run();
-            
+
             // 给邀请人发送奖励通知
             await DB
               .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
-              .bind(inviterUser.username, `[系统通知] 您的邀请用户 ${username} 已注册，您获得奖励 2 元`, now)
+              .bind(inviterUser.username, nt({
+                cn: `您的邀请用户 ${username} 已注册，您获得奖励 2 元`,
+                en: `Your invitee ${username} has registered, you received a ¥2 reward`,
+                jp: `招待したユーザー ${username} が登録しました。2元の報酬を獲得しました`,
+                kr: `초대한 사용자 ${username} 님이 등록했습니다. 2위안 보상을 받았습니다`,
+                es: `Su invitado ${username} se ha registrado, recibió una recompensa de ¥2`,
+                vi: `Người được mời ${username} đã đăng ký, bạn nhận được phần thưởng 2 ¥`,
+                ar: `قام المدعو ${username} بالتسجيل، لقد حصلت على مكافأة ¥2`,
+                ru: `Приглашенный вами пользователь ${username} зарегистрировался, вы получили вознаграждение ¥2`
+              }), now)
               .run();
-            
+
             // 通知immmor有人邀请注册（邀请人不是immmor时才发）
             if (inviterUser.username !== 'immmor') {
               await DB
                 .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
-                .bind('immmor', `[系统通知] 用户 ${inviterUser.username} 成功邀请了 ${username} 注册`, now)
+                .bind('immmor', nt({
+                  cn: `用户 ${inviterUser.username} 成功邀请了 ${username} 注册`,
+                  en: `User ${inviterUser.username} successfully invited ${username} to register`,
+                  jp: `ユーザー ${inviterUser.username} が ${username} を招待して登録しました`,
+                  kr: `사용자 ${inviterUser.username} 님이 ${username} 님을 초대하여 등록했습니다`,
+                  es: `El usuario ${inviterUser.username} invitó exitosamente a ${username} a registrarse`,
+                  vi: `Người dùng ${inviterUser.username} đã mời ${username} đăng ký thành công`,
+                  ar: `قام المستخدم ${inviterUser.username} بدعوة ${username} للتسجيل بنجاح`,
+                  ru: `Пользователь ${inviterUser.username} успешно пригласил ${username} зарегистрироваться`
+                }), now)
                 .run();
             }
           }
@@ -162,8 +195,17 @@ export default {
 
         if (result.success) {
           const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
-          const msg = `[系统通知] 用户 ${username} 注册成功！`;
-          
+          const msg = nt({
+            cn: `用户 ${username} 注册成功！`,
+            en: `User ${username} registered successfully!`,
+            jp: `ユーザー ${username} が登録しました！`,
+            kr: `사용자 ${username} 님이 등록했습니다!`,
+            es: `¡El usuario ${username} se registró exitosamente!`,
+            vi: `Người dùng ${username} đã đăng ký thành công!`,
+            ar: `قام المستخدم ${username} بالتسجيل بنجاح!`,
+            ru: `Пользователь ${username} успешно зарегистрировался!`
+          });
+
           await DB
             .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
             .bind('immmor', msg, now)
@@ -171,14 +213,32 @@ export default {
 
           await DB
             .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
-            .bind(username, '欢迎加入phantom', now)
+            .bind(username, t({
+              cn: '欢迎加入 Phantom',
+              en: 'Welcome to Phantom',
+              jp: 'Phantomへようこそ',
+              kr: 'Phantom에 오신 것을 환영합니다',
+              es: 'Bienvenido a Phantom',
+              vi: 'Chào mừng bạn đến với Phantom',
+              ar: 'مرحبًا بك في Phantom',
+              ru: 'Добро пожаловать в Phantom'
+            }), now)
             .run();
-          
+
           await DB
             .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
-            .bind(username, '免费节点链接和付费节点链接不一样！！！！！', now)
+            .bind(username, t({
+              cn: '免费节点链接和付费节点链接不一样！！！！！',
+              en: 'Free node links are different from paid node links!!!!!',
+              jp: '無料ノードリンクと有料ノードリンクは異なります！！！！！',
+              kr: '무료 노드 링크와 유료 노드 링크는 다릅니다！！！！！',
+              es: '¡Los enlaces de nodos gratuitos son diferentes de los de pago!!!!!',
+              vi: 'Liên kết node miễn phí khác với liên kết node trả phí!!!!!',
+              ar: 'روابط العقد المجانية تختلف عن روابط العقد المدفوعة!!!!!',
+              ru: 'Бесплатные ссылки на узлы отличаются от платных!!!!!'
+            }), now)
             .run();
-          
+
           const loginInfo = JSON.stringify([{
             type: 'register',
             time: now,
@@ -367,8 +427,17 @@ export default {
           
           if (result.success && result.meta.changes > 0) {
             const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
-            const msg = `[系统通知] 用户 ${username} 开通VIP成功！金额：${vipPrice}元，天数：${duration}天`;
-            
+            const msg = nt({
+              cn: `用户 ${username} 开通VIP成功！金额：${vipPrice}元，天数：${duration}天`,
+              en: `User ${username} activated VIP successfully! Amount: ¥${vipPrice}, Days: ${duration}`,
+              jp: `ユーザー ${username} がVIPをアクティブ化しました！金額：${vipPrice}元、期間：${duration}日`,
+              kr: `사용자 ${username} 님이 VIP를 활성화했습니다! 금액: ¥${vipPrice}, 기간: ${duration}일`,
+              es: `¡El usuario ${username} activó VIP exitosamente! Monto: ¥${vipPrice}, Días: ${duration}`,
+              vi: `Người dùng ${username} đã kích hoạt VIP thành công! Số tiền: ¥${vipPrice}, Ngày: ${duration}`,
+              ar: `قام المستخدم ${username} بتفعيل VIP بنجاح! المبلغ: ¥${vipPrice}، الأيام: ${duration}`,
+              ru: `Пользователь ${username} успешно активировал VIP! Сумма: ¥${vipPrice}, Дней: ${duration}`
+            });
+
             await DB
               .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
               .bind('immmor', msg, now)
