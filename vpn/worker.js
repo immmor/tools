@@ -189,7 +189,7 @@ export default {
         }
 
         const result = await DB
-          .prepare('INSERT INTO user (username, password, balance, v_expire_date, learn_vip_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code, v_token, v_link_clash, v_link_v2ray, price_plan, survey, security_answer, fetch_link, source, not_trusted) VALUES (?, ?, ?, NULL, NULL, 307200, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+          .prepare('INSERT INTO user (username, password, balance, v_expire_date, learn_vip_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code, v_token, v_link_clash, v_link_v2ray, price_plan, survey, security_answer, fetch_link, source, not_trusted, auto_rewn) VALUES (?, ?, ?, NULL, NULL, 307200, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)')
           .bind(username, password, finalBalance, new Date().toISOString().slice(0, 19).replace('T', ' '), userInviteCode, '', '', '', pricePlanStr, '{}', securityAnswer || '', '[]', source || '', 'yes')
           .run();
 
@@ -498,45 +498,68 @@ export default {
       if (path === '/api/vip-status' && request.method === 'GET') {
         try {
           const username = url.searchParams.get('username');
-          
-          if (!username) {
-            return resJson({ code: 400, msg: '缺少username参数' }, 400);
-          }
-          
-          const user = await DB
-            .prepare('SELECT username, v_expire_date, v_token, v_link_clash, v_link_v2ray FROM user WHERE username = ?')
+          if (!username) return resJson({ code: 400, msg: '缺少username参数' }, 400);
+
+          let user = await DB
+            .prepare('SELECT username, v_expire_date, v_token, v_link_clash, v_link_v2ray, auto_rewn, balance, price_plan FROM user WHERE username = ?')
             .bind(username)
             .first();
-          
-          if (!user) {
-            return resJson({ code: 404, msg: '用户不存在' }, 404);
-          }
-          
+
+          if (!user) return resJson({ code: 404, msg: '用户不存在' }, 404);
+
           const now = new Date();
-          const expireDate = user.v_expire_date ? new Date(user.v_expire_date.replace(' ', 'T') + 'Z') : null;
-          const isVipValid = expireDate && expireDate > now;
-          
-          let daysRemaining = 0;
-          if (isVipValid) {
-            const timeDiff = expireDate.getTime() - now.getTime();
-            daysRemaining = Math.max(0, Math.ceil(timeDiff / (1000 * 60 * 60 * 24)));
+          let expireDate = user.v_expire_date ? new Date(user.v_expire_date.replace(' ', 'T') + 'Z') : null;
+          let isVipValid = expireDate && expireDate > now;
+          let daysRemaining = isVipValid ? Math.max(0, Math.ceil((expireDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))) : 0;
+
+          if (!isVipValid && user.auto_rewn) {
+            const pp = user.price_plan ? JSON.parse(user.price_plan) : {};
+            const mp = pp.monthly_discount || 10, ap = pp.annual_discount || 100;
+            let dur, pr;
+            if (user.balance >= ap) { dur = 365; pr = ap; }
+            else if (user.balance >= mp) { dur = 30; pr = mp; }
+
+            if (dur) {
+              const lc = await DB.prepare('SELECT key, value FROM link WHERE key IN (?,?,?,?)').bind('clash_monthly','v2ray_monthly','clash_yearly','v2ray_yearly').all();
+              const cfg = {}; lc.results.forEach(r => cfg[r.key] = r.value);
+              const ne = new Date(); ne.setDate(ne.getDate() + dur);
+              const vt = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
+              const yr = dur === 365;
+              const cl = user.v_link_clash || (yr ? cfg.clash_yearly : cfg.clash_monthly);
+              const v2 = user.v_link_v2ray || (yr ? cfg.v2ray_yearly : cfg.v2ray_monthly);
+              const r = await DB.prepare('UPDATE user SET balance = balance - ?, v_expire_date = ?, v_token = ?, v_link_clash = ?, v_link_v2ray = ? WHERE username = ?').bind(pr, ne.toISOString().slice(0,19).replace('T',' '), vt, cl, v2, username).run();
+              if (r.success && r.meta.changes > 0) {
+                await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)').bind('immmor', `用户 ${username} 自动续费VIP成功！金额：${pr}元，天数：${dur}天`, new Date().toISOString().slice(0,19).replace('T',' ')).run();
+                user = { ...user, v_expire_date: ne.toISOString().slice(0,19).replace('T',' '), v_token: vt, v_link_clash: cl, v_link_v2ray: v2, balance: user.balance - pr };
+                expireDate = new Date(user.v_expire_date.replace(' ', 'T') + 'Z');
+                isVipValid = expireDate > now;
+                daysRemaining = Math.max(0, Math.ceil((expireDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+              }
+            }
           }
-          
+
           return resJson({
-            code: 200,
-            msg: '查询成功',
+            code: 200, msg: '查询成功',
             data: {
-              username: user.username,
-              v_expire_date: user.v_expire_date,
-              v_token: user.v_token,
-              v_link_clash: user.v_link_clash,
-              v_link_v2ray: user.v_link_v2ray,
-              is_vip_valid: isVipValid,
-              days_remaining: daysRemaining
+              username: user.username, v_expire_date: user.v_expire_date, v_token: user.v_token,
+              v_link_clash: user.v_link_clash, v_link_v2ray: user.v_link_v2ray,
+              is_vip_valid: isVipValid, days_remaining: daysRemaining, auto_renew: !!user.auto_rewn
             }
           });
         } catch (err) {
           return resJson({ code: 500, msg: '查询失败', error: err.message }, 500);
+        }
+      }
+
+      // ========== 自动续费开关接口 ==========
+      if (path === '/api/toggle-auto-renew' && request.method === 'POST') {
+        try {
+          const { username, enabled } = await request.json();
+          if (!username) return resJson({ code: 400, msg: '缺少username参数' }, 400);
+          await DB.prepare('UPDATE user SET auto_rewn = ? WHERE username = ?').bind(enabled ? 1 : 0, username).run();
+          return resJson({ code: 200, msg: 'ok', data: { auto_renew: !!enabled } });
+        } catch (err) {
+          return resJson({ code: 500, msg: '操作失败', error: err.message }, 500);
         }
       }
 
