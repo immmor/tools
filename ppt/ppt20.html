@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI: The Next Architecture</title>
+    <style>
+        /* --- 核心设计系统 --- */
+        :root {
+            --bg-gradient: linear-gradient(135deg, #08080a 0%, #101015 50%, #15121e 100%);
+            --accent-color: #6366f1; /* 科技钛蓝 */
+            --accent-glow: rgba(99, 102, 241, 0.15);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --glass-bg: rgba(255, 255, 255, 0.02);
+            --glass-border: rgba(255, 255, 255, 0.06);
+            --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-sans);
+            background: #08080a;
+            color: var(--text-main);
+            overflow: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* --- Fullscreen Scroll Snap 容器 --- */
+        .presentation {
+            width: 100vw;
+            height: 100vh;
+            overflow-y: scroll;
+            scroll-snap-type: y mandatory;
+            scroll-behavior: smooth;
+            background: var(--bg-gradient);
+            background-attachment: fixed;
+        }
+
+        /* --- 幻灯片基础与流光背景 --- */
+        .slide {
+            width: 100vw;
+            height: 100vh;
+            scroll-snap-align: start;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 6% 10%;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* 优雅的背景微光动画 */
+        .slide::before {
+            content: '';
+            position: absolute;
+            top: -20%;
+            left: -20%;
+            width: 140%;
+            height: 140%;
+            background: radial-gradient(circle at 40% 40%, rgba(99, 102, 241, 0.04) 0%, transparent 60%);
+            pointer-events: none;
+            z-index: 1;
+            animation: ambientGlow 20s infinite alternate ease-in-out;
+        }
+
+        @keyframes ambientGlow {
+            0% { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(5%, 5%) scale(1.1); }
+        }
+
+        .slide-content {
+            max-width: 1140px;
+            width: 100%;
+            z-index: 2;
+        }
+
+        /* --- 排版与进入动画 (Fade-in-up) --- */
+        .slide-num {
+            font-family: monospace;
+            font-size: 0.85rem;
+            color: var(--accent-color);
+            margin-bottom: 1.5rem;
+            letter-spacing: 0.25em;
+            text-transform: uppercase;
+            opacity: 0;
+        }
+
+        h1, h2, p.lead, .grid, .split {
+            opacity: 0;
+            transform: translateY(24px);
+            transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        h1 {
+            font-size: 4.2rem;
+            font-weight: 700;
+            line-height: 1.15;
+            letter-spacing: -0.03em;
+            margin-bottom: 1.5rem;
+            background: linear-gradient(to right, #ffffff 30%, #94a3b8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        h2 {
+            font-size: 2.8rem;
+            font-weight: 600;
+            line-height: 1.25;
+            letter-spacing: -0.02em;
+            margin-bottom: 2rem;
+        }
+
+        p.lead {
+            font-size: 1.4rem;
+            color: var(--text-muted);
+            line-height: 1.6;
+            font-weight: 300;
+            max-width: 720px;
+        }
+
+        /* 当幻灯片激活时触发动画 */
+        .slide.active .slide-num {
+            opacity: 1;
+            transition: opacity 0.6s ease 0.1s;
+        }
+        .slide.active h1, .slide.active h2 { opacity: 1; transform: translateY(0); transition-delay: 0.2s; }
+        .slide.active p.lead { opacity: 1; transform: translateY(0); transition-delay: 0.3s; }
+        .slide.active .grid, .slide.active .split { opacity: 1; transform: translateY(0); transition-delay: 0.4s; }
+
+        /* --- 栅格布局与卡片 --- */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2rem;
+            margin-top: 2.5rem;
+            width: 100%;
+        }
+
+        .card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            padding: 2.5rem 2rem;
+            border-radius: 12px;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .card:hover {
+            border-color: rgba(99, 102, 241, 0.25);
+            background: rgba(255, 255, 255, 0.04);
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .card h3 {
+            font-size: 1.25rem;
+            margin-bottom: 1rem;
+            font-weight: 600;
+        }
+
+        .card p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+
+        /* --- 经典两栏布局 (左文右图) --- */
+        .split {
+            display: grid;
+            grid-template-columns: 1.1fr 0.9fr;
+            gap: 4rem;
+            align-items: center;
+            width: 100%;
+        }
+
+        /* --- 纯高级感 SVG 数据图表设计 --- */
+        .chart-container {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+
+        /* 柱状图样式与行动画 */
+        .bar-chart {
+            width: 100%;
+            height: 240px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            padding-top: 20px;
+            border-bottom: 1px solid var(--glass-border);
+        }
+
+        .bar-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex: 1;
+            height: 100%;
+            justify-content: flex-end;
+        }
+
+        .bar {
+            width: 45%;
+            background: linear-gradient(to top, var(--accent-color), #a5b4fc);
+            border-radius: 6px 6px 0 0;
+            height: 0%; /* 初始高度为0 */
+            transition: height 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.6s;
+            position: relative;
+            box-shadow: 0 0 20px var(--accent-glow);
+        }
+
+        /* 当页面激活时，图表柱状体向上伸展 */
+        .slide.active .bar-1 { height: 35%; }
+        .slide.active .bar-2 { height: 65%; }
+        .slide.active .bar-3 { height: 95%; }
+
+        .bar-label {
+            margin-top: 12px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-family: monospace;
+        }
+
+        .bar-val {
+            position: absolute;
+            top: -28px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 0.85rem;
+            font-family: monospace;
+            color: var(--text-main);
+            opacity: 0;
+            transition: opacity 0.4s ease 1.5s;
+        }
+        .slide.active .bar-val { opacity: 1; }
+
+        /* 雷达/环形扩散动画线 */
+        .radial-grid {
+            position: relative;
+            width: 260px;
+            height: 260px;
+        }
+        .circle-pulse {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            border: 1px solid var(--accent-color);
+            border-radius: 50%;
+            animation: pulse 3s infinite linear;
+            opacity: 0;
+        }
+        .circle-pulse:nth-child(2) { animation-delay: 1s; }
+        .circle-pulse:nth-child(3) { animation-delay: 2s; }
+
+        @keyframes pulse {
+            0% { width: 0px; height: 0px; opacity: 0.6; }
+            100% { width: 260px; height: 260px; opacity: 0; }
+        }
+
+        /* --- 响应式断点适配 --- */
+        @media (max-width: 1024px) {
+            h1 { font-size: 3rem; }
+            h2 { font-size: 2.2rem; }
+            p.lead { font-size: 1.2rem; }
+            .slide { padding: 8% 6%; }
+            .split { gap: 2rem; }
+        }
+
+        @media (max-width: 768px) {
+            .presentation {
+                scroll-snap-type: none;
+                overflow-y: auto;
+            }
+            .slide {
+                height: auto;
+                min-height: 100vh;
+                padding: 5rem 1.5rem;
+                justify-content: center;
+            }
+            /* 移动端强制取消滑入动画，避免滚动时的白屏感 */
+            h1, h2, p.lead, .grid, .split, .slide-num { opacity: 1 !important; transform: none !important; }
+            .bar-1 { height: 35% !important; }
+            .bar-2 { height: 65% !important; }
+            .bar-3 { height: 95% !important; }
+            .slide.active .bar-val { opacity: 1; }
+            
+            h1 { font-size: 2.4rem; }
+            h2 { font-size: 1.8rem; }
+            .grid, .split {
+                grid-template-columns: 1fr;
+                gap: 1.5rem;
+                margin-top: 1.8rem;
+            }
+            .chart-container { margin-top: 2rem; }
+            .card { padding: 1.8rem 1.5rem; }
+        }
+
+        /* 顶部微型进度条 */
+        .progress-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 2px;
+            background: var(--accent-color);
+            z-index: 100;
+            transition: width 0.2s ease;
+            box-shadow: 0 0 8px var(--accent-color);
+        }
+
+        .nav-hint {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            font-family: monospace;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            opacity: 0.4;
+            z-index: 10;
+        }
+        @media (max-width: 768px) { .nav-hint { display: none; } }
+    </style>
+</head>
+<body>
+
+    <div class="progress-bar" id="progress"></div>
+    <div class="nav-hint">SCROLL OR PGDN</div>
+
+    <main class="presentation" id="presentation">
+
+        <section class="slide active">
+            <div class="slide-content">
+                <div class="slide-num">01 / Introduction</div>
+                <h1>人工智能<br>新一代架构与未来</h1>
+                <p class="lead">探索基于深度学习、大语言模型与智能体的技术奇点，以及它如何重塑我们的构建方式。</p>
+            </div>
+        </section>
+
+        <section class="slide">
+            <div class="slide-content">
+                <div class="slide-num">02 / Growth & Scale</div>
+                <div class="split">
+                    <div>
+                        <h2>端侧算力与模型规模<br>呈现爆发式增长</h2>
+                        <p class="lead" style="margin-top: 1rem;">随着 WebAssembly (WASM) 以及硬件加速的普及，浏览器与本地设备的推理效率在近三年内实现了阶梯式跨越。</p>
+                    </div>
+                    <div class="chart-container">
+                        <div class="bar-chart">
+                            <div class="bar-group">
+                                <div class="bar bar-1"><span class="bar-val">2024</span></div>
+                                <div class="bar-label">Cloud-Only</div>
+                            </div>
+                            <div class="bar-group">
+                                <div class="bar bar-2"><span class="bar-val">2025</span></div>
+                                <div class="bar-label">Hybrid</div>
+                            </div>
+                            <div class="bar-group">
+                                <div class="bar bar-3"><span class="bar-val">2026</span></div>
+                                <div class="bar-label">Edge-Native</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="slide">
+            <div class="slide-content">
+                <div class="slide-num">03 / Core Pillars</div>
+                <h2>智能化转型的三大支柱</h2>
+                <div class="grid">
+                    <div class="card">
+                        <h3 style="color: var(--accent-color);">01 / 异构算力</h3>
+                        <p>从小型的本地化轻量级部署，到大型 GPU 集群的高并发训练，算力的核心正向着低延迟与高利用率演进。</p>
+                    </div>
+                    <div class="card">
+                        <h3 style="color: var(--accent-color);">02 / 智能体网络</h3>
+                        <p>脱离单一的问答框架。多智能体系统（Multi-Agent）通过反思机制与工具调用，正在全自动地处理复杂业务流。</p>
+                    </div>
+                    <div class="card">
+                        <h3 style="color: var(--accent-color);">03 / 数据流全周期</h3>
+                        <p>从前端的手型标注、OCR 高效预处理，到后端的向量知识库检索（RAG），高质量数据驱动着整个闭环。</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="slide">
+            <div class="slide-content">
+                <div class="slide-num">04 / Connectivity</div>
+                <div class="split">
+                    <div>
+                        <h2>无缝连接的未来生态</h2>
+                        <p class="lead" style="margin-top: 1rem;">下一代应用将不再有孤立的界面。AI 核心层、网络协议层与轻量端侧将通过高性能管线有机组合，形成自适应的网状生态。</p>
+                    </div>
+                    <div class="chart-container">
+                        <div class="radial-grid">
+                            <div class="circle-pulse"></div>
+                            <div class="circle-pulse"></div>
+                            <div class="circle-pulse"></div>
+                            <div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:12px; height:12px; background:var(--accent-color); border-radius:50%; box-shadow:0 0 15px var(--accent-color);"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="slide" style="align-items: center; text-align: center;">
+            <div class="slide-content">
+                <div class="slide-num">05 / Conclusion</div>
+                <h2 style="font-size: 3.5rem; background: linear-gradient(to right, #6366f1, #a5b4fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight:700;">
+                    构建、演进、赋能
+                </h2>
+                <p class="lead" style="margin: 1.5rem auto 0 auto;">未来不是 AI 取代人类，而是善用 AI 的人重塑世界。</p>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        const container = document.getElementById('presentation');
+        const progress = document.getElementById('progress');
+        const slides = document.querySelectorAll('.slide');
+
+        // 1. 处理顶部翻页进度条 & 滚动触发页面 Active 状态动画
+        const observerOptions = {
+            root: container,
+            threshold: 0.5 // 当页面有 50% 以上进入视口时，触发该页面的入场动画
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('active');
+                }
+            });
+        }, observerOptions);
+
+        slides.forEach(slide => observer.observe(slide));
+
+        // 2. 实时更新进度条
+        container.addEventListener('scroll', () => {
+            const scrollTop = container.scrollTop;
+            const docHeight = container.scrollHeight - container.clientHeight;
+            const scrollPercent = (scrollTop / docHeight) * 100;
+            progress.style.width = scrollPercent + '%';
+        });
+
+        // 3. 大屏桌面端键盘/空格平滑翻页快捷键
+        window.addEventListener('keydown', (e) => {
+            const slideHeight = window.innerHeight;
+            if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
+                e.preventDefault();
+                container.scrollBy({ top: slideHeight, behavior: 'smooth' });
+            } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
+                e.preventDefault();
+                container.scrollBy({ top: -slideHeight, behavior: 'smooth' });
+            }
+        });
+    </script>
+</body>
+</html>

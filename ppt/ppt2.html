@@ -3,161 +3,478 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>极简炫酷 3D 幻灯片</title>
+    <title>AI: The Next Architecture</title>
     <style>
+        /* --- 核心设计系统与色彩 (升级版：冷峻钛灰与荧光绿) --- */
         :root {
-            --primary-color: #6c5ce7;
-            --transition-speed: 0.8s;
+            --bg-main: #0a0a0c;
+            --accent-color: #00f5a0; /* 极具科技感的荧光绿 */
+            --accent-glow: rgba(0, 245, 160, 0.15);
+            --text-main: #f8fafc;
+            --text-muted: #8e8e93;
+            --glass-bg: rgba(255, 255, 255, 0.02);
+            --glass-border: rgba(255, 255, 255, 0.05);
+            --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
         }
 
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
 
         body {
-            background: #0f0f1a;
-            color: white;
-            font-family: 'Segoe UI', system-ui, sans-serif;
+            font-family: var(--font-sans);
+            background: var(--bg-main);
+            color: var(--text-main);
             overflow: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* --- Fullscreen Scroll Snap 容器 --- */
+        .presentation {
+            width: 100vw;
             height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-
-        /* 幻灯片容器 */
-        .slider-container {
+            overflow-y: scroll;
+            scroll-snap-type: y mandatory;
+            scroll-behavior: smooth;
             position: relative;
-            width: 80vw;
-            height: 60vh;
-            perspective: 1500px; /* 设置 3D 视距 */
         }
 
-        .slider {
-            width: 100%;
-            height: 100%;
-            position: relative;
-            transform-style: preserve-3d;
-            transition: transform var(--transition-speed) cubic-bezier(0.7, 0, 0.3, 1);
+        /* 极简高级感网格底衬 */
+        .presentation::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image: linear-gradient(rgba(255,255,255,0.01) 1px, transparent 1px), 
+                              linear-gradient(90deg, rgba(255,255,255,0.01) 1px, transparent 1px);
+            background-size: 50px 50px;
+            pointer-events: none;
+            z-index: 1;
         }
 
+        /* --- 幻灯片基础布局与进入动画 (Fade-in-up) --- */
         .slide {
-            position: absolute;
-            width: 100%;
-            height: 100%;
+            width: 100vw;
+            height: 100vh;
+            scroll-snap-align: start;
             display: flex;
             flex-direction: column;
             justify-content: center;
+            align-items: flex-start;
+            padding: 6% 10%;
+            position: relative;
+            overflow: hidden;
+            z-index: 2;
+        }
+
+        .slide-content {
+            max-width: 1200px;
+            width: 100%;
+        }
+
+        /* 超大粗体 (Mega Typography) */
+        .slide-num {
+            font-family: monospace;
+            font-size: 0.85rem;
+            color: var(--accent-color);
+            margin-bottom: 2rem;
+            letter-spacing: 0.3em;
+            text-transform: uppercase;
+            opacity: 0;
+        }
+
+        h1, h2, p.lead, .grid, .split, .chart-box, .card {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: all 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        h1 {
+            font-size: 6rem; /* 极为粗大的巨型标题 */
+            font-weight: 900;
+            line-height: 1.05;
+            letter-spacing: -0.04em;
+            margin-bottom: 2rem;
+            background: linear-gradient(to bottom, #ffffff 60%, #a1a1a6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        h2 {
+            font-size: 3.8rem; /* 极大副标题 */
+            font-weight: 800;
+            line-height: 1.15;
+            letter-spacing: -0.03em;
+            margin-bottom: 2.5rem;
+        }
+
+        p.lead {
+            font-size: 1.6rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+            font-weight: 400;
+            max-width: 800px;
+        }
+
+        /* 页面激活时的阶梯动效触发器 */
+        .slide.active .slide-num { opacity: 1; transition: opacity 0.6s ease 0.1s; }
+        .slide.active h1, .slide.active h2 { opacity: 1; transform: translateY(0); transition-delay: 0.15s; }
+        .slide.active p.lead { opacity: 1; transform: translateY(0); transition-delay: 0.25s; }
+        .slide.active .grid, .slide.active .split, .slide.active .chart-box { opacity: 1; transform: translateY(0); transition-delay: 0.35s; }
+
+        /* --- 模块化矩阵栅格 & 硬朗线条卡片 --- */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2rem;
+            margin-top: 3rem;
+            width: 100%;
+        }
+
+        .card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            padding: 3rem 2rem;
+            border-radius: 2px; /* 更加硬朗的瑞士极简线条 */
+            transition: all 0.4s ease;
+        }
+
+        .slide.active .card { opacity: 1; transform: translateY(0); }
+        .slide.active .card:nth-child(1) { transition-delay: 0.4s; }
+        .slide.active .card:nth-child(2) { transition-delay: 0.5s; }
+        .slide.active .card:nth-child(3) { transition-delay: 0.6s; }
+
+        .card:hover {
+            border-color: var(--accent-color);
+            background: rgba(0, 245, 160, 0.02);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .card h3 {
+            font-size: 1.4rem;
+            margin-bottom: 1.2rem;
+            font-weight: 700;
+        }
+
+        .card p {
+            color: var(--text-muted);
+            font-size: 1rem;
+            line-height: 1.6;
+        }
+
+        /* --- 强对比两栏布局 --- */
+        .split {
+            display: grid;
+            grid-template-columns: 1.1fr 0.9fr;
+            gap: 5rem;
             align-items: center;
-            border-radius: 20px;
-            font-size: 2rem;
-            font-weight: bold;
-            backface-visibility: hidden; /* 隐藏背面 */
-            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-            border: 1px solid rgba(255,255,255,0.1);
+            width: 100%;
         }
 
-        /* 幻灯片样式 */
-        .slide:nth-child(1) { background: linear-gradient(135deg, #6c5ce7, #a29bfe); transform: rotateY(0deg) translateZ(0px); }
-        .slide:nth-child(2) { background: linear-gradient(135deg, #00b894, #55efc4); transform: rotateY(90deg) translateZ(40vw); }
-        .slide:nth-child(3) { background: linear-gradient(135deg, #d63031, #ff7675); transform: rotateY(180deg) translateZ(0px); visibility: hidden;}
-        .slide:nth-child(4) { background: linear-gradient(135deg, #e17055, #fab1a0); transform: rotateY(-90deg) translateZ(40vw); }
-
-        .content {
-            text-align: center;
-            padding: 2rem;
-            background: rgba(0, 0, 0, 0.2);
-            backdrop-filter: blur(10px);
-            border-radius: 15px;
-        }
-
-        /* 控制按钮 */
-        .controls {
-            position: absolute;
-            bottom: -80px;
-            left: 50%;
-            transform: translateX(-50%);
+        /* --- 图表组件（纯 CSS / SVG 硬件加速动效） --- */
+        .chart-box {
+            width: 100%;
             display: flex;
-            gap: 20px;
+            justify-content: center;
+            align-items: center;
         }
 
-        button {
-            padding: 12px 25px;
-            border: none;
-            background: rgba(255, 255, 255, 0.1);
-            color: white;
-            border-radius: 30px;
-            cursor: pointer;
-            backdrop-filter: blur(5px);
-            transition: 0.3s;
-            border: 1px solid rgba(255,255,255,0.2);
+        /* 1. 升级版爆发式增长柱状图 */
+        .bar-chart {
+            width: 100%;
+            height: 280px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+            border-bottom: 2px solid #2c2c2e;
+            padding-bottom: 10px;
         }
 
-        button:hover {
-            background: var(--primary-color);
-            transform: translateY(-3px);
+        .bar-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex: 1;
+        }
+
+        .bar {
+            width: 35%;
+            background: var(--accent-color);
+            opacity: 0.3;
+            transition: height 1.5s cubic-bezier(0.16, 1, 0.3, 1) 0.5s, opacity 0.6s ease 0.1s;
+            position: relative;
+            box-shadow: 0 0 25px var(--accent-glow);
+        }
+
+        .bar-1 { height: 70px; }
+        .bar-2 { height: 154px; }
+        .bar-3 { height: 266px; }
+
+        .slide.active .bar-1 { height: 70px; opacity: 1; }
+        .slide.active .bar-2 { height: 154px; opacity: 1; }
+        .slide.active .bar-3 { height: 266px; opacity: 1; }
+
+        .bar-label {
+            margin-top: 15px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-family: monospace;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+        }
+
+        /* 2. 增长曲线折线图 (纯 SVG Path 描边动画) */
+        .line-chart-svg {
+            width: 100%;
+            height: 280px;
+        }
+
+        .line-path {
+            stroke-dasharray: 1000;
+            stroke-dashoffset: 1000;
+            transition: stroke-dashoffset 2s cubic-bezier(0.16, 1, 0.3, 1) 0.6s;
+        }
+
+        /* 激活时绘制曲线 */
+        .slide.active .line-path {
+            stroke-dashoffset: 0;
+        }
+
+        /* 3. 动态矩阵呼吸控制核心 */
+        .matrix-core {
+            width: 220px;
+            height: 220px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+        }
+
+        .dot {
+            background: #2c2c2e;
+            border-radius: 50%;
+            transition: all 0.5s ease;
+        }
+
+        /* 激活时触发多重延时的呼吸动画 */
+        .slide.active .dot {
+            animation: dotGlow 1.8s infinite alternate ease-in-out;
+        }
+
+        .slide.active .dot:nth-child(3n+1) { animation-delay: 0.2s; }
+        .slide.active .dot:nth-child(3n+2) { animation-delay: 0.5s; }
+        .slide.active .dot:nth-child(3n+3) { animation-delay: 0.8s; }
+
+        @keyframes dotGlow {
+            0% { background: #2c2c2e; transform: scale(0.9); }
+            100% { background: var(--accent-color); transform: scale(1.1); box-shadow: 0 0 20px var(--accent-color); }
+        }
+
+        /* --- 响应式大屏与移动端适配 --- */
+        @media (max-width: 1200px) {
+            h1 { font-size: 4.5rem; }
+            h2 { font-size: 3rem; }
+            p.lead { font-size: 1.3rem; }
+            .split { gap: 3rem; }
+        }
+
+        @media (max-width: 768px) {
+            .presentation {
+                scroll-snap-type: none;
+                overflow-y: auto;
+            }
+            .slide {
+                height: auto;
+                min-height: 100vh;
+                padding: 5rem 1.5rem;
+                justify-content: center;
+            }
+            /* 移动端停用动画延迟，改善滑动跟手性与可读性 */
+            h1, h2, p.lead, .grid, .split, .card, .slide-num, .line-path, .bar, .dot { 
+                opacity: 1 !important; 
+                transform: none !important; 
+                transition: none !important;
+                animation: none !important;
+            }
+            /* 移动端静态图表状态 */
+            .bar-1 { height: 70px !important; opacity: 1 !important; }
+            .bar-2 { height: 154px !important; opacity: 1 !important; }
+            .bar-3 { height: 266px !important; opacity: 1 !important; }
+            .line-path { stroke-dashoffset: 0 !important; }
+            .dot { background: var(--accent-color); }
+
+            h1 { font-size: 2.8rem; }
+            h2 { font-size: 2rem; }
+            p.lead { font-size: 1.1rem; }
+            .grid, .split {
+                grid-template-columns: 1fr;
+                gap: 2rem;
+                margin-top: 2rem;
+            }
+            .chart-box { margin-top: 2rem; }
+        }
+
+        /* 顶部极光绿进度条 */
+        .progress-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 3px;
+            background: var(--accent-color);
+            z-index: 100;
+            transition: width 0.2s ease;
+            box-shadow: 0 0 12px var(--accent-color);
         }
     </style>
 </head>
 <body>
 
-    <div class="slider-container">
-        <div class="slider" id="slider">
-            <div class="slide">
-                <div class="content">
-                    <h1>未来设计</h1>
-                    <p>探索 3D 交互的无限可能</p>
-                </div>
-            </div>
-            <div class="slide">
-                <div class="content">
-                    <h1>极致性能</h1>
-                    <p>丝滑顺畅的 CSS 动画</p>
-                </div>
-            </div>
-            <div class="slide">
-                <div class="content">
-                    <h1>创意无限</h1>
-                    <p>用代码构建想象空间</p>
-                </div>
-            </div>
-            <div class="slide">
-                <div class="content">
-                    <h1>点击下方</h1>
-                    <p>感受旋转的魅力</p>
-                </div>
-            </div>
-        </div>
+    <div class="progress-bar" id="progress"></div>
 
-        <div class="controls">
-            <button onclick="rotateSlider('prev')">← 上一页</button>
-            <button onclick="rotateSlider('next')">下一页 →</button>
-        </div>
-    </div>
+    <main class="presentation" id="presentation">
+
+        <section class="slide active">
+            <div class="slide-content">
+                <div class="slide-num">01 / Manifest</div>
+                <h1>ARTIFICIAL<br>INTELLIGENCE.</h1>
+                <p class="lead">新一代智能化架构演进：从云端中心化算力，向着端侧自进化多智能体生态的范式转移。</p>
+            </div>
+        </section>
+
+        <section class="slide">
+            <div class="slide-content">
+                <div class="slide-num">02 / Scale & Power</div>
+                <div class="split">
+                    <div>
+                        <h2>端侧算力<br>阶梯式跃升</h2>
+                        <p class="lead" style="margin-top: 1rem;">通过本地 WebAssembly (WASM) 以及底层硬件加速内核的深度整合，端侧独立推理效率正在吞噬传统纯云端架构的份额。</p>
+                    </div>
+                    <div class="chart-box">
+                        <div class="bar-chart">
+                            <div class="bar-group">
+                                <div class="bar bar-1"></div>
+                                <div class="bar-label">Cloud Base</div>
+                            </div>
+                            <div class="bar-group">
+                                <div class="bar bar-2"></div>
+                                <div class="bar-label">Hybrid Core</div>
+                            </div>
+                            <div class="bar-group">
+                                <div class="bar bar-3"></div>
+                                <div class="bar-label">Edge-Native</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="slide">
+            <div class="slide-content">
+                <div class="slide-num">03 / Architecture</div>
+                <h2>智能化转型的三大硬核支柱</h2>
+                <div class="grid">
+                    <div class="card">
+                        <h3>01 / 异构算力集群</h3>
+                        <p>无论是本地万物互联的轻量级端侧部署，还是拥有超高利用率的 10 机级大规模 GPU 算力矩阵，算力基础正在向极限收敛。</p>
+                    </div>
+                    <div class="card">
+                        <h3>02 / 自反思智能体</h3>
+                        <p>告别死板的单向线性交互。基于多智能体协同管线通过自主反思与工具链调用，独立消化极其复杂的业务图谱。</p>
+                    </div>
+                    <div class="card">
+                        <h3>03 / 高密数据闭环</h3>
+                        <p>数据流即生命线。从前沿的敏捷标注、高效 OCR 管道提取，到高度精炼的 RAG（检索增强生成）向量库，实现无缝吞吐。</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="slide">
+            <div class="slide-content">
+                <div class="slide-num">04 / Performance</div>
+                <div class="split">
+                    <div>
+                        <h2>多智能体协同<br>涌现出的指数曲线</h2>
+                        <p class="lead" style="margin-top: 1rem;">当单个 Agent 走向网状互联，系统的复合生产力不再是线性叠加，而是呈现出极其陡峭的指数级爆发。</p>
+                    </div>
+                    <div class="chart-box">
+                        <svg class="line-chart-svg" viewBox="0 0 400 200" preserveAspectRatio="none">
+                            <defs>
+                                <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" stop-color="#00f5a0" stop-opacity="0.1"></stop>
+                                    <stop offset="100%" stop-color="#00f5a0" stop-opacity="0.6"></stop>
+                                </linearGradient>
+                            </defs>
+                            <line x1="0" y1="180" x2="400" y2="180" stroke="#2c2c2e" stroke-width="1" stroke-dasharray="4"></line>
+                            <line x1="0" y1="100" x2="400" y2="100" stroke="#2c2c2e" stroke-width="1" stroke-dasharray="4"></line>
+                            <path class="line-path" d="M 0 180 Q 150 170, 250 120 T 400 20" fill="none" stroke="#00f5a0" stroke-width="5" stroke-linecap="round"></path>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="slide">
+            <div class="slide-content">
+                <div class="slide-num">05 / Integration</div>
+                <div class="split">
+                    <div>
+                        <h2>重塑全栈边界</h2>
+                        <p class="lead" style="margin-top: 1rem;">未来的构建者将不再受困于机械的代码编写，而是作为高阶架构师，通过调度自适应神经网络，实现应用逻辑的原子级瞬时组装。</p>
+                    </div>
+                    <div class="chart-box">
+                        <div class="matrix-core">
+                            <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+                            <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+                            <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
 
     <script>
-        let currentRotation = 0;
-        const slider = document.getElementById('slider');
+        const container = document.getElementById('presentation');
+        const progress = document.getElementById('progress');
         const slides = document.querySelectorAll('.slide');
 
-        function rotateSlider(direction) {
-            if (direction === 'next') {
-                currentRotation -= 90;
-            } else {
-                currentRotation += 90;
-            }
-            
-            // 应用 3D 旋转
-            slider.style.transform = `rotateY(${currentRotation}deg)`;
+        // 1. 滚动交界监听，激活当前屏的 CSS 复杂动效
+        const observerOptions = {
+            root: container,
+            threshold: 0.5 // 当页面有 50% 以上进入视口时，触发该页面的入场动画
+        };
 
-            // 动态处理可见性（防止背面内容干扰，增强性能）
-            slides.forEach(slide => {
-                slide.style.visibility = 'visible';
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('active');
+                }
             });
-        }
+        }, observerOptions);
 
-        // 键盘支持
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowRight') rotateSlider('next');
-            if (e.key === 'ArrowLeft') rotateSlider('prev');
+        slides.forEach(slide => observer.observe(slide));
+
+        // 2. 更新顶部荧光绿进度条
+        container.addEventListener('scroll', () => {
+            const scrollTop = container.scrollTop;
+            const docHeight = container.scrollHeight - container.clientHeight;
+            const scrollPercent = (scrollTop / docHeight) * 100;
+            progress.style.width = scrollPercent + '%';
+        });
+
+        // 3. 大屏桌面端键盘/空格平滑翻页快捷键
+        window.addEventListener('keydown', (e) => {
+            const slideHeight = window.innerHeight;
+            if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === ' ') {
+                e.preventDefault();
+                container.scrollBy({ top: slideHeight, behavior: 'smooth' });
+            } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
+                e.preventDefault();
+                container.scrollBy({ top: -slideHeight, behavior: 'smooth' });
+            }
         });
     </script>
 </body>
