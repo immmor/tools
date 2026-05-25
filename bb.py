@@ -1,96 +1,77 @@
-import time
-import random
-import string
-import hmac
-import hashlib
-import json
-import requests
+import os
+from binance.client import Client
+from binance.exceptions import BinanceAPIException
 
-# 🌟 填入你刚刚在币安商户后台拿到的核心秘钥
-BINANCE_PAY_API_KEY = "lixvowijoc2pjlhs4rwnbtj1nkxvqxfgqshzw724botw5i1xf858vspv89tamk3u"
-BINANCE_PAY_SECRET_KEY = "66tyakojltp6bopspwuyxkuimrnkuw8cggjq41xfoiorkuzuccuurv2mdmw9dde2"
+# 1. 填入你在手机币安 App 上申请到的 API Key 和 Secret Key
+API_KEY = 'l2Z62aYKmIU9jM8tsHt6kplvJy1SlpxMTDbaS9ND7OXBTm2nLhFBWLEO48ZMAubI'
+API_SECRET = 'j7rDcCyGqozLMUR3nJtRYZbUT9FclLZaBw54xNEXCTYgVFJTONacgjjGSXqSE2LX'
 
-# 🟢 注入你的真实 Merchant ID
-MERCHANT_ID = "1247433549"
+client = Client(API_KEY, API_SECRET)
 
-def generate_nonce(length=32):
-    letters_and_digits = string.ascii_letters + string.digits
-    return ''.join(random.choice(letters_and_digits) for _ in range(length))
-
-def bpay_signature(secret, payload):
-    return hmac.new(
-        secret.encode('utf-8'),
-        payload.encode('utf-8'),
-        hashlib.sha512
-    ).hexdigest()
-
-def create_binance_pay_absolute_order():
-    url = "https://bpay.binanceapi.com/binancepay/openapi/v3/order"
-    merchant_trade_no = f"MROK_FINAL_{int(time.time() * 1000)}"
-    
-    body_data = {
-        "env": {"terminalType": "WEB"},
-        "merchantTradeNo": merchant_trade_no,
-        "orderAmount": "20.00",
-        "currency": "USDT",
-        "goods": {
-            "goodsType": "01",
-            "goodsCategory": "Z000",
-            "referenceGoodsId": "neural_core_vip",
-            "goodsName": "NeuralCore Premium Ticket"
-        }
+def check_deposit_status(target_tx_id=None, coin=None):
+    """
+    检查充值是否到账
+    :param target_tx_id: 区块链上的交易哈希 (TxId)，推荐使用
+    :param coin: 币种名称，如 'USDT', 'BTC' (可选，不传则查近期所有币种)
+    """
+    # 币安状态码字典映射
+    STATUS_MAP = {
+        0: "充值中 (Pending)",
+        6: "已入账但无法提现 (Credited but cannot withdraw)",
+        1: "成功到账 (Success)"
     }
-    
-    # 极致紧凑序列化（确保没有任何空格）
-    payload_str = json.dumps(body_data, separators=(',', ':'))
-    
-    timestamp = str(int(time.time() * 1000))
-    nonce = generate_nonce(32)
-    
-    # 🟢 关键胜负手：当使用 Merchant ID 强推时，签名载荷里必须附加商户ID属性
-    # 格式为: 时间戳 + \n + 随机数 + \n + JSON体 + \n + 商户ID + \n
-    signature_payload = f"{timestamp}\n{nonce}\n{payload_str}\n{MERCHANT_ID}\n"
-    
-    # 算签名
-    signature = bpay_signature(BINANCE_PAY_SECRET_KEY, signature_payload)
-    
-    headers = {
-        "Content-Type": "application/json",
-        "BinancePay-Timestamp": timestamp,
-        "BinancePay-Nonce": nonce,
-        "BinancePay-Signature": signature,
-        "BinancePay-Certificate-SN": BINANCE_PAY_API_KEY, # 缺省SN
-        "X-BPAY-MERCHANTID": MERCHANT_ID                  # 锚定商户ID
-    }
-    
-    print(f"🚀 正在使用同步签名法将商户ID [{MERCHANT_ID}] 推入全栈加密流...")
-    print("🔄 正在发起最终签名验证...")
     
     try:
-        response = requests.post(url, headers=headers, data=payload_str, timeout=10)
-        result = response.json()
-        
-        if result.get("status") == "SUCCESS":
-            order_data = result.get("data", {})
-            print("\n🎉 ============================================== 🎉")
-            print("⚡ 握手成功！币安网关已对账通过，成功吐出专属收款码！ ⚡")
-            print(f"🆔 系统订单号: {merchant_trade_no}")
-            print(f"💰 需付金额: {body_data['orderAmount']} {body_data['currency']}")
-            print("--------------------------------------------------")
-            print("🔗 【核心二维码链接】请复制到浏览器打开：")
-            print(f"\033[93m{order_data.get('qrcodeLink')}\033[0m") 
-            print("--------------------------------------------------")
-            print(f"💡 网页快捷收银台跳转链接: {order_data.get('checkoutUrl')}\n")
-        else:
-            print(f"❌ 币安服务器拒绝。")
-            print(f"原因: {result.get('errorMessage')} (错误码: {result.get('code')})")
-            print(f"回执内容: {result}")
+        print("正在从币安获取充值历史记录...")
+        # 如果指定了币种，传入 coin 参数可以缩小查询范围
+        params = {}
+        if coin:
+            params['coin'] = coin.upper()
             
+        # 获取充币历史列表
+        deposit_history = client.get_deposit_history(**params)
+        
+        if not deposit_history:
+            print("最近未查询到任何充值记录。")
+            return
+
+        # 遍历历史记录进行匹配
+        found = False
+        for record in deposit_history:
+            tx_id = record.get('txId')
+            record_coin = record.get('coin')
+            amount = record.get('amount')
+            status_code = record.get('status')
+            status_desc = STATUS_MAP.get(status_code, f"未知状态码:{status_code}")
+            insert_time = record.get('insertTime') # 毫秒级时间戳
+            
+            # 如果指定了 TxId，则进行精准匹配
+            if target_tx_id and tx_id == target_tx_id:
+                print(f"\n找到匹配的交易！")
+                print(f"币种: {record_coin} | 数量: {amount}")
+                print(f"交易状态: 【{status_desc}】")
+                print(f"交易哈希 (TxId): {tx_id}")
+                found = True
+                break
+            
+            # 如果没有指定 TxId，只指定了币种，就列出该币种最近的记录
+            elif not target_tx_id:
+                print(f"币种: {record_coin} | 数量: {amount} | 状态: {status_desc} | TxId: {tx_id}")
+                found = True
+                
+        if target_tx_id and not found:
+            print(f"\n未能在近期充值记录中找到该 TxId: {target_tx_id}")
+            print("提示：如果刚刚在链上发起转账，币安可能还没捕捉到区块确认，请等待1-2分钟后再试。")
+
+    except BinanceAPIException as e:
+        print(f"币安 API 错误: {e.message}")
     except Exception as e:
-        print(f"❌ 运行异常: {e}")
+        print(f"发生未知错误: {e}")
 
 if __name__ == "__main__":
-    if "你的_" in BINANCE_PAY_API_KEY:
-        print("⚠️ 请先修改代码中的 API_KEY 和 SECRET_KEY！")
-    else:
-        create_binance_pay_absolute_order()
+    # 场景 A：已知链上转账的 TxId（哈希），精准查询是否到账
+    MY_TXID = "这里替换成你在链上转账或钱包里复制的TxId"
+    check_deposit_status(target_tx_id=MY_TXID)
+    
+    # 场景 B：不知道 TxId，只想看最近 USDT 的充值状态
+    # check_deposit_status(coin="USDT")
