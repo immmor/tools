@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTML-in-Canvas 完美交互闭环演示</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #0a0b0d;
+            color: #fff;
+            font-family: system-ui, -apple-system, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        .header {
+            position: absolute;
+            top: 30px;
+            text-align: center;
+            pointer-events: none;
+            z-index: 10;
+        }
+        .header h1 { margin: 0 0 8px 0; font-size: 26px; letter-spacing: 1px; color: #f0f3f8; }
+        .header p { margin: 0; color: #5c6470; font-size: 14px; }
+
+        canvas {
+            border: 1px solid #1f242e;
+            border-radius: 12px;
+            box-shadow: 0 30px 70px rgba(0,0,0,0.6);
+            cursor: text; /* 提示用户内部可输入 */
+        }
+
+        /* --- 塞入 Canvas 内部的真实 HTML 样式 --- */
+        .secure-terminal-card {
+            width: 340px;
+            padding: 25px;
+            background: rgba(20, 24, 33, 0.85);
+            border: 1px solid #00ffcc;
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(0, 255, 204, 0.15);
+            box-sizing: border-box;
+        }
+
+        .terminal-header {
+            font-family: monospace;
+            color: #00ffcc;
+            font-size: 14px;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-align: center;
+        }
+
+        .input-wrapper {
+            margin-bottom: 15px;
+        }
+
+        .input-wrapper label {
+            display: block;
+            font-size: 11px;
+            color: #8a96a8;
+            margin-bottom: 6px;
+            font-family: monospace;
+        }
+
+        /* 统一输入框样式 */
+        .canvas-dom-input {
+            width: 100%;
+            padding: 10px 12px;
+            background: #0d0f14;
+            border: 1px solid #2d3748;
+            border-radius: 4px;
+            color: #fff;
+            font-size: 14px;
+            font-family: monospace;
+            box-sizing: border-box;
+            transition: all 0.25s ease;
+        }
+
+        /* 焦点样式：在 Canvas 内部触发 focus 时会实时重绘展现 */
+        .canvas-dom-input:focus {
+            outline: none;
+            border-color: #00ffcc;
+            background: #11151d;
+            box-shadow: 0 0 8px rgba(0, 255, 204, 0.3);
+        }
+
+        .btn-connect {
+            width: 100%;
+            padding: 12px;
+            background: #00ffcc;
+            border: none;
+            border-radius: 4px;
+            color: #0b0d13;
+            font-weight: bold;
+            font-family: monospace;
+            font-size: 13px;
+            cursor: pointer;
+            letter-spacing: 1px;
+            margin-top: 10px;
+            transition: background 0.2s;
+        }
+
+        .btn-connect:hover { background: #00ddb0; }
+        .btn-connect:active { transform: scale(0.98); }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>HTML-in-Canvas 全交互协议</h1>
+        <p>支持原生点击、聚焦、动态打字闪烁及 CSS 伪类实时响应</p>
+    </div>
+
+    <canvas id="app-canvas" width="800" height="550" layoutsubtree>
+        
+        <div id="canvas-inner-ui" class="secure-terminal-card">
+            <div class="terminal-header">// NODE_ACCESS_AUTH</div>
+            
+            <div class="input-wrapper">
+                <label>HOST ADDRESS</label>
+                <input type="text" class="canvas-dom-input" id="host-ip" placeholder="127.0.0.1" autocomplete="off">
+            </div>
+            
+            <div class="input-wrapper">
+                <label>ACCESS TOKEN</label>
+                <input type="password" class="canvas-dom-input" id="auth-token" placeholder="••••••••">
+            </div>
+
+            <button type="button" class="btn-connect" id="btn-trigger">CONNECT_TO_CORE</button>
+        </div>
+
+    </canvas>
+
+    <script>
+        const canvas = document.getElementById('app-canvas');
+        const ctx = canvas.getContext('2d');
+        const innerUI = document.getElementById('canvas-inner-ui');
+
+        // 定义 UI 在画布内的精确几何坐标（后续指针路由和图像渲染必须统一使用这两组变量）
+        const uiWidth = 340;
+        const uiHeight = 260;
+        const uiX = (canvas.width - uiWidth) / 2;
+        const uiY = (canvas.height - uiHeight) / 2;
+
+        // --- 核心修复：智能事件路由代理 (Event Route Proxy) ---
+        // 显式捕获 Canvas 的物理指针操作，并精准地“扔”给对应的内存 DOM
+        function proxyEventToDOM(e) {
+            const rect = canvas.getBoundingClientRect();
+            // 换算出相对于画布左上角的绝对像素坐标
+            const canvasX = e.clientX - rect.left;
+            const canvasY = e.clientY - rect.top;
+
+            // 1. 尝试使用 WICG 官方标准指针路由
+            if (typeof ctx.routePointerEvent === 'function') {
+                ctx.routePointerEvent(e, innerUI, uiX, uiY);
+            } 
+            // 2. 兼容部分 Blink 早期过渡版本的 API 
+            else if (typeof canvas.dispatchPointerEvent === 'function') {
+                canvas.dispatchPointerEvent(e);
+            }
+        }
+
+        // 绑定完整的指针生命周期，保证点击、抬起、拖拽、选中文本都能穿透
+        canvas.addEventListener('pointerdown', proxyEventToDOM);
+        canvas.addEventListener('pointerup', proxyEventToDOM);
+        canvas.addEventListener('pointermove', proxyEventToDOM);
+
+        // --- 动画：Canvas 原生背景粒子流 ---
+        const backgroundDots = [];
+        for (let i = 0; i < 40; i++) {
+            backgroundDots.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                speedX: (Math.random() - 0.5) * 0.8,
+                speedY: (Math.random() - 0.5) * 0.8
+            });
+        }
+
+        function drawBackground() {
+            ctx.fillStyle = '#0a0d14';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 绘制网格线增强空间感
+            ctx.strokeStyle = '#131924';
+            ctx.lineWidth = 1;
+            const gridSize = 40;
+            for(let x=0; x<canvas.width; x+=gridSize) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,canvas.height); ctx.stroke(); }
+            for(let y=0; y<canvas.height; y+=gridSize) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(canvas.width,y); ctx.stroke(); }
+
+            // 绘制缓慢移动的粒子
+            ctx.fillStyle = 'rgba(0, 255, 204, 0.15)';
+            backgroundDots.forEach(dot => {
+                ctx.beginPath();
+                ctx.arc(dot.x, dot.y, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+                dot.x += dot.speedX;
+                dot.y += dot.speedY;
+                if (dot.x < 0 || dot.x > canvas.width) dot.speedX *= -1;
+                if (dot.y < 0 || dot.y > canvas.height) dot.speedY *= -1;
+            });
+        }
+
+        // --- 渲染管道 ---
+        function render() {
+            // 先画普通的 2D Canvas 图像
+            drawBackground();
+
+            // 检查 API 完整性并渲染 HTML 组件纹理
+            if (typeof ctx.drawElementImage === 'function') {
+                // 核心 API 绘制
+                ctx.drawElementImage(innerUI, uiX, uiY);
+            } else {
+                // 运行环境未开 Flag 的兜底警报提示
+                ctx.fillStyle = 'rgba(255, 51, 51, 0.9)';
+                ctx.font = '15px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText('❌ 实验性特性的运行 Flag 未完全激活', canvas.width / 2, canvas.height / 2 - 20);
+                ctx.fillText('请前往 chrome://flags 启用 #canvas-draw-element', canvas.width / 2, canvas.height / 2 + 10);
+            }
+        }
+
+        // 监听规范中的标准事件：当内部 HTML 发生交互导致不得不“重绘”时，它会自动触发并刷新
+        canvas.addEventListener('paint', render);
+
+        // 使用 requestAnimationFrame 维持 60 FPS 动画，同时确保持续捕获打字时的光标闪烁
+        function animationLoop() {
+            render();
+            if (typeof canvas.requestPaint === 'function') {
+                canvas.requestPaint(); 
+            }
+            requestAnimationFrame(animationLoop);
+        }
+        animationLoop();
+
+        // --- 常规 DOM 事件逻辑监听 ---
+        // 尽管 UI 被画在 Canvas 里，底层的事件回调依旧在原 DOM 元素上完美触发
+        document.getElementById('btn-trigger').addEventListener('click', () => {
+            const host = document.getElementById('host-ip').value || '127.0.0.1';
+            const token = document.getElementById('auth-token').value;
+            
+            if(!token) {
+                alert('🔑 AUTH FAILURE: 密钥不得为空');
+            } else {
+                alert(`📡 通信管道已建立!\n节点目标: ${host}\n签名凭证: ${token}`);
+            }
+        });
+    </script>
+</body>
+</html>
