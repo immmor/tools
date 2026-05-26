@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>口袋妖怪：草丛冒险</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #2c3e50;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            color: #333;
+        }
+
+        .game-container {
+            width: 480px;
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            padding: 15px;
+            box-sizing: border-box;
+        }
+
+        /* 模式1：大地图探索 */
+        #explore-mode {
+            display: block;
+        }
+
+        .map-title {
+            text-align: center;
+            margin: 0 0 10px 0;
+            font-size: 1.1em;
+            color: #555;
+        }
+
+        #map {
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            grid-template-rows: repeat(10, 1fr);
+            gap: 2px;
+            background: #7ec855;
+            padding: 5px;
+            border-radius: 8px;
+            border: 4px solid #5d9e3f;
+            height: 360px;
+        }
+
+        .cell {
+            background: #8de366;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 2px;
+        }
+
+        .cell svg {
+            width: 28px;
+            height: 28px;
+        }
+
+        /* 草丛样式 */
+        .grass {
+            background: #52a43a;
+        }
+
+        /* 模式2：对战界面 */
+        #battle-mode {
+            display: none;
+        }
+
+        .battle-screen {
+            display: flex;
+            justify-content: space-between;
+            background: linear-gradient(to bottom, #86e3ce, #d6e6f2);
+            padding: 15px;
+            border-radius: 10px;
+            height: 160px;
+            border: 3px solid #34495e;
+        }
+
+        .pokemon {
+            width: 45%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end;
+        }
+
+        .pokemon-name {
+            font-weight: bold;
+            font-size: 1em;
+        }
+
+        .hp-bar-container {
+            width: 100%;
+            background: #ddd;
+            border-radius: 5px;
+            height: 8px;
+            margin: 5px 0;
+            overflow: hidden;
+        }
+
+        .hp-bar {
+            height: 100%;
+            width: 100%;
+            background: #4caf50;
+            transition: width 0.3s ease;
+        }
+
+        .pokemon-sprite {
+            width: 45px;
+            height: 45px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .pokemon-sprite svg {
+            width: 100%;
+            height: 100%;
+            animation: bounce 0.6s infinite alternate;
+        }
+
+        @keyframes bounce {
+            from { transform: translateY(0); }
+            to { transform: translateY(-8px); }
+        }
+
+        /* 公共组件：日志与控制 */
+        .log-box {
+            height: 80px;
+            border: 2px solid #ccc;
+            margin-top: 10px;
+            border-radius: 8px;
+            padding: 8px;
+            background: #fafafa;
+            overflow-y: auto;
+            font-size: 0.85em;
+            line-height: 1.4;
+        }
+
+        .control-panel {
+            margin-top: 10px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .move-controls {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 5px;
+            width: 180px;
+            margin: 10px auto 0 auto;
+        }
+
+        button {
+            padding: 10px;
+            font-size: 0.9em;
+            border: none;
+            border-radius: 6px;
+            background: #3498db;
+            color: white;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        button:hover { background: #2980b9; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        .d-pad { background: #34495e; }
+        .d-pad:hover { background: #2c3e50; }
+    </style>
+</head>
+<body>
+
+<div class="game-container">
+    
+    <div id="explore-mode">
+        <div class="map-title">🌲 运用方向键或WASD移动，在深色草丛中寻找妖怪吧！</div>
+        <div id="map"></div>
+        <div class="move-controls">
+            <td></td><button class="d-pad" onclick="movePlayer(0, -1)">▲</button><td></td>
+            <button class="d-pad" onclick="movePlayer(-1, 0)">◀</button>
+            <button class="d-pad" onclick="movePlayer(0, 1)">▼</button>
+            <button class="d-pad" onclick="movePlayer(1, 0)">▶</button>
+        </div>
+    </div>
+
+    <div id="battle-mode">
+        <div class="battle-screen">
+            <div class="pokemon">
+                <div class="pokemon-name" id="p-name">皮卡丘</div>
+                <div class="hp-bar-container"><div class="hp-bar" id="p-hp"></div></div>
+                <div id="p-hp-text" style="font-size: 0.75em;">100/100</div>
+                <div class="pokemon-sprite" id="p-sprite">
+                <svg viewBox="0 0 64 64" id="svg-pikachu">
+                    <circle cx="32" cy="32" r="28" fill="#FFD93D"/>
+                    <ellipse cx="20" cy="26" rx="6" ry="8" fill="#FFD93D"/>
+                    <ellipse cx="44" cy="26" rx="6" ry="8" fill="#FFD93D"/>
+                    <circle cx="20" cy="24" r="4" fill="#222"/>
+                    <circle cx="44" cy="24" r="4" fill="#222"/>
+                    <circle cx="21" cy="23" r="1.5" fill="#fff"/>
+                    <circle cx="45" cy="23" r="1.5" fill="#fff"/>
+                    <ellipse cx="14" cy="32" rx="5" ry="4" fill="#FF6B6B"/>
+                    <ellipse cx="50" cy="32" rx="5" ry="4" fill="#FF6B6B"/>
+                    <ellipse cx="32" cy="40" rx="4" ry="2" fill="#222"/>
+                    <path d="M28 44 Q32 48 36 44" stroke="#222" stroke-width="2" fill="none"/>
+                </svg>
+            </div>
+            </div>
+            <div class="pokemon">
+                <div class="pokemon-name" id="e-name">野生妖怪</div>
+                <div class="hp-bar-container"><div class="hp-bar" id="e-hp"></div></div>
+                <div id="e-hp-text" style="font-size: 0.75em;">100/100</div>
+                <div class="pokemon-sprite" id="e-sprite"></div>
+            </div>
+        </div>
+        
+        <div class="control-panel">
+            <button onclick="battleAction('attack1')">十万伏特</button>
+            <button onclick="battleAction('attack2')">打雷 (看运气)</button>
+            <button onclick="battleAction('heal')">使用伤药</button>
+            <button onclick="battleAction('run')">逃跑</button>
+        </div>
+    </div>
+
+    <div class="log-box" id="log-box">
+        欢迎来到宝可梦世界！请控制角色移动。
+    </div>
+</div>
+
+<script>
+    // --- 地图数据与初始化 ---
+    const MAP_SIZE = 10;
+    let playerPos = { x: 1, y: 1 };
+    // 简易地图矩阵：0=空地，1=草丛
+    const mapData = [
+        [0,0,0,1,1,1,0,0,0,0],
+        [0,0,0,1,1,1,0,1,1,0],
+        [0,0,0,0,0,0,0,1,1,0],
+        [1,1,0,0,0,0,0,0,0,0],
+        [1,1,1,0,0,1,1,1,0,0],
+        [0,1,1,0,0,1,1,1,0,0],
+        [0,0,0,0,0,1,1,1,0,0],
+        [0,0,0,0,0,0,0,0,0,0],
+        [0,1,1,1,0,0,0,1,1,0],
+        [0,1,1,1,0,0,0,1,1,0],
+    ];
+
+    // 潜在的野生宝可梦库
+    const wildPool = [
+        { name: '小火龙', svg: '<svg viewBox="0 0 64 64"><circle cx="32" cy="36" r="24" fill="#FF6B35"/><ellipse cx="32" cy="14" rx="12" ry="8" fill="#FF6B35"/><circle cx="26" cy="32" r="3" fill="#222"/><circle cx="38" cy="32" r="3" fill="#222"/><path d="M26 44 Q32 50 38 44" stroke="#222" stroke-width="2" fill="none"/><path d="M18 20 L12 8 L22 16" fill="#FF6B35"/><path d="M46 20 L52 8 L42 16" fill="#FF6B35"/></svg>', maxHp: 80, hp: 80, atk: 12 },
+        { name: '杰尼龟', svg: '<svg viewBox="0 0 64 64"><ellipse cx="32" cy="40" rx="26" ry="18" fill="#4ECDC4"/><ellipse cx="32" cy="28" rx="18" ry="14" fill="#4ECDC4"/><circle cx="24" cy="26" r="4" fill="#222"/><circle cx="40" cy="26" r="4" fill="#222"/><path d="M28 36 Q32 40 36 36" stroke="#222" stroke-width="2" fill="none"/><ellipse cx="20" cy="52" rx="6" ry="4" fill="#4ECDC4"/><ellipse cx="44" cy="52" rx="6" ry="4" fill="#4ECDC4"/><ellipse cx="32" cy="16" rx="8" ry="4" fill="#45B7AA"/></svg>', maxHp: 90, hp: 90, atk: 10 },
+        { name: '妙蛙种子', svg: '<svg viewBox="0 0 64 64"><ellipse cx="32" cy="42" rx="20" ry="16" fill="#7CB342"/><circle cx="32" cy="24" r="16" fill="#8BC34A"/><circle cx="26" cy="22" r="3" fill="#222"/><circle cx="38" cy="22" r="3" fill="#222"/><path d="M28 30 Q32 34 36 30" stroke="#222" stroke-width="2" fill="none"/><ellipse cx="32" cy="10" rx="8" ry="6" fill="#4CAF50"/><circle cx="28" cy="8" r="4" fill="#81C784"/><circle cx="36" cy="8" r="4" fill="#81C784"/><circle cx="32" cy="6" r="4" fill="#81C784"/></svg>', maxHp: 100, hp: 100, atk: 9 },
+        { name: '超梦 (神兽!)', svg: '<svg viewBox="0 0 64 64"><ellipse cx="32" cy="36" rx="24" ry="22" fill="#E1BEE7"/><path d="M12 28 Q8 12 20 20" stroke="#CE93D8" stroke-width="4" fill="none"/><path d="M52 28 Q56 12 44 20" stroke="#CE93D8" stroke-width="4" fill="none"/><circle cx="22" cy="32" r="5" fill="#7B1FA2"/><circle cx="42" cy="32" r="5" fill="#7B1FA2"/><circle cx="23" cy="31" r="2" fill="#fff"/><circle cx="43" cy="31" r="2" fill="#fff"/><path d="M26 46 Q32 52 38 46" stroke="#7B1FA2" stroke-width="2" fill="none"/></svg>', maxHp: 180, hp: 180, atk: 18 }
+    ];
+
+    let playerPokemon = { name: '皮卡丘', maxHp: 120, hp: 120 };
+    let currentEnemy = null;
+    let isBattle = false;
+
+    const logBox = document.getElementById('log-box');
+
+    function initMap() {
+        const mapEl = document.getElementById('map');
+        mapEl.innerHTML = '';
+        for (let y = 0; y < MAP_SIZE; y++) {
+            for (let x = 0; x < MAP_SIZE; x++) {
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                if (mapData[y][x] === 1) cell.classList.add('grass');
+                cell.id = `cell-${x}-${y}`;
+                mapEl.appendChild(cell);
+            }
+        }
+        drawPlayer();
+    }
+
+    function drawPlayer() {
+        document.querySelectorAll('.cell').forEach(c => { c.innerHTML = ''; });
+        const currentCell = document.getElementById(`cell-${playerPos.x}-${playerPos.y}`);
+        if (currentCell) {
+            currentCell.innerHTML = '<svg viewBox="0 0 64 64"><circle cx="32" cy="20" r="14" fill="#FFD93D"/><circle cx="32" cy="50" r="18" fill="#3498DB"/><circle cx="27" cy="18" r="3" fill="#222"/><circle cx="37" cy="18" r="3" fill="#222"/><circle cx="28" cy="17" r="1" fill="#fff"/><circle cx="38" cy="17" r="1" fill="#fff"/><ellipse cx="32" cy="26" rx="3" ry="2" fill="#E74C3C"/><path d="M27 30 Q32 34 37 30" stroke="#222" stroke-width="1.5" fill="none"/></svg>';
+        }
+    }
+
+    // --- 移动逻辑 ---
+    function movePlayer(dx, dy) {
+        if (isBattle) return;
+
+        let nextX = playerPos.x + dx;
+        let nextY = playerPos.y + dy;
+
+        // 边界检查
+        if (nextX >= 0 && nextX < MAP_SIZE && nextY >= 0 && nextY < MAP_SIZE) {
+            playerPos.x = nextX;
+            playerPos.y = nextY;
+            drawPlayer();
+
+            // 检查是否踩入草丛
+            if (mapData[playerPos.y][playerPos.x] === 1) {
+                addLog("你在草丛中搜寻...");
+                // 30% 概率遇到野生妖怪
+                if (Math.random() < 0.35) {
+                    startBattle();
+                }
+            } else {
+                addLog("在安全的道路上散步。");
+            }
+        }
+    }
+
+    // 监听键盘按键
+    window.addEventListener('keydown', (e) => {
+        if (isBattle) return;
+        switch(e.key.toLowerCase()) {
+            case 'w': case 'arrowup': movePlayer(0, -1); break;
+            case 's': case 'arrowdown': movePlayer(0, 1); break;
+            case 'a': case 'arrowleft': movePlayer(-1, 0); break;
+            case 'd': case 'arrowright': movePlayer(1, 0); break;
+        }
+    });
+
+    // --- 战斗逻辑 ---
+    function startBattle() {
+        isBattle = true;
+        // 从怪兽池随机抽取一只
+        const randTemplate = wildPool[Math.floor(Math.random() * wildPool.length)];
+        // 深拷贝，防止修改模板
+        currentEnemy = JSON.parse(JSON.stringify(randTemplate)); 
+
+        addLog(`💥 🚨 哇！野生的 <strong>【${currentEnemy.name}】</strong> 出现了！`);
+        
+        // 切换视图
+        document.getElementById('explore-mode').style.display = 'none';
+        document.getElementById('battle-mode').style.display = 'block';
+
+        // 初始化对战数据
+        document.getElementById('e-name').innerText = currentEnemy.name;
+        document.getElementById('e-sprite').innerHTML = currentEnemy.svg;
+        
+        updateBattleUI();
+    }
+
+    function updateBattleUI() {
+        // 玩家血条
+        const pPercent = Math.max(0, (playerPokemon.hp / playerPokemon.maxHp) * 100);
+        document.getElementById('p-hp').style.width = pPercent + '%';
+        document.getElementById('p-hp-text').innerText = `${playerPokemon.hp}/${playerPokemon.maxHp}`;
+        
+        // 敌方血条
+        const ePercent = Math.max(0, (currentEnemy.hp / currentEnemy.maxHp) * 100);
+        document.getElementById('e-hp').style.width = ePercent + '%';
+        document.getElementById('e-hp-text').innerText = `${currentEnemy.hp}/${currentEnemy.maxHp}`;
+    }
+
+    function setBattleBtns(disabled) {
+        document.querySelectorAll('#battle-mode button').forEach(b => b.disabled = disabled);
+    }
+
+    function battleAction(action) {
+        if (!isBattle) return;
+        setBattleBtns(true);
+
+        if (action === 'attack1') {
+            let dmg = Math.floor(Math.random() * 15) + 15; // 15-30
+            currentEnemy.hp = Math.max(0, currentEnemy.hp - dmg);
+            addLog(`⚡ 皮卡丘使出【十万伏特】，对 ${currentEnemy.name} 造成 ${dmg} 点伤害！`);
+        } 
+        else if (action === 'attack2') {
+            if (Math.random() < 0.6) { // 60%命中
+                let dmg = Math.floor(Math.random() * 25) + 30; // 30-55
+                currentEnemy.hp = Math.max(0, currentEnemy.hp - dmg);
+                addLog(`⚡ 运气大爆发！皮卡丘【打雷】命中，暴击 ${dmg} 点伤害！`);
+            } else {
+                addLog(`❌ 皮卡丘的【打雷】劈歪了，没有击中！`);
+            }
+        } 
+        else if (action === 'heal') {
+            let heal = 40;
+            playerPokemon.hp = Math.min(playerPokemon.maxHp, playerPokemon.hp + heal);
+            addLog(`🍏 你使用了伤药，皮卡丘回复了 ${heal} 点HP。`);
+        } 
+        else if (action === 'run') {
+            addLog("💨 你成功逃跑了！");
+            setTimeout(endBattle, 1000);
+            return;
+        }
+
+        updateBattleUI();
+
+        // 检查敌人是否倒下
+        if (currentEnemy.hp <= 0) {
+            addLog(`🎉 成功击败了野生的 ${currentEnemy.name}！获得了丰厚经验。`);
+            setTimeout(endBattle, 1500);
+            return;
+        }
+
+        // 敌方回合
+        setTimeout(enemyTurn, 1000);
+    }
+
+    function enemyTurn() {
+        if (!isBattle) return;
+
+        let edmg = Math.floor(Math.random() * 10) + currentEnemy.atk;
+        playerPokemon.hp = Math.max(0, playerPokemon.hp - edmg);
+        
+        addLog(`${currentEnemy.name} 发动撞击，对皮卡丘造成 ${edmg} 点伤害！`);
+        updateBattleUI();
+
+        if (playerPokemon.hp <= 0) {
+            addLog("💀 皮卡丘失去了战斗能力！你被送回了大地图，HP已自动补满。");
+            playerPokemon.hp = playerPokemon.maxHp; // 战败惩罚：满血复活回地图
+            setTimeout(endBattle, 2000);
+            return;
+        }
+
+        setBattleBtns(false);
+    }
+
+    function endBattle() {
+        isBattle = false;
+        // 切回大地图
+        document.getElementById('battle-mode').style.display = 'none';
+        document.getElementById('explore-mode').style.display = 'block';
+        addLog("你回到了野外，请继续探索。");
+        setBattleBtns(false);
+    }
+
+    function addLog(msg) {
+        logBox.innerHTML += msg + '<br>';
+        logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    // 初始化运行
+    initMap();
+</script>
+
+</body>
+</html>

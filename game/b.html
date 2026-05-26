@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Flappy Bird - Three.js</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #70c5ce;
+            font-family: 'Arial', sans-serif;
+            user-select: none;
+        }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            font-size: 48px;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            font-family: sans-serif;
+            pointer-events: none;
+        }
+        #gameover-screen {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: white;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 30px 50px;
+            border-radius: 15px;
+            display: none;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        #gameover-screen h1 { margin: 0 0 10px 0; font-size: 40px; }
+        #gameover-screen p { margin: 0 0 20px 0; font-size: 18px; color: #ccc; }
+        #btn-restart {
+            background: #ff9800;
+            border: none;
+            color: white;
+            padding: 12px 30px;
+            font-size: 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        #btn-restart:hover { background: #e68a00; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+    <div id="ui">0</div>
+    <div id="gameover-screen">
+        <h1>游戏结束</h1>
+        <p>点击按钮或按【空格键】重新开始</p>
+        <button id="btn-restart">重新开始</button>
+    </div>
+
+    <script>
+        // --- 游戏配置 ---
+        const GRAVITY = -0.005;
+        const JUMP_FORCE = 0.12;
+        const PIPE_SPEED = 0.08;
+        const PIPE_SPAWN_INTERVAL = 90; // 帧数间隔
+        const PIPE_GAP = 3.5;          // 上下管道空隙大小
+        const WORLD_BOUNDS = 7;         // 上下边界限制
+
+        // --- 全局变量 ---
+        let scene, camera, renderer;
+        let bird, birdVelocity = 0;
+        let pipes = [];
+        let score = 0;
+        let gameOver = false;
+        let spawnTimer = 0;
+        let particles = [];
+
+        // --- 初始化 ---
+        init();
+        animate();
+
+        function init() {
+            // 1. 场景创建
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x71c5cf);
+            scene.fog = new THREE.FogExp2(0x71c5cf, 0.015);
+
+            // 2. 相机设置
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 2, 10);
+            camera.lookAt(0, 0, 0);
+
+            // 3. 渲染器
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            // 4. 灯光
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(-10, 20, 10);
+            dirLight.castShadow = true;
+            dirLight.shadow.camera.top = 10;
+            dirLight.shadow.camera.bottom = -10;
+            dirLight.shadow.camera.left = -10;
+            dirLight.shadow.camera.right = 20;
+            scene.add(dirLight);
+
+            // 5. 创建主角 (小鸟 - 3D球体代替)
+            const birdGeo = new THREE.SphereGeometry(0.4, 32, 32);
+            const birdMat = new THREE.MeshStandardMaterial({ color: 0xffd700, roughness: 0.3 });
+            bird = new THREE.Mesh(birdGeo, birdMat);
+            bird.castShadow = true;
+            bird.position.set(0, 0, 0);
+            scene.add(bird);
+
+            // 6. 装饰地面
+            const floorGeo = new THREE.BoxGeometry(100, 1, 20);
+            const floorMat = new THREE.MeshStandardMaterial({ color: 0xded895 });
+            const floor = new THREE.Mesh(floorGeo, floorMat);
+            floor.position.set(0, -WORLD_BOUNDS - 0.5, 0);
+            floor.receiveShadow = true;
+            scene.add(floor);
+
+            // 7. 事件监听
+            window.addEventListener('keydown', handleKeyDown);
+            window.addEventListener('touchstart', jump);
+            window.addEventListener('mousedown', jump);
+            window.addEventListener('resize', onWindowResize);
+            document.getElementById('btn-restart').addEventListener('click', resetGame);
+        }
+
+        // --- 管道生成逻辑 ---
+        function createPipe() {
+            const pipeWidth = 0.8;
+            const pipeLength = 12;
+            const pipeGeometry = new THREE.CylinderGeometry(pipeWidth, pipeWidth, pipeLength, 32);
+            const pipeMaterial = new THREE.MeshStandardMaterial({ color: 0x73bf2e, roughness: 0.2 });
+
+            // 随机决定空隙的中心点 Y 坐标
+            const minCenter = -WORLD_BOUNDS + PIPE_GAP;
+            const maxCenter = WORLD_BOUNDS - PIPE_GAP;
+            const centerPosition = Math.random() * (maxCenter - minCenter) + minCenter;
+
+            // 上管道位置
+            const topPipe = new THREE.Mesh(pipeGeometry, pipeMaterial);
+            topPipe.castShadow = true;
+            topPipe.position.set(15, centerPosition + (pipeLength / 2) + (PIPE_GAP / 2), 0);
+            scene.add(topPipe);
+
+            // 下管道位置
+            const bottomPipe = new THREE.Mesh(pipeGeometry, pipeMaterial);
+            bottomPipe.castShadow = true;
+            bottomPipe.position.set(15, centerPosition - (pipeLength / 2) - (PIPE_GAP / 2), 0);
+            scene.add(bottomPipe);
+
+            // 放入数组方便后续更新和碰撞检测
+            pipes.push({
+                top: topPipe,
+                bottom: bottomPipe,
+                passed: false,
+                topYBound: centerPosition + (PIPE_GAP / 2),
+                bottomYBound: centerPosition - (PIPE_GAP / 2),
+                xWidth: pipeWidth
+            });
+        }
+
+        // --- 粒子特效 (小鸟尾迹) ---
+        function createParticle() {
+            const pGeo = new THREE.SphereGeometry(0.1, 8, 8);
+            const pMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 });
+            const p = new THREE.Mesh(pGeo, pMat);
+            p.position.set(bird.position.x - 0.3, bird.position.y, bird.position.z);
+            scene.add(p);
+            particles.push(p);
+        }
+
+        function updateParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.position.x -= 0.05;
+                p.scale.multiplyScalar(0.95); // 逐渐变小
+                p.material.opacity -= 0.02;   // 逐渐透明
+
+                if (p.material.opacity <= 0 || p.scale.x <= 0.01) {
+                    scene.remove(p);
+                    particles.splice(i, 1);
+                }
+            }
+        }
+
+        // --- 游戏控制 ---
+        function jump() {
+            if (gameOver) return;
+            birdVelocity = JUMP_FORCE;
+            // 向上跳跃时微微前倾的视觉效果
+            bird.rotation.z = 0.3;
+        }
+
+        function handleKeyDown(e) {
+            if (e.code === 'Space') {
+                if (gameOver) {
+                    resetGame();
+                } else {
+                    jump();
+                }
+            }
+        }
+
+        function resetGame() {
+            // 清理管道
+            pipes.forEach(p => {
+                scene.remove(p.top);
+                scene.remove(p.bottom);
+            });
+            pipes = [];
+
+            // 清理粒子
+            particles.forEach(p => scene.remove(p));
+            particles = [];
+
+            // 重置状态
+            bird.position.set(0, 0, 0);
+            bird.rotation.set(0, 0, 0);
+            birdVelocity = 0;
+            score = 0;
+            gameOver = false;
+            spawnTimer = 0;
+
+            document.getElementById('ui').innerText = score;
+            document.getElementById('gameover-screen').style.display = 'none';
+        }
+
+        function triggerGameOver() {
+            gameOver = true;
+            document.getElementById('gameover-screen').style.display = 'block';
+        }
+
+        // --- 窗口大小自适应 ---
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- 核心动画循环 ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (!gameOver) {
+                // 1. 应用重力
+                birdVelocity += GRAVITY;
+                bird.position.y += birdVelocity;
+
+                // 稍微平滑一下旋转，往下掉时头朝下
+                bird.rotation.z -= 0.015;
+                bird.rotation.z = Math.max(-0.7, Math.min(0.4, bird.rotation.z));
+
+                // 2. 天花板与地板碰撞
+                if (bird.position.y > WORLD_BOUNDS || bird.position.y < -WORLD_BOUNDS) {
+                    triggerGameOver();
+                }
+
+                // 3. 生成管道
+                spawnTimer++;
+                if (spawnTimer >= PIPE_SPAWN_INTERVAL) {
+                    createPipe();
+                    spawnTimer = 0;
+                }
+
+                // 4. 移动管道并检测碰撞
+                const birdRadius = 0.4;
+                for (let i = pipes.length - 1; i >= 0; i--) {
+                    const p = pipes[i];
+                    p.top.position.x -= PIPE_SPEED;
+                    p.bottom.position.x -= PIPE_SPEED;
+
+                    // 碰撞检测 (简化的 AABB 配合 3D 轴向检测)
+                    const birdX = bird.position.x;
+                    const birdY = bird.position.y;
+                    const pipeX = p.top.position.x;
+
+                    // 检查 X 轴上小鸟是否碰到了管道
+                    if (Math.abs(birdX - pipeX) < (p.xWidth + birdRadius)) {
+                        // 检查 Y 轴上小鸟是否在安全区域外
+                        if (birdY + birdRadius > p.topYBound || birdY - birdRadius < p.bottomYBound) {
+                            triggerGameOver();
+                        }
+                    }
+
+                    // 计分检测
+                    if (!p.passed && pipeX < birdX) {
+                        p.passed = true;
+                        score++;
+                        document.getElementById('ui').innerText = score;
+                    }
+
+                    // 移出屏幕后销毁
+                    if (pipeX < -10) {
+                        scene.remove(p.top);
+                        scene.remove(p.bottom);
+                        pipes.splice(i, 1);
+                    }
+                }
+
+                // 5. 尾迹粒子特效
+                if (Math.random() > 0.4) createParticle();
+            }
+
+            updateParticles();
+
+            // 渲染
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>

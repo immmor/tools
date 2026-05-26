@@ -3,198 +3,863 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aura Ultra | 卷曲模拟</title>
+    <title>极简响应式阅读器</title>
     <style>
         :root {
-            --paper-bg: #fffcf5;
-            --spine-shadow: rgba(0,0,0,0.15);
-            --curl-shadow: rgba(0,0,0,0.3);
-            --transition: 1.6s cubic-bezier(0.645, 0.045, 0.355, 1);
+            --bg-color: #f6f1e7;
+            --text-color: #333333;
+            --header-bg: rgba(0, 0, 0, 0.03);
+            --header-border: rgba(0, 0, 0, 0.05);
+            --footer-color: #666;
+            --font-size-pc: 20px;
+            --font-size-mobile: 18px;
+        }
+
+        body.night-mode {
+            --bg-color: #1a1a1a;
+            --text-color: #b0b0b0;
+            --header-bg: rgba(255, 255, 255, 0.03);
+            --header-border: rgba(255, 255, 255, 0.05);
+            --footer-color: #666;
+        }
+
+        body.bg-white {
+            --bg-color: #ffffff;
+        }
+
+        body.bg-green {
+            --bg-color: #e8f5e9;
+        }
+
+        body.bg-blue {
+            --bg-color: #e3f2fd;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
         }
 
         body {
-            background: #121212;
+            font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.8;
+            overflow: hidden; /* 禁止全身滚动，由阅读区控制 */
             height: 100vh;
             display: flex;
-            justify-content: center;
+            flex-direction: column;
+        }
+
+        /* 顶部工具栏 */
+        header {
+            background-color: var(--header-bg);
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
             align-items: center;
-            perspective: 2500px;
+            font-size: 14px;
+            border-bottom: 1px solid var(--header-border);
+            user-select: none;
+        }
+
+        .book-title {
+            flex: 1;
             overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            margin-right: 15px;
+            min-width: 0;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .shelf-panel {
+            position: fixed;
+            top: 0;
+            right: -320px;
+            width: 320px;
+            height: 100vh;
+            background: var(--bg-color);
+            box-shadow: -2px 0 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+            transition: right 0.3s ease;
+            overflow-y: auto;
+        }
+
+        .shelf-panel.open {
+            right: 0;
+        }
+
+        .shelf-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .shelf-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            border: 1px solid var(--header-border);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .shelf-item:hover {
+            background: var(--header-border);
+        }
+
+        .shelf-item.active {
+            background: var(--text-color);
+            color: var(--bg-color);
+        }
+
+        .shelf-item-icon {
+            font-size: 24px;
+            margin-right: 12px;
+        }
+
+        .shelf-item-info {
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .shelf-item-name {
+            font-size: 14px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .shelf-item-delete {
+            padding: 5px 8px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            opacity: 0.5;
+            font-size: 16px;
+            transition: opacity 0.2s;
+        }
+
+        .shelf-item-delete:hover {
+            opacity: 1;
+        }
+
+        .shelf-empty {
+            text-align: center;
+            padding: 40px 0;
+            color: #888;
+            font-size: 14px;
+        }
+
+        .control-btn {
+            padding: 4px 10px;
+            border: 1px solid var(--header-border);
+            border-radius: 4px;
+            background: transparent;
+            color: var(--text-color);
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .control-btn:hover {
+            background: var(--header-border);
+        }
+
+        .control-btn.active {
+            background: var(--text-color);
+            color: var(--bg-color);
+        }
+
+        .settings-panel {
+            position: fixed;
+            top: 0;
+            right: -280px;
+            width: 280px;
+            height: 100vh;
+            background: var(--bg-color);
+            box-shadow: -2px 0 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+            transition: right 0.3s ease;
+            overflow-y: auto;
+        }
+
+        .settings-panel.open {
+            right: 0;
+        }
+
+        .settings-panel-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.3);
+            z-index: 999;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s, visibility 0.3s;
+        }
+
+        .settings-panel-overlay.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .settings-content {
+            padding: 20px;
+        }
+
+        .settings-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--header-border);
+        }
+
+        .settings-title {
+            font-size: 18px;
+            font-weight: bold;
             margin: 0;
         }
 
-        /* 书脊中心线 */
-        .book-container {
-            position: relative;
-            width: 400px;
-            height: 560px;
-            transform-style: preserve-3d;
-        }
-
-        .page {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            top: 0; left: 0;
-            transform-origin: left center;
-            transform-style: preserve-3d;
-            transition: var(--transition);
+        .settings-close {
+            width: 28px;
+            height: 28px;
+            border: none;
+            background: transparent;
+            color: var(--text-color);
+            font-size: 24px;
             cursor: pointer;
-        }
-
-        /* 页面正面 */
-        .page-front {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            background: var(--paper-bg);
-            backface-visibility: hidden;
-            padding: 40px;
-            box-sizing: border-box;
-            border-radius: 0 5px 5px 0;
-            /* 初始书脊阴影 */
-            box-shadow: inset 10px 0 20px -10px var(--spine-shadow);
-        }
-
-        /* 核心：卷曲阴影层 */
-        .page-front::before {
-            content: '';
-            position: absolute;
-            top: 0; right: 0;
-            width: 50px; height: 100%;
-            background: linear-gradient(to right, transparent, rgba(0,0,0,0.02) 50%, rgba(0,0,0,0.1) 100%);
-            transition: var(--transition);
-        }
-
-        /* 页面背面（翻转后的底色） */
-        .page-back {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            background: #f0ede5;
-            transform: rotateY(180deg);
-            backface-visibility: hidden;
-            border-radius: 5px 0 0 5px;
+            border-radius: 4px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 5rem;
-            color: rgba(0,0,0,0.05);
-            font-weight: bold;
+            transition: background 0.2s;
         }
 
-        /* 翻页时的卷曲特效逻辑 */
-        .page.active {
-            transform: rotateY(-180deg);
+        .settings-close:hover {
+            background: var(--header-border);
         }
 
-        /* 翻转过程中，模拟纸张弯曲隆起的亮部和暗部变化 */
-        .page.active .page-front {
-            background: linear-gradient(to left, 
-                var(--paper-bg) 0%, 
-                var(--paper-bg) 80%, 
-                #eee 90%, 
-                #fff 95%, 
-                #ccc 100%
-            );
+        .settings-section {
+            margin-bottom: 25px;
         }
 
-        /* 页面翻起时的底部投影 */
-        .page-shadow {
+        .settings-label {
+            font-size: 14px;
+            margin-bottom: 10px;
+            color: #888;
+        }
+
+        .settings-options {
+            display: flex;
+            gap: 10px;
+        }
+
+        .option-btn {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid var(--header-border);
+            border-radius: 6px;
+            background: transparent;
+            color: var(--text-color);
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .option-btn:hover {
+            background: var(--header-border);
+        }
+
+        .option-btn.selected {
+            background: var(--text-color);
+            color: var(--bg-color);
+        }
+
+        .toggle-btn {
+            width: 100%;
+        }
+
+        .toggle-btn.active {
+            background: #333;
+            color: #fff;
+        }
+
+        body.night-mode .toggle-btn.active {
+            background: #fff;
+            color: #333;
+        }
+
+        .import-area {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .import-tip {
+            font-size: 12px;
+            color: #888;
+        }
+
+        .color-picker {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .color-dot {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .color-dot:hover {
+            transform: scale(1.2);
+        }
+
+        .color-dot.selected {
+            border-color: var(--text-color);
+        }
+
+        .color-dot.beige { background: #f6f1e7; }
+        .color-dot.white { background: #ffffff; border: 1px solid #ccc; }
+        .color-dot.green { background: #e8f5e9; }
+        .color-dot.blue { background: #e3f2fd; }
+        .color-dot.dark { background: #1a1a1a; }
+
+        /* 主体容器 */
+        .main-container {
+            flex: 1;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: calc(100vh - 45px);
+        }
+
+        /* 阅读内容裁剪区 */
+        .reader-window {
+            width: 90%;
+            max-width: 800px;
+            height: 85%;
+            overflow: hidden; /* 隐藏溢出部分，实现翻页效果 */
+            position: relative;
+        }
+
+        /* 文本内容容器（多栏布局核心） */
+        .content-body {
+            width: 100%;
+            height: 100%;
+            column-fill: auto;
+            column-count: 1;
+            column-gap: 0;
+            text-align: justify;
+            transition: transform 0.3s ease-in-out, opacity 0.2s ease-out;
+        }
+
+        .content-body p {
+            margin-bottom: 1.5em;
+            text-indent: 2em;
+        }
+
+        /* 触控/点击翻页热区（适配手机与无键盘操作） */
+        .click-zone {
             position: absolute;
-            top: 5%; left: 0; width: 100%; height: 90%;
-            background: rgba(0,0,0,0.4);
-            filter: blur(20px);
-            transform-origin: left center;
-            transition: var(--transition);
-            opacity: 0;
+            top: 0;
+            bottom: 0;
+            width: 15%;
+            cursor: pointer;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: transparent;
+            user-select: none;
+            transition: background 0.2s;
+        }
+        .click-zone:hover {
+            background: rgba(0,0,0,0.02);
+        }
+        .left-zone { left: 0; }
+        .right-zone { right: 0; }
+
+        /* 底部导航与页码 */
+        footer {
+            position: absolute;
+            bottom: 15px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 14px;
+            color: var(--footer-color);
+            user-select: none;
             pointer-events: none;
-            z-index: -1;
         }
 
-        .page.active .page-shadow {
-            opacity: 0.3;
-            transform: rotateY(-180deg) scaleX(0.8);
+        /* 响应式适配：手机端屏幕 */
+        @media (max-width: 768px) {
+            .reader-window {
+                width: 92%;
+                height: 88%;
+            }
+            .content-body {
+                column-count: 1; /* 手机端单栏显示 */
+                column-gap: 0;
+                font-size: var(--font-size-mobile);
+            }
+            .click-zone {
+                width: 25%; /* 手机端扩大点击热区 */
+            }
+            /* 手机端隐藏悬浮库，靠点击两边翻页即可 */
+            .click-zone:hover {
+                background: transparent;
+            }
         }
 
-        /* 内容样式 */
-        h1 { font-family: "Songti SC", serif; color: #444; margin-bottom: 20px; }
-        p { line-height: 1.8; color: #555; text-align: justify; font-size: 1.1rem; }
-
-        /* 自动播放进度条 */
-        .progress {
-            position: fixed; bottom: 0; left: 0; height: 4px;
-            background: gold; width: 0;
+        /* 电脑端大屏字体稍大 */
+        @media (min-width: 769px) {
+            .content-body {
+                font-size: var(--font-size-pc);
+            }
         }
     </style>
 </head>
 <body>
 
-<div class="progress" id="progress"></div>
+    <header>
+        <div class="book-title">《开源网络小说示例》</div>
+        <div class="header-actions">
+            <button class="control-btn" id="shelfBtn">📚</button>
+            <button class="control-btn" id="settingsBtn">设置</button>
+        </div>
+    </header>
 
-<div class="book-container" id="book">
+    <div class="settings-panel" id="settingsPanel">
+        <div class="settings-content">
+            <div class="settings-header">
+                <div class="settings-title">设置</div>
+                <button class="settings-close" id="settingsCloseBtn">×</button>
+            </div>
+            <div class="settings-section">
+                <div class="settings-label">翻页效果</div>
+                <div class="settings-options">
+                    <button class="option-btn" id="effectSlideBtn">滑动</button>
+                    <button class="option-btn" id="effectFadeBtn">渐变</button>
+                </div>
+            </div>
+            <div class="settings-section">
+                <div class="settings-label">背景颜色</div>
+                <div class="color-picker">
+                    <div class="color-dot beige selected" data-bg="beige" title="米黄"></div>
+                    <div class="color-dot white" data-bg="white" title="白色"></div>
+                    <div class="color-dot green" data-bg="green" title="护眼绿"></div>
+                    <div class="color-dot blue" data-bg="blue" title="蓝色"></div>
+                </div>
+            </div>
+            <div class="settings-section">
+                <div class="settings-label">夜间模式</div>
+                <button class="option-btn toggle-btn" id="nightModeBtn">🌙 开启</button>
+            </div>
+            <div class="settings-section">
+                <div class="settings-label">导入书籍</div>
+                <div class="import-area">
+                    <input type="file" id="bookFileInput" accept=".txt" hidden>
+                    <button class="option-btn" id="importBtn">选择文件</button>
+                    <div class="import-tip">支持 .txt 格式文本文件</div>
+                </div>
+            </div>
+        </div>
     </div>
 
-<script>
-    const book = document.getElementById('book');
-    const contentData = [
-        {title: "卷曲之美", body: "真正的卷曲感来源于光影的非线性变化。当纸张翻起，由于受光角度不同，边缘会产生微小的亮线。"},
-        {title: "物理模拟", body: "我们通过 CSS 渐变模拟了纸张在 120 度角时的隆起阴影。虽然它是平面的，但你的眼睛会被欺骗。"},
-        {title: "沉浸阅读", body: "这种节奏感让阅读变得神圣。文字不再是屏幕上的像素，而是承载于指尖的温度。"},
-        {title: "未完待续", body: "技术的终点是艺术。希望这个版本能满足你对‘炫酷’与‘仿真’的所有幻想。"}
-    ];
+    <div class="shelf-panel" id="shelfPanel">
+        <div class="settings-content">
+            <div class="settings-header">
+                <div class="settings-title">我的书架</div>
+                <button class="settings-close" id="shelfCloseBtn">×</button>
+            </div>
+            <div class="shelf-list" id="shelfList"></div>
+        </div>
+    </div>
 
-    let currentPage = 0;
+    <div class="main-container">
+        <div class="click-zone left-zone" id="prevBtn" title="上一页"></div>
+        <div class="click-zone right-zone" id="nextBtn" title="下一页"></div>
 
-    function init() {
-        contentData.forEach((data, i) => {
-            const page = document.createElement('div');
-            page.className = 'page';
-            page.style.zIndex = contentData.length - i;
-            page.innerHTML = `
-                <div class="page-shadow"></div>
-                <div class="page-front">
-                    <h1>${data.title}</h1>
-                    <p>${data.body}</p>
-                </div>
-                <div class="page-back">${i+1}</div>
-            `;
-            page.onclick = () => manualFlip();
-            book.appendChild(page);
-        });
-        startAuto();
-    }
+        <div class="reader-window" id="windowBox">
+            <div class="content-body" id="contentBody">
+                <p>第一章：初现。这是一个使用纯HTML、CSS和JavaScript构建的响应式现代阅读器。它不需要任何复杂的后端服务器，完全在用户的浏览器中运行。无论是使用宽屏的台式电脑，还是使用便携的智能手机，它都能完美适应。</p>
+                <p>在核心技术的选择上，我们采用了CSS的 `column`（多栏布局）属性。这是实现电子书“真·翻页”效果最高效的方式。在电脑大屏幕上，阅读器会自动切换为双栏排版，降低视线移动的疲劳感；而在手机等窄屏幕上，它会自动合并为单栏，保障阅读的专注度。</p>
+                <p>翻页的原理非常有意思：JavaScript会动态计算当前视窗的宽度和间距。当用户点击“下一页”时，内容容器就会向左平移一个视窗的距离，从而实现丝滑的无缝翻页。这种设计避免了传统的上下滚动带来的眩晕感，更贴近传统纸质书的阅读体验。</p>
+                <p>为了给读者提供最好的视觉保护，我们默认采用了温和的米黄色（#f6f1e7）作为背景色，搭配深灰色的文字。这种配色在暗光环境下不易刺眼，在亮光下也具备足够的清晰度。字间距和行高也都经过了精心调校，符合中文排版美学。</p>
+                <p>本系统支持多种交互方式。在电脑上，你既可以用鼠标点击屏幕左侧或右侧边缘，也可以直接敲击键盘上的左方向键（←）和右方向键（→）；在手机上，直接用手指轻触屏幕左右两侧的1/4区域，即可轻松完成翻页。</p>
+                <p>第二章：未来。你可以将任何你喜欢的小说文本直接粘贴到这个HTML文件中的 `content-body` 容器里。甚至可以进一步扩展功能，例如加入本地缓存（LocalStorage）来记录用户的阅读进度，或者加入一键切换夜间模式的按钮。</p>
+                <p>前端技术的魅力就在于此，无需复杂的安装包，一个简单的文件，就能成为你专属的、干净纯粹的电子书阅览室。愿你享受每一个静心阅读的夜晚。</p>
+            </div>
+        </div>
+    </div>
 
-    function flip() {
-        const pages = document.querySelectorAll('.page');
-        if (currentPage < pages.length) {
-            pages[currentPage].classList.add('active');
-            currentPage++;
-        } else {
-            pages.forEach(p => p.classList.remove('active'));
-            currentPage = 0;
+    <footer id="pageIndicator">第 1 / -- 页</footer>
+
+    <script>
+        const contentBody = document.getElementById('contentBody');
+        const windowBox = document.getElementById('windowBox');
+        const prevBtn = document.getElementById('prevBtn');
+        const nextBtn = document.getElementById('nextBtn');
+        const pageIndicator = document.getElementById('pageIndicator');
+
+        let currentPage = 0;
+        let totalPages = 1;
+
+        // 计算总页数和执行翻页
+        function updateLayout() {
+            // 获取单页的步长（视窗宽度 + 栏间距）
+            const windowWidth = windowBox.clientWidth;
+            
+            // 判断当前是单栏（手机）还是双栏（电脑）
+            const columnGap = 0; 
+            const step = windowWidth + columnGap;
+
+            // 获取内容实际总宽度，计算总页数
+            const scrollWidth = contentBody.scrollWidth;
+            totalPages = Math.max(1, Math.ceil(scrollWidth / step));
+
+            // 防止缩放浏览器时当前页码越界
+            if (currentPage >= totalPages) {
+                currentPage = totalPages - 1;
+            }
+            if (currentPage < 0) currentPage = 0;
+
+            // 通过平移（Translate）实现翻页
+            const translateX = -currentPage * step;
+            contentBody.style.transform = `translateX(${translateX}px)`;
+
+            // 更新页码显示
+            pageIndicator.innerText = `第 ${currentPage + 1} / ${totalPages} 页`;
+            
+            // 控制边界按钮的显示（可选隐藏）
+            prevBtn.style.opacity = currentPage === 0 ? "0.3" : "1";
+            nextBtn.style.opacity = currentPage === totalPages - 1 ? "0.3" : "1";
         }
-    }
 
-    function manualFlip() {
-        clearInterval(timer);
-        flip();
-        startAuto();
-    }
+        // 翻页逻辑
+        let isAnimating = false;
+        let pageEffect = localStorage.getItem('pageEffect') || 'slide';
 
-    let timer;
-    function startAuto() {
-        const bar = document.getElementById('progress');
-        bar.style.transition = 'none';
-        bar.style.width = '0';
-        setTimeout(() => {
-            bar.style.transition = 'width 4s linear';
-            bar.style.width = '100%';
-        }, 50);
-        timer = setInterval(flip, 4000);
-    }
+        function doPageTransition(callback) {
+            if (pageEffect === 'fade') {
+                if (isAnimating) return;
+                isAnimating = true;
+                contentBody.style.transition = 'opacity 0.2s ease-out';
+                contentBody.style.opacity = '0';
+                setTimeout(() => {
+                    callback();
+                    setTimeout(() => {
+                        contentBody.style.opacity = '1';
+                        setTimeout(() => {
+                            contentBody.style.transition = 'transform 0.3s ease-in-out';
+                            isAnimating = false;
+                        }, 50);
+                    }, 50);
+                }, 200);
+            } else {
+                callback();
+            }
+        }
 
-    init();
-</script>
+        function nextPage() {
+            if (currentPage < totalPages - 1) {
+                doPageTransition(() => {
+                    currentPage++;
+                    updateLayout();
+                });
+            }
+        }
+
+        function prevPage() {
+            if (currentPage > 0) {
+                doPageTransition(() => {
+                    currentPage--;
+                    updateLayout();
+                });
+            }
+        }
+
+        // 事件绑定：点击触发
+        nextBtn.addEventListener('click', nextPage);
+        prevBtn.addEventListener('click', prevPage);
+
+        // 事件绑定：键盘方向键触发
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight') nextPage();
+            if (e.key === 'ArrowLeft') prevPage();
+        });
+
+        // 监听窗口大小变化（横竖屏切换或调整浏览器大小）
+        let resizeTimeout;
+        window.addEventListener('resize', () => {
+            clearTimeout(resizeTimeout);
+            // 防抖处理，避免频繁计算卡顿
+            resizeTimeout = setTimeout(updateLayout, 100); 
+        });
+
+        // 初始化加载
+        window.addEventListener('load', updateLayout);
+        setTimeout(updateLayout, 300);
+
+        // ========== 设置面板 ==========
+        const settingsBtn = document.getElementById('settingsBtn');
+        const settingsPanel = document.getElementById('settingsPanel');
+        const settingsCloseBtn = document.getElementById('settingsCloseBtn');
+        const nightModeBtn = document.getElementById('nightModeBtn');
+        const effectSlideBtn = document.getElementById('effectSlideBtn');
+        const effectFadeBtn = document.getElementById('effectFadeBtn');
+        const colorDots = document.querySelectorAll('.color-dot');
+
+        function openSettings() {
+            settingsPanel.classList.add('open');
+        }
+
+        function closeSettings() {
+            settingsPanel.classList.remove('open');
+        }
+
+        settingsBtn.addEventListener('click', () => {
+            if (settingsPanel.classList.contains('open')) {
+                closeSettings();
+            } else {
+                openSettings();
+            }
+        });
+
+        settingsCloseBtn.addEventListener('click', closeSettings);
+
+        // ========== 书架面板 ==========
+        const shelfBtn = document.getElementById('shelfBtn');
+        const shelfPanel = document.getElementById('shelfPanel');
+        const shelfCloseBtn = document.getElementById('shelfCloseBtn');
+        const shelfList = document.getElementById('shelfList');
+
+        function openShelf() {
+            shelfPanel.classList.add('open');
+            renderShelf();
+        }
+
+        function closeShelf() {
+            shelfPanel.classList.remove('open');
+        }
+
+        shelfBtn.addEventListener('click', () => {
+            if (shelfPanel.classList.contains('open')) {
+                closeShelf();
+            } else {
+                openShelf();
+            }
+        });
+
+        shelfCloseBtn.addEventListener('click', closeShelf);
+
+        function getShelf() {
+            const saved = localStorage.getItem('bookShelf');
+            return saved ? JSON.parse(saved) : [];
+        }
+
+        function saveShelf(shelf) {
+            localStorage.setItem('bookShelf', JSON.stringify(shelf));
+        }
+
+        function addToShelf(name, content) {
+            const shelf = getShelf();
+            const exists = shelf.find(b => b.name === name);
+            if (!exists) {
+                shelf.unshift({ name, content });
+                saveShelf(shelf);
+            }
+        }
+
+        function removeFromShelf(name) {
+            const shelf = getShelf();
+            const filtered = shelf.filter(b => b.name !== name);
+            saveShelf(filtered);
+        }
+
+        function renderShelf() {
+            const shelf = getShelf();
+            const currentTitle = bookTitle.textContent;
+
+            if (shelf.length === 0) {
+                shelfList.innerHTML = '<div class="shelf-empty">书架为空<br>从设置导入书籍</div>';
+                return;
+            }
+
+            shelfList.innerHTML = shelf.map(book => `
+                <div class="shelf-item ${book.name === currentTitle ? 'active' : ''}" data-name="${book.name}">
+                    <div class="shelf-item-icon">📖</div>
+                    <div class="shelf-item-info">
+                        <div class="shelf-item-name">${book.name}</div>
+                    </div>
+                    <button class="shelf-item-delete" data-delete="${book.name}">×</button>
+                </div>
+            `).join('');
+
+            shelfList.querySelectorAll('.shelf-item').forEach(item => {
+                item.addEventListener('click', (e) => {
+                    if (!e.target.classList.contains('shelf-item-delete')) {
+                        const name = item.dataset.name;
+                        const book = getShelf().find(b => b.name === name);
+                        if (book) {
+                            loadBook(book.name, book.content);
+                            closeShelf();
+                        }
+                    }
+                });
+            });
+
+            shelfList.querySelectorAll('.shelf-item-delete').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const name = btn.dataset.delete;
+                    if (confirm(`确定删除《${name}》？`)) {
+                        removeFromShelf(name);
+                        renderShelf();
+                    }
+                });
+            });
+        }
+
+        function loadBook(name, content) {
+            const paragraphs = content.split(/\n\n+/).filter(p => p.trim());
+            const html = paragraphs.map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
+            contentBody.innerHTML = html;
+            bookTitle.textContent = name;
+            localStorage.setItem('bookContent', content);
+            localStorage.setItem('bookTitle', name);
+            currentPage = 0;
+            updateLayout();
+            renderShelf();
+        }
+
+        settingsPanel.addEventListener('click', (e) => {
+            if (e.target === settingsPanel) {
+                closeSettings();
+            }
+        });
+
+        function saveSettings() {
+            localStorage.setItem('readerSettings', JSON.stringify({
+                nightMode: document.body.classList.contains('night-mode'),
+                bgColor: document.body.className.replace('night-mode', '').trim(),
+                pageEffect: pageEffect
+            }));
+        }
+
+        function loadSettings() {
+            const saved = localStorage.getItem('readerSettings');
+            if (saved) {
+                const settings = JSON.parse(saved);
+                if (settings.nightMode) {
+                    document.body.classList.add('night-mode');
+                }
+                if (settings.bgColor) {
+                    document.body.classList.remove('beige', 'bg-white', 'bg-green', 'bg-blue');
+                    document.body.classList.add(settings.bgColor);
+                    colorDots.forEach(dot => {
+                        dot.classList.toggle('selected', dot.dataset.bg === settings.bgColor);
+                    });
+                }
+                if (settings.pageEffect) {
+                    pageEffect = settings.pageEffect;
+                }
+            }
+            updateUI();
+        }
+
+        function updateUI() {
+            const isNight = document.body.classList.contains('night-mode');
+            nightModeBtn.textContent = isNight ? '☀️ 关闭' : '🌙 开启';
+            nightModeBtn.classList.toggle('active', isNight);
+
+            effectSlideBtn.classList.toggle('selected', pageEffect === 'slide');
+            effectFadeBtn.classList.toggle('selected', pageEffect === 'fade');
+        }
+
+        nightModeBtn.addEventListener('click', () => {
+            document.body.classList.toggle('night-mode');
+            updateUI();
+            saveSettings();
+        });
+
+        effectSlideBtn.addEventListener('click', () => {
+            pageEffect = 'slide';
+            localStorage.setItem('pageEffect', pageEffect);
+            updateUI();
+        });
+
+        effectFadeBtn.addEventListener('click', () => {
+            pageEffect = 'fade';
+            localStorage.setItem('pageEffect', pageEffect);
+            updateUI();
+        });
+
+        colorDots.forEach(dot => {
+            dot.addEventListener('click', () => {
+                const bg = dot.dataset.bg;
+                document.body.classList.remove('beige', 'bg-white', 'bg-green', 'bg-blue');
+                if (bg !== 'beige') {
+                    document.body.classList.add(bg === 'white' ? 'bg-white' : bg === 'green' ? 'bg-green' : 'bg-blue');
+                }
+                colorDots.forEach(d => d.classList.remove('selected'));
+                dot.classList.add('selected');
+                saveSettings();
+            });
+        });
+
+        // ========== 导入书籍 ==========
+        const importBtn = document.getElementById('importBtn');
+        const bookFileInput = document.getElementById('bookFileInput');
+        const bookTitle = document.querySelector('.book-title');
+
+        importBtn.addEventListener('click', () => {
+            bookFileInput.click();
+        });
+
+        bookFileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const text = event.target.result;
+                    const name = file.name.replace('.txt', '');
+                    addToShelf(name, text);
+                    loadBook(name, text);
+                    closeSettings();
+                };
+                reader.readAsText(file);
+            }
+        });
+
+        // 加载保存的书籍内容
+        const savedBookContent = localStorage.getItem('bookContent');
+        const savedBookTitle = localStorage.getItem('bookTitle');
+        if (savedBookContent && savedBookTitle) {
+            loadBook(savedBookTitle, savedBookContent);
+        }
+
+        loadSettings();
+    </script>
 </body>
 </html>

@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Three.js 无人机穿梭挑战</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #050510;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+        }
+        /* UI 仪表盘 */
+        #ui-container {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #333333;
+            text-shadow: 0 0 2px #888888;
+            font-family: monospace;
+            font-size: 16px;
+            pointer-events: none;
+        }
+        .bar-container {
+            width: 150px;
+            height: 10px;
+            background: #111;
+            border: 1px solid #00ffcc;
+            margin-top: 5px;
+            margin-bottom: 10px;
+        }
+        .bar {
+            height: 100%;
+            background: #00ffcc;
+            width: 0%;
+            transition: width 0.1s;
+        }
+        #game-over {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ff3333;
+            text-align: center;
+            font-size: 32px;
+            font-weight: bold;
+            text-shadow: 0 0 10px #ff3333;
+            background: rgba(0,0,0,0.8);
+            padding: 30px;
+            border: 2px solid #ff3333;
+            border-radius: 10px;
+        }
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #333333;
+            background: rgba(255,255,255,0.8);
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 14px;
+            text-align: center;
+            pointer-events: none;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+
+    <div id="ui-container">
+        <div>油门 (Throttle): <span id="txt-throttle">0</span>%</div>
+        <div class="bar-container"><div id="bar-throttle" class="bar"></div></div>
+        <div>高度 (Altitude): <span id="txt-altitude">0</span>m</div>
+        <div>速度 (Speed): <span id="txt-speed">0</span> km/h</div>
+        <div style="margin-top: 10px; color: #ffcc00;">得分 (Score): <span id="txt-score" style="color: #ffcc00;">0</span></div>
+        <div style="margin-top: 5px;">光环 (Rings): <span id="txt-rings" style="color: #00ff00;">0</span> / <span id="txt-total-rings">0</span></div>
+    </div>
+
+    <div id="game-over">
+        游戏结束！无人机坠毁<br>
+        <span style="font-size: 18px; color: #fff;">按空格键重新开始</span>
+    </div>
+
+    <div id="instructions">
+        <b>操作指南:</b> W/S: 前进/后退 | A/D: 左右平移 | 箭头↑/↓: 上升/下降 | 箭头←/→: 左右转向<br>
+        <b>任务:</b> 穿过绿色光环得分！飞行越远得分越高！
+    </div>
+
+    <script>
+        // --- 游戏配置与全局变量 ---
+        let scene, camera, renderer;
+        let drone, rotors = [];
+        let buildings = [];
+        let rings = [];
+        let ringsCollected = 0;
+        let clock = new THREE.Clock();
+        let gameOver = false;
+        let score = 0;
+
+        // 无人机物理状态
+        let physics = {
+            position: new THREE.Vector3(0, 5, 0),
+            velocity: new THREE.Vector3(),
+            rotation: new THREE.Vector3(),
+            speed: 0,
+            throttle: 0,    // 油门 0 - 100
+            maxSpeed: 40,
+            acceleration: 30,
+            drag: 0.95      // 空气阻力
+        };
+
+        // 按键状态
+        let keys = {
+            w: false, s: false, a: false, d: false,
+            ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false
+        };
+
+        // --- 初始化 ---
+        init();
+        animate();
+
+        function init() {
+            // 1. 场景
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xe0e0e0);
+            scene.fog = new THREE.FogExp2(0xe0e0e0, 0.008);
+
+            // 2. 相机
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+            // 3. 渲染器
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            // 4. 灯光
+            const ambientLight = new THREE.AmbientLight(0x333355, 1.5);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0x00ffcc, 1.0);
+            dirLight.position.set(20, 40, 20);
+            dirLight.castShadow = true;
+            scene.add(dirLight);
+
+            // 5. 地面
+            const floorGeo = new THREE.PlaneGeometry(2000, 2000, 100, 100);
+            const floorMat = new THREE.MeshStandardMaterial({
+                color: 0x888888,
+                roughness: 0.9,
+                metalness: 0.1
+            });
+            const floor = new THREE.Mesh(floorGeo, floorMat);
+            floor.rotation.x = -Math.PI / 2;
+            floor.receiveShadow = true;
+            scene.add(floor);
+
+            const grid = new THREE.GridHelper(2000, 200, 0x666666, 0x999999);
+            grid.position.y = 0.02;
+            scene.add(grid);
+
+            for (let i = 0; i < 100; i++) {
+                const patchGeo = new THREE.PlaneGeometry(5 + Math.random() * 10, 5 + Math.random() * 10);
+                const patchMat = new THREE.MeshStandardMaterial({
+                    color: 0x777777,
+                    roughness: 0.95,
+                    metalness: 0.05,
+                    transparent: true,
+                    opacity: 0.7
+                });
+                const patch = new THREE.Mesh(patchGeo, patchMat);
+                patch.rotation.x = -Math.PI / 2;
+                patch.position.set(
+                    (Math.random() - 0.5) * 400,
+                    0.03,
+                    (Math.random() - 0.5) * 800
+                );
+                scene.add(patch);
+            }
+
+            // 6. 创建无人机
+            createDrone();
+
+            // 7. 生成城市障碍物
+            generateEnvironment();
+
+            // 8. 事件监听
+            window.addEventListener('resize', onWindowResize, false);
+            window.addEventListener('keydown', (e) => handleKeyEvent(e, true));
+            window.addEventListener('keyup', (e) => handleKeyEvent(e, false));
+        }
+
+        // --- 构建无人机 3D 模型 ---
+        function createDrone() {
+            drone = new THREE.Group();
+
+            // 中心机身
+            const bodyGeo = new THREE.BoxGeometry(1.2, 0.2, 1.2);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.8, roughness: 0.2 });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.castShadow = true;
+            drone.add(body);
+
+            // 机载核心（发光指示灯）
+            const coreGeo = new THREE.SphereGeometry(0.3, 16, 16);
+            const coreMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+            const core = new THREE.Mesh(coreGeo, coreMat);
+            core.position.y = 0.15;
+            drone.add(core);
+
+            // 四个轴 (X字形布局)
+            const armMat = new THREE.MeshStandardMaterial({ color: 0x555555 });
+            const armLength = 1.2;
+            
+            const armAngles = [Math.PI/4, Math.PI*3/4, -Math.PI/4, -Math.PI*3/4];
+            armAngles.forEach((angle) => {
+                const armGeo = new THREE.CylinderGeometry(0.05, 0.05, armLength);
+                const arm = new THREE.Mesh(armGeo, armMat);
+                arm.rotation.z = Math.PI / 2;
+                arm.rotation.y = angle;
+                // 计算轴的延伸位置
+                arm.position.x = Math.cos(angle) * (armLength/2);
+                arm.position.z = Math.sin(angle) * (armLength/2);
+                arm.castShadow = true;
+                drone.add(arm);
+
+                // 电机座
+                const motorGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.2);
+                const motor = new THREE.Mesh(motorGeo, armMat);
+                motor.position.set(Math.cos(angle)*armLength, 0.1, Math.sin(angle)*armLength);
+                drone.add(motor);
+
+                // 螺旋桨
+                const rotorGeo = new THREE.BoxGeometry(0.8, 0.01, 0.06);
+                const rotorMat = new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 });
+                const rotor = new THREE.Mesh(rotorGeo, rotorMat);
+                rotor.position.set(Math.cos(angle)*armLength, 0.21, Math.sin(angle)*armLength);
+                drone.add(rotor);
+                rotors.push(rotor); // 收集起来用于后续旋转动画
+            });
+
+            // 初始位置
+            drone.position.copy(physics.position);
+            scene.add(drone);
+        }
+
+        // --- 生成随机障碍物城市 ---
+        function generateEnvironment() {
+            const buildingMat = new THREE.MeshStandardMaterial({ 
+                color: 0x8888aa, 
+                roughness: 0.5,
+                metalness: 0.2
+            });
+
+            // 在无人机前方随机散布大楼
+            for (let i = 0; i < 60; i++) {
+                const h = 20 + Math.random() * 50; // 随机高度
+                const w = 10 + Math.random() * 15; // 随机宽度
+                const buildingGeo = new THREE.BoxGeometry(w, h, w);
+                const building = new THREE.Mesh(buildingGeo, buildingMat);
+
+                // 随机位置（避免生成在起点 0,0 附近）
+                let x = (Math.random() - 0.5) * 400;
+                let z = -Math.random() * 800 - 50; // 主要分布在前方
+
+                building.position.set(x, h / 2, z);
+                building.castShadow = true;
+                building.receiveShadow = true;
+
+                // 给大楼加点发光窗户的特效边框（简化版）
+                const edges = new THREE.EdgesGeometry(buildingGeo);
+                const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x444466 }));
+                building.add(line);
+
+                scene.add(building);
+                buildings.push(building); // 用于碰撞检测
+
+                if (Math.random() > 0.5) {
+                    addBillboard(x, h, z, w);
+                }
+            }
+
+            generateRings();
+        }
+
+        function generateRings() {
+            const ringMat = new THREE.MeshBasicMaterial({ color: 0x00ff88, side: THREE.DoubleSide });
+            const ringGeo = new THREE.TorusGeometry(5, 0.5, 8, 32);
+
+            for (let i = 0; i < 15; i++) {
+                const ring = new THREE.Mesh(ringGeo, ringMat.clone());
+                ring.position.set(
+                    (Math.random() - 0.5) * 300,
+                    10 + Math.random() * 40,
+                    -100 - i * 50
+                );
+                ring.rotation.y = Math.random() * Math.PI;
+                ring.userData.collected = false;
+                scene.add(ring);
+                rings.push(ring);
+            }
+            document.getElementById('txt-total-rings').innerText = rings.length;
+        }
+
+        function addBillboard(x, buildingY, z, buildingWidth) {
+            const slogans = [
+                "DRONE DELIVERY", "FLY HIGH", "SKY TAXI", "AERIAL VIEW",
+                "欢迎光临", "无人机快递", "蓝天白云", "飞翔梦想",
+                "SALE 50%", "NEW PRODUCT", "TAKE OFF", "LANDING ZONE"
+            ];
+
+            const faces = [
+                { offsetX: 0, offsetZ: buildingWidth/2 + 0.5, rotY: 0 },
+                { offsetX: 0, offsetZ: -buildingWidth/2 - 0.5, rotY: Math.PI },
+                { offsetX: buildingWidth/2 + 0.5, offsetZ: 0, rotY: Math.PI/2 },
+                { offsetX: -buildingWidth/2 - 0.5, offsetZ: 0, rotY: -Math.PI/2 }
+            ];
+
+            faces.forEach(face => {
+                const canvas = document.createElement('canvas');
+                canvas.width = 512;
+                canvas.height = 128;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#222222';
+                ctx.fillRect(0, 0, 512, 128);
+                ctx.fillStyle = '#ffcc00';
+                ctx.font = 'bold 36px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(slogans[Math.floor(Math.random() * slogans.length)], 256, 64);
+
+                const texture = new THREE.CanvasTexture(canvas);
+                const spriteMat = new THREE.SpriteMaterial({ map: texture });
+                const sprite = new THREE.Sprite(spriteMat);
+                sprite.position.set(x + face.offsetX, buildingY + 5, z + face.offsetZ);
+                sprite.scale.set(15, 4, 1);
+                scene.add(sprite);
+            });
+        }
+
+        // --- 输入处理 ---
+        function handleKeyEvent(event, isDown) {
+            if (gameOver) {
+                if (event.code === 'Space' && isDown) restartGame();
+                return;
+            }
+
+            if (event.key === 'w' || event.key === 'W') keys.w = isDown;
+            if (event.key === 's' || event.key === 'S') keys.s = isDown;
+            if (event.key === 'a' || event.key === 'A') keys.a = isDown;
+            if (event.key === 'd' || event.key === 'D') keys.d = isDown;
+            
+            if (event.key === 'ArrowUp') keys.ArrowUp = isDown;
+            if (event.key === 'ArrowDown') keys.ArrowDown = isDown;
+            if (event.key === 'ArrowLeft') keys.ArrowLeft = isDown;
+            if (event.key === 'ArrowRight') keys.ArrowRight = isDown;
+        }
+
+        // --- 物理与控制核心逻辑 ---
+        function updatePhysics(delta) {
+            if (gameOver) return;
+
+            // 1. 转向控制 (左右箭头)
+            if (keys.ArrowLeft) physics.rotation.y += 2.0 * delta;
+            if (keys.ArrowRight) physics.rotation.y -= 2.0 * delta;
+            drone.rotation.y = physics.rotation.y;
+
+            // 2. 高度控制 (上下箭头控制油门)
+            if (keys.ArrowUp) physics.throttle = Math.min(100, physics.throttle + 100 * delta);
+            else if (keys.ArrowDown) physics.throttle = Math.max(0, physics.throttle - 100 * delta);
+
+            // 模拟重力与油门升力平衡
+            let lift = (physics.throttle / 100) * 25; 
+            let gravity = 9.8;
+            physics.velocity.y += (lift - gravity) * delta;
+
+            // 3. 前后左右平移控制 (WASD)
+            // 根据当前无人机的朝向计算前方向和右方向
+            let forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), physics.rotation.y);
+            let right = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), physics.rotation.y);
+
+            let moveDirection = new THREE.Vector3();
+            if (keys.w) moveDirection.add(forward);
+            if (keys.s) moveDirection.add(forward.clone().negate());
+            if (keys.a) moveDirection.add(right.clone().negate());
+            if (keys.d) moveDirection.add(right);
+            moveDirection.normalize();
+
+            physics.velocity.x += moveDirection.x * physics.acceleration * delta;
+            physics.velocity.z += moveDirection.z * physics.acceleration * delta;
+
+            // 应用空气阻力 (摩擦力)
+            physics.velocity.x *= Math.pow(physics.drag, delta * 60);
+            physics.velocity.y *= Math.pow(physics.drag, delta * 60);
+            physics.velocity.z *= Math.pow(physics.drag, delta * 60);
+
+            // 更新位置
+            physics.position.addScaledVector(physics.velocity, delta);
+
+            // 触地限制
+            if (physics.position.y < 0.2) {
+                physics.position.y = 0.2;
+                physics.velocity.y = 0;
+            }
+
+            drone.position.copy(physics.position);
+
+            // 4. 视觉特效：飞行时机身轻微倾斜
+            // 向前飞向后倾斜，向左飞向右倾斜
+            let localVelocity = physics.velocity.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), -physics.rotation.y);
+            drone.rotation.z = -localVelocity.x * 0.05; // 左右倾斜
+            drone.rotation.x = localVelocity.z * 0.05; // 前后倾斜
+
+            // 5. 旋转螺旋桨
+            let rotorSpeed = 10 + (physics.throttle * 0.3);
+            rotors.forEach(rotor => {
+                rotor.rotation.y += rotorSpeed * delta;
+            });
+
+            // 6. 旋转光环
+            rings.forEach(ring => {
+                ring.rotation.x += delta * 0.5;
+                ring.rotation.z += delta * 0.3;
+            });
+
+            // 更新速度计算（用于UI）
+            physics.speed = Math.round(physics.velocity.length() * 3.6);
+            
+            // 刷分机制：飞得越远（Z轴负方向）得分越高
+            let currentScore = Math.floor(Math.abs(physics.position.z));
+            if (currentScore > score) score = currentScore;
+        }
+
+        // --- 碰撞检测 ---
+        function checkCollisions() {
+            if (gameOver) return;
+
+            let droneRadius = 1.2;
+            let groundLevel = 0.2;
+            let landingBuffer = 1.0;
+
+            for (let i = 0; i < buildings.length; i++) {
+                let b = buildings[i];
+                let bSize = b.geometry.parameters;
+                let buildingTopY = b.position.y + bSize.height / 2;
+                let minX = b.position.x - bSize.width/2 - droneRadius;
+                let maxX = b.position.x + bSize.width/2 + droneRadius;
+                let minZ = b.position.z - bSize.depth/2 - droneRadius;
+                let maxZ = b.position.z + bSize.depth/2 + droneRadius;
+
+                if (physics.position.x > minX && physics.position.x < maxX &&
+                    physics.position.z > minZ && physics.position.z < maxZ) {
+
+                    let landingY = buildingTopY + droneRadius;
+                    if (physics.position.y > groundLevel && physics.position.y < landingY - landingBuffer) {
+                        triggerGameOver();
+                        break;
+                    } else if (physics.position.y >= landingY - landingBuffer && physics.position.y < landingY + landingBuffer) {
+                        physics.position.y = landingY;
+                        if (physics.velocity.y < 0) physics.velocity.y = 0;
+                    }
+                }
+            }
+
+            for (let i = 0; i < rings.length; i++) {
+                let ring = rings[i];
+                if (ring.userData.collected) continue;
+
+                let dist = physics.position.distanceTo(ring.position);
+                if (dist < 5.5) {
+                    ring.userData.collected = true;
+                    ring.material.color.setHex(0x888888);
+                    ringsCollected++;
+                    score += 500;
+                    document.getElementById('txt-rings').innerText = ringsCollected;
+                }
+            }
+        }
+
+        // --- 相机跟随逻辑 ---
+        function updateCamera() {
+            // 第三人称后随视角
+            let offset = new THREE.Vector3(0, 2.5, 6); // 相机相对于无人机的偏移量
+            offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), physics.rotation.y);
+            
+            let targetCamPos = physics.position.clone().add(offset);
+            
+            // 平滑相机过渡 (Lerp)
+            camera.position.lerp(targetCamPos, 0.1);
+            // 相机始终盯着无人机稍微靠前一点的位置
+            let lookTarget = physics.position.clone();
+            let forward = new THREE.Vector3(0, 0, -2).applyAxisAngle(new THREE.Vector3(0, 1, 0), physics.rotation.y);
+            lookTarget.add(forward);
+            camera.lookAt(lookTarget);
+        }
+
+        // --- 更新 UI 仪表盘 ---
+        function updateUI() {
+            document.getElementById('txt-throttle').innerText = Math.round(physics.throttle);
+            document.getElementById('bar-throttle').style.width = physics.throttle + '%';
+            document.getElementById('txt-altitude').innerText = Math.max(0, (physics.position.y - 0.2).toFixed(1));
+            document.getElementById('txt-speed').innerText = physics.speed;
+            document.getElementById('txt-score').innerText = score;
+        }
+
+        // --- 游戏结束与重启 ---
+        function triggerGameOver() {
+            gameOver = true;
+            document.getElementById('game-over').style.display = 'block';
+            physics.velocity.set(0, -5, 0); // 坠落动画
+        }
+
+        function restartGame() {
+            gameOver = false;
+            score = 0;
+            ringsCollected = 0;
+            document.getElementById('game-over').style.display = 'none';
+            document.getElementById('txt-rings').innerText = '0';
+
+            rings.forEach(ring => {
+                ring.userData.collected = false;
+                ring.material.color.setHex(0x00ff88);
+            });
+
+            physics.position.set(0, 5, 0);
+            physics.velocity.set(0, 0, 0);
+            physics.rotation.set(0, 0, 0);
+            physics.throttle = 0;
+
+            drone.position.copy(physics.position);
+            drone.rotation.set(0,0,0);
+        }
+
+        // --- 窗口大小自适应 ---
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- 主循环 ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            let delta = clock.getDelta();
+            // 防止切屏后 delta 过大导致穿墙
+            if (delta > 0.1) delta = 0.1; 
+
+            updatePhysics(delta);
+            checkCollisions();
+            updateCamera();
+            updateUI();
+
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
