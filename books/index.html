@@ -651,22 +651,28 @@
             }
         }
 
-        // 事件绑定：点击触发 - 智能判断翻页区域
+        let touchStartX = 0;
+        let touchStartTime = 0;
+
         mainContainer.addEventListener('mousedown', (e) => {
             selectionStartTime = Date.now();
         });
 
-        mainContainer.addEventListener('click', (e) => {
+        mainContainer.addEventListener('touchstart', (e) => {
+            touchStartX = e.touches[0].clientX;
+            touchStartTime = Date.now();
+        });
+
+        function handlePageTurn(clientX) {
             const selection = window.getSelection();
             const hasSelection = selection.toString().trim().length > 0;
-            const timeSinceMouseDown = Date.now() - selectionStartTime;
-
-            if (hasSelection || timeSinceMouseDown > 200) {
+            
+            if (hasSelection) {
                 return;
             }
 
             const rect = mainContainer.getBoundingClientRect();
-            const clickX = e.clientX - rect.left;
+            const clickX = clientX - rect.left;
             const width = rect.width;
             const zoneWidth = window.innerWidth <= 768 ? width * 0.25 : width * 0.15;
 
@@ -674,6 +680,24 @@
                 prevPage();
             } else if (clickX > width - zoneWidth) {
                 nextPage();
+            }
+        }
+
+        mainContainer.addEventListener('click', (e) => {
+            const timeSinceMouseDown = Date.now() - selectionStartTime;
+            if (timeSinceMouseDown > 200) {
+                return;
+            }
+            handlePageTurn(e.clientX);
+        });
+
+        mainContainer.addEventListener('touchend', (e) => {
+            const timeSinceTouchStart = Date.now() - touchStartTime;
+            if (timeSinceTouchStart > 200) {
+                return;
+            }
+            if (e.changedTouches.length > 0) {
+                handlePageTurn(e.changedTouches[0].clientX);
             }
         });
 
@@ -1125,15 +1149,28 @@
 
         annotationCloseBtn.addEventListener('click', closeAnnotationPanel);
 
-        // 选中文字添加批注
-        contentBody.addEventListener('mouseup', () => {
+        let lastSelectionText = '';
+        
+        function handleSelection() {
             const text = window.getSelection().toString().trim();
-            if (text.length > 0 && text.length < 500) {
+            if (text.length > 0 && text.length < 500 && text !== lastSelectionText) {
+                lastSelectionText = text;
                 setTimeout(() => {
-                    if (window.getSelection().toString().trim() === text) {
+                    const currentSelection = window.getSelection().toString().trim();
+                    if (currentSelection === text) {
                         showAnnotationPopup(text);
                     }
-                }, 100);
+                }, 300);
+            }
+        }
+        
+        contentBody.addEventListener('mouseup', handleSelection);
+        contentBody.addEventListener('touchend', handleSelection);
+        
+        document.addEventListener('selectionchange', () => {
+            const selection = window.getSelection().toString().trim();
+            if (selection.length === 0) {
+                lastSelectionText = '';
             }
         });
 
