@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>单机斗地主 - 修复出牌显示版</title>
+    <style>
+        body {
+            background-color: #1a5e3a;
+            color: white;
+            font-family: 'Microsoft YaHei', sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* 顶部底牌区域 */
+        #top-bar {
+            height: 12%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: rgba(0,0,0,0.2);
+            position: relative;
+        }
+        .di-pai {
+            display: flex;
+            gap: 10px;
+        }
+
+        /* 游戏主舞台 */
+        #game-stage {
+            flex: 1;
+            display: flex;
+            position: relative;
+        }
+
+        /* 左右电脑玩家 */
+        .ai-player {
+            width: 150px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background-color: rgba(0,0,0,0.1);
+        }
+        .avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background-color: #333;
+            border: 2px solid #fff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        .identity {
+            font-size: 12px;
+            color: #ffeb3b;
+            font-weight: bold;
+        }
+
+        /* 中央公共出牌展示区域 */
+        #desk {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px;
+            position: relative;
+        }
+        
+        /* 核心改变：全场共用一个大出牌区，分别展示三方的牌 */
+        .desk-display-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            margin: 20px 0;
+        }
+        
+        .desk-cards {
+            height: 85px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-width: 150px;
+            border: 1px dashed rgba(255,255,255,0.15);
+            border-radius: 8px;
+            background: rgba(0,0,0,0.05);
+        }
+
+        /* 底部人类玩家区域 */
+        #player-area {
+            height: 35%;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            align-items: center;
+            padding-bottom: 20px;
+            position: relative;
+        }
+        .controls {
+            margin-bottom: 15px;
+            display: flex;
+            gap: 15px;
+        }
+        button {
+            padding: 8px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            border: none;
+            border-radius: 20px;
+            background-color: #ff9800;
+            color: white;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        button:hover { background-color: #e68a00; }
+        button:disabled { background-color: #777; cursor: not-allowed; }
+
+        /* 卡牌通用样式 */
+        .card {
+            width: 70px;
+            height: 100px;
+            background-color: white;
+            border-radius: 6px;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 5px;
+            box-sizing: border-box;
+            font-weight: bold;
+            position: relative;
+            cursor: pointer;
+            transition: transform 0.1s ease;
+        }
+        .card.red { color: #e53935; }
+        .card.black { color: #212121; }
+        .card.selected {
+            transform: translateY(-20px);
+            box-shadow: 0 10px 15px rgba(0,0,0,0.6);
+        }
+
+        /* 玩家手牌重叠效果 */
+        .hand-cards {
+            display: flex;
+            justify-content: center;
+            width: 100%;
+            height: 110px;
+        }
+        .hand-cards .card {
+            margin-left: -35px;
+        }
+        .hand-cards .card:first-child {
+            margin-left: 0;
+        }
+        
+        #msg-box {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.8);
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 18px;
+            display: none;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="top-bar">
+        <div style="position:absolute; left:20px; font-size:14px;">底牌：</div>
+        <div class="di-pai" id="dipai-container">
+            <div class="card black">?</div>
+            <div class="card black">?</div>
+            <div class="card black">?</div>
+        </div>
+    </div>
+
+    <div id="game-stage">
+        <div class="ai-player" id="player-left">
+            <div class="avatar">电脑左 (1)</div>
+            <div class="identity" id="identity-1">农民</div>
+            <p>剩牌: <span id="card-count-1">0</span> 张</p>
+        </div>
+
+        <div id="desk">
+            <div style="text-align: center; color: #ffeb3b; font-size: 14px;" id="game-status">点击下方“开始游戏”</div>
+            <div id="msg-box">提示信息</div>
+            
+            <div class="desk-display-area">
+                <div style="font-size:12px; color:#aaa; text-align:center;">上方：电脑左 | 中间：您 | 下方：电脑右</div>
+                <div id="desk-1" class="desk-cards"></div>
+                <div id="desk-0" class="desk-cards"></div>
+                <div id="desk-2" class="desk-cards"></div>
+            </div>
+        </div>
+
+        <div class="ai-player" id="player-right">
+            <div class="avatar">电脑右 (2)</div>
+            <div class="identity" id="identity-2">农民</div>
+            <p>剩牌: <span id="card-count-2">0</span> 张</p>
+        </div>
+    </div>
+
+    <div id="player-area">
+        <div class="controls">
+            <button id="btn-start" onclick="startGame()">开始游戏</button>
+            <button id="btn-call" onclick="callLandlord(true)" style="display:none;">叫地主</button>
+            <button id="btn-pass-call" onclick="callLandlord(false)" style="display:none;">不叫</button>
+            <button id="btn-play" onclick="playCards()" style="display:none;">出牌</button>
+            <button id="btn-pass" onclick="passTurn()" style="display:none;">不要</button>
+        </div>
+        <div style="margin-bottom: 5px; font-weight: bold; color: #ffeb3b;" id="identity-0">您的手牌</div>
+        <div class="hand-cards" id="player-hand"></div>
+    </div>
+
+    <script>
+        const SUITS = ['♠', '♥', '♣', '♦'];
+        const RANKS = ['3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A', '2'];
+        const RANK_ORDER = {'3':3, '4':4, '5':5, '6':6, '7':7, '8':8, '9':9, '10':10, 'J':11, 'Q':12, 'K':13, 'A':14, '2':15, '小王':16, '大王':17};
+
+        let deck = [];
+        let players = [[], [], []]; 
+        let dipai = [];
+        let landlord = -1;
+        let currentTurn = -1;
+        
+        // 【新增控制核心】
+        let lastShowPlayer = -1; // 上一个真正出了牌的人（用来判定是不是大家都不要，重新获得球权）
+
+        function createDeck() {
+            let newDeck = [];
+            for (let rank of RANKS) {
+                for (let suit of SUITS) {
+                    let isRed = (suit === '♥' || suit === '♦');
+                    newDeck.push({ rank, suit, color: isRed ? 'red' : 'black', value: RANK_ORDER[rank] });
+                }
+            }
+            newDeck.push({ rank: '小王', suit: '🃏', color: 'red', value: RANK_ORDER['小王'] });
+            newDeck.push({ rank: '大王', suit: '🃏', color: 'red', value: RANK_ORDER['大王'] });
+            return newDeck;
+        }
+
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+        function startGame() {
+            deck = createDeck();
+            shuffle(deck);
+
+            players = [[], [], []];
+            for (let i = 0; i < 51; i++) {
+                players[i % 3].push(deck[i]);
+            }
+            dipai = deck.slice(51);
+
+            players.forEach(hand => hand.sort((a, b) => b.value - a.value));
+
+            renderPlayerCards();
+            document.getElementById('card-count-1').innerText = players[1].length;
+            document.getElementById('card-count-2').innerText = players[2].length;
+            
+            // 清空上一局出牌显示
+            document.getElementById('desk-0').innerHTML = '';
+            document.getElementById('desk-1').innerHTML = '';
+            document.getElementById('desk-2').innerHTML = '';
+            document.getElementById('dipai-container').innerHTML = `<div class="card black">?</div><div class="card black">?</div><div class="card black">?</div>`;
+
+            document.getElementById('btn-start').style.display = 'none';
+            document.getElementById('btn-call').style.display = 'inline-block';
+            document.getElementById('btn-pass-call').style.display = 'inline-block';
+            document.getElementById('game-status').innerText = '请选择是否叫地主';
+        }
+
+        function renderPlayerCards() {
+            const container = document.getElementById('player-hand');
+            container.innerHTML = '';
+            players[0].forEach((card, index) => {
+                const cardDiv = document.createElement('div');
+                cardDiv.className = `card ${card.color}`;
+                cardDiv.innerHTML = `<div>${card.suit}${card.rank}</div>`;
+                cardDiv.dataset.index = index;
+                cardDiv.onclick = function() { this.classList.toggle('selected'); };
+                container.appendChild(cardDiv);
+            });
+        }
+
+        function callLandlord(isCall) {
+            if (isCall) {
+                landlord = 0;
+                players[0] = players[0].concat(dipai).sort((a, b) => b.value - a.value);
+                document.getElementById('identity-0').innerText = '您的手牌（地主 👑）';
+                renderPlayerCards();
+            } else {
+                landlord = Math.random() > 0.5 ? 1 : 2;
+                players[landlord] = players[landlord].concat(dipai).sort((a, b) => b.value - a.value);
+                document.getElementById(`identity-${landlord}`).innerText = '地主 👑';
+                document.getElementById(`card-count-${landlord}`).innerText = players[landlord].length;
+            }
+            showDipai();
+
+            document.getElementById('btn-call').style.display = 'none';
+            document.getElementById('btn-pass-call').style.display = 'none';
+            document.getElementById('btn-play').style.display = 'inline-block';
+            document.getElementById('btn-pass').style.display = 'inline-block';
+            
+            currentTurn = landlord;
+            lastShowPlayer = landlord; // 新一轮由地主先出牌
+            nextTurn();
+        }
+
+        function showDipai() {
+            const container = document.getElementById('dipai-container');
+            container.innerHTML = '';
+            dipai.forEach(card => {
+                const cardDiv = document.createElement('div');
+                cardDiv.className = `card ${card.color}`;
+                cardDiv.innerHTML = `<div>${card.suit}${card.rank}</div>`;
+                container.appendChild(cardDiv);
+            });
+        }
+
+        function nextTurn() {
+            // 核心逻辑：如果转了一圈回到了出牌人的回合，说明大家都“不要”，则清空全场出牌准备新一轮
+            if (currentTurn === lastShowPlayer) {
+                document.getElementById('desk-0').innerHTML = '';
+                document.getElementById('desk-1').innerHTML = '';
+                document.getElementById('desk-2').innerHTML = '';
+            }
+
+            if (currentTurn === 0) {
+                document.getElementById('game-status').innerText = '请您出牌';
+                document.getElementById('btn-play').disabled = false;
+                // 如果是自己开局领出，则不能点“不要”
+                document.getElementById('btn-pass').disabled = (lastShowPlayer === 0);
+            } else {
+                document.getElementById('game-status').innerText = `电脑 ${currentTurn} 正在思考...`;
+                document.getElementById('btn-play').disabled = true;
+                document.getElementById('btn-pass').disabled = true;
+                setTimeout(() => { aiPlay(); }, 1200);
+            }
+        }
+
+        // 玩家点击【出牌】
+        function playCards() {
+            const selectedElements = document.querySelectorAll('.hand-cards .selected');
+            if (selectedElements.length === 0) {
+                showMsg('请先选择要出的牌！');
+                return;
+            }
+
+            let selectedCards = [];
+            let indices = [];
+            selectedElements.forEach(el => {
+                let idx = parseInt(el.dataset.index);
+                indices.push(idx);
+                selectedCards.push(players[0][idx]);
+            });
+
+            // 移除手牌
+            indices.sort((a,b) => b - a).forEach(idx => { players[0].splice(idx, 1); });
+
+            // 渲染到玩家的出牌槽，并更新出牌权
+            renderDesk(0, selectedCards);
+            lastShowPlayer = 0; 
+            renderPlayerCards();
+
+            if (checkWin(0)) return;
+
+            currentTurn = 1;
+            nextTurn();
+        }
+
+        // 玩家点击【不要】
+        function passTurn() {
+            document.getElementById('desk-0').innerHTML = '<span style="color:#aaa;font-size:14px;">不要</span>';
+            currentTurn = 1;
+            nextTurn();
+        }
+
+        function getType(cards) {
+            if (!cards || cards.length === 0) return null;
+            const n = cards.length;
+            const values = cards.map(c => c.value);
+            const sorted = [...values].sort((a, b) => a - b);
+
+            if (n === 1) return { type: 'single', rank: sorted[0] };
+            if (n === 2) {
+                if (sorted[0] === sorted[1]) return { type: 'pair', rank: sorted[0] };
+                if ((sorted[0] === 16 && sorted[1] === 17) || (sorted[0] === 15 && sorted[1] === 16) || (sorted[0] === 15 && sorted[1] === 17)) return { type: 'bomb', rank: 100 };
+                if (sorted[0] === 16 || sorted[0] === 17) return null;
+                if (sorted[1] === 16 || sorted[1] === 17) return null;
+            }
+            if (n === 4) {
+                if (sorted[0] === sorted[3]) return { type: 'bomb', rank: sorted[0] };
+            }
+            if (n === 3) {
+                if (sorted[0] === sorted[2]) return { type: 'triple', rank: sorted[0] };
+            }
+            if (n >= 5) {
+                let isStraight = true;
+                for (let i = 1; i < n; i++) {
+                    if (sorted[i] - sorted[i - 1] !== 1 || sorted[i] > 14) { isStraight = false; break; }
+                }
+                if (isStraight) return { type: 'straight', rank: sorted[n - 1], length: n };
+            }
+            if (n >= 6 && n % 2 === 0) {
+                let isDoubleStraight = true;
+                for (let i = 0; i < n; i += 2) {
+                    if (sorted[i] !== sorted[i + 1]) { isDoubleStraight = false; break; }
+                    if (i + 2 < n && sorted[i + 2] - sorted[i] !== 1) { isDoubleStraight = false; break; }
+                }
+                if (isDoubleStraight) return { type: 'doubleStraight', rank: sorted[n - 1], length: n / 2 };
+            }
+            return null;
+        }
+
+        function canBeat(typeInfo, myCard, deskInfo) {
+            if (!deskInfo) return true;
+            if (typeInfo.type !== deskInfo.type) {
+                if (typeInfo.type === 'bomb' && deskInfo.type !== 'bomb') return true;
+                if (deskInfo.type === 'bomb') return false;
+                return false;
+            }
+            if (typeInfo.type === 'straight' || typeInfo.type === 'doubleStraight') {
+                if (typeInfo.length !== deskInfo.length) return false;
+            }
+            return myCard.value > deskInfo.rank;
+        }
+
+        function findCardsToBeat(aiHand, deskCards) {
+            if (!deskCards || deskCards.length === 0) return null;
+            const deskInfo = getType(deskCards);
+            if (!deskInfo) return null;
+            const sorted = [...aiHand].sort((a, b) => b.value - a.value);
+
+            if (deskInfo.type === 'single' || deskInfo.type === 'pair' || deskInfo.type === 'triple') {
+                for (let i = sorted.length - 1; i >= 0; i--) {
+                    const c = sorted[i];
+                    const t = getType([c]);
+                    if (t && canBeat(t, c, deskInfo)) return [c];
+                }
+            }
+            if (deskInfo.type === 'bomb') {
+                for (let i = sorted.length - 4; i >= 0; i--) {
+                    if (sorted[i].value === sorted[i + 3].value) return sorted.slice(i, i + 4);
+                }
+                if (sorted[0].rank === '小王' && sorted[1].rank === '大王') return [sorted[0], sorted[1]];
+                if (sorted[0].rank === '大王') return null;
+                for (let i = sorted.length - 1; i >= 0; i--) {
+                    if (sorted[i].value === 16 || sorted[i].value === 17) {
+                        for (let j = i - 1; j >= 0; j--) {
+                            if (sorted[j].value === 16 || sorted[j].value === 17) {
+                                return [sorted[j], sorted[i]];
+                            }
+                        }
+                    }
+                }
+                return null;
+            }
+            if (deskInfo.type === 'straight') {
+                const len = deskInfo.length;
+                const straightCards = [];
+                for (let i = 0; i < sorted.length; i++) {
+                    if (sorted[i].value > 14) continue;
+                    straightCards.push(sorted[i]);
+                }
+                straightCards.sort((a, b) => b.value - a.value);
+                for (let start = straightCards.length - len; start >= 0; start--) {
+                    const seq = straightCards.slice(start, start + len);
+                    const vals = seq.map(c => c.value).sort((a, b) => a - b);
+                    let ok = true;
+                    for (let k = 1; k < len; k++) {
+                        if (vals[k] - vals[k - 1] !== 1) { ok = false; break; }
+                    }
+                    if (ok && vals[len - 1] > deskInfo.rank) return seq;
+                }
+                return null;
+            }
+            if (deskInfo.type === 'doubleStraight') {
+                const pairCount = deskInfo.length;
+                const pairs = [];
+                for (let i = 0; i < sorted.length - 1; i++) {
+                    if (sorted[i].value === sorted[i + 1].value && sorted[i].value <= 14) {
+                        pairs.push([sorted[i], sorted[i + 1]]);
+                        i++;
+                    }
+                }
+                pairs.sort((a, b) => b[0].value - a[0].value);
+                for (let start = pairs.length - pairCount; start >= 0; start--) {
+                    const seq = pairs.slice(start, start + pairCount);
+                    const topRank = seq[0][0].value;
+                    if (topRank > deskInfo.rank) {
+                        const result = [];
+                        seq.forEach(p => p.forEach(c => result.push(c)));
+                        return result;
+                    }
+                }
+                return null;
+            }
+            return null;
+        }
+
+        function pickBestLead(aiHand) {
+            const sorted = [...aiHand].sort((a, b) => b.value - a.value);
+            for (let i = sorted.length - 4; i >= 0; i--) {
+                if (sorted[i].value === sorted[i + 3].value) return sorted.slice(i, i + 4);
+            }
+            for (let i = sorted.length - 3; i >= 0; i--) {
+                if (sorted[i].value === sorted[i + 2].value) return sorted.slice(i, i + 3);
+            }
+            for (let i = sorted.length - 2; i >= 0; i--) {
+                if (sorted[i].value === sorted[i + 1]) return [sorted[i], sorted[i + 1]];
+            }
+            for (let i = 0; i < sorted.length; i++) {
+                if (sorted[i].value <= 14) return [sorted[i]];
+            }
+            return [sorted[0]];
+        }
+
+        function aiPlay() {
+            let aiHand = players[currentTurn];
+            let deskCards = [];
+            for (let pid = 0; pid < 3; pid++) {
+                const el = document.getElementById(`desk-${pid}`);
+                if (pid !== currentTurn && el && el.querySelector('.card')) {
+                    const cardEls = el.querySelectorAll('.card');
+                    if (cardEls.length > 0) {
+                        const txt = cardEls[0].innerText;
+                        if (!txt.includes('不要')) {
+                            deskCards = [];
+                            cardEls.forEach(cel => {
+                                const parts = cel.innerText.match(/([♠♥♣♦🃏])(.*)/);
+                                if (parts) {
+                                    const suit = parts[1];
+                                    const rank = parts[2];
+                                    const isRed = (suit === '♥' || suit === '♦');
+                                    deskCards.push({ rank, suit, color: isRed ? 'red' : 'black', value: RANK_ORDER[rank] || 0 });
+                                }
+                            });
+                            break;
+                        }
+                    }
+                }
+            }
+            const isNewRound = (lastShowPlayer === currentTurn);
+            let playCards = null;
+
+            if (isNewRound) {
+                playCards = pickBestLead(aiHand);
+            } else {
+                playCards = findCardsToBeat(aiHand, deskCards);
+                if (!playCards) {
+                    document.getElementById(`desk-${currentTurn}`).innerHTML = '<span style="color:#aaa;font-size:14px;">不要</span>';
+                    document.getElementById(`card-count-${currentTurn}`).innerText = aiHand.length;
+                    if (checkWin(currentTurn)) return;
+                    currentTurn = (currentTurn + 1) % 3;
+                    nextTurn();
+                    return;
+                }
+            }
+
+            playCards.forEach(c => {
+                const idx = aiHand.findIndex(h => h.suit === c.suit && h.rank === c.rank);
+                if (idx !== -1) aiHand.splice(idx, 1);
+            });
+            renderDesk(currentTurn, playCards);
+            lastShowPlayer = currentTurn;
+            document.getElementById(`card-count-${currentTurn}`).innerText = aiHand.length;
+            if (checkWin(currentTurn)) return;
+            currentTurn = (currentTurn + 1) % 3;
+            nextTurn();
+        }
+
+        function renderDesk(playerIdx, cards) {
+            const desk = document.getElementById(`desk-${playerIdx}`);
+            desk.innerHTML = ''; // 只清空当前出牌人的区域
+            cards.forEach(card => {
+                const cardDiv = document.createElement('div');
+                cardDiv.className = `card ${card.color}`;
+                cardDiv.innerHTML = `<div>${card.suit}${card.rank}</div>`;
+                cardDiv.style.width = '50px';
+                cardDiv.style.height = '75px';
+                cardDiv.style.fontSize = '12px';
+                cardDiv.style.marginLeft = '-15px'; // 让出牌也有一点点重叠感
+                desk.appendChild(cardDiv);
+            });
+        }
+
+        function checkWin(playerIdx) {
+            if (players[playerIdx].length === 0) {
+                let role = (playerIdx === landlord) ? "地主" : "农民";
+                let name = (playerIdx === 0) ? "您" : `电脑${playerIdx}`;
+                alert(`游戏结束！${name}(${role}) 赢了！`);
+                location.reload(); // 简单粗暴重新加载
+                return true;
+            }
+            return false;
+        }
+
+        function showMsg(text) {
+            const msgBox = document.getElementById('msg-box');
+            msgBox.innerText = text;
+            msgBox.style.display = 'block';
+            setTimeout(() => { msgBox.style.display = 'none'; }, 1200);
+        }
+    </script>
+</body>
+</html>

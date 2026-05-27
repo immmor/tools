@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>元素熔炉 (Element Forge)</title>
+    <style>
+        :root {
+            --bg-color: #1a1a2e;
+            --panel-color: #16213e;
+            --text-color: #e94560;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        header {
+            text-align: center;
+            margin-top: 10px;
+        }
+
+        h1 {
+            margin: 0;
+            color: var(--text-color);
+            text-shadow: 0 0 10px rgba(233, 69, 96, 0.5);
+        }
+
+        #game-container {
+            width: 90%;
+            max-width: 1000px;
+            height: 85vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            margin-top: 10px;
+        }
+
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            background: var(--panel-color);
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: 1px solid #0f3460;
+        }
+
+        .zone {
+            border: 2px dashed #0f3460;
+            border-radius: 12px;
+            padding: 15px;
+            min-height: 160px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            background: rgba(22, 33, 62, 0.5);
+            transition: all 0.3s;
+        }
+
+        #battlefield {
+            min-height: 200px;
+            border-color: var(--text-color);
+            position: relative;
+        }
+
+        #battlefield::before {
+            content: "熔炉战场 (最多放置2张元素卡触发融合)";
+            position: absolute;
+            color: rgba(255,255,255,0.1);
+            font-size: 1.2rem;
+            pointer-events: none;
+        }
+
+        .card {
+            width: 110px;
+            height: 160px;
+            border-radius: 10px;
+            cursor: pointer;
+            position: relative;
+            transition: transform 0.2s, box-shadow 0.2s;
+            user-select: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 10px;
+            box-sizing: border-box;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+
+        .card:hover {
+            transform: translateY(-10px) scale(1.05);
+        }
+
+        /* 元素卡牌样式 */
+        .card.fire { background: linear-gradient(135deg, #ff416c, #ff4b2b); border: 2px solid #ff4b2b; }
+        .card.water { background: linear-gradient(135deg, #1e3c72, #2a5298); border: 2px solid #2a5298; }
+        .card.earth { background: linear-gradient(135deg, #3d7e5a, #76ba99); border: 2px solid #3d7e5a; }
+        /* 融合卡牌样式 */
+        .card.steam { background: linear-gradient(135deg, #e6e6e6, #95a5a6); border: 2px solid #bdc3c7; animation: pulse 1.5s infinite; }
+        .card.lava { background: linear-gradient(135deg, #f12711, #f5af19); border: 2px solid #f12711; animation: pulse 1.5s infinite; }
+        .card.mud { background: linear-gradient(135deg, #573312, #a87943); border: 2px solid #573312; animation: pulse 1.5s infinite; }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 5px #fff; }
+            50% { box-shadow: 0 0 20px var(--text-color); }
+            100% { box-shadow: 0 0 5px #fff; }
+        }
+
+        .card-name { font-weight: bold; font-size: 1.1rem; text-shadow: 1px 1px 2px #000; }
+        .card-type { font-size: 0.75rem; opacity: 0.8; background: rgba(0,0,0,0.2); padding: 2px 5px; border-radius: 4px; width: fit-content; }
+        .card-power { align-self: flex-end; font-size: 1.5rem; font-weight: bold; text-shadow: 2px 2px 4px #000; }
+
+        #log-panel {
+            height: 80px;
+            background: #0f3460;
+            border-radius: 8px;
+            padding: 10px;
+            font-size: 0.9rem;
+            overflow-y: auto;
+            color: #ccc;
+            border: 1px solid #16213e;
+        }
+
+        .btn {
+            background-color: var(--text-color);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 1rem;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+
+        .btn:hover { background-color: #ff6b81; }
+        .btn:disabled { background-color: #555; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>🔥 元素熔炉 (Element Forge) 🔥</h1>
+        <p style="margin: 5px 0; color: #aaa;">点击手牌送入熔炉，创造融合反应，击败敌方血量！</p>
+    </header>
+
+    <div id="game-container">
+        <div class="status-bar">
+            <div>😈 敌方血量: <span id="enemy-hp" style="color: #ff4b2b; font-weight: bold;">100</span></div>
+            <div>🔮 剩余回合: <span id="turn-count" style="font-weight: bold;">10</span></div>
+            <div>🏆 当前积分: <span id="score" style="color: #f5af19; font-weight: bold;">0</span></div>
+        </div>
+
+        <div class="zone" id="battlefield"></div>
+
+        <div id="log-panel">游戏开始！请选择手牌放入熔炉...</div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h3>🔮 你的手牌：</h3>
+            <button class="btn" id="end-turn-btn" onclick="processForge()">🔥 熔炼激活！</button>
+        </div>
+        
+        <div class="zone" id="hand"></div>
+    </div>
+
+    <script>
+        // 基础卡牌数据库
+        const BASE_CARDS = [
+            { id: 1, name: '纯净水', type: 'water', power: 10 },
+            { id: 2, name: '烈焰火', type: 'fire', power: 12 },
+            { id: 3, name: '厚重土', type: 'earth', power: 15 }
+        ];
+
+        // 融合配方数据库
+        const RECIPES = {
+            'fire+water': { name: '💨 蒸汽炸弹', type: 'steam', power: 35, desc: '水火蒸发！造成巨额爆发伤害！' },
+            'fire+earth': { name: '🌋 熔岩巨兽', type: 'lava', power: 45, desc: '烈火熔岩！直接摧毁敌方防线！' },
+            'earth+water': { name: '💩 剧毒沼泽', type: 'mud', power: 25, desc: '泥泞沼泽！攻守兼备的消耗。' }
+        };
+
+        // 游戏状态
+        let enemyHp = 100;
+        let turnsLeft = 10;
+        let score = 0;
+        let hand = [];
+        let battlefield = [];
+
+        const handZone = document.getElementById('hand');
+        const boardZone = document.getElementById('battlefield');
+        const logPanel = document.getElementById('log-panel');
+
+        // 初始化游戏
+        function initGame() {
+            enemyHp = 100;
+            turnsLeft = 10;
+            score = 0;
+            hand = [];
+            battlefield = [];
+            updateUI();
+            // 初始抽5张卡
+            for(let i=0; i<5; i++) drawCard();
+            log("游戏初始化完成！请将2张元素卡牌送入战场进行融合。");
+        }
+
+        // 抽卡
+        function drawCard() {
+            if (hand.length >= 7) return; 
+            const randomBase = BASE_CARDS[Math.floor(Math.random() * BASE_CARDS.length)];
+            // 深拷贝防止引用污染
+            const newCard = { ...randomBase, instanceId: Math.random().toString(36).substr(2, 9) };
+            hand.push(newCard);
+            renderHand();
+        }
+
+        // 渲染手牌
+        function renderHand() {
+            handZone.innerHTML = '';
+            hand.forEach(card => {
+                const cardEl = createCardDOM(card);
+                cardEl.onclick = () => moveToBattlefield(card);
+                handZone.appendChild(cardEl);
+            });
+        }
+
+        // 渲染战场
+        function renderBattlefield() {
+            boardZone.innerHTML = '';
+            battlefield.forEach(card => {
+                const cardEl = createCardDOM(card);
+                cardEl.onclick = () => moveToHand(card);
+                boardZone.appendChild(cardEl);
+            });
+        }
+
+        // 创建卡牌HTML节点
+        function createCardDOM(card) {
+            const div = document.createElement('div');
+            div.className = `card ${card.type}`;
+            div.innerHTML = `
+                <div class="card-name">${card.name}</div>
+                <div class="card-type">${card.type.toUpperCase()}</div>
+                <div class="card-power">⚔️${card.power}</div>
+            `;
+            return div;
+        }
+
+        // 移到战场
+        function moveToBattlefield(card) {
+            if (battlefield.length >= 2) {
+                log("❌ 熔炉一次只能容纳 2 张基础元素卡！");
+                return;
+            }
+            hand = hand.filter(c => c.instanceId !== card.instanceId);
+            battlefield.push(card);
+            renderHand();
+            renderBattlefield();
+            log(`将 [${card.name}] 放入了熔炉。`);
+        }
+
+        // 从战场退回手牌
+        function moveToHand(card) {
+            // 如果已经是融合卡，不可收回
+            if(['steam','lava','mud'].includes(card.type)) return;
+            
+            battlefield = battlefield.filter(c => c.instanceId !== card.instanceId);
+            hand.push(card);
+            renderHand();
+            renderBattlefield();
+            log(`将 [${card.name}] 撤回手牌。`);
+        }
+
+        // 核心逻辑：熔炼激活（回合结束处理）
+        function processForge() {
+            if (battlefield.length === 0) {
+                log("❌ 战场上没有卡牌，无法激活熔炉！");
+                return;
+            }
+
+            turnsLeft--;
+            let damageDealt = 0;
+
+            // 检查是否触发融合机制
+            if (battlefield.length === 2) {
+                const type1 = battlefield[0].type;
+                const type2 = battlefield[1].type;
+                
+                // 组合键名排序组合，如 fire+water
+                const key1 = `${type1}+${type2}`;
+                const key2 = `${type2}+${type1}`;
+                const recipe = RECIPES[key1] || RECIPES[key2];
+
+                if (recipe) {
+                    // 触发融合！
+                    log(`✨【连锁反应】触发融合！${battlefield[0].name} + ${battlefield[1].name} ...`);
+                    
+                    const fusedCard = {
+                        instanceId: 'fuse-' + Date.now(),
+                        name: recipe.name,
+                        type: recipe.type,
+                        power: recipe.power
+                    };
+
+                    // 展示融合后的超级卡牌
+                    boardZone.innerHTML = '';
+                    boardZone.appendChild(createCardDOM(fusedCard));
+                    
+                    damageDealt = fusedCard.power;
+                    score += damageDealt * 2;
+                    log(`💥 融合成功！诞生了 [${recipe.name}]！对敌人造成 ${damageDealt} 点巨额伤害！(${recipe.desc})`);
+                } else {
+                    // 同属性或未配对情况：合并数值但无特殊加成
+                    damageDealt = battlefield[0].power + battlefield[1].power;
+                    score += damageDealt;
+                    log(`⚔️ 同性排斥，未能融合。双卡协力造成 ${damageDealt} 点伤害。`);
+                }
+            } else if (battlefield.length === 1) {
+                // 单卡攻击
+                damageDealt = battlefield[0].power;
+                score += damageDealt;
+                log(`⚔️ [${battlefield[0].name}] 单枪匹马发动攻击，造成 ${damageDealt} 点伤害。`);
+            }
+
+            // 扣除敌方血量
+            enemyHp = Math.max(0, enemyHp - damageDealt);
+            
+            // 清空战场，补满手牌
+            setTimeout(() => {
+                battlefield = [];
+                renderBattlefield();
+                while(hand.length < 5) drawCard();
+                checkGameStatus();
+                updateUI();
+            }, 1500); // 留出1.5秒给玩家看特效/结果
+        }
+
+        // 日志打印
+        function log(msg) {
+            logPanel.innerHTML = msg + "<br>" + logPanel.innerHTML;
+        }
+
+        // 更新状态数字
+        function updateUI() {
+            document.getElementById('enemy-hp').innerText = enemyHp;
+            document.getElementById('turn-count').innerText = turnsLeft;
+            document.getElementById('score').innerText = score;
+            
+            // 按钮状态控制
+            document.getElementById('end-turn-btn').disabled = (turnsLeft <= 0 || enemyHp <= 0);
+        }
+
+        // 检查输赢
+        function checkGameStatus() {
+            if (enemyHp <= 0) {
+                alert(`🎉 恭喜通关！你成功摧毁了元素核心！\n最终积分: ${score}`);
+                initGame();
+            } else if (turnsLeft <= 0) {
+                alert(`💀 能量耗尽，挑战失败！敌方残余血量: ${enemyHp}\n再接再厉！`);
+                initGame();
+            }
+        }
+
+        // 启动游戏
+        initGame();
+    </script>
+</body>
+</html>

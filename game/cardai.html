@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>赛博进化：维度对决 (Cyber Evolution)</title>
+    <style>
+        :root {
+            --neon-blue: #00f3ff;
+            --neon-purple: #9d4edd;
+            --neon-pink: #ff007f;
+            --dark-bg: #0a0a12;
+            --card-width: 100px;
+            --card-height: 150px;
+        }
+
+        /* 手机端适配：缩小卡牌尺寸 */
+        @media (max-width: 768px) {
+            :root {
+                --card-width: 75px;
+                --card-height: 110px;
+            }
+            .stat { font-size: 10px !important; }
+            .card-name { font-size: 11px !important; }
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        body {
+            background-color: var(--dark-bg);
+            color: #fff;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 顶部状态栏 */
+        header {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.03);
+            border-bottom: 1px solid rgba(0, 243, 255, 0.2);
+            backdrop-filter: blur(10px);
+        }
+
+        .life-bar {
+            font-weight: bold;
+            text-shadow: 0 0 10px var(--neon-blue);
+        }
+
+        /* 双维度核心战场 */
+        #battlefield {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-around;
+            padding: 10px;
+            gap: 10px;
+        }
+
+        .dimension-zone {
+            flex: 1;
+            border: 2px dashed rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+            transition: all 0.3s ease;
+        }
+
+        /* 现实位面样式 */
+        #physical-zone {
+            background: radial-gradient(circle, rgba(0, 243, 255, 0.05) 0%, transparent 70%);
+            border-color: rgba(0, 243, 255, 0.3);
+        }
+        #physical-zone::before {
+            content: "现实位面 (PHYSICAL)";
+            position: absolute; left: 10px; top: 10px; color: var(--neon-blue); font-size: 12px; letter-spacing: 2px; opacity: 0.6;
+        }
+
+        /* 数字意识空间样式 */
+        #cyber-zone {
+            background: radial-gradient(circle, rgba(157, 78, 221, 0.05) 0%, transparent 70%);
+            border-color: rgba(157, 78, 221, 0.3);
+        }
+        #cyber-zone::before {
+            content: "意识空间 (CYBER)";
+            position: absolute; left: 10px; top: 10px; color: var(--neon-purple); font-size: 12px; letter-spacing: 2px; opacity: 0.6;
+        }
+
+        /* 玩家手牌区 */
+        #hand-zone {
+            height: calc(var(--card-height) + 30px);
+            background: rgba(0, 0, 0, 0.4);
+            border-top: 2px solid rgba(255, 0, 127, 0.2);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            overflow-x: auto;
+        }
+
+        /* 卡牌基础样式 */
+        .card {
+            width: var(--card-width);
+            height: var(--card-height);
+            background: #151525;
+            border: 2px solid #333;
+            border-radius: 8px;
+            position: relative;
+            cursor: grab;
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            touch-action: none; /* 阻止移动端默认滚动行为，优化拖拽 */
+        }
+
+        .card:active { cursor: grabbing; }
+
+        /* AI 矩阵卡牌特效 */
+        .card[data-type="ai"] { border-color: var(--neon-blue); box-shadow: 0 0 8px rgba(0, 243, 255, 0.3); }
+        /* 病毒卡牌特效 */
+        .card[data-type="virus"] { border-color: var(--neon-pink); box-shadow: 0 0 8px rgba(255, 0, 127, 0.3); }
+
+        .card-name {
+            font-size: 13px;
+            font-weight: bold;
+            text-align: center;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding-bottom: 4px;
+        }
+
+        .card-art {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            opacity: 0.8;
+        }
+
+        .card-stats {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+        }
+
+        .stat {
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .atk { background: #8b0000; color: #fff; }
+        .hp { background: #006400; color: #fff; }
+
+        /* 游戏控制按钮 */
+        #end-turn-btn {
+            position: absolute;
+            right: 20px;
+            bottom: calc(var(--card-height) + 50px);
+            padding: 12px 24px;
+            background: linear-gradient(45deg, var(--neon-purple), var(--neon-pink));
+            border: none;
+            border-radius: 30px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 0 15px rgba(157, 78, 221, 0.5);
+            z-index: 100;
+        }
+        #end-turn-btn:hover {
+            transform: scale(1.05);
+        }
+
+        /* 提示层 */
+        #msg-overlay {
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.85);
+            padding: 20px 40px;
+            border-radius: 10px;
+            border: 1px solid var(--neon-blue);
+            font-size: 24px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 1000;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="life-bar">玩家血量 (HP): <span id="player-hp">30</span></div>
+        <div style="color: var(--neon-pink); font-weight: bold;">AI 敌方血量: <span id="enemy-hp">30</span></div>
+    </header>
+
+    <div id="battlefield">
+        <div class="dimension-zone" id="cyber-zone" ondragover="allowDrop(event)" ondrop="drop(event, 'cyber')"></div>
+        <div class="dimension-zone" id="physical-zone" ondragover="allowDrop(event)" ondrop="drop(event, 'physical')"></div>
+    </div>
+
+    <button id="end-turn-btn" onclick="aiTurn()">结束回合</button>
+
+    <div id="hand-zone"></div>
+
+    <div id="msg-overlay">提示信息</div>
+
+    <script>
+        // 游戏状态
+        let playerHP = 30;
+        let enemyHP = 30;
+        
+        // 预设创新卡牌数据
+        const cardTemplates = [
+            { id: 1, name: "GPT量子体", type: "ai", atk: 4, hp: 5, icon: "🤖" },
+            { id: 2, name: "深度蠕虫", type: "virus", atk: 3, hp: 3, icon: "🐛" },
+            { id: 3, name: "神经防火墙", type: "ai", atk: 1, hp: 8, icon: "🧱" },
+            { id: 4, name: "零日漏洞", type: "virus", atk: 6, hp: 2, icon: "💥" },
+            { id: 5, name: "硅基巨像", type: "ai", atk: 5, hp: 6, icon: "🗿" }
+        ];
+
+        // 初始化：洗牌并生成手牌
+        function initGame() {
+            const handZone = document.getElementById('hand-zone');
+            handZone.innerHTML = '';
+            // 随机抽4张卡牌
+            for(let i=0; i<4; i++) {
+                let randomCard = cardTemplates[Math.floor(Math.random() * cardTemplates.length)];
+                let cardEl = createCardElement(randomCard, i);
+                handZone.appendChild(cardEl);
+            }
+        }
+
+        // 创建卡牌DOM（完美支持PC端拖拽 & 移动端触摸拖动）
+        function createCardElement(card, index) {
+            const el = document.createElement('div');
+            el.className = 'card';
+            el.setAttribute('data-type', card.type);
+            el.setAttribute('draggable', 'true');
+            el.id = `card-${index}-${Date.now()}`;
+            
+            el.innerHTML = `
+                <div class="card-name">${card.name}</div>
+                <div class="card-art">${card.icon}</div>
+                <div class="card-stats">
+                    <div class="stat atk">${card.atk}</div>
+                    <div class="stat hp">${card.hp}</div>
+                </div>
+            `;
+
+            // --- PC端 拖拽事件 ---
+            el.addEventListener('dragstart', (e) => {
+                e.dataTransfer.setData('text/plain', el.id);
+            });
+
+            // --- 移动端 触摸事件核心创新（使用 touch 模拟拖拽穿梭） ---
+            let activeTouch = false;
+            let startX, startY;
+            
+            el.addEventListener('touchstart', (e) => {
+                activeTouch = true;
+                const touch = e.touches[0];
+                startX = touch.clientX;
+                startY = touch.clientY;
+                el.style.position = 'fixed';
+                el.style.zIndex = '1000';
+                moveAt(touch.clientX, touch.clientY);
+            }, {passive: true});
+
+            el.addEventListener('touchmove', (e) => {
+                if (!activeTouch) return;
+                const touch = e.touches[0];
+                moveAt(touch.clientX, touch.clientY);
+            }, {passive: true});
+
+            el.addEventListener('touchend', (e) => {
+                if (!activeTouch) return;
+                activeTouch = false;
+                el.style.position = '';
+                el.style.zIndex = '';
+                
+                // 获取释放触摸时手指所在的元素
+                const touch = e.changedTouches[0];
+                el.style.display = 'none'; // 临时隐藏以获取下方真正的元素
+                const dropTarget = document.elementFromPoint(touch.clientX, touch.clientY);
+                el.style.display = 'flex';
+
+                // 判断落点在哪个维度
+                const zone = dropTarget ? dropTarget.closest('.dimension-zone') : null;
+                if (zone) {
+                    zone.appendChild(el);
+                    triggerDimensionEffect(card, zone.id);
+                } else {
+                    // 没落到战场，退回手牌区
+                    document.getElementById('hand-zone').appendChild(el);
+                }
+            });
+
+            function moveAt(pageX, pageY) {
+                el.style.left = pageX - varToPx('--card-width') / 2 + 'px';
+                el.style.top = pageY - varToPx('--card-height') / 2 + 'px';
+            }
+
+            return el;
+        }
+
+        // 辅助函数：获取CSS变量的像素值
+        function varToPx(varName) {
+            return window.innerWidth <= 768 ? (varName === '--card-width' ? 75 : 110) : (varName === '--card-width' ? 100 : 150);
+        }
+
+        // PC端 拖拽释放允许
+        function allowDrop(ev) {
+            ev.preventDefault();
+        }
+
+        // PC端 释放卡牌
+        function drop(ev, zoneName) {
+            ev.preventDefault();
+            const data = ev.dataTransfer.getData("text/plain");
+            const cardEl = document.getElementById(data);
+            if(cardEl) {
+                ev.currentTarget.appendChild(cardEl);
+                // 模拟获取卡牌数据
+                const name = cardEl.querySelector('.card-name').innerText;
+                showMsg(`${name} 部署到 ${zoneName === 'cyber' ? '意识空间' : '现实位面'}`);
+                
+                // 触发维度核心对决逻辑
+                executeBattle(cardEl, zoneName);
+            }
+        }
+
+        // 维度核心规则结算机制
+        function triggerDimensionEffect(card, zoneId) {
+            let msg = "";
+            if (zoneId === 'cyber-zone') {
+                msg = `${card.name} 进入数字意识空间！激活【逻辑入侵】：直接削减AI血量 2 点！`;
+                enemyHP = Math.max(0, enemyHP - 2);
+            } else {
+                msg = `${card.name} 进入现实位面！激活【物理增压】：自身攻击力 +1！`;
+                const atkEl = document.querySelector('.card .atk');
+                if(atkEl) atkEl.innerText = parseInt(atkEl.innerText) + 1;
+            }
+            document.getElementById('enemy-hp').innerText = enemyHP;
+            showMsg(msg);
+            checkGameOver();
+        }
+
+        function executeBattle(cardEl, zoneName) {
+            const atk = parseInt(cardEl.querySelector('.atk').innerText);
+            if (zoneName === 'cyber') {
+                enemyHP = Math.max(0, enemyHP - atk);
+                showMsg(`逻辑打击！对AI造成 ${atk} 点数据湮灭`);
+            } else {
+                enemyHP = Math.max(0, enemyHP - (atk + 1));
+                showMsg(`物理轰炸！对AI造成 ${atk + 1} 点实体破坏`);
+            }
+            document.getElementById('enemy-hp').innerText = enemyHP;
+            checkGameOver();
+        }
+
+        // 模拟 AI 回合
+        function aiTurn() {
+            showMsg("AI 思考中...");
+            setTimeout(() => {
+                // 简单AI逻辑：随机扣除玩家血量
+                let damage = Math.floor(Math.random() * 4) + 2;
+                playerHP = Math.max(0, playerHP - damage);
+                document.getElementById('player-hp').innerText = playerHP;
+                showMsg(`AI 发动反击！入侵了你的现实终端，扣除 ${damage} HP`);
+                
+                checkGameOver();
+                
+                // 补充玩家手牌
+                if(document.getElementById('hand-zone').children.length < 4) {
+                    let randomCard = cardTemplates[Math.floor(Math.random() * cardTemplates.length)];
+                    let cardEl = createCardElement(randomCard, Date.now());
+                    document.getElementById('hand-zone').appendChild(cardEl);
+                }
+            }, 1200);
+        }
+
+        // 提示层控制
+        function showMsg(text) {
+            const overlay = document.getElementById('msg-overlay');
+            overlay.innerText = text;
+            overlay.style.opacity = '1';
+            setTimeout(() => { overlay.style.opacity = '0'; }, 2000);
+        }
+
+        // 游戏胜负判定
+        function checkGameOver() {
+            if (enemyHP <= 0) {
+                alert("祝贺你！成功用意志与算法击败了失控AI！");
+                resetGame();
+            } else if (playerHP <= 0) {
+                alert("你被AI格式化了...游戏结束。");
+                resetGame();
+            }
+        }
+
+        function resetGame() {
+            playerHP = 30;
+            enemyHP = 30;
+            document.getElementById('player-hp').innerText = playerHP;
+            document.getElementById('enemy-hp').innerText = enemyHP;
+            document.getElementById('cyber-zone').innerHTML = '';
+            document.getElementById('physical-zone').innerHTML = '';
+            initGame();
+        }
+
+        // 启动游戏
+        initGame();
+    </script>
+</body>
+</html>

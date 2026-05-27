@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChainSoul Awakening - 区块链卡牌创新版</title>
+    <style>
+        :root {
+            --bg-color: #0a0b10;
+            --card-crypto: linear-gradient(135deg, #00ffcc, #0099ff);
+            --card-nft: linear-gradient(135deg, #ff007f, #7928ca);
+            --card-gas: linear-gradient(135deg, #ffaa00, #ff0022);
+            --text-color: #e2e8f0;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Roboto, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 顶部区块链状态栏 */
+        header {
+            background: rgba(20, 21, 33, 0.85);
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #1e293b;
+            backdrop-filter: blur(10px);
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-value {
+            color: #00ffcc;
+            font-weight: bold;
+            text-shadow: 0 0 10px rgba(0,255,204,0.5);
+        }
+
+        /* 游戏核心主战场 */
+        main {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 3fr 1fr;
+            padding: 20px;
+            gap: 20px;
+            height: calc(100vh - 70px);
+        }
+
+        /* 左侧战场 */
+        .battle-arena {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            background: rgba(15, 23, 42, 0.6);
+            border-radius: 16px;
+            padding: 20px;
+            border: 1px solid #334155;
+            position: relative;
+        }
+
+        /* 敌方与友方战场战线 */
+        .field-zone {
+            height: 160px;
+            border: 2px dashed #334155;
+            border-radius: 12px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            background: rgba(0,0,0,0.2);
+            transition: all 0.3s;
+        }
+
+        .field-zone.drag-over {
+            border-color: #00ffcc;
+            background: rgba(0, 255, 204, 0.05);
+        }
+
+        .vs-divider {
+            text-align: center;
+            color: #64748b;
+            font-size: 14px;
+            letter-spacing: 4px;
+            margin: 10px 0;
+        }
+
+        /* 玩家手牌区 */
+        .hand-zone {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            min-height: 160px;
+            align-items: flex-end;
+            padding-bottom: 10px;
+        }
+
+        /* 右侧：创新区块链工坊（Mint 机制） */
+        .crypto-forge {
+            background: rgba(20, 21, 33, 0.9);
+            border-radius: 16px;
+            border: 1px solid #ff007f;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            box-shadow: 0 0 20px rgba(255, 0, 127, 0.15);
+        }
+
+        .forge-slots {
+            display: flex;
+            justify-content: space-around;
+            background: #090d16;
+            padding: 15px;
+            border-radius: 10px;
+            border: 1px solid #334155;
+        }
+
+        .forge-slot {
+            width: 80px;
+            height: 110px;
+            border: 2px dashed #475569;
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 12px;
+            color: #64748b;
+            text-align: center;
+        }
+
+        /* 卡牌基础样式 */
+        .card {
+            width: 110px;
+            height: 155px;
+            border-radius: 10px;
+            padding: 10px;
+            color: #fff;
+            cursor: grab;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            transition: transform 0.2s, box-shadow 0.2s;
+            user-select: none;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        .card:hover {
+            transform: translateY(-10px) scale(1.05);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+        }
+
+        .card.crypto { background: var(--card-crypto); box-shadow: 0 0 10px rgba(0,255,204,0.3); }
+        .card.nft { background: var(--card-nft); box-shadow: 0 0 10px rgba(255,0,127,0.3); }
+        .card.gas { background: var(--card-gas); box-shadow: 0 0 10px rgba(255,170,0,0.3); }
+        
+        /* 现场铸造的超能卡样式 */
+        .card.minted {
+            background: linear-gradient(45deg, #ff00cc, #3333ff, #00ffcc);
+            animation: pulse 2s infinite alternate;
+            border: 2px solid #fff;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 10px #ff00cc; }
+            100% { box-shadow: 0 0 25px #00ffcc; }
+        }
+
+        .card-title { font-size: 12px; font-weight: bold; text-transform: uppercase; }
+        .card-hash { font-size: 9px; opacity: 0.6; font-family: monospace; }
+        .card-power { font-size: 22px; font-weight: 900; text-align: center; margin: auto 0; }
+        .card-cost { 
+            position: absolute; top: -5px; right: -5px; 
+            background: #000; color: #ffaa00; border-radius: 50%;
+            width: 22px; height: 22px; text-align: center; line-height: 22px;
+            font-size: 11px; font-weight: bold; border: 1px solid #ffaa00;
+        }
+
+        /* 按钮设计 */
+        .btn {
+            background: linear-gradient(90deg, #ff007f, #7928ca);
+            border: none; color: white; padding: 12px;
+            border-radius: 8px; cursor: pointer; font-weight: bold;
+            transition: opacity 0.2s; text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .btn:hover { opacity: 0.9; }
+        .btn:disabled { background: #334155; color: #64748b; cursor: not-allowed; }
+
+        /* 日志和说明面板 */
+        .log-panel {
+            flex: 1; background: #090d16; border-radius: 8px;
+            padding: 10px; font-family: monospace; font-size: 11px;
+            color: #10b981; overflow-y: auto; max-height: 150px;
+            border: 1px solid #1e293b;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h2>🔗 ChainSoul <span style="font-size: 14px; color:#64748b;">v1.0 Testnet</span></h2>
+        <div class="status-item">当前区块高度: <span id="block-height" class="status-value">1042</span></div>
+        <div class="status-item">Gas 能量: <span id="gas-energy" class="status-value">5 / 5</span></div>
+        <div class="status-item">节点血量(HP): <span id="player-hp" class="status-value" style="color:#ef4444;">100</span></div>
+        <div class="status-item">敌方节点HP: <span id="enemy-hp" class="status-value" style="color:#ef4444;">100</span></div>
+    </header>
+
+    <main>
+        <div class="battle-arena">
+            <div class="field-zone" id="enemy-field">
+                <div class="card gas" style="cursor:default;">
+                    <div class="card-title">暗网防火墙</div>
+                    <div class="card-power">15</div>
+                    <div class="card-hash">#0000abc5</div>
+                </div>
+            </div>
+
+            <div class="vs-divider">—— NETWORK MEMPOOL (交易池战线) ——</div>
+
+            <div class="field-zone" id="player-field" ondragover="allowDrop(event)" ondragleave="dragLeave(event)" ondrop="dropToField(event)">
+                </div>
+
+            <div class="hand-zone" id="hand-zone">
+                </div>
+        </div>
+
+        <div class="crypto-forge">
+            <h3>🛠️ 区块工坊 (Forge)</h3>
+            <p style="font-size: 12px; color: #94a3b8;">拖入一张手牌与系统生成的哈希碎片结合，可以在线 Mint (铸造) 出双倍战力的【全链超能卡】！</p>
+            
+            <div class="forge-slots">
+                <div class="forge-slot" id="forge-card-slot" ondragover="allowDrop(event)" ondrop="dropToForge(event)">
+                    拖入卡牌
+                </div>
+                <div style="font-size:24px; align-self:center;">+</div>
+                <div class="forge-slot" style="border-style: solid; border-color: #00ffcc; color: #00ffcc;">
+                    <div id="hash-fragment">#7a9f...2b</div>
+                </div>
+            </div>
+
+            <button class="btn" id="mint-btn" onclick="mintSuperCard()" disabled>铸造全链卡 (Cost 2 Gas)</button>
+            <button class="btn" style="background:linear-gradient(90deg, #3b82f6, #1d4ed8);" onclick="nextBlockTurn()">打包区块 (结束回合)</button>
+
+            <h4 style="margin-top: 10px; font-size:13px;">📜 链上交易日志:</h4>
+            <div class="log-panel" id="log-panel">
+                [System] 创世区块初始化成功...<br>
+                [System] 节点连接成功，注入初始手牌。
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // 游戏状态数据
+        let game = {
+            blockHeight: 1042,
+            gas: 5,
+            maxGas: 5,
+            playerHP: 100,
+            enemyHP: 100,
+            draggedCardId: null,
+            cardInForge: null,
+            cardIdCounter: 0
+        };
+
+        // 卡牌库基础模板
+        const cardTemplates = [
+            { name: "比特币巨鲸", type: "crypto", power: 12, cost: 3 },
+            { name: "以太坊密匙", type: "crypto", power: 8, cost: 2 },
+            { name: "无聊猿 NFT", type: "nft", power: 15, cost: 4 },
+            { name: "加密朋克", type: "nft", power: 10, cost: 2 },
+            { name: "Gas 燃料瓶", type: "gas", power: 5, cost: 1 },
+        ];
+
+        // 初始化
+        window.onload = function() {
+            generateHand(4);
+            generateHashFragment();
+            updateUI();
+        };
+
+        // 生成随机哈希碎片
+        function generateHashFragment() {
+            const hex = "0123456789abcdef";
+            let result = "#";
+            for (let i = 0; i < 6; i++) {
+                result += hex[Math.floor(Math.random() * 16)];
+            }
+            document.getElementById('hash-fragment').innerText = result;
+        }
+
+        // 生成手牌
+        function generateHand(count) {
+            const handZone = document.getElementById('hand-zone');
+            for(let i=0; i<count; i++) {
+                const tpl = cardTemplates[Math.floor(Math.random() * cardTemplates.length)];
+                game.cardIdCounter++;
+                
+                const cardDom = document.createElement('div');
+                cardDom.className = `card ${tpl.type}`;
+                cardDom.id = `card-${game.cardIdCounter}`;
+                cardDom.draggable = true;
+                cardDom.dataset.cost = tpl.cost;
+                cardDom.dataset.power = tpl.power;
+                cardDom.dataset.name = tpl.name;
+                cardDom.dataset.type = tpl.type;
+                
+                cardDom.innerHTML = `
+                    <div class="card-cost">${tpl.cost}</div>
+                    <div class="card-title">${tpl.name}</div>
+                    <div class="card-power">${tpl.power}</div>
+                    <div class="card-hash">#${Math.random().toString(16).substr(2, 6)}</div>
+                `;
+
+                cardDom.addEventListener('dragstart', (e) => {
+                    game.draggedCardId = e.target.id;
+                });
+
+                handZone.appendChild(cardDom);
+            }
+        }
+
+        // 拖拽逻辑控制
+        function allowDrop(e) {
+            e.preventDefault();
+            if(e.currentTarget.classList.contains('field-zone')) {
+                e.currentTarget.classList.add('drag-over');
+            }
+        }
+
+        function dragLeave(e) {
+            e.currentTarget.classList.remove('drag-over');
+        }
+
+        // 拖拽到战场上：打出卡牌
+        function dropToField(e) {
+            e.preventDefault();
+            const field = document.getElementById('player-field');
+            field.classList.remove('drag-over');
+            
+            const cardDom = document.getElementById(game.draggedCardId);
+            if(!cardDom) return;
+
+            const cost = parseInt(cardDom.dataset.cost);
+
+            if(game.gas >= cost) {
+                game.gas -= cost;
+                cardDom.draggable = false; // 部署后不可再拖动
+                field.appendChild(cardDom);
+                log(`玩家打出 [${cardDom.dataset.name}]，消耗 Gas: ${cost}`);
+                
+                // 触发对敌方防御合同的自动攻击
+                setTimeout(() => combat(parseInt(cardDom.dataset.power)), 500);
+                updateUI();
+            } else {
+                log("❌ Gas 燃料不足，无法完成链上部署！", "#ef4444");
+            }
+        }
+
+        // 拖拽到右侧区块链工坊
+        function dropToForge(e) {
+            e.preventDefault();
+            const slot = document.getElementById('forge-card-slot');
+            if(slot.children.length > 0) return; // 已经有牌了
+
+            const cardDom = document.getElementById(game.draggedCardId);
+            if(!cardDom) return;
+
+            slot.innerHTML = "";
+            slot.appendChild(cardDom);
+            game.cardInForge = cardDom;
+            
+            document.getElementById('mint-btn').disabled = false;
+            log(`卡牌 [${cardDom.dataset.name}] 已放入工坊，准备上链 Mint。`);
+        }
+
+        // 创新机制：现场 Mint 升级超级卡牌
+        function mintSuperCard() {
+            if(game.gas < 2 || !game.cardInForge) {
+                log("❌ Gas 不足(需2点) 或 未放置有效卡牌！", "#ef4444");
+                return;
+            }
+
+            game.gas -= 2;
+            const originalCard = game.cardInForge;
+            const hash = document.getElementById('hash-fragment').innerText;
+
+            // 属性质变提升
+            const newPower = parseInt(originalCard.dataset.power) * 2;
+            const newName = "🔥 全链." + originalCard.dataset.name;
+
+            // 更改属性与外观
+            originalCard.dataset.power = newPower;
+            originalCard.dataset.name = newName;
+            originalCard.className = "card minted";
+            originalCard.querySelector('.card-power').innerText = newPower;
+            originalCard.querySelector('.card-title').innerText = newName;
+            originalCard.querySelector('.card-hash').innerText = hash;
+
+            // 回收到手牌区
+            document.getElementById('hand-zone').appendChild(originalCard);
+            
+            // 重置工坊
+            const slot = document.getElementById('forge-card-slot');
+            slot.innerText = "拖入卡牌";
+            game.cardInForge = null;
+            document.getElementById('mint-btn').disabled = true;
+
+            log(`🎉 Mint 成功！诞生全链稀有卡：[${newName}] (战力飙升至 ${newPower}!)`);
+            generateHashFragment(); // 更新下一轮的哈希
+            updateUI();
+        }
+
+        // 简单的战斗结算
+        function combat(power) {
+            // 简单逻辑：直接对敌方节点或敌方怪兽卡产生伤害
+            game.enemyHP -= power;
+            if(game.enemyHP <= 0) {
+                game.enemyHP = 0;
+                alert("🏆 恭喜！你成功攻破了对方的区块链节点，获得胜利！");
+                location.reload();
+            }
+            log(`⚔️ 卡牌激活动作：对敌方网络造成 ${power} 点算力冲击！`);
+            updateUI();
+        }
+
+        // 打包区块（回合结束）
+        function nextBlockTurn() {
+            game.blockHeight++;
+            game.gas = game.maxGas; // 恢复全额 Gas
+            log(`📦 区块 #${game.blockHeight} 已成功打包打包！Gas 能量已回满。`);
+            
+            // 敌方AI简单反击
+            const enemyAttack = Math.floor(Math.random() * 8) + 5;
+            game.playerHP -= enemyAttack;
+            log(`⚠️ 收到来自黑客节点的区块侧击，自身 HP 减少 ${enemyAttack}`, "#ef4444");
+
+            if(game.playerHP <= 0) {
+                game.playerHP = 0;
+                alert("💀 你的主节点已被黑客攻破，游戏结束！");
+                location.reload();
+            }
+
+            // 补充一张新随机手牌
+            generateHand(1);
+            updateUI();
+        }
+
+        // 状态面板刷新
+        function updateUI() {
+            document.getElementById('block-height').innerText = game.blockHeight;
+            document.getElementById('gas-energy').innerText = `${game.gas} / ${game.maxGas}`;
+            document.getElementById('player-hp').innerText = game.playerHP;
+            document.getElementById('enemy-hp').innerText = game.enemyHP;
+        }
+
+        // 打印区块链日志
+        function log(msg, color = "#10b981") {
+            const panel = document.getElementById('log-panel');
+            panel.innerHTML += `<br><span style="color:${color}">[Tx] ${msg}</span>`;
+            panel.scrollTop = panel.scrollHeight;
+        }
+    </script>
+</body>
+</html>

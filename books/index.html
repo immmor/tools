@@ -43,14 +43,6 @@
             -webkit-tap-highlight-color: transparent;
         }
 
-        *::selection {
-            background: transparent;
-        }
-
-        .click-zone::selection {
-            background: transparent;
-        }
-
         body {
             font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
             background-color: var(--bg-color);
@@ -191,8 +183,8 @@
         .settings-panel {
             position: fixed;
             top: 0;
-            right: -280px;
-            width: 280px;
+            right: -320px;
+            width: 320px;
             height: 100vh;
             background: var(--bg-color);
             box-shadow: -2px 0 10px rgba(0,0,0,0.1);
@@ -387,31 +379,6 @@
             text-indent: 2em;
         }
 
-        /* 触控/点击翻页热区（适配手机与无键盘操作） */
-        .click-zone {
-            position: absolute;
-            top: 0;
-            bottom: 0;
-            width: 15%;
-            cursor: pointer;
-            z-index: 10;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: transparent;
-            user-select: none;
-            -webkit-tap-highlight-color: transparent;
-            -webkit-touch-callout: none;
-            touch-action: manipulation;
-            outline: none;
-            transition: background 0.2s;
-        }
-        .click-zone:hover {
-            background: rgba(0,0,0,0.02);
-        }
-        .left-zone { left: 0; }
-        .right-zone { right: 0; }
-
         /* 底部导航与页码 */
         footer {
             position: absolute;
@@ -435,19 +402,82 @@
                 column-count: 1; /* 手机端单栏显示 */
                 column-gap: 0;
             }
-            .click-zone {
-                width: 25%; /* 手机端扩大点击热区 */
-            }
-            /* 手机端隐藏悬浮库，靠点击两边翻页即可 */
-            .click-zone:hover {
-                background: transparent;
-            }
         }
 
         .content-body {
             font-size: var(--font-size-custom);
         }
+
+        .annotation-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            border: 1px solid var(--header-border);
+            border-radius: 8px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .annotation-item:hover {
+            background: var(--header-border);
+        }
+
+        .annotation-item-icon {
+            font-size: 20px;
+            margin-right: 12px;
+        }
+
+        .annotation-item-info {
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .annotation-item-page {
+            font-size: 12px;
+            color: #888;
+            margin-top: 4px;
+        }
+
+        .annotation-item-text {
+            font-size: 14px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .annotation-item-delete {
+            padding: 5px 8px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            opacity: 0.5;
+            font-size: 16px;
+            transition: opacity 0.2s;
+        }
+
+        .annotation-item-delete:hover {
+            opacity: 1;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #888;
+            font-size: 14px;
+        }
+
+        .annotation-marker {
+            background: linear-gradient(120deg, #ffd700 0%, #ffa500 100%);
+            color: #333;
+            padding: 1px 3px;
+            border-radius: 2px;
+            cursor: pointer;
+        }
     </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 </head>
 <body>
 
@@ -496,9 +526,9 @@
             <div class="settings-section">
                 <div class="settings-label">导入书籍</div>
                 <div class="import-area">
-                    <input type="file" id="bookFileInput" accept=".txt" hidden>
+                    <input type="file" id="bookFileInput" accept=".txt,.md,.epub,.pdf,.doc,.docx" hidden>
                     <button class="option-btn" id="importBtn">选择文件</button>
-                    <div class="import-tip">支持 .txt 格式文本文件</div>
+                    <div class="import-tip">支持 .txt / .md / .epub / .pdf / .doc / .docx 格式</div>
                 </div>
             </div>
         </div>
@@ -514,10 +544,17 @@
         </div>
     </div>
 
-    <div class="main-container">
-        <div class="click-zone left-zone" id="prevBtn" title="上一页"></div>
-        <div class="click-zone right-zone" id="nextBtn" title="下一页"></div>
+    <div class="shelf-panel" id="annotationPanel">
+        <div class="settings-content">
+            <div class="settings-header">
+                <div class="settings-title">批注管理</div>
+                <button class="settings-close" id="annotationCloseBtn">×</button>
+            </div>
+            <div id="annotationList"></div>
+        </div>
+    </div>
 
+    <div class="main-container" id="mainContainer">
         <div class="reader-window" id="windowBox">
             <div class="content-body" id="contentBody">
                 <p>第一章：初现。这是一个使用纯HTML、CSS和JavaScript构建的响应式现代阅读器。它不需要任何复杂的后端服务器，完全在用户的浏览器中运行。无论是使用宽屏的台式电脑，还是使用便携的智能手机，它都能完美适应。</p>
@@ -536,42 +573,37 @@
     <script>
         const contentBody = document.getElementById('contentBody');
         const windowBox = document.getElementById('windowBox');
-        const prevBtn = document.getElementById('prevBtn');
-        const nextBtn = document.getElementById('nextBtn');
+        const mainContainer = document.getElementById('mainContainer');
         const pageIndicator = document.getElementById('pageIndicator');
+        let selectionStartTime = 0;
 
         let currentPage = 0;
         let totalPages = 1;
 
-        // 计算总页数和执行翻页
         function updateLayout() {
-            // 获取单页的步长（视窗宽度 + 栏间距）
             const windowWidth = windowBox.clientWidth;
-            
-            // 判断当前是单栏（手机）还是双栏（电脑）
-            const columnGap = 0; 
-            const step = windowWidth + columnGap;
-
-            // 获取内容实际总宽度，计算总页数
             const scrollWidth = contentBody.scrollWidth;
-            totalPages = Math.max(1, Math.ceil(scrollWidth / step));
 
-            // 防止缩放浏览器时当前页码越界
+            if (scrollWidth <= windowWidth) {
+                totalPages = 1;
+                currentPage = 0;
+                contentBody.style.transform = 'translateX(0px)';
+                pageIndicator.innerText = `第 1 / 1 页`;
+            return;
+            }
+
+            totalPages = Math.max(1, Math.round(scrollWidth / windowWidth));
+            const actualStep = scrollWidth / totalPages;
+
             if (currentPage >= totalPages) {
                 currentPage = totalPages - 1;
             }
             if (currentPage < 0) currentPage = 0;
 
-            // 通过平移（Translate）实现翻页
-            const translateX = -currentPage * step;
+            const translateX = -currentPage * actualStep;
             contentBody.style.transform = `translateX(${translateX}px)`;
 
-            // 更新页码显示
             pageIndicator.innerText = `第 ${currentPage + 1} / ${totalPages} 页`;
-            
-            // 控制边界按钮的显示（可选隐藏）
-            prevBtn.style.opacity = currentPage === 0 ? "0.3" : "1";
-            nextBtn.style.opacity = currentPage === totalPages - 1 ? "0.3" : "1";
         }
 
         // 翻页逻辑
@@ -604,6 +636,7 @@
                 doPageTransition(() => {
                     currentPage++;
                     updateLayout();
+                    localStorage.setItem(`progress_${bookTitle.textContent}`, currentPage);
                 });
             }
         }
@@ -613,13 +646,36 @@
                 doPageTransition(() => {
                     currentPage--;
                     updateLayout();
+                    localStorage.setItem(`progress_${bookTitle.textContent}`, currentPage);
                 });
             }
         }
 
-        // 事件绑定：点击触发
-        nextBtn.addEventListener('click', nextPage);
-        prevBtn.addEventListener('click', prevPage);
+        // 事件绑定：点击触发 - 智能判断翻页区域
+        mainContainer.addEventListener('mousedown', (e) => {
+            selectionStartTime = Date.now();
+        });
+
+        mainContainer.addEventListener('click', (e) => {
+            const selection = window.getSelection();
+            const hasSelection = selection.toString().trim().length > 0;
+            const timeSinceMouseDown = Date.now() - selectionStartTime;
+
+            if (hasSelection || timeSinceMouseDown > 200) {
+                return;
+            }
+
+            const rect = mainContainer.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const width = rect.width;
+            const zoneWidth = window.innerWidth <= 768 ? width * 0.25 : width * 0.15;
+
+            if (clickX < zoneWidth) {
+                prevPage();
+            } else if (clickX > width - zoneWidth) {
+                nextPage();
+            }
+        });
 
         // 事件绑定：键盘方向键触发
         document.addEventListener('keydown', (e) => {
@@ -659,11 +715,12 @@
             settingsPanel.classList.remove('open');
         }
 
-        settingsBtn.addEventListener('click', () => {
-            if (settingsPanel.classList.contains('open')) {
-                closeSettings();
+        settingsBtn.addEventListener('click', (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                openAnnotationPanel();
             } else {
-                openSettings();
+                if (settingsPanel.classList.contains('open')) closeSettings();
+                else openSettings();
             }
         });
 
@@ -769,9 +826,13 @@
             bookTitle.textContent = name;
             localStorage.setItem('bookContent', content);
             localStorage.setItem('bookTitle', name);
-            currentPage = 0;
+            
+            const savedProgress = localStorage.getItem(`progress_${name}`);
+            currentPage = savedProgress !== null ? parseInt(savedProgress) : 0;
+            
             updateLayout();
             renderShelf();
+            setTimeout(() => applyMarkers(), 100);
         }
 
         settingsPanel.addEventListener('click', (e) => {
@@ -906,19 +967,118 @@
             bookFileInput.click();
         });
 
-        bookFileInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
+        async function parseTxtMd(file) {
+            return new Promise((resolve, reject) => {
                 const reader = new FileReader();
-                reader.onload = (event) => {
-                    const text = event.target.result;
-                    const name = file.name.replace('.txt', '');
-                    addToShelf(name, text);
-                    loadBook(name, text);
-                    closeSettings();
-                };
+                reader.onload = (e) => resolve(e.target.result);
+                reader.onerror = reject;
                 reader.readAsText(file);
+            });
+        }
+
+        async function parseEpub(file) {
+            return new Promise(async (resolve, reject) => {
+                try {
+                    const zip = await JSZip.loadAsync(file);
+                    let content = '';
+                    const contentOpf = zip.file(/\.opf$/i)[0];
+                    if (contentOpf) {
+                        const opfText = await contentOpf.async('text');
+                        const manifestMatch = opfText.match(/<manifest>([\s\S]*?)<\/manifest>/i);
+                        if (manifestMatch) {
+                            const itemMatches = manifestMatch[1].match(/<item[^>]*href=["']([^"']+)["'][^>]*media-type=["']application\/xhtml\+xml["'][^>]*\/?>/gi);
+                            if (itemMatches) {
+                                for (const item of itemMatches) {
+                                    const hrefMatch = item.match(/href=["']([^"']+)["']/i);
+                                    if (hrefMatch) {
+                                        const htmlFile = zip.file(hrefMatch[1]);
+                                        if (htmlFile) {
+                                            const htmlContent = await htmlFile.async('text');
+                                            const textContent = htmlContent.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+                                            content += textContent + '\n\n';
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    resolve(content || 'EPUB文件解析失败：无法提取文本内容');
+                } catch (error) {
+                    reject(new Error('EPUB解析失败: ' + error.message));
+                }
+            });
+        }
+
+        async function parsePdf(file) {
+            return new Promise(async (resolve, reject) => {
+                try {
+                    const arrayBuffer = await file.arrayBuffer();
+                    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                    let text = '';
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const textContent = await page.getTextContent();
+                        const pageText = textContent.items.map(item => item.str).join(' ');
+                        text += pageText + '\n\n';
+                    }
+                    resolve(text);
+                } catch (error) {
+                    reject(new Error('PDF解析失败: ' + error.message));
+                }
+            });
+        }
+
+        async function parseDocx(file) {
+            return new Promise(async (resolve, reject) => {
+                try {
+                    const arrayBuffer = await file.arrayBuffer();
+                    const result = await mammoth.extractRawText({ arrayBuffer });
+                    resolve(result.value);
+                } catch (error) {
+                    reject(new Error('DOCX解析失败: ' + error.message));
+                }
+            });
+        }
+
+        bookFileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const ext = file.name.split('.').pop().toLowerCase();
+            let text = '';
+            let name = file.name.replace(/\.[^/.]+$/, '');
+
+            try {
+                switch (ext) {
+                    case 'txt':
+                    case 'md':
+                        text = await parseTxtMd(file);
+                        break;
+                    case 'epub':
+                        text = await parseEpub(file);
+                        break;
+                    case 'pdf':
+                        text = await parsePdf(file);
+                        break;
+                    case 'doc':
+                    case 'docx':
+                        text = await parseDocx(file);
+                        break;
+                    default:
+                        alert('不支持的文件格式！');
+                        return;
+                }
+
+                addToShelf(name, text);
+                loadBook(name, text);
+                closeSettings();
+            } catch (error) {
+                console.error('导入失败:', error);
+                alert('文件导入失败: ' + error.message);
             }
+
+            e.target.value = '';
         });
 
         // 加载保存的书籍内容
@@ -935,6 +1095,184 @@
                     loadBook(bookName, text);
                 })
                 .catch(() => {});
+        }
+
+        // ========== 阅读进度自动保存（已集成到翻页函数中）==========
+
+        // ========== 简化版批注功能 ==========
+        const annotationPanel = document.getElementById('annotationPanel');
+        const annotationCloseBtn = document.getElementById('annotationCloseBtn');
+        const annotationList = document.getElementById('annotationList');
+
+        function getAnnotations() {
+            const key = bookTitle.textContent || 'default';
+            return JSON.parse(localStorage.getItem(`annotations_${key}`) || '[]');
+        }
+
+        function saveAnnotations(annotations) {
+            const key = bookTitle.textContent || 'default';
+            localStorage.setItem(`annotations_${key}`, JSON.stringify(annotations));
+        }
+
+        function openAnnotationPanel() {
+            annotationPanel.classList.add('open');
+            renderAnnotations();
+        }
+
+        function closeAnnotationPanel() {
+            annotationPanel.classList.remove('open');
+        }
+
+        annotationCloseBtn.addEventListener('click', closeAnnotationPanel);
+
+        // 选中文字添加批注
+        contentBody.addEventListener('mouseup', () => {
+            const text = window.getSelection().toString().trim();
+            if (text.length > 0 && text.length < 500) {
+                setTimeout(() => {
+                    if (window.getSelection().toString().trim() === text) {
+                        showAnnotationPopup(text);
+                    }
+                }, 100);
+            }
+        });
+
+        function showAnnotationPopup(text, existingNote, existingId) {
+            const isEdit = existingId !== null;
+            const overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.3);z-index:1999;';
+
+            const popup = document.createElement('div');
+            popup.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:var(--bg-color);border:1px solid var(--header-border);border-radius:12px;padding:20px;box-shadow:0 4px 20px rgba(0,0,0,0.2);z-index:2000;width:300px;';
+            popup.innerHTML = `
+                <div style="font-size:16px;font-weight:bold;margin-bottom:12px;color:var(--text-color);">${isEdit ? '编辑批注' : '添加批注'}</div>
+                <div style="font-size:13px;color:#666;margin-bottom:12px;padding:8px;background:rgba(0,0,0,0.03);border-radius:4px;">"${text.substring(0, 30)}${text.length > 30 ? '...' : ''}"</div>
+                <textarea placeholder="输入批注..." style="width:100%;height:80px;padding:8px;border:1px solid var(--header-border);border-radius:6px;background:transparent;color:var(--text-color);font-size:14px;resize:none;font-family:inherit;margin-bottom:12px;">${existingNote || ''}</textarea>
+                <div style="display:flex;gap:8px;justify-content:flex-end;">
+                    ${isEdit ? '<button class="delete-btn" style="padding:6px 16px;border:1px solid #d33;border-radius:4px;background:transparent;color:#d33;cursor:pointer;margin-right:auto;">删除</button>' : ''}
+                    <button class="cancel-btn" style="padding:6px 16px;border:1px solid var(--header-border);border-radius:4px;background:transparent;color:var(--text-color);cursor:pointer;">取消</button>
+                    <button class="save-btn" style="padding:6px 16px;border:none;border-radius:4px;background:var(--text-color);color:var(--bg-color);cursor:pointer;">保存</button>
+                </div>
+            `;
+
+            document.body.appendChild(overlay);
+            document.body.appendChild(popup);
+
+            const closePopup = () => { overlay.remove(); popup.remove(); };
+            overlay.onclick = closePopup;
+            popup.querySelector('.cancel-btn').onclick = closePopup;
+            
+            if (isEdit) {
+                popup.querySelector('.delete-btn').onclick = () => {
+                    if (confirm('删除此批注？')) {
+                        let annotations = getAnnotations().filter(a => a.id !== existingId);
+                        saveAnnotations(annotations);
+                        applyMarkers();
+                        renderAnnotations();
+                        closePopup();
+                    }
+                };
+            }
+            
+            popup.querySelector('.save-btn').onclick = () => {
+                const note = popup.querySelector('textarea').value.trim();
+                if (!note) { alert('请输入批注'); return; }
+                
+                if (isEdit) {
+                    let annotations = getAnnotations();
+                    const idx = annotations.findIndex(a => a.id === existingId);
+                    if (idx !== -1) {
+                        annotations[idx].note = note;
+                        annotations[idx].time = new Date().toLocaleString();
+                        saveAnnotations(annotations);
+                        applyMarkers();
+                        renderAnnotations();
+                    }
+                } else {
+                    const annotations = getAnnotations();
+                    annotations.push({ id: Date.now(), text, note, page: currentPage + 1, time: new Date().toLocaleString() });
+                    saveAnnotations(annotations);
+                    applyMarkers();
+                    renderAnnotations();
+                }
+                closePopup();
+            };
+        }
+
+        function applyMarkers() {
+            const annotations = getAnnotations();
+            
+            document.querySelectorAll('.annotation-marker').forEach(marker => {
+                marker.outerHTML = marker.textContent;
+            });
+
+            if (!annotations.length) return;
+
+            let html = contentBody.innerHTML;
+            annotations.forEach(a => {
+                const escaped = a.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                html = html.replace(new RegExp(`(${escaped})`, 'gi'), 
+                    `<span class="annotation-marker" data-note="${a.note.replace(/"/g, '&quot;')}" data-text="${a.text}">$1</span>`);
+            });
+            contentBody.innerHTML = html;
+            
+            document.querySelectorAll('.annotation-marker').forEach(marker => {
+                marker.onclick = function(e) {
+                    e.stopPropagation();
+                    const text = this.dataset.text;
+                    const note = this.dataset.note;
+                    const annotations = getAnnotations();
+                    const ann = annotations.find(a => a.text === text);
+                    showAnnotationPopup(text, note, ann ? ann.id : null);
+                };
+            });
+        }
+
+        function renderAnnotations() {
+            const annotations = getAnnotations();
+            
+            if (!annotations.length) {
+                annotationList.innerHTML = '<div class="empty-state">暂无批注<br>选择文字后可添加</div>';
+                return;
+            }
+
+            annotationList.innerHTML = annotations.map(a => `
+                <div class="annotation-item" data-id="${a.id}">
+                    <div class="annotation-item-icon">📝</div>
+                    <div class="annotation-item-info">
+                        <div class="annotation-item-text">${a.note}</div>
+                        <div class="annotation-item-page">第 ${a.page} 页 · ${a.time}</div>
+                    </div>
+                    <button class="annotation-item-delete" data-id="${a.id}">×</button>
+                </div>
+            `).join('');
+
+            annotationList.querySelectorAll('.annotation-item').forEach(item => {
+                item.addEventListener('click', (e) => {
+                    if (!e.target.classList.contains('annotation-item-delete')) {
+                        const id = parseInt(item.dataset.id);
+                        const a = getAnnotations().find(x => x.id === id);
+                        if (a) {
+                            currentPage = a.page - 1;
+                            updateLayout();
+                            setTimeout(() => applyMarkers(), 300);
+                            closeAnnotationPanel();
+                        }
+                    }
+                });
+            });
+
+            annotationList.querySelectorAll('.annotation-item-delete').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (confirm('删除此批注？')) {
+                        const annotations = getAnnotations().filter(x => x.id !== parseInt(btn.dataset.id));
+                        saveAnnotations(annotations);
+                        applyMarkers();
+                        renderAnnotations();
+                    }
+                });
+            });
         }
 
         loadSettings();

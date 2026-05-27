@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Gas Wars: 节点争夺战</title>
+    <style>
+        :root {
+            --bg-color: #0a0f1d;
+            --card-bg: rgba(16, 24, 48, 0.9);
+            --primary: #00ffcc;
+            --secondary: #8833ff;
+            --text: #e2e8f0;
+            --danger: #ff3366;
+            --warning: #ffaa00;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 顶部状态栏 */
+        header {
+            background: linear-gradient(90deg, #111827, #1f2937);
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid var(--primary);
+            box-shadow: 0 4px 20px rgba(0, 255, 204, 0.15);
+            z-index: 10;
+        }
+
+        .logo {
+            font-weight: bold;
+            font-size: 1.2rem;
+            color: var(--primary);
+            text-shadow: 0 0 8px var(--primary);
+        }
+
+        .block-height {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 4px 12px;
+            border-radius: 20px;
+            border: 1px solid var(--secondary);
+            font-size: 0.9rem;
+        }
+
+        /* 主画布布局 */
+        .game-container {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 1fr 320px;
+            height: calc(100vh - 50px);
+            position: relative;
+        }
+
+        /* 战场区域 */
+        .battlefield {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 15px;
+            background: radial-gradient(circle at center, #1e1b4b 0%, #0a0f1d 100%);
+            overflow-y: auto;
+            position: relative;
+        }
+
+        /* 玩家/对手状态栏 */
+        .node-status {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--card-bg);
+            padding: 10px 15px;
+            border-radius: 12px;
+            border-left: 4px solid var(--primary);
+            backdrop-filter: blur(10px);
+        }
+        
+        .node-status.opponent {
+            border-left-color: var(--danger);
+        }
+
+        .stat-group {
+            display: flex;
+            gap: 15px;
+            font-size: 0.9rem;
+        }
+
+        .stat { display: flex; align-items: center; gap: 5px; }
+        .stat.hp { color: var(--danger); font-weight: bold; }
+        .stat.gas { color: var(--warning); }
+        .stat.hash { color: var(--primary); }
+
+        /* 链上卡槽（战场中心） */
+        .mempool {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            min-height: 160px;
+            border: 2px dashed rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            margin: 15px 0;
+            position: relative;
+            background: rgba(0,0,0,0.2);
+        }
+
+        .mempool::before {
+            content: "MEMPOOL (待确认交易区)";
+            position: absolute;
+            top: 10px;
+            font-size: 0.75rem;
+            color: rgba(255,255,255,0.3);
+            letter-spacing: 2px;
+        }
+
+        /* 卡牌样式设计 - 借鉴玻璃拟态与极简主义 */
+        .card {
+            width: 105px;
+            height: 150px;
+            background: var(--card-bg);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            cursor: pointer;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        .card:not(.disabled):hover {
+            transform: translateY(-10px) scale(1.05);
+            border-color: var(--primary);
+            box-shadow: 0 10px 20px rgba(0, 255, 204, 0.2);
+        }
+
+        .card.selected {
+            border-color: var(--secondary) !important;
+            box-shadow: 0 0 15px var(--secondary) !important;
+            transform: translateY(-15px);
+        }
+
+        .card.disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        .card-type {
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            color: var(--primary);
+            font-weight: bold;
+        }
+
+        .card-name {
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin: 4px 0;
+            word-break: break-all;
+        }
+
+        .card-effect {
+            font-size: 0.65rem;
+            color: #94a3b8;
+            flex: 1;
+            margin-top: 4px;
+            line-height: 1.2;
+        }
+
+        .card-cost {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            margin-top: auto;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            padding-top: 4px;
+        }
+
+        /* 手牌区 */
+        .hand-container {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            padding: 10px 0;
+            min-height: 170px;
+            align-items: flex-end;
+        }
+
+        /* 动作控制台 */
+        .controls {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 5px;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, var(--secondary), #5511cc);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 4px 12px rgba(136, 51, 255, 0.3);
+            font-size: 0.9rem;
+        }
+
+        .btn:active { transform: scale(0.95); }
+        .btn.btn-mint {
+            background: linear-gradient(135deg, var(--primary), #00b38f);
+            color: #0a0f1d;
+            box-shadow: 0 4px 12px rgba(0, 255, 204, 0.3);
+        }
+
+        /* 右侧/底部的区块链分布式账本日志 */
+        .ledger-panel {
+            background: #0f172a;
+            border-left: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .ledger-header {
+            padding: 15px;
+            background: rgba(0,0,0,0.3);
+            font-weight: bold;
+            font-size: 0.9rem;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .ledger-logs {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.75rem;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .log-entry {
+            line-height: 1.4;
+            padding: 6px;
+            border-radius: 4px;
+            background: rgba(255,255,255,0.02);
+            border-left: 2px solid #475569;
+        }
+        .log-entry.tx { border-left-color: var(--secondary); color: #c084fc; }
+        .log-entry.block { border-left-color: var(--primary); color: var(--primary); background: rgba(0,255,204,0.05); }
+        .log-entry.sys { border-left-color: var(--warning); color: var(--warning); }
+
+        /* 响应式媒体查询：移动端触控优化 */
+        @media (max-width: 768px) {
+            .game-container {
+                grid-template-columns: 1fr;
+                grid-template-rows: 1fr 140px;
+                height: calc(100vh - 50px);
+            }
+
+            .battlefield {
+                padding: 8px;
+                height: 100%;
+            }
+
+            .ledger-panel {
+                border-left: none;
+                border-top: 1px solid rgba(255,255,255,0.1);
+                height: 140px;
+            }
+
+            .mempool {
+                min-height: 110px;
+                margin: 8px 0;
+            }
+
+            .card {
+                width: 75px;
+                height: 110px;
+                padding: 6px;
+                border-radius: 6px;
+            }
+
+            .card-name { font-size: 0.7rem; margin: 2px 0; }
+            .card-effect { font-size: 0.55rem; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+            .card-cost { font-size: 0.6rem; padding-top: 2px; }
+            .card-type { font-size: 0.5rem; }
+
+            .hand-container {
+                min-height: 120px;
+                gap: 6px;
+            }
+
+            .btn {
+                padding: 10px 16px;
+                font-size: 0.8rem;
+            }
+            
+            .node-status {
+                padding: 6px 10px;
+            }
+            .stat-group { gap: 8px; font-size: 0.75rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo">⚡ GAS WARS.io</div>
+        <div class="block-height" id="blockHeight">BLOCK: #1,024</div>
+    </header>
+
+    <div class="game-container">
+        <main class="battlefield">
+            
+            <div class="node-status opponent">
+                <div>🤖 敌方验证节点 (AI)</div>
+                <div class="stat-group">
+                    <div class="stat hp">质押金: <span id="optHp">100</span></div>
+                    <div class="stat gas">Gas: <span id="optGas">10</span></div>
+                    <div class="stat hash">算力: <span id="optHash">0</span>TH/s</div>
+                </div>
+            </div>
+
+            <div class="mempool" id="mempool">
+                </div>
+
+            <div class="node-status">
+                <div>👤 我的全节点 (You)</div>
+                <div class="stat-group">
+                    <div class="stat hp">质押金: <span id="playerHp">100</span></div>
+                    <div class="stat gas">Gas: <span id="playerGas">10</span></div>
+                    <div class="stat hash">算力: <span id="playerHash">0</span>TH/s</div>
+                </div>
+            </div>
+
+            <div class="hand-container" id="hand"></div>
+
+            <div class="controls">
+                <button class="btn" id="btnPlay" onclick="broadcastTx()">广播交易 (Play)</button>
+                <button class="btn btn-mint" onclick="mintBlock()">铸造区块 (Mint)</button>
+            </div>
+
+        </main>
+
+        <aside class="ledger-panel">
+            <div class="ledger-header">📁 全球分布式账本 (Ledger Log)</div>
+            <div class="ledger-logs" id="logs">
+                <div class="log-entry sys">[SYSTEM] 创世区块加载成功。初始Gas已分发。</div>
+            </div>
+        </aside>
+    </div>
+
+    <script>
+        // --- 游戏卡牌数据库设计 ---
+        const CARD_LIBRARY = [
+            { id: 1, name: "ASIC矿机", type: "Hash", effect: "算力 +5", costGas: 3, action: (p, o) => p.hash += 5 },
+            { id: 2, name: "51%算力攻击", type: "Attack", effect: "扣除对方15质押金", costGas: 5, action: (p, o) => o.hp -= 15 },
+            { id: 3, name: "Gas质押返还", type: "Defend", effect: "自身回复20质押金", costGas: 2, action: (p, o) => p.hp += 20 },
+            { id: 4, name: "闪电网络", type: "Speed", effect: "下回合Gas上限 +4", costGas: 1, action: (p, o) => p.gas += 4 },
+            { id: 5, name: "智能合约炸弹", type: "Contract", effect: "扣除敌方5点算力", costGas: 4, action: (p, o) => o.hash = Math.max(0, o.hash - 5) }
+        ];
+
+        // --- 核心游戏状态 ---
+        let gameState = {
+            blockHeight: 1024,
+            player: { hp: 100, gas: 10, maxGas: 10, hash: 0, hand: [] },
+            opponent: { hp: 100, gas: 10, maxGas: 10, hash: 0 },
+            mempool: [], // 当前待打包的卡牌交易
+            selectedCardIndex: null
+        };
+
+        // --- 初始化配置 ---
+        function initGame() {
+            log("sys", "正在连接到对等网络节点...");
+            // 发牌
+            for(let i=0; i<4; i++) {
+                gameState.player.hand.push(getRandomCard());
+            }
+            render();
+        }
+
+        function getRandomCard() {
+            return { ...CARD_LIBRARY[Math.floor(Math.random() * CARD_LIBRARY.length)] };
+        }
+
+        // --- 渲染引擎（自适应支持） ---
+        function render() {
+            document.getElementById('blockHeight').innerText = `BLOCK: #${gameState.blockHeight}`;
+            
+            // 渲染状态
+            document.getElementById('playerHp').innerText = gameState.player.hp;
+            document.getElementById('playerGas').innerText = `${gameState.player.gas}/${gameState.player.maxGas}`;
+            document.getElementById('playerHash').innerText = gameState.player.hash;
+
+            document.getElementById('optHp').innerText = gameState.opponent.hp;
+            document.getElementById('optGas').innerText = gameState.opponent.gas;
+            document.getElementById('optHash').innerText = gameState.opponent.hash;
+
+            // 渲染手牌
+            const handEl = document.getElementById('hand');
+            handEl.innerHTML = '';
+            gameState.player.hand.forEach((card, index) => {
+                const cardDiv = document.createElement('div');
+                cardDiv.className = `card ${card.costGas > gameState.player.gas ? 'disabled' : ''} ${gameState.selectedCardIndex === index ? 'selected' : ''}`;
+                cardDiv.innerHTML = `
+                    <div class="card-type">${card.type}</div>
+                    <div class="card-name">${card.name}</div>
+                    <div class="card-effect">${card.effect}</div>
+                    <div class="card-cost">
+                        <span>⛽ ${card.costGas}</span>
+                    </div>
+                `;
+                if(card.costGas <= gameState.player.gas) {
+                    // 同时绑定 Click (PC) 和 Touchstart (手机) 确保极速响应
+                    cardDiv.addEventListener('click', () => selectCard(index));
+                }
+                handEl.appendChild(cardDiv);
+            });
+
+            // 渲染内池 (Mempool)
+            const mempoolEl = document.getElementById('mempool');
+            mempoolEl.innerHTML = '';
+            gameState.mempool.forEach(card => {
+                const txDiv = document.createElement('div');
+                txDiv.className = 'card';
+                txDiv.style.borderColor = 'var(--secondary)';
+                txDiv.innerHTML = `
+                    <div class="card-type" style="color:var(--secondary)">TX_PENDING</div>
+                    <div class="card-name">${card.name}</div>
+                    <div class="card-effect">${card.effect}</div>
+                `;
+                mempoolEl.appendChild(txDiv);
+            });
+        }
+
+        // --- 核心游戏动作 ---
+        function selectCard(index) {
+            gameState.selectedCardIndex = gameState.selectedCardIndex === index ? null : index;
+            render();
+        }
+
+        // 玩家向网络广播交易（出牌）
+        function broadcastTx() {
+            if (gameState.selectedCardIndex === null) {
+                alert("请先选择一张链上智能合约手牌进行广播！");
+                return;
+            }
+            
+            const card = gameState.player.hand[gameState.selectedCardIndex];
+            if (gameState.player.gas >= card.costGas) {
+                gameState.player.gas -= card.costGas;
+                gameState.player.hand.splice(gameState.selectedCardIndex, 1);
+                gameState.mempool.push(card);
+                
+                log("tx", `TxID_${Math.floor(Math.random()*100000)}: 广播交易 [${card.name}] 耗费 Gas: ${card.costGas}`);
+                
+                gameState.selectedCardIndex = null;
+                render();
+            }
+        }
+
+        // 铸造区块（回合结算，核心区块链博弈点）
+        function mintBlock() {
+            log("sys", "正在开始工作量证明 (PoW) 竞速挖矿...");
+            
+            // 简单的AI机制：模拟AI竞争出牌
+            simulateOpponent();
+
+            setTimeout(() => {
+                gameState.blockHeight++;
+                log("block", `New Block! 成功打包区块 #${gameState.blockHeight}`);
+
+                // 结算计算力优势：高算力的一方能额外重创对方质押
+                let hashDiff = gameState.player.hash - gameState.opponent.hash;
+                if (hashDiff > 0) {
+                    gameState.opponent.hp -= Math.floor(hashDiff * 0.5);
+                    log("block", `🏆 我方凭借多出 ${hashDiff} TH/s 的算力，掠夺了对方记账权，扣除敌方质押金`);
+                } else if (hashDiff < 0) {
+                    gameState.player.hp -= Math.floor(Math.abs(hashDiff) * 0.5);
+                    log("block", `❌ 敌方算力碾压，主导了区块打包，扣除我方质押金`);
+                }
+
+                // 执行当前内存池中所有被成功打包的智能合约效果
+                gameState.mempool.forEach(card => {
+                    card.action(gameState.player, gameState.opponent);
+                    log("sys", `合约执行成功: ${card.name} 触发效果。`);
+                });
+
+                // 释放内存池
+                gameState.mempool = [];
+
+                // 周期性恢复 Gas 限制，并补充手牌
+                gameState.player.gas = gameState.player.maxGas;
+                gameState.opponent.gas = gameState.opponent.maxGas;
+                
+                while(gameState.player.hand.length < 4) {
+                    gameState.player.hand.push(getRandomCard());
+                }
+
+                // 胜负检测
+                if(gameState.player.hp <= 0 || gameState.opponent.hp <= 0) {
+                    alert(gameState.player.hp > gameState.opponent.hp ? "🎉 恭喜！你成功摧毁了对方节点，赢得了全链网络控制权！" : "💀 警告：你的节点质押降至0，已被网络强行清退！");
+                    location.reload();
+                }
+
+                render();
+            }, 600); // 预留短暂动画加载感
+        }
+
+        // 模拟对手AI操作
+        function simulateOpponent() {
+            // 对手随机增加算力或者进行攻击
+            const aiDecision = Math.random();
+            if (aiDecision > 0.5) {
+                gameState.opponent.hash += Math.floor(Math.random() * 6) + 2;
+                log("tx", "🤖 敌方节点：升级了硬件设施，算力大幅攀升！");
+            } else {
+                gameState.player.hp -= 10;
+                log("tx", "🤖 敌方节点：发起恶意分布式拒绝服务(DDoS)攻击，扣除我方质押。");
+            }
+        }
+
+        // 账本日志包装函数
+        function log(type, msg) {
+            const logsEl = document.getElementById('logs');
+            const newLog = document.createElement('div');
+            newLog.className = `log-entry ${type}`;
+            newLog.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            logsEl.appendChild(newLog);
+            // 自动滚动到底部
+            logsEl.scrollTop = logsEl.scrollHeight;
+        }
+
+        // 运行游戏
+        initGame();
+    </script>
+</body>
+</html>
