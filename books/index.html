@@ -575,6 +575,7 @@
         const windowBox = document.getElementById('windowBox');
         const mainContainer = document.getElementById('mainContainer');
         const pageIndicator = document.getElementById('pageIndicator');
+        let selectionStartTime = 0;
 
         let currentPage = 0;
         let totalPages = 1;
@@ -651,17 +652,29 @@
         }
 
         // 事件绑定：点击触发 - 智能判断翻页区域
+        mainContainer.addEventListener('mousedown', (e) => {
+            selectionStartTime = Date.now();
+        });
+
         mainContainer.addEventListener('click', (e) => {
-            const selection = window.getSelection().toString().trim();
-            if (selection.length > 0) return;
+            const selection = window.getSelection();
+            const hasSelection = selection.toString().trim().length > 0;
+            const timeSinceMouseDown = Date.now() - selectionStartTime;
+
+            if (hasSelection || timeSinceMouseDown > 200) {
+                return;
+            }
 
             const rect = mainContainer.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const w = rect.width;
-            const zone = window.innerWidth <= 768 ? w * 0.25 : w * 0.15;
+            const clickX = e.clientX - rect.left;
+            const width = rect.width;
+            const zoneWidth = window.innerWidth <= 768 ? width * 0.25 : width * 0.15;
 
-            if (x < zone) prevPage();
-            else if (x > w - zone) nextPage();
+            if (clickX < zoneWidth) {
+                prevPage();
+            } else if (clickX > width - zoneWidth) {
+                nextPage();
+            }
         });
 
         // 事件绑定：键盘方向键触发
@@ -1112,7 +1125,6 @@
 
         annotationCloseBtn.addEventListener('click', closeAnnotationPanel);
 
-        // 选中文字添加批注 - 支持桌面和移动端
         function handleSelection() {
             const text = window.getSelection().toString().trim();
             if (text.length > 0 && text.length < 500) {
@@ -1120,7 +1132,7 @@
                     if (window.getSelection().toString().trim() === text) {
                         showAnnotationPopup(text);
                     }
-                }, 200);
+                }, 100);
             }
         }
         contentBody.addEventListener('mouseup', handleSelection);
