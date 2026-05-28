@@ -134,6 +134,15 @@
             display: flex; justify-content: center; align-items: center;
             pointer-events: auto; touch-action: none;
         }
+        /* 手机端蹲下按钮 */
+        #btn-crouch {
+            position: absolute; bottom: 210px; right: 50px;
+            width: 60px; height: 60px; background: rgba(150, 100, 50, 0.4);
+            border: 3px solid rgba(255, 255, 255, 0.6); border-radius: 50%;
+            color: white; font-weight: bold; font-size: 14px;
+            display: flex; justify-content: center; align-items: center;
+            pointer-events: auto; touch-action: none;
+        }
     </style>
 </head>
 <body>
@@ -169,11 +178,13 @@
         <div id="btn-weapon">武器</div>
         <div id="btn-reload">换弹</div>
         <div id="btn-car">车辆</div>
+        <div id="btn-crouch">蹲下</div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://unpkg.com/three@0.128.0/examples/js/objects/Sky.js"></script>
 
     <script>
         // --- 1. 设备环境判定 ---
@@ -185,30 +196,41 @@
         if (isMobile) {
             mobileUi.style.display = 'block';
             menuSub.innerHTML = `消灭全部 <span style="color:#ffcc00;">3</span> 个敌人！<br>金色圆点是爆头弱点！<br>也可以开车撞敌人！`;
-            guideText.innerHTML = `【触控操作】<br>左侧摇杆控制移动 | 右半屏滑动调整视角<br>点击右侧[开火]/[跳跃]/[武器]/[换弹]/[车辆]按钮`;
+            guideText.innerHTML = `【触控操作】<br>左侧摇杆控制移动 | 右半屏滑动调整视角<br>点击右侧[开火]/[跳跃]/[蹲下]/[武器]/[换弹]/[车辆]按钮`;
         } else {
             menuSub.innerHTML = `消灭全部 <span style="color:#ffcc00;">3</span> 个敌人！<br>金色圆点是一枪秒杀的暴击点！<br>也可以开车撞敌人！<br><br>点击屏幕锁鼠标开始`;
-            guideText.innerHTML = `【PC键盘操作】<br>WASD 键移动 | 空格键跳跃 | 鼠标左键射击<br>按 1/2/3 键切换武器 | 按 R 键换弹 | 按 E 键进入/离开车辆`;
+            guideText.innerHTML = `【PC键盘操作】<br>WASD 键移动 | 空格键跳跃 | Ctrl 键蹲下 | 鼠标左键射击<br>按 1/2/3 键切换武器 | 按 R 键换弹 | 按 E 键进入/离开车辆`;
         }
 
         // --- 2. 基础场景设置 ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0xcccccc);
-        scene.fog = new THREE.FogExp2(0xcccccc, 0.015);
+
+        const sky = new THREE.Sky();
+        sky.scale.setScalar(10000);
+        scene.add(sky);
+        const skyUniforms = sky.material.uniforms;
+        skyUniforms['turbidity'].value = 10;
+        skyUniforms['rayleigh'].value = 2;
+        skyUniforms['mieCoefficient'].value = 0.005;
+        skyUniforms['mieDirectionalG'].value = 0.8;
+        const sunPosition = new THREE.Vector3();
+        sunPosition.setFromSphericalCoords(1, Math.PI / 2, Math.PI / 4);
+        skyUniforms['sunPosition'].value.copy(sunPosition);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 0.5;
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.y = 2; 
+        camera.position.y = 2;
 
-        // 统一在底层创建一个核心管理节点对象，用来统一在手机端和电脑端操作其旋转与移动
         const playerNode = new THREE.Object3D();
         playerNode.position.set(0, 0, 0);
         playerNode.add(camera);
         scene.add(playerNode);
-
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.shadowMap.enabled = true;
-        document.body.appendChild(renderer.domElement);
 
         // 灯光与场景构建
         scene.add(new THREE.AmbientLight(0x666666));
@@ -217,18 +239,82 @@
         dirLight.castShadow = true;
         scene.add(dirLight);
 
-        const floor = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.8 }));
+        const textureLoader = new THREE.TextureLoader();
+        const floorTexture = textureLoader.load('static/img/floor.jpg');
+        floorTexture.wrapS = THREE.RepeatWrapping;
+        floorTexture.wrapT = THREE.RepeatWrapping;
+        floorTexture.repeat.set(20, 20);
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({ map: floorTexture, roughness: 0.8 }));
         floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
 
         const walls = [];
-        const wallGeo = new THREE.BoxGeometry(4, 8, 4);
-        const wallMat = new THREE.MeshStandardMaterial({ color: 0x888888 });
-        for(let i=0; i<12; i++) {
-            const wall = new THREE.Mesh(wallGeo, wallMat);
-            wall.position.set((Math.random() - 0.5) * 100, 4, (Math.random() - 0.5) * 100);
+        const wallTypes = [
+            { type: 'box', size: [4, 8, 4], color: 0x888888 },
+            { type: 'box', size: [6, 4, 3], color: 0x8B4513 },
+            { type: 'cylinder', radius: 1.5, height: 10, color: 0x696969 },
+            { type: 'box', size: [3, 6, 3], color: 0x556B2F },
+            { type: 'box', size: [8, 3, 4], color: 0xA0522D },
+            { type: 'cylinder', radius: 2, height: 5, color: 0x708090 },
+            { type: 'box', size: [5, 7, 5], color: 0x8B0000 },
+            { type: 'box', size: [2, 12, 2], color: 0x2F4F4F },
+            { type: 'box', size: [7, 3, 7], color: 0xCD853F },
+            { type: 'cylinder', radius: 1, height: 8, color: 0xBC8F8F }
+        ];
+        for(let i=0; i<15; i++) {
+            const wallType = wallTypes[i % wallTypes.length];
+            let wall;
+            if (wallType.type === 'box') {
+                wall = new THREE.Mesh(
+                    new THREE.BoxGeometry(...wallType.size),
+                    new THREE.MeshStandardMaterial({ color: wallType.color })
+                );
+                wall.userData.size = new THREE.Vector3(...wallType.size);
+            } else {
+                wall = new THREE.Mesh(
+                    new THREE.CylinderGeometry(wallType.radius, wallType.radius, wallType.height, 12),
+                    new THREE.MeshStandardMaterial({ color: wallType.color })
+                );
+                wall.userData.size = new THREE.Vector3(wallType.radius * 2, wallType.height, wallType.radius * 2);
+            }
+            wall.position.set((Math.random() - 0.5) * 100, wall.userData.size.y / 2, (Math.random() - 0.5) * 100);
             wall.castShadow = true; wall.receiveShadow = true; scene.add(wall);
             walls.push(wall);
         }
+
+        const modelBasePath = 'static/model/';
+        setTimeout(function() {
+            loader.load(modelBasePath + 'Fox.glb', function(gltf) {
+                try {
+                    foxModel = gltf.scene;
+                    foxModel.traverse(function(child) {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                        }
+                    });
+                    const foxBounding = new THREE.Box3().setFromObject(foxModel);
+                    const foxSize = new THREE.Vector3();
+                    foxBounding.getSize(foxSize);
+                    if (foxSize.x === 0 || foxSize.y === 0 || foxSize.z === 0) {
+                        foxSize.set(2, 2, 2);
+                    }
+                    for(let i = 0; i < 4; i++) {
+                        const foxClone = foxModel.clone();
+                        foxClone.scale.set(0.5, 0.5, 0.5);
+                        foxClone.position.set((Math.random() - 0.5) * 80, foxSize.y * 0.25, (Math.random() - 0.5) * 80);
+                        foxClone.userData.size = new THREE.Vector3(Math.max(foxSize.x * 0.5, 1), Math.max(foxSize.y * 0.5, 1), Math.max(foxSize.z * 0.5, 1));
+                        foxClone.userData.isFox = true;
+                        scene.add(foxClone);
+                        walls.push(foxClone);
+                    }
+                    console.log('Fox模型加载成功');
+                } catch(e) {
+                    console.error('Fox模型处理失败:', e);
+                }
+            }, undefined, function(error) {
+                console.warn('Fox模型加载失败，使用默认障碍物:', error);
+            });
+        }, 1000);
 
         // 车辆系统
         const carGroup = new THREE.Group();
@@ -312,14 +398,14 @@
         ak47Group.visible = false;
         camera.add(ak47Group);
 
-        // 创建刀
+        // 创建刀 - 长刀
         const knifeGroup = new THREE.Group();
-        const knifeBlade = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.25, 0.45), new THREE.MeshStandardMaterial({ color: 0xc0c0c0, metalness: 0.9, roughness: 0.1 }));
-        knifeBlade.position.set(0.18, -0.1, -0.35);
-        const knifeHandle = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.1, 0.1), new THREE.MeshStandardMaterial({ color: 0x4a2c0a, metalness: 0.2, roughness: 0.8 }));
-        knifeHandle.position.set(0.18, -0.25, -0.55);
-        knifeGroup.add(knifeBlade);
-        knifeGroup.add(knifeHandle);
+        const bladeMat = new THREE.MeshStandardMaterial({ color: 0xb0b0b0, metalness: 0.85, roughness: 0.2 });
+
+        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.06, 0.35), bladeMat);
+        blade.position.set(0.18, -0.08, -0.25);
+
+        knifeGroup.add(blade);
         weapons.knife = knifeGroup;
         knifeGroup.visible = false;
         camera.add(knifeGroup);
@@ -358,14 +444,17 @@
             reloadTime: 2.0
         };
         const ammoDisplay = document.getElementById('ammo-display');
-        const enemyGroups = [], shootableObjects = [], enemyBullets = [];
+        const enemyGroups = [], shootableObjects = [], enemyBullets = [], playerBullets = [];
 
         const bodyGeo = new THREE.BoxGeometry(2, 2, 2), bodyMat = new THREE.MeshStandardMaterial({ color: 0xff3333 });
         const headGeo = new THREE.SphereGeometry(0.4, 12, 12), headMat = new THREE.MeshStandardMaterial({ color: 0xffcc00 });
-        const bulletGeo = new THREE.SphereGeometry(0.18, 6, 6), bulletMat = new THREE.MeshBasicMaterial({ color: 0xffcc00 }); 
+        const bulletGeo = new THREE.SphereGeometry(0.18, 6, 6), bulletMat = new THREE.MeshBasicMaterial({ color: 0xffcc00 });
+        const playerBulletGeo = new THREE.BoxGeometry(0.08, 0.08, 0.4);
+        const playerBulletMat = new THREE.MeshBasicMaterial({ color: 0xffff00 }); 
         const healthLayer = document.getElementById('enemy-health-layer');
 
         let enemyModel = null;
+        let foxModel = null;
         const loader = new THREE.GLTFLoader();
 
         function loadEnemyModel(url) {
@@ -492,6 +581,7 @@
             if (isGameEnded || !gameStarted) return;
             const pPos = playerNode.position;
             const distToCar = pPos.distanceTo(carGroup.position);
+            const playerOnGround = Math.abs(pPos.y) < 0.2;
 
             if (isInCar) {
                 isInCar = false;
@@ -505,7 +595,7 @@
                 weapons.gun.visible = weapons.current === 'gun';
                 weapons.ak47.visible = weapons.current === 'ak47';
                 weapons.knife.visible = weapons.current === 'knife';
-            } else if (distToCar < carEnterDistance) {
+            } else if (distToCar < carEnterDistance && playerOnGround) {
                 isInCar = true;
                 playerNode.position.set(carGroup.position.x, carGroup.position.y, carGroup.position.z);
                 playerNode.rotation.order = 'YXZ';
@@ -527,6 +617,7 @@
         const headshotAlert = document.getElementById('headshot-alert');
 
         let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false, canJump = false;
+        let isCrouching = false;
         const velocity = new THREE.Vector3(), direction = new THREE.Vector3();
         const carVelocity = new THREE.Vector3();
         let carRotation = 0;
@@ -557,6 +648,8 @@
                     case 'Digit3': switchWeapon('knife'); break;
                     case 'KeyR': reloadWeapon(); break;
                     case 'KeyE': toggleCar(); break;
+                    case 'ControlLeft':
+                    case 'ControlRight': isCrouching = true; break;
                 }
             });
             document.addEventListener('keyup', (e) => {
@@ -565,6 +658,8 @@
                     case 'KeyA': moveLeft = false; break;
                     case 'KeyS': moveBackward = false; break;
                     case 'KeyD': moveRight = false; break;
+                    case 'ControlLeft':
+                    case 'ControlRight': isCrouching = false; break;
                 }
             });
             document.addEventListener('mousedown', (e) => {
@@ -685,11 +780,33 @@
                 e.preventDefault();
                 toggleCar();
             });
+            document.getElementById('btn-crouch').addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                isCrouching = true;
+            });
+            document.getElementById('btn-crouch').addEventListener('touchend', (e) => {
+                e.preventDefault();
+                isCrouching = false;
+            });
         }
 
         // --- 5. 核心武器使用函数 (双端共用) ---
         const raycaster = new THREE.Raycaster();
-        const mouseCenter = new THREE.Vector2(0, 0); 
+        const mouseCenter = new THREE.Vector2(0, 0);
+
+        function spawnPlayerBullet(startPos, direction, speed, damage) {
+            const bullet = new THREE.Mesh(playerBulletGeo, playerBulletMat.clone());
+            bullet.position.copy(startPos);
+            bullet.userData = {
+                direction: direction.clone().normalize(),
+                speed: speed,
+                damage: damage,
+                lifeTime: 2.0
+            };
+            bullet.lookAt(startPos.clone().add(direction));
+            scene.add(bullet);
+            playerBullets.push(bullet);
+        }
 
         function fireWeapon() {
             if (isGameEnded || !gameStarted || isKnifeAttacking || ammoSystem.isReloading) return;
@@ -703,14 +820,19 @@
                 gunBody.position.z += 0.1; setTimeout(() => { gunBody.position.z -= 0.1; }, 50);
 
                 raycaster.setFromCamera(mouseCenter, camera);
+                const gunTipWorld = new THREE.Vector3();
+                gunBody.getWorldPosition(gunTipWorld);
+                gunTipWorld.add(camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(0.5));
 
                 const wallIntersects = raycaster.intersectObjects(walls);
                 const enemyIntersects = raycaster.intersectObjects(shootableObjects);
 
+                let targetDist = 200;
                 if (enemyIntersects.length > 0) {
                     const enemyHit = enemyIntersects[0];
                     const wallHit = wallIntersects.find(w => w.distance < enemyHit.distance);
                     if (!wallHit) {
+                        targetDist = enemyHit.distance;
                         const hitMesh = enemyHit.object;
                         const targetGroup = hitMesh.userData.parentGroup;
                         const isHeadshot = hitMesh.userData.isHead;
@@ -738,6 +860,7 @@
                         }
                     }
                 }
+                spawnPlayerBullet(gunTipWorld, camera.getWorldDirection(new THREE.Vector3()), 150, 1);
             } else if (weapons.current === 'ak47') {
                 const ammo = ammoSystem.ak47;
                 if (ammo.current <= 0) return;
@@ -752,14 +875,19 @@
                 }, 50);
 
                 raycaster.setFromCamera(mouseCenter, camera);
+                const ak47TipWorld = new THREE.Vector3();
+                ak47Barrel.getWorldPosition(ak47TipWorld);
+                ak47TipWorld.add(camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(0.5));
 
                 const wallIntersects = raycaster.intersectObjects(walls);
                 const enemyIntersects = raycaster.intersectObjects(shootableObjects);
 
+                let targetDist = 200;
                 if (enemyIntersects.length > 0) {
                     const enemyHit = enemyIntersects[0];
                     const wallHit = wallIntersects.find(w => w.distance < enemyHit.distance);
                     if (!wallHit) {
+                        targetDist = enemyHit.distance;
                         const hitMesh = enemyHit.object;
                         const targetGroup = hitMesh.userData.parentGroup;
                         const isHeadshot = hitMesh.userData.isHead;
@@ -787,6 +915,7 @@
                         }
                     }
                 }
+                spawnPlayerBullet(ak47TipWorld, camera.getWorldDirection(new THREE.Vector3()), 180, 2);
             } else if (weapons.current === 'knife') {
                 if (isKnifeAttacking) return;
                 isKnifeAttacking = true;
@@ -850,6 +979,7 @@
                 menuSub.innerHTML = `你尽力了！瞄准金色弱点能够瞬间秒杀敌人。<br><br><span style="font-size:14px;color:#fff">重新刷新网页可以再次挑战</span>`;
             }
             enemyBullets.forEach(b => scene.remove(b)); enemyBullets.length = 0;
+            playerBullets.forEach(b => scene.remove(b)); playerBullets.length = 0;
         }
 
         // --- 5. 游戏主循环渲染 ---
@@ -885,8 +1015,12 @@
                     direction.normalize();
                 }
 
-                const wallSize = new THREE.Vector3(4, 8, 4);
-                const playerSize = new THREE.Vector3(1.5, 2, 1.5);
+                const playerSize = isCrouching ? new THREE.Vector3(1.5, 1, 1.5) : new THREE.Vector3(1.5, 2, 1.5);
+                const cameraOffsetY = isCrouching ? 1 : 2;
+
+                if (!isInCar) {
+                    camera.position.y = cameraOffsetY;
+                }
 
                 if (isInCar) {
                     carVelocity.z -= carVelocity.z * 8.0 * delta;
@@ -929,8 +1063,8 @@
 
                     const carOldPos = carGroup.position.clone();
                     walls.forEach(wall => {
-                        if (checkBoxCollision(carGroup.position, carSize, wall.position, wallSize)) {
-                            resolveCollision(carGroup.position, carSize, wall.position, wallSize);
+                        if (checkBoxCollision(carGroup.position, carSize, wall.position, wall.userData.size)) {
+                            resolveCollision(carGroup.position, carSize, wall.position, wall.userData.size);
                         }
                     });
                     if (carGroup.position.x !== carOldPos.x || carGroup.position.z !== carOldPos.z) {
@@ -949,15 +1083,32 @@
                     }
 
                     playerNode.position.y += (velocity.y * delta);
+                    const carRoofHeight = carGroup.position.y + 1.2;
                     if (playerNode.position.y < 0) {
                         velocity.y = 0; playerNode.position.y = 0; canJump = true;
+                    } else if (playerNode.position.y > carRoofHeight - 0.1 && playerNode.position.y < carRoofHeight + 0.5) {
+                        const xDist = Math.abs(playerNode.position.x - carGroup.position.x);
+                        const zDist = Math.abs(playerNode.position.z - carGroup.position.z);
+                        if (xDist < carSize.x / 2 - 0.3 && zDist < carSize.z / 2 - 0.3) {
+                            playerNode.position.y = carRoofHeight;
+                            velocity.y = 0;
+                            canJump = true;
+                        }
                     }
 
                     walls.forEach(wall => {
-                        if (checkBoxCollision(playerNode.position, playerSize, wall.position, wallSize)) {
-                            resolveCollision(playerNode.position, playerSize, wall.position, wallSize);
+                        if (checkBoxCollision(playerNode.position, playerSize, wall.position, wall.userData.size)) {
+                            resolveCollision(playerNode.position, playerSize, wall.position, wall.userData.size);
                         }
                     });
+
+                    if (checkBoxCollision(playerNode.position, playerSize, carGroup.position, carSize)) {
+                        const carRoofHeight = carGroup.position.y + 1.2;
+                        const playerFeet = playerNode.position.y;
+                        if (playerFeet < carRoofHeight - 0.3) {
+                            resolveCollision(playerNode.position, playerSize, carGroup.position, carSize);
+                        }
+                    }
                 }
 
                 // 显示车辆交互提示
@@ -966,8 +1117,9 @@
                     carPrompt.style.display = 'block';
                 } else {
                     const distToCar = playerNode.position.distanceTo(carGroup.position);
+                    const playerOnGround = Math.abs(playerNode.position.y) < 0.2;
                     carPrompt.textContent = '按 E 进入车辆';
-                    carPrompt.style.display = distToCar < carEnterDistance ? 'block' : 'none';
+                    carPrompt.style.display = (distToCar < carEnterDistance && playerOnGround) ? 'block' : 'none';
                 }
 
                 // 驾驶时相机跟随车辆
@@ -979,8 +1131,7 @@
                 // 统一同步玩家的3D位置
                 const pPos = new THREE.Vector3();
                 playerNode.getWorldPosition(pPos);
-                // 加上眼睛的高度差
-                pPos.y += 2; 
+                pPos.y += isInCar ? 2 : cameraOffsetY; 
 
                 // 敌人 AI 与血条 2D 反向投影
                 enemyGroups.forEach(eg => {
@@ -991,8 +1142,8 @@
                     // 敌人与柱子碰撞
                     const enemySize = new THREE.Vector3(2, 2, 2);
                     walls.forEach(wall => {
-                        if (checkBoxCollision(eg.position, enemySize, wall.position, wallSize)) {
-                            resolveCollision(eg.position, enemySize, wall.position, wallSize);
+                        if (checkBoxCollision(eg.position, enemySize, wall.position, wall.userData.size)) {
+                            resolveCollision(eg.position, enemySize, wall.position, wall.userData.size);
                         }
                     });
 
@@ -1016,6 +1167,8 @@
                             document.getElementById('score').innerText = score;
                             if (score >= maxEnemies) triggerEnd(true);
                         }
+                    } else if (checkBoxCollision(eg.position, enemySize, carGroup.position, carSize)) {
+                        resolveCollision(eg.position, enemySize, carGroup.position, carSize);
                     }
 
                     tempV.copy(eg.position); tempV.y += 2.8; tempV.project(camera); 
@@ -1047,7 +1200,7 @@
                     let hitWall = false;
                     const bulletSize = new THREE.Vector3(0.4, 0.4, 0.4);
                     for (let j = 0; j < walls.length; j++) {
-                        if (checkBoxCollision(b.position, bulletSize, walls[j].position, wallSize)) {
+                        if (checkBoxCollision(b.position, bulletSize, walls[j].position, walls[j].userData.size)) {
                             hitWall = true;
                             break;
                         }
@@ -1060,6 +1213,52 @@
                         takeDamage(20); scene.remove(b); enemyBullets.splice(i, 1); continue;
                     }
                     if (b.userData.lifeTime <= 0) { scene.remove(b); enemyBullets.splice(i, 1); }
+                }
+
+                // 玩家子弹逻辑
+                for (let i = playerBullets.length - 1; i >= 0; i--) {
+                    const b = playerBullets[i];
+                    b.position.addScaledVector(b.userData.direction, b.userData.speed * delta);
+                    b.userData.lifeTime -= delta;
+
+                    let hitWall = false;
+                    const bulletSize = new THREE.Vector3(0.2, 0.2, 0.5);
+                    for (let j = 0; j < walls.length; j++) {
+                        if (checkBoxCollision(b.position, bulletSize, walls[j].position, walls[j].userData.size)) {
+                            hitWall = true;
+                            break;
+                        }
+                    }
+
+                    if (hitWall || b.userData.lifeTime <= 0) {
+                        scene.remove(b); playerBullets.splice(i, 1); continue;
+                    }
+
+                    let hitEnemy = false;
+                    for (let j = enemyGroups.length - 1; j >= 0; j--) {
+                        const eg = enemyGroups[j];
+                        const enemySize = new THREE.Vector3(2, 2, 2);
+                        if (checkBoxCollision(b.position, bulletSize, eg.position, enemySize)) {
+                            hitEnemy = true;
+                            eg.userData.hp -= b.userData.damage;
+                            const hpPercent = (eg.userData.hp / eg.userData.maxHp) * 100;
+                            eg.userData.hpFillElement.style.width = Math.max(0, hpPercent) + '%';
+                            if (eg.userData.hp <= 0) {
+                                if (eg.userData.hpElement) eg.userData.hpElement.remove();
+                                shootableObjects.splice(shootableObjects.indexOf(eg.userData.body), 1);
+                                shootableObjects.splice(shootableObjects.indexOf(eg.userData.head), 1);
+                                scene.remove(eg);
+                                enemyGroups.splice(j, 1);
+                                score++;
+                                document.getElementById('score').innerText = score;
+                                if (score >= maxEnemies) triggerEnd(true);
+                            }
+                            break;
+                        }
+                    }
+                    if (hitEnemy) {
+                        scene.remove(b); playerBullets.splice(i, 1);
+                    }
                 }
             } else {
                 enemyGroups.forEach(eg => { if(eg.userData.hpElement) eg.userData.hpElement.style.display = 'none'; });
