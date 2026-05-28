@@ -187,6 +187,22 @@
     <script src="https://unpkg.com/three@0.128.0/examples/js/objects/Sky.js"></script>
 
     <script>
+        // --- 0. 音效系统 ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const sounds = {
+            shoot: () => { const o = audioCtx.createOscillator(), g = audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination); o.frequency.setValueAtTime(150, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.1); g.gain.setValueAtTime(0.3, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1); o.start(); o.stop(audioCtx.currentTime + 0.1); },
+            ak47: () => { const o = audioCtx.createOscillator(), g = audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination); o.type = 'sawtooth'; o.frequency.setValueAtTime(200, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(80, audioCtx.currentTime + 0.08); g.gain.setValueAtTime(0.2, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08); o.start(); o.stop(audioCtx.currentTime + 0.08); },
+            knife: () => { const o = audioCtx.createOscillator(), g = audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination); o.type = 'triangle'; o.frequency.setValueAtTime(800, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 0.15); g.gain.setValueAtTime(0.15, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15); o.start(); o.stop(audioCtx.currentTime + 0.15); },
+            explosion: () => { const bufferSize = audioCtx.sampleRate * 0.5, buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate), data = buffer.getChannelData(0); for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 2); const source = audioCtx.createBufferSource(), g = audioCtx.createGain(), filter = audioCtx.createBiquadFilter(); source.buffer = buffer; filter.type = 'lowpass'; filter.frequency.value = 500; source.connect(filter); filter.connect(g); g.connect(audioCtx.destination); g.gain.setValueAtTime(0.6, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5); source.start(); },
+            reload: () => { const o = audioCtx.createOscillator(), g = audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination); o.frequency.setValueAtTime(300, audioCtx.currentTime); o.frequency.setValueAtTime(400, audioCtx.currentTime + 0.1); g.gain.setValueAtTime(0.1, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2); o.start(); o.stop(audioCtx.currentTime + 0.2); },
+            hit: () => { const o = audioCtx.createOscillator(), g = audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination); o.type = 'sine'; o.frequency.setValueAtTime(1000, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1); g.gain.setValueAtTime(0.2, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1); o.start(); o.stop(audioCtx.currentTime + 0.1); },
+            enemyDie: () => { const o = audioCtx.createOscillator(), g = audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination); o.type = 'square'; o.frequency.setValueAtTime(200, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.3); g.gain.setValueAtTime(0.15, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3); o.start(); o.stop(audioCtx.currentTime + 0.3); },
+            headshot: () => { const o = audioCtx.createOscillator(), g = audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination); o.type = 'sine'; o.frequency.setValueAtTime(1500, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(2000, audioCtx.currentTime + 0.1); o.frequency.exponentialRampToValueAtTime(500, audioCtx.currentTime + 0.2); g.gain.setValueAtTime(0.25, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2); o.start(); o.stop(audioCtx.currentTime + 0.2); },
+            jump: () => { const o = audioCtx.createOscillator(), g = audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination); o.frequency.setValueAtTime(200, audioCtx.currentTime); o.frequency.exponentialRampToValueAtTime(400, audioCtx.currentTime + 0.1); g.gain.setValueAtTime(0.1, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1); o.start(); o.stop(audioCtx.currentTime + 0.1); },
+            switchWeapon: () => { const o = audioCtx.createOscillator(), g = audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination); o.type = 'sine'; o.frequency.setValueAtTime(600, audioCtx.currentTime); o.frequency.setValueAtTime(800, audioCtx.currentTime + 0.05); g.gain.setValueAtTime(0.1, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1); o.start(); o.stop(audioCtx.currentTime + 0.1); },
+            car: () => { const o = audioCtx.createOscillator(), g = audioCtx.createGain(); o.connect(g); g.connect(audioCtx.destination); o.type = 'sawtooth'; o.frequency.setValueAtTime(100, audioCtx.currentTime); o.frequency.linearRampToValueAtTime(200, audioCtx.currentTime + 0.3); g.gain.setValueAtTime(0.15, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3); o.start(); o.stop(audioCtx.currentTime + 0.3); }
+        };
+
         // --- 1. 设备环境判定 ---
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         const mobileUi = document.getElementById('mobile-ui');
@@ -596,6 +612,7 @@
 
         function switchWeapon(weaponName) {
             if (weapons.current === weaponName) return;
+            sounds.switchWeapon();
             weapons.current = weaponName;
             weapons.gun.visible = weaponName === 'gun';
             weapons.ak47.visible = weaponName === 'ak47';
@@ -617,7 +634,7 @@
             if (ammoSystem.isReloading || weapons.current === 'knife' || weapons.current === 'grenade') return;
             const ammo = ammoSystem[weapons.current];
             if (ammo.current === ammo.max) return;
-            
+            sounds.reload();
             ammoSystem.isReloading = true;
             ammoDisplay.textContent = '换弹中...';
 
@@ -644,6 +661,7 @@
 
         function toggleCar() {
             if (isGameEnded || !gameStarted) return;
+            sounds.car();
             const pPos = playerNode.position;
             const distToCar = pPos.distanceTo(carGroup.position);
             const playerOnGround = Math.abs(pPos.y) < 0.2;
@@ -707,7 +725,7 @@
                     case 'KeyA': moveLeft = true; break;
                     case 'KeyS': moveBackward = true; break;
                     case 'KeyD': moveRight = true; break;
-                    case 'Space': if (canJump) velocity.y += 11; canJump = false; break;
+                    case 'Space': if (canJump) { sounds.jump(); velocity.y += 11; } canJump = false; break;
                     case 'Digit1': switchWeapon('gun'); break;
                     case 'Digit2': switchWeapon('ak47'); break;
                     case 'Digit3': switchWeapon('knife'); break;
@@ -827,7 +845,7 @@
                 e.preventDefault(); 
                 isTouchDown = false; 
             });
-            document.getElementById('btn-jump').addEventListener('touchstart', (e) => { e.preventDefault(); if (canJump) velocity.y += 11; canJump = false; });
+            document.getElementById('btn-jump').addEventListener('touchstart', (e) => { e.preventDefault(); if (canJump) { sounds.jump(); velocity.y += 11; } canJump = false; });
             document.getElementById('btn-weapon').addEventListener('touchstart', (e) => { 
                 e.preventDefault(); 
                 if (weapons.current === 'gun') {
@@ -882,6 +900,7 @@
             if (weapons.current === 'gun') {
                 const ammo = ammoSystem.gun;
                 if (ammo.current <= 0) return;
+                sounds.shoot();
                 ammo.current--;
                 updateAmmoDisplay();
 
@@ -922,7 +941,7 @@
                             shootableObjects.splice(shootableObjects.indexOf(targetGroup.userData.head), 1);
                             scene.remove(targetGroup);
                             enemyGroups.splice(enemyGroups.indexOf(targetGroup), 1);
-
+                            isHeadshot ? sounds.headshot() : sounds.enemyDie();
                             score++; document.getElementById('score').innerText = score;
                             if (score >= maxEnemies) triggerEnd(true);
                         }
@@ -932,6 +951,7 @@
             } else if (weapons.current === 'ak47') {
                 const ammo = ammoSystem.ak47;
                 if (ammo.current <= 0) return;
+                sounds.ak47();
                 ammo.current--;
                 updateAmmoDisplay();
 
@@ -977,7 +997,7 @@
                             shootableObjects.splice(shootableObjects.indexOf(targetGroup.userData.head), 1);
                             scene.remove(targetGroup);
                             enemyGroups.splice(enemyGroups.indexOf(targetGroup), 1);
-
+                            isHeadshot ? sounds.headshot() : sounds.enemyDie();
                             score++; document.getElementById('score').innerText = score;
                             if (score >= maxEnemies) triggerEnd(true);
                         }
@@ -987,6 +1007,7 @@
             } else if (weapons.current === 'knife') {
                 if (isKnifeAttacking) return;
                 isKnifeAttacking = true;
+                sounds.knife();
 
                 const originalRotation = weapons.knife.rotation.z;
                 weapons.knife.rotation.z = 0.8;
@@ -1012,7 +1033,7 @@
                             shootableObjects.splice(shootableObjects.indexOf(targetGroup.userData.head), 1);
                             scene.remove(targetGroup);
                             enemyGroups.splice(enemyGroups.indexOf(targetGroup), 1);
-
+                            sounds.enemyDie();
                             score++; document.getElementById('score').innerText = score;
                             if (score >= maxEnemies) triggerEnd(true);
                         }
@@ -1033,6 +1054,7 @@
         // 玩家受击与胜负处理
         function takeDamage(amount) {
             if(isGameEnded) return; playerHp -= amount;
+            sounds.hit();
             playerHpBar.style.width = Math.max(0, playerHp) + '%';
             document.getElementById('damage-flash').style.opacity = '1';
             setTimeout(() => { document.getElementById('damage-flash').style.opacity = '0'; }, 100);
@@ -1088,6 +1110,7 @@
                     g.userData.timeLeft -= delta;
                     if (g.userData.timeLeft <= 0 && !g.userData.exploded) {
                         g.userData.exploded = true;
+                        sounds.explosion();
                         createExplosion(g.position.clone());
                         scene.remove(g);
                         thrownGrenades.splice(i, 1);
@@ -1253,6 +1276,7 @@
                             shootableObjects.splice(shootableObjects.indexOf(eg.userData.head), 1);
                             scene.remove(eg);
                             enemyGroups.splice(enemyGroups.indexOf(eg), 1);
+                            sounds.enemyDie();
                             score++;
                             document.getElementById('score').innerText = score;
                             if (score >= maxEnemies) triggerEnd(true);
@@ -1339,6 +1363,7 @@
                                 shootableObjects.splice(shootableObjects.indexOf(eg.userData.head), 1);
                                 scene.remove(eg);
                                 enemyGroups.splice(j, 1);
+                                sounds.enemyDie();
                                 score++;
                                 document.getElementById('score').innerText = score;
                                 if (score >= maxEnemies) triggerEnd(true);
