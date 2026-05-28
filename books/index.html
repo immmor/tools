@@ -1152,7 +1152,7 @@
         contentBody.addEventListener('touchend', handleSelection);
 
         function showAnnotationPopup(text, existingNote, existingId) {
-            const isEdit = existingId !== null;
+            const isEdit = existingId != null;
             const overlay = document.createElement('div');
             overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.3);z-index:1999;';
 
@@ -1215,30 +1215,64 @@
 
         function applyMarkers() {
             const annotations = getAnnotations();
-            
+
+            // 1. 先清除旧的高亮标记，恢复为纯文本节点
             document.querySelectorAll('.annotation-marker').forEach(marker => {
-                marker.outerHTML = marker.textContent;
+                const parent = marker.parentNode;
+                while (marker.firstChild) {
+                    parent.insertBefore(marker.firstChild, marker);
+                }
+                parent.removeChild(marker);
             });
 
             if (!annotations.length) return;
 
-            let html = contentBody.innerHTML;
+            // 2. 收集所有文本节点
+            function getTextNodes(node) {
+                const textNodes = [];
+                const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, null, false);
+                let n;
+                while ((n = walker.nextNode())) {
+                    if (n.parentElement && n.parentElement.closest('.annotation-marker')) continue;
+                    textNodes.push(n);
+                }
+                return textNodes;
+            }
+
+            const textNodes = getTextNodes(contentBody);
+
+            // 3. 对每个批注，在文本节点中查找并高亮
             annotations.forEach(a => {
-                const escaped = a.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                html = html.replace(new RegExp(`(${escaped})`, 'gi'), 
-                    `<span class="annotation-marker" data-note="${a.note.replace(/"/g, '&quot;')}" data-text="${a.text}">$1</span>`);
-            });
-            contentBody.innerHTML = html;
-            
-            document.querySelectorAll('.annotation-marker').forEach(marker => {
-                marker.onclick = function(e) {
-                    e.stopPropagation();
-                    const text = this.dataset.text;
-                    const note = this.dataset.note;
-                    const annotations = getAnnotations();
-                    const ann = annotations.find(a => a.text === text);
-                    showAnnotationPopup(text, note, ann ? ann.id : null);
-                };
+                const searchText = a.text;
+                for (let i = 0; i < textNodes.length; i++) {
+                    const node = textNodes[i];
+                    const text = node.textContent;
+                    const idx = text.indexOf(searchText);
+                    if (idx !== -1) {
+                        const span = document.createElement('span');
+                        span.className = 'annotation-marker';
+                        span.dataset.note = a.note;
+                        span.dataset.text = a.text;
+                        span.textContent = searchText;
+                        span.onclick = function(e) {
+                            e.stopPropagation();
+                            const ann = getAnnotations().find(x => x.text === a.text);
+                            showAnnotationPopup(a.text, a.note, ann ? ann.id : null);
+                        };
+
+                        const parent = node.parentNode;
+                        if (idx > 0) {
+                            parent.insertBefore(document.createTextNode(text.substring(0, idx)), node);
+                        }
+                        parent.insertBefore(span, node);
+                        if (idx + searchText.length < text.length) {
+                            node.textContent = text.substring(idx + searchText.length);
+                        } else {
+                            parent.removeChild(node);
+                        }
+                        break;
+                    }
+                }
             });
         }
 
