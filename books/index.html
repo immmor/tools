@@ -582,41 +582,60 @@
 
         let currentPage = 0;
         let totalPages = 1;
+        let layoutRafId = null;
+        let layoutLock = false;
 
         function updateLayout() {
+            if (layoutLock) return;
+            layoutLock = true;
+
+            if (layoutRafId) {
+                cancelAnimationFrame(layoutRafId);
+            }
+
+            layoutRafId = requestAnimationFrame(() => {
+                performLayoutUpdate();
+                layoutRafId = null;
+                layoutLock = false;
+            });
+        }
+
+        function performLayoutUpdate() {
             const windowWidth = windowBox.clientWidth;
-            
+            if (windowWidth === 0) return;
+
+            const computedStyle = window.getComputedStyle(contentBody);
+            const lineHeight = parseFloat(computedStyle.lineHeight) || 36;
+            const paddingLeft = parseFloat(computedStyle.paddingLeft) || 20;
+            const paddingRight = parseFloat(computedStyle.paddingRight) || 20;
+            const availableWidth = windowWidth - paddingLeft - paddingRight;
+
             contentBody.style.width = 'auto';
             contentBody.style.minWidth = '100%';
-            contentBody.style.webkitColumnWidth = windowWidth + 'px';
-            contentBody.style.columnWidth = windowWidth + 'px';
-            contentBody.style.webkitColumnCount = 'auto';
-            contentBody.style.columnCount = 'auto';
-            
-            setTimeout(() => {
-                const scrollWidth = contentBody.scrollWidth;
-                
-                if (scrollWidth <= windowWidth) {
-                    totalPages = 1;
-                    currentPage = 0;
-                    contentBody.style.transform = 'translateX(0px)';
-                    pageIndicator.innerText = `第 1 / 1 页`;
-                    return;
-                }
+            contentBody.style.columnWidth = availableWidth + 'px';
 
-                totalPages = Math.max(1, Math.round(scrollWidth / windowWidth));
-                const actualStep = scrollWidth / totalPages;
+            const scrollWidth = contentBody.scrollWidth;
 
-                if (currentPage >= totalPages) {
-                    currentPage = totalPages - 1;
-                }
-                if (currentPage < 0) currentPage = 0;
+            if (scrollWidth <= windowWidth) {
+                totalPages = 1;
+                currentPage = 0;
+                contentBody.style.transform = 'translateX(0px)';
+                pageIndicator.innerText = `第 1 / 1 页`;
+                return;
+            }
 
-                const translateX = -currentPage * actualStep;
-                contentBody.style.transform = `translateX(${translateX}px)`;
+            totalPages = Math.max(1, Math.round(scrollWidth / windowWidth));
+            const actualStep = scrollWidth / totalPages;
 
-                pageIndicator.innerText = `第 ${currentPage + 1} / ${totalPages} 页`;
-            }, 50);
+            if (currentPage >= totalPages) {
+                currentPage = totalPages - 1;
+            }
+            if (currentPage < 0) currentPage = 0;
+
+            const translateX = -currentPage * actualStep;
+            contentBody.style.transform = `translateX(${translateX}px)`;
+
+            pageIndicator.innerText = `第 ${currentPage + 1} / ${totalPages} 页`;
         }
 
         // 翻页逻辑
@@ -839,10 +858,10 @@
             bookTitle.textContent = name;
             localStorage.setItem('bookContent', content);
             localStorage.setItem('bookTitle', name);
-            
+
             const savedProgress = localStorage.getItem(`progress_${name}`);
             currentPage = savedProgress !== null ? parseInt(savedProgress) : 0;
-            
+
             updateLayout();
             renderShelf();
             setTimeout(() => applyMarkers(), 100);
@@ -1216,7 +1235,6 @@
         function applyMarkers() {
             const annotations = getAnnotations();
 
-            // 1. 先清除旧的高亮标记，恢复为纯文本节点
             document.querySelectorAll('.annotation-marker').forEach(marker => {
                 const parent = marker.parentNode;
                 while (marker.firstChild) {
@@ -1227,27 +1245,34 @@
 
             if (!annotations.length) return;
 
-            // 2. 收集所有文本节点
-            function getTextNodes(node) {
-                const textNodes = [];
-                const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, null, false);
-                let n;
-                while ((n = walker.nextNode())) {
-                    if (n.parentElement && n.parentElement.closest('.annotation-marker')) continue;
-                    textNodes.push(n);
+            const fragment = document.createDocumentFragment();
+            const existingNodes = new Set();
+
+            function getTextNodes(node, nodes = []) {
+                if (node.nodeType === Node.TEXT_NODE) {
+                    if (node.textContent.trim() && !node.parentElement?.closest('.annotation-marker')) {
+                        nodes.push(node);
+                    }
+                } else if (node.nodeType === Node.ELEMENT_NODE && !node.classList.contains('annotation-marker')) {
+                    for (const child of node.childNodes) {
+                        getTextNodes(child, nodes);
+                    }
                 }
-                return textNodes;
+                return nodes;
             }
 
             const textNodes = getTextNodes(contentBody);
+            const textNodeMap = new Map();
 
-            // 3. 对每个批注，在文本节点中查找并高亮
+            textNodes.forEach(node => {
+                textNodeMap.set(node, node.textContent);
+            });
+
             annotations.forEach(a => {
                 const searchText = a.text;
-                for (let i = 0; i < textNodes.length; i++) {
-                    const node = textNodes[i];
-                    const text = node.textContent;
-                    const idx = text.indexOf(searchText);
+                for (const [node, originalText] of textNodeMap) {
+                    if (existingNodes.has(node)) continue;
+                    const idx = originalText.indexOf(searchText);
                     if (idx !== -1) {
                         const span = document.createElement('span');
                         span.className = 'annotation-marker';
@@ -1261,15 +1286,21 @@
                         };
 
                         const parent = node.parentNode;
-                        if (idx > 0) {
-                            parent.insertBefore(document.createTextNode(text.substring(0, idx)), node);
+                        const beforeText = originalText.substring(0, idx);
+                        const afterText = originalText.substring(idx + searchText.length);
+
+                        if (beforeText) {
+                            node.textContent = beforeText;
                         }
-                        parent.insertBefore(span, node);
-                        if (idx + searchText.length < text.length) {
-                            node.textContent = text.substring(idx + searchText.length);
-                        } else {
-                            parent.removeChild(node);
+
+                        if (afterText) {
+                            const afterNode = document.createTextNode(afterText);
+                            parent.insertBefore(afterNode, node.nextSibling);
+                            textNodeMap.set(afterNode, afterText);
                         }
+
+                        parent.insertBefore(span, node.nextSibling);
+                        existingNodes.add(node);
                         break;
                     }
                 }
