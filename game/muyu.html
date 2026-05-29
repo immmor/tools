@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>电子木鱼 - 线上功德箱</title>
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --text-color: #ffffff;
+            --accent-color: #e5c158; /* 佛系金色 */
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+            user-select: none; /* 防止频繁点击时选中文字 */
+            -webkit-user-select: none;
+        }
+
+        /* 顶部功德计数器 */
+        .counter-container {
+            text-align: center;
+            margin-bottom: 50px;
+        }
+
+        .counter-label {
+            font-size: 1.2rem;
+            color: #888;
+            letter-spacing: 2px;
+        }
+
+        .counter-num {
+            font-size: 3.5rem;
+            font-weight: bold;
+            color: var(--accent-color);
+            margin-top: 10px;
+            transition: transform 0.1s ease;
+        }
+
+        /* 木鱼主体容器 */
+        .muyu-container {
+            position: relative;
+            cursor: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="40" height="80" viewBox="0 0 40 80"><rect x="10" y="2" width="20" height="12" rx="3" fill="%23A0522D"/><rect x="17" y="14" width="6" height="64" rx="3" fill="%238B4513"/></svg>') 20 2, pointer;
+            outline: none;
+            -webkit-tap-highlight-color: transparent; /* 移除移动端点击高亮 */
+        }
+
+        /* 木鱼图片/图形 */
+        .muyu {
+            width: 200px;
+            height: 160px;
+            background-color: #333;
+            border-radius: 50% 50% 45% 45% / 60% 60% 40% 40%; /* 模拟木鱼形状 */
+            position: relative;
+            box-shadow: inset -10px -10px 20px #222, inset 10px 10px 20px #444;
+            transition: transform 0.05s ease-in-out;
+        }
+
+        /* 木鱼中间的花纹缝隙 */
+        .muyu::after {
+            content: '';
+            position: absolute;
+            bottom: 30px;
+            left: 15%;
+            width: 70%;
+            height: 6px;
+            background-color: var(--bg-color);
+            border-radius: 3px;
+        }
+
+        /* 点击时的缩放动画 */
+        .muyu.active {
+            transform: scale(0.92);
+        }
+
+        /* 功德+1 漂浮动画 */
+        .gongde-text {
+            position: absolute;
+            top: -40px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 1.5rem;
+            color: var(--accent-color);
+            font-weight: 500;
+            opacity: 0;
+            pointer-events: none; /* 确保不会干扰点击 */
+            animation: floatUp 0.8s ease-out forwards;
+        }
+
+        @keyframes floatUp {
+            0% {
+                transform: translate(-50%, 20px);
+                opacity: 0;
+            }
+            20% {
+                opacity: 1;
+            }
+            100% {
+                transform: translate(-50%, -60px);
+                opacity: 0;
+            }
+        }
+
+        /* 底部提示 */
+        .tips {
+            position: absolute;
+            bottom: 30px;
+            color: #555;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="counter-container">
+        <div class="counter-label">总功德</div>
+        <div class="counter-num" id="counter">0</div>
+    </div>
+
+    <div class="muyu-container" id="muyuBtn">
+        <div class="muyu" id="muyuImg"></div>
+        </div>
+
+    <div class="tips">点击木鱼，净化心灵</div>
+
+    <script>
+        const muyuBtn = document.getElementById('muyuBtn');
+        const muyuImg = document.getElementById('muyuImg');
+        const counterEl = document.getElementById('counter');
+
+        let count = 0;
+
+        // --- 音效处理 ---
+        // 使用 Web Audio API 合成一个逼真的木鱼声（免去加载外部音频文件的麻烦，开箱即用！）
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playMuyuSound() {
+            const osc = audioCtx.createOscillator();
+            const osc2 = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            const gainNode2 = audioCtx.createGain();
+
+            osc.connect(gainNode);
+            osc2.connect(gainNode2);
+            gainNode.connect(audioCtx.destination);
+            gainNode2.connect(audioCtx.destination);
+
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(220, audioCtx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(80, audioCtx.currentTime + 0.15);
+
+            osc2.type = 'triangle';
+            osc2.frequency.setValueAtTime(440, audioCtx.currentTime);
+            osc2.frequency.exponentialRampToValueAtTime(160, audioCtx.currentTime + 0.1);
+
+            gainNode.gain.setValueAtTime(0.6, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+
+            gainNode2.gain.setValueAtTime(0.15, audioCtx.currentTime);
+            gainNode2.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.08);
+
+            osc.start();
+            osc2.start();
+            osc.stop(audioCtx.currentTime + 0.2);
+            osc2.stop(audioCtx.currentTime + 0.1);
+        }
+
+        // --- 点击事件 ---
+        muyuBtn.addEventListener('mousedown', (e) => {
+            // 激活 Web Audio 上下文（部分浏览器安全策略要求必须由用户交互触发）
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+
+            // 1. 触发木鱼缩放动画
+            muyuImg.classList.add('active');
+
+            // 2. 计数增加
+            count++;
+            counterEl.innerText = count;
+
+            // 3. 播放音效
+            playMuyuSound();
+
+            // 4. 创建“功德+1”漂浮文字
+            createGongdeEffect();
+        });
+
+        // 鼠标松开时恢复木鱼大小
+        muyuBtn.addEventListener('mouseup', () => {
+            muyuImg.classList.remove('active');
+        });
+
+        // 移动端触摸事件支持
+        muyuBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault(); // 阻止默认的缩放/双击行为
+            muyuBtn.dispatchEvent(new Event('mousedown'));
+        });
+        muyuBtn.addEventListener('touchend', () => {
+            muyuImg.classList.remove('active');
+        });
+
+        // --- 动态生成功德文字 ---
+        function createGongdeEffect() {
+            const text = document.createElement('div');
+            text.className = 'gongde-text';
+            text.innerText = '功德 +1';
+            
+            // 随机微微倾斜，让多次点击时看起来更灵动
+            const randomRotate = (Math.random() - 0.5) * 20; // -10deg 到 10deg
+            text.style.transform = `translateX(-50%) rotate(${randomRotate}deg)`;
+
+            muyuBtn.appendChild(text);
+
+            // 动画结束后自动销毁 DOM 节点，防止页面卡顿
+            text.addEventListener('animationend', () => {
+                text.remove();
+            });
+        }
+    </script>
+</body>
+</html>

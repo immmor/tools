@@ -77,7 +77,6 @@
 
         .header-actions {
             display: flex;
-            gap: 10px;
         }
 
         .shelf-panel {
@@ -153,6 +152,31 @@
             opacity: 1;
         }
 
+        .store-action-btn {
+            padding: 5px 10px;
+            border: none;
+            background: var(--text-color);
+            color: var(--bg-color);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: opacity 0.2s;
+        }
+
+        .store-action-btn:hover {
+            opacity: 0.8;
+        }
+
+        .store-buy-btn {
+            background: #e67e22;
+            color: #fff;
+        }
+
+        .store-free-btn {
+            background: #4caf50;
+            color: #fff;
+        }
+
         .shelf-empty {
             text-align: center;
             padding: 40px 0;
@@ -162,13 +186,17 @@
 
         .control-btn {
             padding: 4px 10px;
-            border: 1px solid var(--header-border);
+            border: none;
             border-radius: 4px;
             background: transparent;
             color: var(--text-color);
             cursor: pointer;
             font-size: 13px;
             transition: all 0.2s;
+        }
+
+        .header-actions .control-btn {
+            font-size: 16px;
         }
 
         .control-btn:hover {
@@ -481,14 +509,16 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 <body>
 
     <header>
         <div class="book-title">《开源网络小说示例》</div>
         <div class="header-actions">
-            <button class="control-btn" id="shelfBtn">书架</button>
-            <button class="control-btn" id="settingsBtn">设置</button>
+            <button class="control-btn" id="shelfBtn"><i class="fa-solid fa-book"></i></button>
+            <button class="control-btn" id="storeBtn"><i class="fa-solid fa-cart-shopping"></i></button>
+            <button class="control-btn" id="settingsBtn"><i class="fa-solid fa-gear"></i></button>
         </div>
     </header>
 
@@ -544,6 +574,16 @@
                 <button class="settings-close" id="shelfCloseBtn">×</button>
             </div>
             <div class="shelf-list" id="shelfList"></div>
+        </div>
+    </div>
+
+    <div class="shelf-panel" id="storePanel">
+        <div class="settings-content">
+            <div class="settings-header">
+                <div class="settings-title">在线书店</div>
+                <button class="settings-close" id="storeCloseBtn">×</button>
+            </div>
+            <div id="storeList" class="shelf-list"></div>
         </div>
     </div>
 
@@ -760,8 +800,12 @@
 
         // ========== 书架面板 ==========
         const shelfBtn = document.getElementById('shelfBtn');
+        const storeBtn = document.getElementById('storeBtn');
         const shelfPanel = document.getElementById('shelfPanel');
+        const storePanel = document.getElementById('storePanel');
+        const storeList = document.getElementById('storeList');
         const shelfCloseBtn = document.getElementById('shelfCloseBtn');
+        const storeCloseBtn = document.getElementById('storeCloseBtn');
         const shelfList = document.getElementById('shelfList');
 
         function openShelf() {
@@ -773,6 +817,15 @@
             shelfPanel.classList.remove('open');
         }
 
+        function openStore() {
+            storePanel.classList.add('open');
+            renderStore();
+        }
+
+        function closeStore() {
+            storePanel.classList.remove('open');
+        }
+
         shelfBtn.addEventListener('click', () => {
             if (shelfPanel.classList.contains('open')) {
                 closeShelf();
@@ -782,6 +835,106 @@
         });
 
         shelfCloseBtn.addEventListener('click', closeShelf);
+
+        storeBtn.addEventListener('click', () => {
+            if (storePanel.classList.contains('open')) {
+                closeStore();
+            } else {
+                openStore();
+            }
+        });
+
+        storeCloseBtn.addEventListener('click', closeStore);
+
+        const storeBooks = [
+            { name: '红楼梦', author: '曹雪芹', price: 0, desc: '中国古典四大名著之一', content: '<p>第一回：甄士隐梦幻识通灵，贾雨村风尘怀闺秀。</p><p>此开卷第一回也。作者自云：因曾历过一番梦幻之后，故将真事隐去，而借「通灵」之说，撰此《石头记》一书也。</p>' },
+            { name: '西游记', author: '吴承恩', price: 0, desc: '中国古典四大名著之一', content: '<p>第一回：灵根育孕源流出，心性修持大道生。</p><p>混沌未分天地乱，茫茫渺渺无人闻。自从盘古破鸿蒙，开辟从兹清浊辨。</p>' },
+            { name: '水浒传', author: '施耐庵', price: 15, desc: '中国古典四大名著之一', content: '<p>第一回：张天师祈禳瘟疫，洪太尉误走妖魔。</p><p>话说大宋仁宗天子在位，嘉佑三年三月三日，五使五岳观世音菩萨下降凡间。</p>' },
+            { name: '三国演义', author: '罗贯中', price: 15, desc: '中国古典四大名著之一', content: '<p>第一回：宴桃园豪杰三结义，斩黄巾英雄首立功。</p><p>话说天下大势，分久必合，合久必分。周末七国分争，并入于秦。</p>' },
+            { name: '聊斋志异', author: '蒲松龄', price: 20, desc: '中国古典短篇小说集', content: '<p>第一卷：考城隍</p><p>予姊丈之祖，宋公讳焘，邑廪生。一日病卧，见吏人持牒，牵白颠马来，云：请赴试。</p>' }
+        ];
+
+        function getPurchased() {
+            const saved = localStorage.getItem('purchasedBooks');
+            return saved ? JSON.parse(saved) : [];
+        }
+
+        function savePurchased(list) {
+            localStorage.setItem('purchasedBooks', JSON.stringify(list));
+        }
+
+        function renderStore() {
+            const shelf = getShelf();
+            const shelfNames = shelf.map(b => b.name);
+            const purchased = getPurchased();
+
+            storeList.innerHTML = storeBooks.map(book => {
+                const isPurchased = purchased.includes(book.name);
+                const isInShelf = shelfNames.includes(book.name);
+                const isFree = book.price === 0;
+
+                let actionHtml = '';
+                if (isInShelf) {
+                    actionHtml = '<span style="color:#888;font-size:12px">已添加</span>';
+                } else if (isPurchased || isFree) {
+                    actionHtml = '<button class="store-action-btn store-free-btn" data-add="' + book.name + '"><i class="fa-solid fa-plus"></i> 免费</button>';
+                } else {
+                    actionHtml = '<button class="store-action-btn store-buy-btn" data-buy="' + book.name + '"><i class="fa-solid fa-lock"></i> ' + book.price + '元</button>';
+                }
+
+                return '<div class="shelf-item" data-name="' + book.name + '">' +
+                    '<div class="shelf-item-icon">' + (isFree ? '📖' : '📚') + '</div>' +
+                    '<div class="shelf-item-info">' +
+                    '<div class="shelf-item-name">' + book.name + '</div>' +
+                    '<div class="annotation-item-page">' + book.author + '</div>' +
+                    '</div>' + actionHtml +
+                    '</div>';
+            }).join('');
+
+            storeList.querySelectorAll('[data-add]').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const bookName = btn.dataset.add;
+                    const book = storeBooks.find(b => b.name === bookName);
+                    if (book) {
+                        addToShelf(book.name, book.content);
+                        renderStore();
+                    }
+                });
+            });
+
+            storeList.querySelectorAll('[data-buy]').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const bookName = btn.dataset.buy;
+                    const book = storeBooks.find(b => b.name === bookName);
+                    if (book && confirm('确定花费 ' + book.price + ' 元购买《' + book.name + '》吗？\n\n(演示用，无需真实支付)')) {
+                        const purchased = getPurchased();
+                        if (!purchased.includes(bookName)) {
+                            purchased.push(bookName);
+                            savePurchased(purchased);
+                        }
+                        addToShelf(book.name, book.content);
+                        renderStore();
+                    }
+                });
+            });
+
+            storeList.querySelectorAll('.shelf-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const bookName = item.dataset.name;
+                    const book = storeBooks.find(b => b.name === bookName);
+                    const purchased = getPurchased();
+                    if (book && (shelfNames.includes(book.name) || purchased.includes(book.name) || book.price === 0)) {
+                        if (!shelfNames.includes(book.name)) {
+                            addToShelf(book.name, book.content);
+                        }
+                        loadBook(book.name, book.content);
+                        closeStore();
+                    }
+                });
+            });
+        }
 
         function getShelf() {
             const saved = localStorage.getItem('bookShelf');

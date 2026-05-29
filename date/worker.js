@@ -1,4 +1,70 @@
 // ✅ ES模块格式 + 彻底修复prepare undefined + 完整CORS + kkk/pwd登录必过 + 全接口可用
+// 多语言消息辅助函数
+const LK = ['cn','en','jp','kr','es','vi','ar','ru'];
+const t = (d) => JSON.stringify(Object.fromEntries(LK.map(k => [k, d[k] ?? ''])));
+const NP = { cn:'[系统通知]', en:'[System Notification]', jp:'[システム通知]', kr:'[시스템 알림]', es:'[Notificación del Sistema]', vi:'[Thông báo Hệ thống]', ar:'[إشعار النظام]', ru:'[Системное уведомление]' };
+const nt = (d) => t(Object.fromEntries(LK.map(k => [k, `${NP[k]} ${d[k] ?? ''}`])));
+
+// 自动续费单个用户的函数
+async function autoRenewUser(DB, user) {
+  const now = new Date();
+  const expireDate = user.v_expire_date ? new Date(user.v_expire_date.replace(' ', 'T') + 'Z') : null;
+  const isVipValid = expireDate && expireDate > now;
+  
+  // 计算还有多久过期（毫秒）
+  const timeUntilExpire = expireDate ? expireDate - now : Infinity;
+  const oneDayInMs = 24 * 60 * 60 * 1000;
+  
+  // 如果未开启自动续费，直接返回
+  if (!user.auto_rewn) return null;
+  
+  // 如果已经过期，或者距离过期还有不到 1 天，才执行续费
+  const shouldRenew = !isVipValid || timeUntilExpire <= oneDayInMs;
+  
+  if (!shouldRenew) return null;
+
+  const pp = user.price_plan ? JSON.parse(user.price_plan) : {};
+  const mp = pp.monthly_discount || 10, ap = pp.annual_discount || 100;
+  let dur, pr;
+  
+  if (user.balance >= ap) { dur = 365; pr = ap; }
+  else if (user.balance >= mp) { dur = 30; pr = mp; }
+  else return null;
+
+  const lc = await DB.prepare('SELECT key, value FROM link WHERE key IN (?,?,?,?)').bind('clash_monthly','v2ray_monthly','clash_yearly','v2ray_yearly').all();
+  const cfg = {}; lc.results.forEach(r => cfg[r.key] = r.value);
+  const ne = new Date(); ne.setDate(ne.getDate() + dur);
+  const vt = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
+  const yr = dur === 365;
+  const cl = user.v_link_clash || (yr ? cfg.clash_yearly : cfg.clash_monthly);
+  const v2 = user.v_link_v2ray || (yr ? cfg.v2ray_yearly : cfg.v2ray_monthly);
+  
+  const r = await DB.prepare('UPDATE user SET balance = balance - ?, v_expire_date = ?, v_token = ?, v_link_clash = ?, v_link_v2ray = ? WHERE username = ?').bind(pr, ne.toISOString().slice(0,19).replace('T',' '), vt, cl, v2, user.username).run();
+  
+  if (r.success && r.meta.changes > 0) {
+    const nowStr = new Date().toISOString().slice(0,19).replace('T',' ');
+    
+    // 给用户发送通知（多语言）
+    await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)').bind(user.username, nt({
+      cn: `您的VIP已自动续费成功！金额：${pr}元，天数：${dur}天`,
+      en: `Your VIP has been automatically renewed successfully! Amount: ¥${pr}, Days: ${dur}`,
+      jp: `VIPの自動更新が成功しました！金額：${pr}円、日数：${dur}日`,
+      kr: `VIP 자동 갱신 성공! 금액: ¥${pr}, 일수: ${dur}일`,
+      es: `¡Renovación automática de VIP exitosa! Monto: ¥${pr}, Días: ${dur}`,
+      vi: `Gia hạn VIP tự động thành công! Số tiền: ¥${pr}, Ngày: ${dur}`,
+      ar: `تم تجديد VIP تلقائيًا بنجاح! المبلغ: ¥${pr}, الأيام: ${dur}`,
+      ru: `Автоматическое продление VIP успешно! Сумма: ¥${pr}, Дни: ${dur}`
+    }), nowStr).run();
+    
+    // 给管理员发送通知（仅中文）
+    await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)').bind('immmor', `用户 ${user.username} 自动续费VIP成功！金额：${pr}元，天数：${dur}天`, nowStr).run();
+    
+    return { username: user.username, amount: pr, days: dur };
+  }
+  
+  return null;
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -9,7 +75,7 @@ export default {
       return new Response(null, {
         headers: {
           'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type',
           'Access-Control-Max-Age': '86400'
         }
@@ -41,7 +107,7 @@ export default {
       // ========== 注册接口（核心）→ 用户名密码注册 ==========
       if (path === '/api/register' && request.method === 'POST') {
         const params = await request.json();
-        const { username, password, inviteCode } = params;
+        const { username, password, inviteCode, securityAnswer, source, priceParam } = params;
         
         if (!username || !password) {
           return resJson({ success: false, message: '用户名和密码不能为空！' }, 400);
@@ -92,6 +158,8 @@ export default {
 
         let finalBalance = 0;
 
+        let inviterUsername = null;
+
         // 如果提供了邀请码，检查邀请人是否存在并给予奖励
         if (inviteCode) {
           const inviterUser = await DB
@@ -100,6 +168,7 @@ export default {
             .first();
           
           if (inviterUser) {
+            inviterUsername = inviterUser.username;
             // 被邀请人奖励2元
             finalBalance = 2;
             
@@ -114,58 +183,148 @@ export default {
             // 给被邀请人发送奖励通知
             await DB
               .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
-              .bind(username, `[系统通知] 您使用邀请码 ${inviteCode} 注册成功，获得奖励 2 元`, now)
+              .bind(username, nt({
+                cn: `您使用邀请码 ${inviteCode} 注册成功，获得奖励 2 元`,
+                en: `You registered using invite code ${inviteCode} and received a ¥2 reward`,
+                jp: `招待コード ${inviteCode} を使用して登録し、2元の報酬を獲得しました`,
+                kr: `초대 코드 ${inviteCode}를 사용하여 등록하고 2위안 보상을 받았습니다`,
+                es: `Se registró con el código de invitación ${inviteCode} y recibió una recompensa de ¥2`,
+                vi: `Bạn đã đăng ký bằng mã mời ${inviteCode} và nhận được phần thưởng 2 ¥`,
+                ar: `لقد سجلت باستخدام رمز الدعوة ${inviteCode} وحصلت على مكافأة ¥2`,
+                ru: `Вы зарегистрировались с кодом приглашения ${inviteCode} и получили вознаграждение ¥2`
+              }), now)
               .run();
-            
+
             // 给邀请人发送奖励通知
             await DB
               .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
-              .bind(inviterUser.username, `[系统通知] 您的邀请用户 ${username} 已注册，您获得奖励 2 元`, now)
+              .bind(inviterUser.username, nt({
+                cn: `您的邀请用户 ${username} 已注册，您获得奖励 2 元`,
+                en: `Your invitee ${username} has registered, you received a ¥2 reward`,
+                jp: `招待したユーザー ${username} が登録しました。2元の報酬を獲得しました`,
+                kr: `초대한 사용자 ${username} 님이 등록했습니다. 2위안 보상을 받았습니다`,
+                es: `Su invitado ${username} se ha registrado, recibió una recompensa de ¥2`,
+                vi: `Người được mời ${username} đã đăng ký, bạn nhận được phần thưởng 2 ¥`,
+                ar: `قام المدعو ${username} بالتسجيل، لقد حصلت على مكافأة ¥2`,
+                ru: `Приглашенный вами пользователь ${username} зарегистрировался, вы получили вознаграждение ¥2`
+              }), now)
               .run();
+
+            // 通知immmor有人邀请注册（邀请人不是immmor时才发）
+            if (inviterUser.username !== 'immmor') {
+              await DB
+                .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
+                .bind('immmor', nt({
+                  cn: `用户 ${inviterUser.username} 成功邀请了 ${username} 注册`,
+                  en: `User ${inviterUser.username} successfully invited ${username} to register`,
+                  jp: `ユーザー ${inviterUser.username} が ${username} を招待して登録しました`,
+                  kr: `사용자 ${inviterUser.username} 님이 ${username} 님을 초대하여 등록했습니다`,
+                  es: `El usuario ${inviterUser.username} invitó exitosamente a ${username} a registrarse`,
+                  vi: `Người dùng ${inviterUser.username} đã mời ${username} đăng ký thành công`,
+                  ar: `قام المستخدم ${inviterUser.username} بدعوة ${username} للتسجيل بنجاح`,
+                  ru: `Пользователь ${inviterUser.username} успешно пригласил ${username} зарегистрироваться`
+                }), now)
+                .run();
+            }
           }
         }
 
-        // 插入新用户（默认余额0，VIP过期时间为null，流量限制相关字段）
+        // 构建价格方案：如果提供了priceParam，使用对应的预定义价格
+        const pricePlans = {
+          'o': { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, annual_savings: 44 },
+          't': { monthly_original: 25, monthly_discount: 20, annual_original: 300, annual_discount: 200, annual_savings: 100 },
+          't3': { monthly_original: 37.5, monthly_discount: 30, annual_original: 450, annual_discount: 350, annual_savings: 100 },
+          'f4': { monthly_original: 50, monthly_discount: 40, annual_original: 600, annual_discount: 450, annual_savings: 150 },
+          'f': { monthly_original: 62.5, monthly_discount: 50, annual_original: 750, annual_discount: 550, annual_savings: 200 }
+        };
+        
+        let pricePlanStr;
+        if (priceParam && pricePlans[priceParam]) {
+          pricePlanStr = JSON.stringify(pricePlans[priceParam]);
+        } else {
+          const defaultPrice = { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, annual_savings: 44 };
+          const linkRows = await DB.prepare('SELECT key, value FROM link WHERE key LIKE ?').bind('price_%').all();
+          linkRows.results.forEach(r => { if (r.value) defaultPrice[r.key.replace('price_', '')] = parseFloat(r.value); });
+          pricePlanStr = JSON.stringify(defaultPrice);
+        }
+
         const result = await DB
-          .prepare('INSERT INTO user (username, password, balance, v_expire_date, learn_vip_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code, v_token, v_link_clash, v_link_v2ray) VALUES (?, ?, ?, NULL, NULL, 307200, 0, ?, ?, ?, ?, ?)')
-          .bind(username, password, finalBalance, new Date().toISOString().slice(0, 19).replace('T', ' '), userInviteCode, '', '', '')
+          .prepare('INSERT INTO user (username, password, balance, v_expire_date, learn_vip_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code, v_token, v_link_clash, v_link_v2ray, price_plan, survey, security_answer, fetch_link, source, not_trusted, auto_rewn) VALUES (?, ?, ?, NULL, NULL, 307200, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)')
+          .bind(username, password, finalBalance, new Date().toISOString().slice(0, 19).replace('T', ' '), userInviteCode, '', '', '', pricePlanStr, '{}', securityAnswer || '', '[]', source || '', 'yes')
           .run();
 
         if (result.success) {
           const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
-          const msg = `[系统通知] 用户 ${username} 注册成功！`;
-          
+          const msg = nt({
+            cn: `用户 ${username} 注册成功！`,
+            en: `User ${username} registered successfully!`,
+            jp: `ユーザー ${username} が登録しました！`,
+            kr: `사용자 ${username} 님이 등록했습니다!`,
+            es: `¡El usuario ${username} se registró exitosamente!`,
+            vi: `Người dùng ${username} đã đăng ký thành công!`,
+            ar: `قام المستخدم ${username} بالتسجيل بنجاح!`,
+            ru: `Пользователь ${username} успешно зарегистрировался!`
+          });
+
           await DB
             .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
             .bind('immmor', msg, now)
             .run();
-          
+
           await DB
             .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
-            .bind('admin', msg, now)
+            .bind(username, t({
+              cn: '欢迎加入 Phantom',
+              en: 'Welcome to Phantom',
+              jp: 'Phantomへようこそ',
+              kr: 'Phantom에 오신 것을 환영합니다',
+              es: 'Bienvenido a Phantom',
+              vi: 'Chào mừng bạn đến với Phantom',
+              ar: 'مرحبًا بك في Phantom',
+              ru: 'Добро пожаловать в Phantom'
+            }), now)
             .run();
 
           await DB
             .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
-            .bind(username, '欢迎加入phantom', now)
+            .bind(username, t({
+              cn: '免费节点链接和付费节点链接不一样！！！！！',
+              en: 'Free node links are different from paid node links!!!!!',
+              jp: '無料ノードリンクと有料ノードリンクは異なります！！！！！',
+              kr: '무료 노드 링크와 유료 노드 링크는 다릅니다！！！！！',
+              es: '¡Los enlaces de nodos gratuitos son diferentes de los de pago!!!!!',
+              vi: 'Liên kết node miễn phí khác với liên kết node trả phí!!!!!',
+              ar: 'روابط العقد المجانية تختلف عن روابط العقد المدفوعة!!!!!',
+              ru: 'Бесплатные ссылки на узлы отличаются от платных!!!!!'
+            }), now)
             .run();
-          
-          await DB
-            .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
-            .bind(username, '免费节点链接和付费节点链接不一样！！！！！', now)
-            .run();
-          
+
           const loginInfo = JSON.stringify([{
             type: 'register',
             time: now,
             ip: request.headers.get('CF-Connecting-IP') || 'unknown',
-            device: request.headers.get('User-Agent') || 'unknown'
+            device: request.headers.get('User-Agent') || 'unknown',
+            acceptLanguage: request.headers.get('Accept-Language') || 'unknown',
+            country: request.headers.get('CF-IPCountry') || 'unknown'
           }]);
           
           await DB
             .prepare('UPDATE user SET login_info = ? WHERE username = ?')
             .bind(loginInfo, username)
             .run();
+          
+          if (inviterUsername) {
+            const inviter = await DB.prepare('SELECT invited_user FROM user WHERE username = ?').bind(inviterUsername).first();
+            let invitedUsers = [];
+            if (inviter?.invited_user) {
+              try {
+                invitedUsers = JSON.parse(inviter.invited_user);
+              } catch (e) {}
+            }
+            const registerTime = new Date(new Date().getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+            invitedUsers.unshift({ username: username, registerTime: registerTime });
+            await DB.prepare('UPDATE user SET invited_user = ? WHERE username = ?').bind(JSON.stringify(invitedUsers), inviterUsername).run();
+          }
           
           return resJson({ 
             success: true, 
@@ -182,52 +341,179 @@ export default {
       if (path === '/api/login' && request.method === 'POST') {
         const params = await request.json();
         const { username, password } = params;
-        
+
         if (!username || !password) {
           return resJson({ success: false, message: '用户名和密码不能为空！' }, 400);
         }
 
-        // 查询账号：包含余额和VIP信息
         const user = await DB
-          .prepare('SELECT rowid, username, balance, v_expire_date FROM user WHERE username = ? AND password = ?')
+          .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link FROM user WHERE username = ? AND password = ?')
           .bind(username, password)
           .first();
 
         if (user) {
-          const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
-          const loginInfoEntry = {
-            type: 'login',
-            time: now,
-            ip: request.headers.get('CF-Connecting-IP') || 'unknown',
-            device: request.headers.get('User-Agent') || 'unknown'
-          };
-          
-          const loginInfo = await DB
-            .prepare('SELECT login_info FROM user WHERE username = ?')
-            .bind(username)
-            .first();
-          
+          const now = new Date(new Date().getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+          const loginInfoEntry = { type: 'login', time: now, ip: request.headers.get('CF-Connecting-IP') || 'unknown', device: request.headers.get('User-Agent') || 'unknown', acceptLanguage: request.headers.get('Accept-Language') || 'unknown', country: request.headers.get('CF-IPCountry') || 'unknown' };
+
+          const loginInfo = await DB.prepare('SELECT login_info FROM user WHERE username = ?').bind(username).first();
           let updatedLoginInfo = JSON.stringify([loginInfoEntry]);
-          
-          if (loginInfo && loginInfo.login_info) {
+          if (loginInfo?.login_info) {
             try {
               const existingInfo = JSON.parse(loginInfo.login_info);
               existingInfo.unshift(loginInfoEntry);
               updatedLoginInfo = JSON.stringify(existingInfo.slice(0, 10));
-            } catch (e) {
-              updatedLoginInfo = JSON.stringify([loginInfoEntry]);
-            }
+            } catch (e) {}
           }
-          
-          await DB
-            .prepare('UPDATE user SET login_info = ? WHERE username = ?')
-            .bind(updatedLoginInfo, username)
-            .run();
-          
-          return resJson({ success: true, message: '登录成功！', userInfo: { id: user.id, username: user.username, balance: user.balance } });
+          await DB.prepare('UPDATE user SET login_info = ? WHERE username = ?').bind(updatedLoginInfo, username).run();
+
+          const fetchLinkArr = user.fetch_link ? JSON.parse(user.fetch_link) : [];
+          if (fetchLinkArr.length >= 3 && user.not_trusted === 'yes') {
+            await DB.prepare('UPDATE user SET not_trusted = ? WHERE username = ?').bind('', username).run();
+            user.not_trusted = '';
+          }
+
+          const pricePlan = user.price_plan ? JSON.parse(user.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
+
+          return resJson({ success: true, message: '登录成功！', userInfo: { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '' }, pricePlan });
         } else {
           return resJson({ success: false, message: '用户名或密码错误' }, 401);
         }
+      }
+
+      // ========== 视频通话TURN凭证接口 ==========
+      if (path === '/api/video/ice-credentials' && request.method === 'GET') {
+        const turnKeyId = env.TURN_KEY_ID;
+        const turnApiToken = env.TURN_API_TOKEN;
+        
+        if (!turnKeyId || !turnApiToken) {
+          return resJson({ success: false, message: 'TURN服务未配置' }, 500);
+        }
+        
+        try {
+          const response = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${turnKeyId}/credentials/generate-ice-servers`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${turnApiToken}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ ttl: 86400 })
+          });
+          
+          if (!response.ok) {
+            throw new Error(`TURN API error: ${response.status}`);
+          }
+          
+          const iceData = await response.json();
+          return resJson({ success: true, iceServers: iceData.iceServers });
+        } catch (err) {
+          return resJson({ success: false, message: '获取TURN凭证失败', error: err.message }, 500);
+        }
+      }
+
+      // ========== 视频通话会话创建接口 ==========
+      if (path === '/api/video/session' && request.method === 'POST') {
+        const appId = env.TURN_APP_ID;
+        
+        if (!appId) {
+          return resJson({ success: false, message: '视频服务未配置，请检查TURN_APP_ID' }, 500);
+        }
+        
+        try {
+          const response = await fetch(`https://rtc.live.cloudflare.com/v1/apps/${appId}/sessions/new`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          const responseText = await response.text();
+          let data;
+          try {
+            data = JSON.parse(responseText);
+          } catch {
+            throw new Error(`Cloudflare API错误: ${response.status} - ${responseText}`);
+          }
+          
+          if (!response.ok) {
+            throw new Error(data.error || data.message || data.errors?.[0]?.message || `Session API error: ${response.status}`);
+          }
+          
+          return resJson({ success: true, sessionId: data.sessionId });
+        } catch (err) {
+          console.error('创建会话失败:', err);
+          return resJson({ success: false, message: '创建会话失败', error: err.message }, 500);
+        }
+      }
+
+      // ========== 视频通话Tracks接口（处理offer/answer） ==========
+      if (path === '/api/video/tracks' && request.method === 'POST') {
+        const appId = env.TURN_APP_ID;
+        const params = await request.json();
+        const { sessionId, sdp, type, trackName } = params;
+        
+        if (!appId || !sessionId) {
+          return resJson({ success: false, message: '参数不完整' }, 400);
+        }
+        
+        try {
+          let url, method;
+          const body = { sessionDescription: { sdp, type } };
+          
+          if (sdp) {
+            url = `https://rtc.live.cloudflare.com/v1/apps/${appId}/sessions/${sessionId}/renegotiate`;
+            method = 'PUT';
+          } else {
+            url = `https://rtc.live.cloudflare.com/v1/apps/${appId}/sessions/${sessionId}/tracks/new`;
+            method = 'POST';
+            delete body.sessionDescription;
+            body.trackId = trackName || crypto.randomUUID();
+            body.trackKind = 'video';
+          }
+          
+          const response = await fetch(url, {
+            method,
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(body)
+          });
+          
+          const responseText = await response.text();
+          let result;
+          try {
+            result = JSON.parse(responseText);
+          } catch {
+            throw new Error(`Cloudflare API错误: ${response.status} - ${responseText}`);
+          }
+          
+          if (!response.ok) {
+            throw new Error(result.error || result.message || result.errors?.[0]?.message || `Tracks API error: ${response.status}`);
+          }
+          
+          return resJson({ success: true, data: result });
+        } catch (err) {
+          console.error('处理Tracks失败:', err);
+          return resJson({ success: false, message: '处理Tracks失败', error: err.message }, 500);
+        }
+      }
+
+      if (path === '/api/check-security' && request.method === 'GET') {
+        const username = url.searchParams.get('username');
+        if (!username) return resJson({ code: 400, msg: '缺少username参数' }, 400);
+        const user = await DB.prepare('SELECT security_answer FROM user WHERE username = ?').bind(username).first();
+        if (!user) return resJson({ code: 404, msg: '用户不存在' }, 404);
+        if (!user.security_answer) return resJson({ code: 400, msg: '该用户未设置密保问题' }, 400);
+        return resJson({ code: 200, msg: '需要验证密保' });
+      }
+
+      if (path === '/api/reset-password' && request.method === 'POST') {
+        const { username, securityAnswer, newPassword } = await request.json();
+        if (!username || !securityAnswer || !newPassword) return resJson({ success: false, message: '参数不完整' }, 400);
+        const user = await DB.prepare('SELECT security_answer FROM user WHERE username = ?').bind(username).first();
+        if (!user) return resJson({ success: false, message: '用户不存在' }, 404);
+        if (user.security_answer !== securityAnswer) return resJson({ success: false, message: '密保答案错误' }, 401);
+        await DB.prepare('UPDATE user SET password = ? WHERE username = ?').bind(newPassword, username).run();
+        return resJson({ success: true, message: '密码重置成功' });
       }
 
       // ========== 按用户名查询（测试kkk专用） ==========
@@ -270,6 +556,16 @@ export default {
           const now = new Date();
           let newExpireDate = new Date();
           
+          const linkConfig = await DB
+            .prepare('SELECT key, value FROM link WHERE key IN (?, ?, ?, ?)')
+            .bind('clash_monthly', 'v2ray_monthly', 'clash_yearly', 'v2ray_yearly')
+            .all();
+          
+          const config = {};
+          linkConfig.results.forEach(row => {
+            config[row.key] = row.value;
+          });
+          
           const user = await DB
             .prepare('SELECT balance, v_expire_date, v_token, v_link_clash, v_link_v2ray FROM user WHERE username = ?')
             .bind(username)
@@ -298,8 +594,8 @@ export default {
           const vToken = generateVToken();
           
           const isYearly = duration === 365;
-          const vLinkClash = isYearly ? 'https://p5jli.no-mad-sub.one/link/R4eay53N8l0ooeQn?clash=3&extend=1' : (user.v_link_clash || 'https://9alh9.no-mad-sub.one/link/CE3VhuOL5JWxjurX?clash=3&extend=1');
-          const vLinkV2ray = isYearly ? 'https://p5jli.no-mad-sub.one/link/R4eay53N8l0ooeQn?sub=3&extend=1' : (user.v_link_v2ray || 'https://9alh9.no-mad-sub.one/link/CE3VhuOL5JWxjurX?sub=3&extend=1');
+          const vLinkClash = user.v_link_clash || (isYearly ? config.clash_yearly : config.clash_monthly);
+          const vLinkV2ray = user.v_link_v2ray || (isYearly ? config.v2ray_yearly : config.v2ray_monthly);
           
           const result = await DB
             .prepare('UPDATE user SET balance = balance - ?, v_expire_date = ?, v_token = ?, v_link_clash = ?, v_link_v2ray = ? WHERE username = ?')
@@ -308,16 +604,20 @@ export default {
           
           if (result.success && result.meta.changes > 0) {
             const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
-            const msg = `[系统通知] 用户 ${username} 开通VIP成功！`;
-            
+            const msg = nt({
+              cn: `用户 ${username} 开通VIP成功！金额：${vipPrice}元，天数：${duration}天`,
+              en: `User ${username} activated VIP successfully! Amount: ¥${vipPrice}, Days: ${duration}`,
+              jp: `ユーザー ${username} がVIPをアクティブ化しました！金額：${vipPrice}元、期間：${duration}日`,
+              kr: `사용자 ${username} 님이 VIP를 활성화했습니다! 금액: ¥${vipPrice}, 기간: ${duration}일`,
+              es: `¡El usuario ${username} activó VIP exitosamente! Monto: ¥${vipPrice}, Días: ${duration}`,
+              vi: `Người dùng ${username} đã kích hoạt VIP thành công! Số tiền: ¥${vipPrice}, Ngày: ${duration}`,
+              ar: `قام المستخدم ${username} بتفعيل VIP بنجاح! المبلغ: ¥${vipPrice}، الأيام: ${duration}`,
+              ru: `Пользователь ${username} успешно активировал VIP! Сумма: ¥${vipPrice}, Дней: ${duration}`
+            });
+
             await DB
               .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
               .bind('immmor', msg, now)
-              .run();
-            
-            await DB
-              .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
-              .bind('admin', msg, now)
               .run();
             
             const updatedUser = await DB
@@ -350,8 +650,24 @@ export default {
           return resJson({ 
             code: 500, 
             msg: '开通VIP失败', 
-            error: err.message 
+            error: err.message
           }, 500);
+        }
+      }
+
+      // ========== 问卷接口 ==========
+      if (path === '/api/survey' && request.method === 'POST') {
+        try {
+          const { username, key, value } = await request.json();
+          if (!username || !key) return resJson({ code: 400, msg: '缺少参数' }, 400);
+          const user = await DB.prepare('SELECT survey FROM user WHERE username = ?').bind(username).first();
+          if (!user) return resJson({ code: 404, msg: '用户不存在' }, 404);
+          const survey = user.survey ? JSON.parse(user.survey) : {};
+          survey[key] = value;
+          await DB.prepare('UPDATE user SET survey = ? WHERE username = ?').bind(JSON.stringify(survey), username).run();
+          return resJson({ code: 200, msg: '提交成功' });
+        } catch (err) {
+          return resJson({ code: 500, msg: '提交失败', error: err.message }, 500);
         }
       }
 
@@ -359,45 +675,56 @@ export default {
       if (path === '/api/vip-status' && request.method === 'GET') {
         try {
           const username = url.searchParams.get('username');
-          
-          if (!username) {
-            return resJson({ code: 400, msg: '缺少username参数' }, 400);
-          }
-          
-          const user = await DB
-            .prepare('SELECT username, v_expire_date, v_token, v_link_clash, v_link_v2ray FROM user WHERE username = ?')
+          if (!username) return resJson({ code: 400, msg: '缺少username参数' }, 400);
+
+          let user = await DB
+            .prepare('SELECT username, v_expire_date, v_token, v_link_clash, v_link_v2ray, auto_rewn, balance, price_plan FROM user WHERE username = ?')
             .bind(username)
             .first();
-          
-          if (!user) {
-            return resJson({ code: 404, msg: '用户不存在' }, 404);
-          }
-          
+
+          if (!user) return resJson({ code: 404, msg: '用户不存在' }, 404);
+
           const now = new Date();
-          const expireDate = user.v_expire_date ? new Date(user.v_expire_date.replace(' ', 'T') + 'Z') : null;
-          const isVipValid = expireDate && expireDate > now;
-          
-          let daysRemaining = 0;
-          if (isVipValid) {
-            const timeDiff = expireDate.getTime() - now.getTime();
-            daysRemaining = Math.max(0, Math.ceil(timeDiff / (1000 * 60 * 60 * 24)));
+          let expireDate = user.v_expire_date ? new Date(user.v_expire_date.replace(' ', 'T') + 'Z') : null;
+          let isVipValid = expireDate && expireDate > now;
+          let daysRemaining = isVipValid ? Math.max(0, Math.ceil((expireDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))) : 0;
+
+          if (!isVipValid && user.auto_rewn) {
+            // 使用新的自动续费函数
+            const result = await autoRenewUser(DB, user);
+            if (result) {
+              user = await DB
+                .prepare('SELECT username, v_expire_date, v_token, v_link_clash, v_link_v2ray, auto_rewn, balance, price_plan FROM user WHERE username = ?')
+                .bind(username)
+                .first();
+              expireDate = user.v_expire_date ? new Date(user.v_expire_date.replace(' ', 'T') + 'Z') : null;
+              isVipValid = expireDate && expireDate > now;
+              daysRemaining = isVipValid ? Math.max(0, Math.ceil((expireDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))) : 0;
+            }
           }
-          
+
           return resJson({
-            code: 200,
-            msg: '查询成功',
+            code: 200, msg: '查询成功',
             data: {
-              username: user.username,
-              v_expire_date: user.v_expire_date,
-              v_token: user.v_token,
-              v_link_clash: user.v_link_clash,
-              v_link_v2ray: user.v_link_v2ray,
-              is_vip_valid: isVipValid,
-              days_remaining: daysRemaining
+              username: user.username, v_expire_date: user.v_expire_date, v_token: user.v_token,
+              v_link_clash: user.v_link_clash, v_link_v2ray: user.v_link_v2ray,
+              is_vip_valid: isVipValid, days_remaining: daysRemaining, auto_renew: !!user.auto_rewn
             }
           });
         } catch (err) {
           return resJson({ code: 500, msg: '查询失败', error: err.message }, 500);
+        }
+      }
+
+      // ========== 自动续费开关接口 ==========
+      if (path === '/api/toggle-auto-renew' && request.method === 'POST') {
+        try {
+          const { username, enabled } = await request.json();
+          if (!username) return resJson({ code: 400, msg: '缺少username参数' }, 400);
+          await DB.prepare('UPDATE user SET auto_rewn = ? WHERE username = ?').bind(enabled ? 1 : 0, username).run();
+          return resJson({ code: 200, msg: 'ok', data: { auto_renew: !!enabled } });
+        } catch (err) {
+          return resJson({ code: 500, msg: '操作失败', error: err.message }, 500);
         }
       }
 
@@ -473,7 +800,7 @@ export default {
       if (path === '/api/user/edit' && request.method === 'POST') {
         try {
           const params = await request.json();
-          const { username, password, balance, v_expire_date, learn_vip_expire_date, v_token, invite_code, v_link_clash, v_link_v2ray, not_trusted, login_info } = params;
+          const { username, password, balance, v_expire_date, learn_vip_expire_date, v_token, invite_code, v_link_clash, v_link_v2ray, not_trusted, login_info, price_plan } = params;
           
           if (!username) {
             return resJson({ code: 400, msg: '缺少username参数' }, 400);
@@ -526,6 +853,10 @@ export default {
           if (not_trusted !== undefined) {
             updates.push('not_trusted = ?');
             values.push(not_trusted);
+          }
+          if (price_plan !== undefined) {
+            updates.push('price_plan = ?');
+            values.push(price_plan);
           }
           if (login_info !== undefined) {
             updates.push('login_info = ?');
@@ -620,7 +951,7 @@ export default {
           }
           
           const user = await DB
-            .prepare('SELECT v_expire_date, v_token, monthly_quota, used_quota, quota_reset_date, username, v_link_clash FROM user WHERE v_token = ?')
+            .prepare('SELECT v_expire_date, v_token, monthly_quota, used_quota, quota_reset_date, username, v_link_clash, fetch_link FROM user WHERE v_token = ?')
             .bind(vToken)
             .first();
           
@@ -632,15 +963,12 @@ export default {
           const expireDate = user.v_expire_date ? new Date(user.v_expire_date) : null;
           
           if (!expireDate || expireDate < now) {
-            return resJson({ 
-              code: 403, 
-              msg: 'VIP已过期或未开通',
-              quota_info: {
-                monthly_quota: user.monthly_quota || 307200,
-                used_quota: user.used_quota || 0,
-                remaining_quota: (user.monthly_quota || 307200) - (user.used_quota || 0)
-              }
-            }, 403);
+            // VIP 已过期，重定向到免费节点接口
+            const freeUrl = `/free/clash?username=${encodeURIComponent(user.username)}`;
+            return new Response(null, {
+              status: 307,
+              headers: { 'Location': freeUrl }
+            });
           }
           
           const year = now.getFullYear();
@@ -658,11 +986,18 @@ export default {
           
           const configText = await response.text();
           
+          // 记录用户调用
+          const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+          const fetchLink = user.fetch_link ? JSON.parse(user.fetch_link) : [];
+          fetchLink.unshift({ type: 'vip', protocol: 'clash', fetchTime: beijingTime });
+          if (fetchLink.length > 50) fetchLink.pop();
+          await DB.prepare('UPDATE user SET fetch_link = ? WHERE username = ?').bind(JSON.stringify(fetchLink), user.username).run();
+          
           return new Response(configText, {
             headers: {
               'Content-Type': 'text/yaml; charset=utf-8',
               'Access-Control-Allow-Origin': '*',
-              'Content-Disposition': `attachment; filename="vip-clash-${year}${month}${day}.yaml"`
+              'Content-Disposition': `attachment; filename="phantom.yaml"`
             }
           });
         } catch (err) {
@@ -680,7 +1015,7 @@ export default {
           }
           
           const user = await DB
-            .prepare('SELECT v_expire_date, v_token, username, v_link_v2ray FROM user WHERE v_token = ?')
+            .prepare('SELECT v_expire_date, v_token, username, v_link_v2ray, fetch_link FROM user WHERE v_token = ?')
             .bind(vToken)
             .first();
           
@@ -692,7 +1027,12 @@ export default {
           const expireDate = user.v_expire_date ? new Date(user.v_expire_date) : null;
           
           if (!expireDate || expireDate < now) {
-            return resJson({ code: 403, msg: 'VIP已过期或未开通' }, 403);
+            // VIP 已过期，重定向到免费节点接口
+            const freeUrl = `/free/v2ray?username=${encodeURIComponent(user.username)}`;
+            return new Response(null, {
+              status: 307,
+              headers: { 'Location': freeUrl }
+            });
           }
           
           const vipV2rayUrl = user.v_link_v2ray;
@@ -708,11 +1048,18 @@ export default {
           const month = String(now.getMonth() + 1).padStart(2, '0');
           const day = String(now.getDate()).padStart(2, '0');
           
+          // 记录用户调用
+          const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+          const fetchLink = user.fetch_link ? JSON.parse(user.fetch_link) : [];
+          fetchLink.unshift({ type: 'vip', protocol: 'v2ray', fetchTime: beijingTime });
+          if (fetchLink.length > 50) fetchLink.pop();
+          await DB.prepare('UPDATE user SET fetch_link = ? WHERE username = ?').bind(JSON.stringify(fetchLink), user.username).run();
+          
           return new Response(configText, {
             headers: {
               'Content-Type': 'text/plain; charset=utf-8',
               'Access-Control-Allow-Origin': '*',
-              'Content-Disposition': `attachment; filename="vip-v2ray-${year}${month}${day}.txt"`
+              'Content-Disposition': `attachment; filename="phantom.txt"`
             }
           });
         } catch (err) {
@@ -723,15 +1070,36 @@ export default {
       // ========== 免费节点接口 ==========
       if (path === '/free/clash' && request.method === 'GET') {
         try {
-          // 根据当前日期生成链接
+          let username = url.searchParams.get('username');
+          
+          if (!username) {
+            return resJson({ code: 400, msg: '缺少 username 参数' }, 400);
+          }
+          
+          // URL 解码用户名（处理邮箱等特殊字符）
+          try {
+            username = decodeURIComponent(username);
+          } catch (e) {
+            // 如果解码失败，使用原始值
+          }
+          
+          // 验证用户是否存在
+          const user = await DB.prepare('SELECT fetch_link FROM user WHERE username = ?').bind(username).first();
+          if (!user) {
+            return resJson({ code: 404, msg: '用户不存在' }, 404);
+          }
+          
+          // 根据当前日期生成链接（获取昨天的配置文件）
           const now = new Date();
-          const year = now.getFullYear();
-          const month = String(now.getMonth() + 1).padStart(2, '0');
-          const day = String(now.getDate() - 1).padStart(2, '0');
+          // 减去1天获取昨天的日期
+          const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+          const year = yesterday.getFullYear();
+          const month = String(yesterday.getMonth() + 1).padStart(2, '0');
+          const day = String(yesterday.getDate()).padStart(2, '0');
           
           const clashUrl = `https://node.clashnode.top/uploads/${year}/${month}/0-${year}${month}${day}.yaml`;
           
-          // 获取Clash配置
+          // 获取 Clash 配置
           const response = await fetch(clashUrl);
           
           if (!response.ok) {
@@ -740,11 +1108,18 @@ export default {
           
           const configText = await response.text();
           
+          // 记录用户调用
+          const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+          const fetchLink = user.fetch_link ? JSON.parse(user.fetch_link) : [];
+          fetchLink.unshift({ type: 'free', protocol: 'clash', fetchTime: beijingTime });
+          if (fetchLink.length > 50) fetchLink.pop();
+          await DB.prepare('UPDATE user SET fetch_link = ? WHERE username = ?').bind(JSON.stringify(fetchLink), username).run();
+          
           return new Response(configText, {
             headers: {
               'Content-Type': 'text/yaml; charset=utf-8',
               'Access-Control-Allow-Origin': '*',
-              'Content-Disposition': `attachment; filename="clash-${year}${month}${day}.yaml"`
+              'Content-Disposition': `attachment; filename="phantom-free.yaml"`
             }
           });
         } catch (err) {
@@ -754,15 +1129,36 @@ export default {
 
       if (path === '/free/v2ray' && request.method === 'GET') {
         try {
-          // 根据当前日期生成链接
+          let username = url.searchParams.get('username');
+          
+          if (!username) {
+            return resJson({ code: 400, msg: '缺少 username 参数' }, 400);
+          }
+          
+          // URL 解码用户名（处理邮箱等特殊字符）
+          try {
+            username = decodeURIComponent(username);
+          } catch (e) {
+            // 如果解码失败，使用原始值
+          }
+          
+          // 验证用户是否存在
+          const user = await DB.prepare('SELECT fetch_link FROM user WHERE username = ?').bind(username).first();
+          if (!user) {
+            return resJson({ code: 404, msg: '用户不存在' }, 404);
+          }
+          
+          // 根据当前日期生成链接（获取昨天的配置文件）
           const now = new Date();
-          const year = now.getFullYear();
-          const month = String(now.getMonth() + 1).padStart(2, '0');
-          const day = String(now.getDate() - 1).padStart(2, '0');
+          // 减去 1 天获取昨天的日期
+          const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+          const year = yesterday.getFullYear();
+          const month = String(yesterday.getMonth() + 1).padStart(2, '0');
+          const day = String(yesterday.getDate()).padStart(2, '0');
           
           const v2rayUrl = `https://node.clashnode.top/uploads/${year}/${month}/0-${year}${month}${day}.txt`;
           
-          // 获取V2Ray配置
+          // 获取 V2Ray 配置
           const response = await fetch(v2rayUrl);
           
           if (!response.ok) {
@@ -771,11 +1167,18 @@ export default {
           
           const configText = await response.text();
           
+          // 记录用户调用
+          const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+          const fetchLink = user.fetch_link ? JSON.parse(user.fetch_link) : [];
+          fetchLink.unshift({ type: 'free', protocol: 'v2ray', fetchTime: beijingTime });
+          if (fetchLink.length > 50) fetchLink.pop();
+          await DB.prepare('UPDATE user SET fetch_link = ? WHERE username = ?').bind(JSON.stringify(fetchLink), username).run();
+          
           return new Response(configText, {
             headers: {
               'Content-Type': 'text/plain; charset=utf-8',
               'Access-Control-Allow-Origin': '*',
-              'Content-Disposition': `attachment; filename="v2ray-${year}${month}${day}.txt"`
+              'Content-Disposition': `attachment; filename="phantom-free.txt"`
             }
           });
         } catch (err) {
@@ -986,6 +1389,16 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           
           const now = new Date();
           
+          const linkConfig = await DB
+            .prepare('SELECT key, value FROM link WHERE key IN (?, ?, ?, ?)')
+            .bind('clash_monthly', 'v2ray_monthly', 'clash_yearly', 'v2ray_yearly')
+            .all();
+          
+          const config = {};
+          linkConfig.results.forEach(row => {
+            config[row.key] = row.value;
+          });
+          
           const user = await DB
             .prepare('SELECT username, v_expire_date, v_token, v_link_clash, v_link_v2ray FROM user WHERE username = ?')
             .bind(username)
@@ -1003,7 +1416,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           
           const result = await DB
             .prepare('UPDATE user SET v_token = ?, v_link_clash = ?, v_link_v2ray = ? WHERE username = ?')
-            .bind(newVToken, '', '', username)
+            .bind(newVToken, config.clash_monthly, config.v2ray_monthly, username)
             .run();
           
           if (result.success && result.meta.changes > 0) {
@@ -1049,28 +1462,35 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
           
           if (target === 'all') {
-            // 获取所有用户
             const users = await DB
               .prepare('SELECT username FROM user')
               .all();
-            
+
             if (!users.results || users.results.length === 0) {
               return resJson({ code: 404, msg: '暂无用户' }, 404);
             }
-            
-            // 为每个用户插入消息
-            for (const user of users.results) {
+
+            const BATCH_SIZE = 30;
+            let totalInserted = 0;
+
+            for (let i = 0; i < users.results.length; i += BATCH_SIZE) {
+              const batch = users.results.slice(i, i + BATCH_SIZE);
+              const placeholders = batch.map(() => '(?, ?, ?, 0)').join(', ');
+              const values = batch.flatMap(user => [user.username, content, now]);
+              
               await DB
-                .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
-                .bind(user.username, content, now)
+                .prepare(`INSERT INTO messages (username, content, created_at, is_read) VALUES ${placeholders}`)
+                .bind(...values)
                 .run();
+              
+              totalInserted += batch.length;
             }
-            
+
             return resJson({
               code: 200,
               msg: '发送成功',
               data: {
-                total: users.results.length,
+                total: totalInserted,
                 content
               }
             });
@@ -1173,6 +1593,162 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
         }
       }
 
+      // ========== 获取订阅链接配置 ==========
+      if (path === '/api/link/config' && request.method === 'GET') {
+        try {
+          const links = await DB
+            .prepare('SELECT key, value FROM link WHERE key IN (?, ?, ?, ?)')
+            .bind('clash_monthly', 'v2ray_monthly', 'clash_yearly', 'v2ray_yearly')
+            .all();
+          
+          const config = {};
+          links.results.forEach(row => {
+            config[row.key] = row.value;
+          });
+          
+          return resJson({
+            code: 200,
+            data: config
+          });
+        } catch (err) {
+          console.error('获取链接配置错误:', err);
+          return resJson({ code: 500, msg: '获取失败', error: err.message }, 500);
+        }
+      }
+
+      // ========== 更新订阅链接配置 ==========
+      if (path === '/api/link/update' && request.method === 'POST') {
+        try {
+          const params = await request.json();
+          const { key, value } = params;
+
+          if (!key || !value) {
+            return resJson({ code: 400, msg: '缺少必要参数' }, 400);
+          }
+
+          const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+          const result = await DB
+            .prepare('UPDATE link SET value = ?, updated_at = ? WHERE key = ?')
+            .bind(value, now, key)
+            .run();
+
+          if (result.success && result.meta.changes > 0) {
+            return resJson({ code: 200, msg: '更新成功' });
+          } else {
+            return resJson({ code: 500, msg: '更新失败' }, 500);
+          }
+        } catch (err) {
+          console.error('更新链接配置错误:', err);
+          return resJson({ code: 500, msg: '更新失败', error: err.message }, 500);
+        }
+      }
+
+      // ========== 获取价格计划 ==========
+      if (path === '/api/price-plan' && request.method === 'GET') {
+        try {
+          const rows = await DB.prepare('SELECT key, value FROM link WHERE key LIKE ?').bind('price_%').all();
+          const plan = {};
+          rows.results.forEach(r => plan[r.key.replace('price_', '')] = parseFloat(r.value) || 0);
+          return resJson({ code: 200, data: plan });
+        } catch (err) {
+          return resJson({ code: 500, msg: '获取失败', error: err.message }, 500);
+        }
+      }
+
+      // ========== 更新价格计划 ==========
+      if (path === '/api/price-plan/update' && request.method === 'POST') {
+        try {
+          const params = await request.json();
+          const { monthly_original, monthly_discount, annual_original, annual_discount, savings } = params;
+          const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+          const prices = { monthly_original, monthly_discount, annual_original, annual_discount, savings };
+          for (const [key, value] of Object.entries(prices)) {
+            if (value !== undefined) {
+              await DB.prepare('INSERT OR REPLACE INTO link (key, value, updated_at) VALUES (?, ?, ?)')
+                .bind(`price_${key}`, String(value), now).run();
+            }
+          }
+          return resJson({ code: 200, msg: '更新成功' });
+        } catch (err) {
+          return resJson({ code: 500, msg: '更新失败', error: err.message }, 500);
+        }
+      }
+
+      // ========== 检测单个用户Clash链接 ==========
+      if (path === '/api/clash-link' && request.method === 'GET') {
+        const username = url.searchParams.get('username');
+        if (!username) return resJson({ code: 400, msg: '缺少username参数' }, 400);
+        const user = await DB.prepare('SELECT username, v_link_clash FROM user WHERE username = ?').bind(username).first();
+        if (!user) return resJson({ code: 404, msg: '用户不存在' }, 404);
+        if (!user.v_link_clash) return resJson({ code: 400, msg: '该用户无Clash链接' }, 400);
+        try {
+          const res = await fetch(user.v_link_clash);
+          const info = res.headers.get('subscription-userinfo');
+          return resJson({ code: 200, data: { username, link: user.v_link_clash, subscription_userinfo: info, ok: res.ok, status: res.status } });
+        } catch (err) {
+          return resJson({ code: 200, data: { username, link: user.v_link_clash, error: err.message } });
+        }
+      }
+
+      // ========== 检测所有用户Clash链接 ==========
+      if (path === '/api/clash-links' && request.method === 'GET') {
+        const users = await DB.prepare('SELECT username, v_link_clash FROM user WHERE v_link_clash IS NOT NULL AND v_link_clash != ""').all();
+        const results = [];
+        for (const u of users.results || []) {
+          if (!u.v_link_clash) continue;
+          try {
+            const res = await fetch(u.v_link_clash);
+            const info = res.headers.get('subscription-userinfo');
+            results.push({ username: u.username, link: u.v_link_clash, subscription_userinfo: info, ok: res.ok, status: res.status });
+          } catch (err) {
+            results.push({ username: u.username, link: u.v_link_clash, error: err.message });
+          }
+        }
+        return resJson({ code: 200, data: results });
+      }
+
+      // ========== 获取所有节点链接 ==========
+      if (path === '/api/links' && request.method === 'GET') {
+        try {
+          const links = await DB.prepare("SELECT * FROM link WHERE key LIKE 'node%' ORDER BY id DESC").all();
+          return resJson({ code: 200, msg: '查询成功', data: links.results || [] });
+        } catch (err) {
+          return resJson({ code: 500, msg: '查询失败', error: err.message }, 500);
+        }
+      }
+
+      // ========== 添加或更新节点链接 ==========
+      if (path === '/api/links' && request.method === 'POST') {
+        try {
+          const { key, value } = await request.json();
+          if (!key || value === undefined) {
+            return resJson({ code: 400, msg: '缺少key或value参数' }, 400);
+          }
+          const existing = await DB.prepare('SELECT * FROM link WHERE key = ?').bind(key).first();
+          if (existing) {
+            await DB.prepare('UPDATE link SET value = ?, updated_at = ? WHERE key = ?').bind(value, new Date().toISOString().slice(0, 19).replace('T', ' '), key).run();
+          } else {
+            await DB.prepare('INSERT INTO link (key, value) VALUES (?, ?)').bind(key, value).run();
+          }
+          return resJson({ code: 200, msg: '保存成功' });
+        } catch (err) {
+          return resJson({ code: 500, msg: '保存失败', error: err.message }, 500);
+        }
+      }
+
+      // ========== 删除节点链接 ==========
+      if (path === '/api/links' && request.method === 'DELETE') {
+        try {
+          const { key } = await request.json();
+          if (!key) return resJson({ code: 400, msg: '缺少key参数' }, 400);
+          await DB.prepare('DELETE FROM link WHERE key = ?').bind(key).run();
+          return resJson({ code: 200, msg: '删除成功' });
+        } catch (err) {
+          return resJson({ code: 500, msg: '删除失败', error: err.message }, 500);
+        }
+      }
+
       // ========== 默认接口提示 ==========
       return resJson({
         code: 200,
@@ -1186,6 +1762,72 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
         error: err.message,
         tip: '优先检查D1绑定的Variable name是否为 DB'
       }, 500);
+    }
+  },
+
+  // ========== Cloudflare Worker 定时任务 ==========
+  async scheduled(event, env, ctx) {
+    console.log('定时任务开始执行:', new Date().toISOString());
+    
+    try {
+      const DB = env.DB;
+      if (!DB) {
+        console.error('数据库绑定失败！');
+        return;
+      }
+      
+      // 计算过期前1天和当前时间
+      const now = new Date();
+      const oneDayLater = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      const nowStr = now.toISOString().slice(0, 19).replace('T', ' ');
+      const oneDayLaterStr = oneDayLater.toISOString().slice(0, 19).replace('T', ' ');
+      
+      // 优化：直接在数据库层面过滤，只查询需要续费的用户
+      // 条件：开启自动续费 且 (已过期 或 1天内过期)
+      const usersResult = await DB
+        .prepare(`
+          SELECT username, v_expire_date, v_token, v_link_clash, v_link_v2ray, auto_rewn, balance, price_plan 
+          FROM user 
+          WHERE auto_rewn = 1 
+          AND (v_expire_date IS NULL OR v_expire_date <= ?)
+        `)
+        .bind(oneDayLaterStr)
+        .all();
+      
+      if (!usersResult.results || usersResult.results.length === 0) {
+        console.log('没有需要自动续费的用户');
+        return;
+      }
+      
+      const users = usersResult.results;
+      const results = [];
+      
+      console.log(`找到 ${users.length} 个可能需要续费的用户`);
+      
+      // 处理每个用户的自动续费
+      for (const user of users) {
+        try {
+          const result = await autoRenewUser(DB, user);
+          if (result) {
+            results.push(result);
+            console.log(`用户 ${user.username} 自动续费成功: ¥${result.amount}, ${result.days}天`);
+          }
+        } catch (err) {
+          console.error(`处理用户 ${user.username} 时出错:`, err);
+        }
+      }
+      
+      console.log(`定时任务执行完成，共检查 ${users.length} 个用户，成功续费 ${results.length} 个用户`);
+      
+      // 如果有续费成功的用户，给管理员发送汇总通知（仅中文）
+      if (results.length > 0) {
+        const now = new Date().toISOString().slice(0,19).replace('T',' ');
+        const totalAmount = results.reduce((sum, r) => sum + r.amount, 0);
+        await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)').bind('immmor', `定时任务执行完成！共续费 ${results.length} 个用户，总金额 ¥${totalAmount}`, now).run();
+      }
+      
+    } catch (err) {
+      console.error('定时任务执行出错:', err);
     }
   },
 };

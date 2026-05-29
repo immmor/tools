@@ -1,4 +1,80 @@
 // ✅ ES模块格式 + 彻底修复prepare undefined + 完整CORS + kkk/pwd登录必过 + 全接口可用
+// 多语言消息辅助函数
+const LK = ['cn','en','jp','kr','es','vi','ar','ru'];
+const t = (d) => JSON.stringify(Object.fromEntries(LK.map(k => [k, d[k] ?? ''])));
+const NP = { cn:'[系统通知]', en:'[System Notification]', jp:'[システム通知]', kr:'[시스템 알림]', es:'[Notificación del Sistema]', vi:'[Thông báo Hệ thống]', ar:'[إشعار النظام]', ru:'[Системное уведомление]' };
+const nt = (d) => t(Object.fromEntries(LK.map(k => [k, `${NP[k]} ${d[k] ?? ''}`])));
+
+// 生成5位随机字符串（v_token）
+const generateVToken = () => {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let token = '';
+  for (let i = 0; i < 5; i++) {
+    token += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return token;
+};
+
+// 自动续费单个用户的函数
+async function autoRenewUser(DB, user) {
+  const now = new Date();
+  const expireDate = user.v_expire_date ? new Date(user.v_expire_date.replace(' ', 'T') + 'Z') : null;
+  const isVipValid = expireDate && expireDate > now;
+  
+  // 计算还有多久过期（毫秒）
+  const timeUntilExpire = expireDate ? expireDate - now : Infinity;
+  const oneDayInMs = 24 * 60 * 60 * 1000;
+  
+  // 如果未开启自动续费，直接返回
+  if (!user.auto_rewn) return null;
+  
+  // 如果已经过期，或者距离过期还有不到 1 天，才执行续费
+  const shouldRenew = !isVipValid || timeUntilExpire <= oneDayInMs;
+  
+  if (!shouldRenew) return null;
+
+  const pp = user.price_plan ? JSON.parse(user.price_plan) : {};
+  const mp = pp.monthly_discount || 10, ap = pp.annual_discount || 100;
+  let dur, pr;
+  
+  if (user.balance >= ap) { dur = 365; pr = ap; }
+  else if (user.balance >= mp) { dur = 30; pr = mp; }
+  else return null;
+
+  const lc = await DB.prepare('SELECT key, value FROM link WHERE key IN (?,?,?,?)').bind('clash_monthly','v2ray_monthly','clash_yearly','v2ray_yearly').all();
+  const cfg = {}; lc.results.forEach(r => cfg[r.key] = r.value);
+  const ne = new Date(); ne.setDate(ne.getDate() + dur);
+  const vt = user.v_token || generateVToken(); // 如果已有 token 就用原来的
+  const yr = dur === 365;
+  const cl = user.v_link_clash || (yr ? cfg.clash_yearly : cfg.clash_monthly);
+  const v2 = user.v_link_v2ray || (yr ? cfg.v2ray_yearly : cfg.v2ray_monthly);
+  
+  const r = await DB.prepare('UPDATE user SET balance = balance - ?, v_expire_date = ?, v_token = ?, v_link_clash = ?, v_link_v2ray = ? WHERE username = ?').bind(pr, ne.toISOString().slice(0,19).replace('T',' '), vt, cl, v2, user.username).run();
+  
+  if (r.success && r.meta.changes > 0) {
+    const nowStr = new Date().toISOString().slice(0,19).replace('T',' ');
+    
+    // 给用户发送通知（多语言）
+    await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)').bind(user.username, nt({
+      cn: `您的VIP已自动续费成功！金额：${pr}元，天数：${dur}天`,
+      en: `Your VIP has been automatically renewed successfully! Amount: ¥${pr}, Days: ${dur}`,
+      jp: `VIPの自動更新が成功しました！金額：${pr}円、日数：${dur}日`,
+      kr: `VIP 자동 갱신 성공! 금액: ¥${pr}, 일수: ${dur}일`,
+      es: `¡Renovación automática de VIP exitosa! Monto: ¥${pr}, Días: ${dur}`,
+      vi: `Gia hạn VIP tự động thành công! Số tiền: ¥${pr}, Ngày: ${dur}`,
+      ar: `تم تجديد VIP تلقائيًا بنجاح! المبلغ: ¥${pr}, الأيام: ${dur}`,
+      ru: `Автоматическое продление VIP успешно! Сумма: ¥${pr}, Дни: ${dur}`
+    }), nowStr).run();
+    
+    // 给管理员发送通知（仅中文）
+    await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)').bind('immmor', `用户 ${user.username} 自动续费VIP成功！金额：${pr}元，天数：${dur}天`, nowStr).run();
+    
+    return { username: user.username, amount: pr, days: dur };
+  }
+  
+  return null;
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -25,12 +101,6 @@ export default {
         }
       });
     };
-
-    // 多语言消息辅助函数
-    const LK = ['cn','en','jp','kr','es','vi','ar','ru'];
-    const t = (d) => JSON.stringify(Object.fromEntries(LK.map(k => [k, d[k] ?? ''])));
-    const NP = { cn:'[系统通知]', en:'[System Notification]', jp:'[システム通知]', kr:'[시스템 알림]', es:'[Notificación del Sistema]', vi:'[Thông báo Hệ thống]', ar:'[إشعار النظام]', ru:'[Системное уведомление]' };
-    const nt = (d) => t(Object.fromEntries(LK.map(k => [k, `${NP[k]} ${d[k] ?? ''}`])));
 
     try {
       // ========== ✅ 核心修复：数据库实例兜底（解决prepare undefined） ==========
@@ -354,15 +424,7 @@ export default {
           : resJson({ code: 404, msg: '用户不存在' }, 404);
       }
 
-      // ========== 生成5位随机字符串 ==========
-      const generateVToken = () => {
-        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-        let token = '';
-        for (let i = 0; i < 5; i++) {
-          token += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
-        return token;
-      };
+
 
       // ========== 开通VIP接口 ==========
       if (path === '/api/open-vip' && request.method === 'POST') {
@@ -500,7 +562,7 @@ export default {
           const username = url.searchParams.get('username');
           if (!username) return resJson({ code: 400, msg: '缺少username参数' }, 400);
 
-          let user = await DB
+          const user = await DB
             .prepare('SELECT username, v_expire_date, v_token, v_link_clash, v_link_v2ray, auto_rewn, balance, price_plan FROM user WHERE username = ?')
             .bind(username)
             .first();
@@ -508,35 +570,9 @@ export default {
           if (!user) return resJson({ code: 404, msg: '用户不存在' }, 404);
 
           const now = new Date();
-          let expireDate = user.v_expire_date ? new Date(user.v_expire_date.replace(' ', 'T') + 'Z') : null;
-          let isVipValid = expireDate && expireDate > now;
-          let daysRemaining = isVipValid ? Math.max(0, Math.ceil((expireDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))) : 0;
-
-          if (!isVipValid && user.auto_rewn) {
-            const pp = user.price_plan ? JSON.parse(user.price_plan) : {};
-            const mp = pp.monthly_discount || 10, ap = pp.annual_discount || 100;
-            let dur, pr;
-            if (user.balance >= ap) { dur = 365; pr = ap; }
-            else if (user.balance >= mp) { dur = 30; pr = mp; }
-
-            if (dur) {
-              const lc = await DB.prepare('SELECT key, value FROM link WHERE key IN (?,?,?,?)').bind('clash_monthly','v2ray_monthly','clash_yearly','v2ray_yearly').all();
-              const cfg = {}; lc.results.forEach(r => cfg[r.key] = r.value);
-              const ne = new Date(); ne.setDate(ne.getDate() + dur);
-              const vt = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
-              const yr = dur === 365;
-              const cl = user.v_link_clash || (yr ? cfg.clash_yearly : cfg.clash_monthly);
-              const v2 = user.v_link_v2ray || (yr ? cfg.v2ray_yearly : cfg.v2ray_monthly);
-              const r = await DB.prepare('UPDATE user SET balance = balance - ?, v_expire_date = ?, v_token = ?, v_link_clash = ?, v_link_v2ray = ? WHERE username = ?').bind(pr, ne.toISOString().slice(0,19).replace('T',' '), vt, cl, v2, username).run();
-              if (r.success && r.meta.changes > 0) {
-                await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)').bind('immmor', `用户 ${username} 自动续费VIP成功！金额：${pr}元，天数：${dur}天`, new Date().toISOString().slice(0,19).replace('T',' ')).run();
-                user = { ...user, v_expire_date: ne.toISOString().slice(0,19).replace('T',' '), v_token: vt, v_link_clash: cl, v_link_v2ray: v2, balance: user.balance - pr };
-                expireDate = new Date(user.v_expire_date.replace(' ', 'T') + 'Z');
-                isVipValid = expireDate > now;
-                daysRemaining = Math.max(0, Math.ceil((expireDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
-              }
-            }
-          }
+          const expireDate = user.v_expire_date ? new Date(user.v_expire_date.replace(' ', 'T') + 'Z') : null;
+          const isVipValid = expireDate && expireDate > now;
+          const daysRemaining = isVipValid ? Math.max(0, Math.ceil((expireDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))) : 0;
 
           return resJson({
             code: 200, msg: '查询成功',
@@ -1597,6 +1633,71 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
         error: err.message,
         tip: '优先检查D1绑定的Variable name是否为 DB'
       }, 500);
+    }
+  },
+
+  // ========== Cloudflare Worker 定时任务 ==========
+  async scheduled(event, env, ctx) {
+    console.log('定时任务开始执行:', new Date().toISOString());
+    
+    try {
+      const DB = env.DB;
+      if (!DB) {
+        console.error('数据库绑定失败！');
+        return;
+      }
+      
+      // 计算过期前1天和当前时间
+      const now = new Date();
+      const oneDayLater = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+      const nowStr = now.toISOString().slice(0, 19).replace('T', ' ');
+      const oneDayLaterStr = oneDayLater.toISOString().slice(0, 19).replace('T', ' ');
+      
+      // 优化：直接在数据库层面过滤，只查询需要续费的用户
+      // 条件：开启自动续费 且 (已过期 或 1天内过期)
+      const usersResult = await DB
+        .prepare(`
+          SELECT username, v_expire_date, v_token, v_link_clash, v_link_v2ray, auto_rewn, balance, price_plan 
+          FROM user 
+          WHERE auto_rewn = 1 
+          AND (v_expire_date IS NULL OR v_expire_date <= ?)
+        `)
+        .bind(oneDayLaterStr)
+        .all();
+      
+      if (!usersResult.results || usersResult.results.length === 0) {
+        console.log('没有需要自动续费的用户');
+        return;
+      }
+      
+      const users = usersResult.results;
+      const results = [];
+      console.log(`找到 ${users.length} 个可能需要续费的用户`);
+      
+      // 处理每个用户的自动续费
+      for (const user of users) {
+        try {
+          const result = await autoRenewUser(DB, user);
+          if (result) {
+            results.push(result);
+            console.log(`用户 ${user.username} 自动续费成功: ¥${result.amount}, ${result.days}天`);
+          }
+        } catch (err) {
+          console.error(`处理用户 ${user.username} 时出错:`, err);
+        }
+      }
+      
+      console.log(`定时任务执行完成，共检查 ${users.length} 个用户，成功续费 ${results.length} 个用户`);
+      
+      // 如果有续费成功的用户，给管理员发送汇总通知（仅中文）
+      if (results.length > 0) {
+        const now = new Date().toISOString().slice(0,19).replace('T',' ');
+        const totalAmount = results.reduce((sum, r) => sum + r.amount, 0);
+        await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)').bind('immmor', `定时任务执行完成！共续费 ${results.length} 个用户，总金额 ¥${totalAmount}`, now).run();
+      }
+      
+    } catch (err) {
+      console.error('定时任务执行出错:', err);
     }
   },
 };
