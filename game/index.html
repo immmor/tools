@@ -166,6 +166,9 @@
 
     <div id="weapon-display">🔫 手枪</div>
     <div id="ammo-display">12 / 12</div>
+    <div id="grenade-charge-container" style="position:absolute;bottom:100px;left:50%;transform:translateX(-50%);width:150px;height:12px;background:rgba(0,0,0,0.6);border:2px solid #fff;border-radius:6px;display:none;z-index:2;overflow:hidden;">
+        <div id="grenade-charge-bar" style="width:0%;height:100%;background:linear-gradient(90deg,#ff6600,#ffcc00);transition:width 0.05s linear;"></div>
+    </div>
     <div id="car-prompt" style="position:absolute;bottom:120px;left:50%;transform:translateX(-50%);color:#ffcc00;font-size:20px;font-weight:bold;text-shadow:2px 2px 4px rgba(0,0,0,0.8);pointer-events:none;z-index:2;display:none;">按 E 进入车辆</div>
 
     <div id="enemy-health-layer"></div>
@@ -407,7 +410,7 @@
         const explosionRadius = 8;
         const grenadeDelay = 2.5;
 
-        function throwGrenade() {
+        function throwGrenade(chargeMultiplier) {
             if (ammoSystem.grenade.current <= 0) return;
             ammoSystem.grenade.current--;
             updateAmmoDisplay();
@@ -423,9 +426,9 @@
             grenadeBody.getWorldPosition(throwPos);
             grenade.position.copy(throwPos);
             const dir = camera.getWorldDirection(new THREE.Vector3());
-            if (dir.y < 0) dir.y *= 1.5;
-            grenade.userData.velocity = dir.multiplyScalar(20);
-            grenade.userData.velocity.y += 5;
+            const basePower = 12 + chargeMultiplier * 22;
+            grenade.userData.velocity = dir.multiplyScalar(basePower);
+            grenade.userData.velocity.y += 6 + chargeMultiplier * 10;
             grenade.userData.timeLeft = grenadeDelay;
             grenade.userData.exploded = false;
 
@@ -491,6 +494,8 @@
         let playerHp = 100, score = 0, maxEnemies = 3, isGameEnded = false, gameStarted = false;
         let isKnifeAttacking = false;
         let isMouseDown = false, isTouchDown = false;
+        let isGrenadeCharging = false, grenadeChargeStart = 0;
+        const grenadeMinCharge = 0.15, grenadeMaxCharge = 1.8;
         let ak47FireTimer = 0, ak47FireRate = 0.12;
 
         function checkBoxCollision(pos1, size1, pos2, size2) {
@@ -749,11 +754,27 @@
             document.addEventListener('mousedown', (e) => {
                 if (pcControls.isLocked && e.button === 0) {
                     isMouseDown = true;
-                    if (weapons.current !== 'ak47') fireWeapon();
+                    if (weapons.current === 'grenade') {
+                        isGrenadeCharging = true;
+                        grenadeChargeStart = performance.now();
+                        document.getElementById('grenade-charge-container').style.display = 'block';
+                    } else if (weapons.current !== 'ak47') {
+                        fireWeapon();
+                    }
                 }
             });
             document.addEventListener('mouseup', (e) => {
-                if (e.button === 0) isMouseDown = false;
+                if (e.button === 0) {
+                    if (isGrenadeCharging && weapons.current === 'grenade') {
+                        const chargeTime = Math.min((performance.now() - grenadeChargeStart) / 1000, grenadeMaxCharge);
+                        const chargeMultiplier = Math.max((chargeTime - grenadeMinCharge) / (grenadeMaxCharge - grenadeMinCharge), 0);
+                        throwGrenade(chargeMultiplier);
+                        isGrenadeCharging = false;
+                        document.getElementById('grenade-charge-container').style.display = 'none';
+                        document.getElementById('grenade-charge-bar').style.width = '0%';
+                    }
+                    isMouseDown = false;
+                }
             });
         } else {
             // ---- 手机端触控逻辑 ----
@@ -839,10 +860,24 @@
             document.getElementById('btn-fire').addEventListener('touchstart', (e) => { 
                 e.preventDefault(); 
                 isTouchDown = true;
-                if (weapons.current !== 'ak47') fireWeapon(); 
+                if (weapons.current === 'grenade') {
+                    isGrenadeCharging = true;
+                    grenadeChargeStart = performance.now();
+                    document.getElementById('grenade-charge-container').style.display = 'block';
+                } else if (weapons.current !== 'ak47') {
+                    fireWeapon();
+                }
             });
             document.getElementById('btn-fire').addEventListener('touchend', (e) => { 
                 e.preventDefault(); 
+                if (isGrenadeCharging && weapons.current === 'grenade') {
+                    const chargeTime = Math.min((performance.now() - grenadeChargeStart) / 1000, grenadeMaxCharge);
+                    const chargeMultiplier = Math.max((chargeTime - grenadeMinCharge) / (grenadeMaxCharge - grenadeMinCharge), 0);
+                    throwGrenade(chargeMultiplier);
+                    isGrenadeCharging = false;
+                    document.getElementById('grenade-charge-container').style.display = 'none';
+                    document.getElementById('grenade-charge-bar').style.width = '0%';
+                }
                 isTouchDown = false; 
             });
             document.getElementById('btn-jump').addEventListener('touchstart', (e) => { e.preventDefault(); if (canJump) { sounds.jump(); velocity.y += 11; } canJump = false; });
@@ -887,7 +922,8 @@
                 direction: direction.clone().normalize(),
                 speed: speed,
                 damage: damage,
-                lifeTime: 2.0
+                lifeTime: 2.0,
+                velocityY: direction.y * speed
             };
             bullet.lookAt(startPos.clone().add(direction));
             scene.add(bullet);
@@ -1046,8 +1082,6 @@
                     weapons.knife.position.z += 0.2;
                     isKnifeAttacking = false;
                 }, 250);
-            } else if (weapons.current === 'grenade') {
-                throwGrenade();
             }
         }
 
@@ -1092,6 +1126,13 @@
                     }
                 }
 
+                // 手榴弹蓄力UI更新
+                if (isGrenadeCharging) {
+                    const chargeTime = Math.min((performance.now() - grenadeChargeStart) / 1000, grenadeMaxCharge);
+                    const chargePercent = Math.min((chargeTime / grenadeMaxCharge) * 100, 100);
+                    document.getElementById('grenade-charge-bar').style.width = chargePercent + '%';
+                }
+
                 // 物理阻尼与重力
                 velocity.x -= velocity.x * 10.0 * delta;
                 velocity.z -= velocity.z * 10.0 * delta;
@@ -1099,13 +1140,21 @@
 
                 for (let i = thrownGrenades.length - 1; i >= 0; i--) {
                     const g = thrownGrenades[i];
-                    g.userData.velocity.y -= 20 * delta;
+                    g.userData.velocity.y -= 12 * delta;
+                    g.userData.velocity.x -= g.userData.velocity.x * 1.5 * delta;
+                    g.userData.velocity.z -= g.userData.velocity.z * 1.5 * delta;
                     g.position.add(g.userData.velocity.clone().multiplyScalar(delta));
                     if (g.position.y < 0.15) {
                         g.position.y = 0.15;
-                        g.userData.velocity.y *= -0.4;
-                        g.userData.velocity.x *= 0.7;
-                        g.userData.velocity.z *= 0.7;
+                        if (Math.abs(g.userData.velocity.y) > 0.5) {
+                            g.userData.velocity.y *= -0.35;
+                            g.userData.velocity.x *= 0.75;
+                            g.userData.velocity.z *= 0.75;
+                        } else {
+                            g.userData.velocity.y = 0;
+                            g.userData.velocity.x *= 0.9;
+                            g.userData.velocity.z *= 0.9;
+                        }
                     }
                     g.userData.timeLeft -= delta;
                     if (g.userData.timeLeft <= 0 && !g.userData.exploded) {
@@ -1333,6 +1382,8 @@
                 for (let i = playerBullets.length - 1; i >= 0; i--) {
                     const b = playerBullets[i];
                     b.position.addScaledVector(b.userData.direction, b.userData.speed * delta);
+                    b.userData.velocityY -= 9.8 * 0.8 * delta;
+                    b.position.y += b.userData.velocityY * delta;
                     b.userData.lifeTime -= delta;
 
                     let hitWall = false;
