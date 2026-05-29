@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D仿真翻页阅读器</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            font-family: 'Microsoft YaHei', sans-serif;
+            overflow: hidden;
+        }
+
+        /* 提示控制栏 */
+        .controls {
+            margin-bottom: 20px;
+            color: #fff;
+        }
+
+        button {
+            padding: 10px 20px;
+            background-color: #555;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 0 10px;
+            font-size: 16px;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background-color: #777;
+        }
+
+        /* 书籍容器 */
+        .book-container {
+            width: 900px;
+            height: 600px;
+            position: relative;
+            perspective: 1500px; /* 3D 景深 */
+        }
+
+        /* 书本主体 */
+        .book {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            transform-style: preserve-3d;
+            transition: transform 0.5s;
+        }
+
+        /* 单页基础样式 */
+        .page {
+            width: 50%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            right: 0;
+            transform-origin: left center; /* 以左边轴心旋转 */
+            transform-style: preserve-3d;
+            transition: transform 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+            z-index: 1;
+        }
+
+        /* 正面和背面 */
+        .front, .back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            backface-visibility: hidden; /* 翻转到背面时隐藏正面 */
+            padding: 40px;
+            box-shadow: inset 3px 0 10px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .front {
+            background-color: #fbf6ec; /* 书页复古色 */
+            color: #333;
+            border-radius: 0 10px 10px 0;
+        }
+
+        .back {
+            background-color: #f5edd7;
+            color: #333;
+            transform: rotateY(180deg); /* 背面默认水平翻转 */
+            border-radius: 10px 0 0 10px;
+        }
+
+        /* 文章排版 */
+        h2 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #222;
+        }
+
+        p {
+            font-size: 18px;
+            line-height: 1.8;
+            text-indent: 2em;
+            text-align: justify;
+        }
+
+        .page-num {
+            text-align: center;
+            font-size: 14px;
+            color: #888;
+        }
+
+        /* 封面特制 */
+        .cover-front {
+            background: linear-gradient(135deg, #a13d2d, #732619);
+            color: #f1d3a1;
+            justify-content: center;
+            align-items: center;
+            box-shadow: inset -5px 0 10px rgba(0,0,0,0.3);
+        }
+
+        .cover-front h1 {
+            font-size: 36px;
+            margin-bottom: 10px;
+            letter-spacing: 4px;
+        }
+
+        .cover-back {
+            background-color: #fbf6ec;
+        }
+
+        /* 封底特制 */
+        .cover-end {
+            background: linear-gradient(135deg, #732619, #a13d2d);
+            color: #f1d3a1;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* 翻页后的层级与状态控制 */
+        .page.flipped {
+            transform: rotateY(-180deg);
+        }
+
+        /* 动态调整层级，确保正面和背面的页面堆叠正确 */
+        #p1 { z-index: 5; }
+        #p2 { z-index: 4; }
+        #p3 { z-index: 3; }
+        #p4 { z-index: 2; }
+        #p5 { z-index: 1; }
+    </style>
+</head>
+<body>
+
+    <div class="controls">
+        <button id="prev-btn">上一页</button>
+        <button id="next-btn">下一页</button>
+    </div>
+
+    <div class="book-container">
+        <div id="book" class="book">
+            
+            <div id="p1" class="page">
+                <div class="front cover-front">
+                    <h1>数字仿真精选集</h1>
+                    <p style="text-align: center; text-indent: 0; font-size: 16px;">VOL. 01</p>
+                </div>
+                <div class="back">
+                    <h2>第一章：序言</h2>
+                    <p>欢迎来到纯网页端仿真的世界。这是一个利用现代 CSS 3D 属性构建的阅读器。无需加载庞大的第三方流媒体或复杂的 Canvas 框架，仅仅通过几行核心的代码，我们就能在扁平的屏幕上重塑指尖划过纸张的质感。</p>
+                    <div class="page-num">1</div>
+                </div>
+            </div>
+
+            <div id="p2" class="page">
+                <div class="front">
+                    <h2>第二章：技术解析</h2>
+                    <p>本仿真器核心依赖于 `perspective` 属性，它为整个父级容器开辟了一个三维透视空间。每一个页面通过设置 `transform-origin: left center`，将旋转的轴心牢牢锁在书脊的核心位置。</p>
+                    <div class="page-num">2</div>
+                </div>
+                <div class="back">
+                    <h2>第三章：视觉沉淀</h2>
+                    <p>为了让纸张看起来更加真实，我们使用了 `backface-visibility: hidden` 属性。这意味着当页面翻转过去后，它的正面文字不会镜像显示在背面，而是自然隐藏，露出了真正的背部内容。</p>
+                    <div class="page-num">3</div>
+                </div>
+            </div>
+
+            <div id="p3" class="page">
+                <div class="front">
+                    <h2>第四章：交互细节</h2>
+                    <p>完美的动画离不开细腻的贝塞尔曲线。我们在平移和翻转之间加入了过渡动画（Transition），并配合了阴影（box-shadow）的渐变，使得纸张在空中划过时带有一丝淡淡的空气阻力感。</p>
+                    <div class="page-num">4</div>
+                </div>
+                <div class="back">
+                    <h2>第五章：未来演进</h2>
+                    <p>未来的电子书将不仅仅是文字的承载工具。随着 WebGL 以及 GPU 加速的普及，我们可以期待看到伴随着翻页动态泛起的纸张褶皱、光影折射，甚至是伴随指尖滑动的沙沙声效。</p>
+                    <div class="page-num">5</div>
+                </div>
+            </div>
+
+            <div id="p4" class="page">
+                <div class="front">
+                    <h2>第六章：尾声</h2>
+                    <p>至此，我们的简易技术演示已接近尾声。科技让信息传递得更快，而设计让冰冷的屏幕多了一份温度。希望这段精简的代码能为你后续的创作带来一丝灵感和启发。</p>
+                    <div class="page-num">6</div>
+                </div>
+                <div class="back cover-end">
+                    <h1>谢谢观看</h1>
+                    <p style="text-align: center; text-indent: 0; font-size: 14px;">Powered by CSS 3D</p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // 获取 DOM 元素
+        const prevBtn = document.querySelector("#prev-btn");
+        const nextBtn = document.querySelector("#next-btn");
+        const book = document.querySelector("#book");
+
+        // 获取所有纸张（每一张包含了 front 和 back 两面）
+        const pages = [
+            document.querySelector("#p1"),
+            document.querySelector("#p2"),
+            document.querySelector("#p3"),
+            document.querySelector("#p4")
+        ];
+
+        // 核心控制逻辑
+        let currentLocation = 1;
+        let maxLocation = pages.length + 1;
+
+        function openBook() {
+            book.style.transform = "translateX(50%)"; // 打开书本时，整体向右位移半个书身，让书脊居中
+        }
+
+        function closeBook(isAtAtStart) {
+            if(isAtAtStart) {
+                book.style.transform = "translateX(0%)"; // 如果在封面，书靠右
+            } else {
+                book.style.transform = "translateX(100%)"; // 如果在封底，书靠左
+            }
+        }
+
+        function goNextPage() {
+            if(currentLocation < maxLocation) {
+                if (currentLocation === 1) {
+                    openBook();
+                }
+                
+                // 翻动当前页
+                pages[currentLocation - 1].classList.add("flipped");
+                
+                // 动态管理层级 Z-index，防止背面内容被下一页盖住
+                pages[currentLocation - 1].style.zIndex = currentLocation;
+
+                if (currentLocation === maxLocation - 1) {
+                    closeBook(false);
+                }
+                currentLocation++;
+            }
+        }
+
+        function goPrevPage() {
+            if(currentLocation > 1) {
+                if (currentLocation === maxLocation) {
+                    openBook();
+                }
+
+                // 回翻页
+                pages[currentLocation - 2].classList.remove("flipped");
+                
+                // 恢复原有的层级
+                pages[currentLocation - 2].style.zIndex = maxLocation - currentLocation + 5;
+
+                if (currentLocation === 2) {
+                    closeBook(true);
+                }
+                currentLocation--;
+            }
+        }
+
+        // 事件监听
+        nextBtn.addEventListener("click", goNextPage);
+        prevBtn.addEventListener("click", goPrevPage);
+    </script>
+</body>
+</html>

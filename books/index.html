@@ -1279,21 +1279,42 @@
             e.target.value = '';
         });
 
-        // 加载保存的书籍内容
+        // 加载保存的书籍内容（用于回退）
         const savedBookContent = localStorage.getItem('bookContent');
         const savedBookTitle = localStorage.getItem('bookTitle');
-        if (savedBookContent && savedBookTitle) {
-            loadBook(savedBookTitle, savedBookContent);
-        } else {
-            fetch('book.txt')
-                .then(response => response.text())
-                .then(text => {
-                    const bookName = '开源网络小说示例';
-                    addToShelf(bookName, text);
-                    loadBook(bookName, text);
-                })
-                .catch(() => {});
+
+        // 默认书籍列表
+        const defaultBooks = [
+            { name: '寒江孤影', file: '寒江孤影.txt' },
+            { name: '初遇在那个秋天', file: '初遇在那个秋天.txt' }
+        ];
+
+        // 初始化书架和加载第一本书
+        async function initBooks() {
+            try {
+                for (const book of defaultBooks) {
+                    const response = await fetch(book.file);
+                    if (response.ok) {
+                        const text = await response.text();
+                        addToShelf(book.name, text);
+                    }
+                }
+
+                const shelf = getShelf();
+                if (shelf.length > 0) {
+                    loadBook(shelf[0].name, shelf[0].content);
+                } else if (savedBookContent && savedBookTitle) {
+                    loadBook(savedBookTitle, savedBookContent);
+                }
+            } catch (error) {
+                console.error('初始化书籍失败:', error);
+                if (savedBookContent && savedBookTitle) {
+                    loadBook(savedBookTitle, savedBookContent);
+                }
+            }
         }
+
+        initBooks();
 
         // ========== 阅读进度自动保存（已集成到翻页函数中）==========
 
