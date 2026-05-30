@@ -556,14 +556,6 @@
                 <div class="settings-label">夜间模式</div>
                 <button class="option-btn toggle-btn" id="nightModeBtn">🌙 开启</button>
             </div>
-            <div class="settings-section">
-                <div class="settings-label">导入书籍</div>
-                <div class="import-area">
-                    <input type="file" id="bookFileInput" accept=".txt,.md,.epub,.pdf,.doc,.docx" hidden>
-                    <button class="option-btn" id="importBtn">选择文件</button>
-                    <div class="import-tip">支持 .txt / .md / .epub / .pdf / .doc / .docx 格式</div>
-                </div>
-            </div>
         </div>
     </div>
 
@@ -572,6 +564,13 @@
             <div class="settings-header">
                 <div class="settings-title">我的书架</div>
                 <button class="settings-close" id="shelfCloseBtn">×</button>
+            </div>
+            <div class="settings-section" style="margin-bottom: 20px;">
+                <div class="import-area">
+                    <input type="file" id="bookFileInput" accept=".txt,.md,.epub,.pdf,.doc,.docx" hidden>
+                    <button class="option-btn" id="importBtn" style="width: 100%;"><i class="fa-solid fa-plus"></i> 导入书籍</button>
+                    <div class="import-tip">支持 .txt / .md / .epub / .pdf / .doc / .docx 格式</div>
+                </div>
             </div>
             <div class="shelf-list" id="shelfList"></div>
         </div>
@@ -1178,29 +1177,102 @@
             return new Promise(async (resolve, reject) => {
                 try {
                     const zip = await JSZip.loadAsync(file);
+
+                    const containerFile = zip.file('META-INF/container.xml');
+                    if (!containerFile) {
+                        reject(new Error('无效的EPUB文件：缺少container.xml'));
+                        return;
+                    }
+
+                    const containerText = await containerFile.async('text');
+                    const opfPathMatch = containerText.match(/full-path=["']([^"']+)["']/i);
+                    if (!opfPathMatch) {
+                        reject(new Error('无法找到OPF文件路径'));
+                        return;
+                    }
+
+                    const opfPath = opfPathMatch[1];
+                    const opfDir = opfPath.substring(0, opfPath.lastIndexOf('/') + 1);
+                    const opfFile = zip.file(opfPath);
+
+                    if (!opfFile) {
+                        reject(new Error(`无法找到OPF文件：${opfPath}`));
+                        return;
+                    }
+
+                    const opfText = await opfFile.async('text');
+
+                    const manifestItems = {};
+                    const manifestMatch = opfText.match(/<manifest>([\s\S]*?)<\/manifest>/i);
+                    if (manifestMatch) {
+                        const itemRegex = /<item[^>]*id=["']([^"']+)["'][^>]*href=["']([^"']+)["'][^>]*media-type=["']([^"']+)["'][^>]*\/?>/gi;
+                        let match;
+                        while ((match = itemRegex.exec(manifestMatch[1])) !== null) {
+                            manifestItems[match[1]] = {
+                                href: match[2],
+                                mediaType: match[3]
+                            };
+                        }
+                    }
+
+                    const spineOrder = [];
+                    const spineMatch = opfText.match(/<spine[^>]*>([\s\S]*?)<\/spine>/i);
+                    if (spineMatch) {
+                        const itemrefRegex = /<itemref[^>]*idref=["']([^"']+)["'][^>]*\/?>/gi;
+                        let match;
+                        while ((match = itemrefRegex.exec(spineMatch[1])) !== null) {
+                            spineOrder.push(match[1]);
+                        }
+                    }
+
                     let content = '';
-                    const contentOpf = zip.file(/\.opf$/i)[0];
-                    if (contentOpf) {
-                        const opfText = await contentOpf.async('text');
-                        const manifestMatch = opfText.match(/<manifest>([\s\S]*?)<\/manifest>/i);
-                        if (manifestMatch) {
-                            const itemMatches = manifestMatch[1].match(/<item[^>]*href=["']([^"']+)["'][^>]*media-type=["']application\/xhtml\+xml["'][^>]*\/?>/gi);
-                            if (itemMatches) {
-                                for (const item of itemMatches) {
-                                    const hrefMatch = item.match(/href=["']([^"']+)["']/i);
-                                    if (hrefMatch) {
-                                        const htmlFile = zip.file(hrefMatch[1]);
-                                        if (htmlFile) {
-                                            const htmlContent = await htmlFile.async('text');
-                                            const textContent = htmlContent.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-                                            content += textContent + '\n\n';
-                                        }
+
+                    if (spineOrder.length > 0) {
+                        for (const idref of spineOrder) {
+                            const item = manifestItems[idref];
+                            if (item && (item.mediaType.includes('html') || item.mediaType.includes('xhtml'))) {
+                                const fullPath = opfDir + item.href;
+                                const htmlFile = zip.file(fullPath);
+
+                                if (htmlFile) {
+                                    const htmlContent = await htmlFile.async('text');
+                                    const textContent = htmlContent
+                                        .replace(/<script[\s\S]*?<\/script>/gi, '')
+                                        .replace(/<style[\s\S]*?<\/style>/gi, '')
+                                        .replace(/<[^>]+>/g, ' ')
+                                        .replace(/\s+/g, ' ')
+                                        .trim();
+
+                                    if (textContent) {
+                                        content += textContent + '\n\n';
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        for (const [id, item] of Object.entries(manifestItems)) {
+                            if (item.mediaType.includes('html') || item.mediaType.includes('xhtml')) {
+                                const fullPath = opfDir + item.href;
+                                const htmlFile = zip.file(fullPath);
+
+                                if (htmlFile) {
+                                    const htmlContent = await htmlFile.async('text');
+                                    const textContent = htmlContent
+                                        .replace(/<script[\s\S]*?<\/script>/gi, '')
+                                        .replace(/<style[\s\S]*?<\/style>/gi, '')
+                                        .replace(/<[^>]+>/g, ' ')
+                                        .replace(/\s+/g, ' ')
+                                        .trim();
+
+                                    if (textContent) {
+                                        content += textContent + '\n\n';
                                     }
                                 }
                             }
                         }
                     }
-                    resolve(content || 'EPUB文件解析失败：无法提取文本内容');
+
+                    resolve(content.trim() || 'EPUB文件解析失败：无法提取文本内容');
                 } catch (error) {
                     reject(new Error('EPUB解析失败: ' + error.message));
                 }
@@ -1432,62 +1504,59 @@
 
             if (!annotations.length) return;
 
-            const fragment = document.createDocumentFragment();
-            const existingNodes = new Set();
-
-            function getTextNodes(node, nodes = []) {
-                if (node.nodeType === Node.TEXT_NODE) {
-                    if (node.textContent.trim() && !node.parentElement?.closest('.annotation-marker')) {
-                        nodes.push(node);
-                    }
-                } else if (node.nodeType === Node.ELEMENT_NODE && !node.classList.contains('annotation-marker')) {
-                    for (const child of node.childNodes) {
-                        getTextNodes(child, nodes);
-                    }
-                }
-                return nodes;
-            }
-
-            const textNodes = getTextNodes(contentBody);
-            const textNodeMap = new Map();
-
-            textNodes.forEach(node => {
-                textNodeMap.set(node, node.textContent);
-            });
+            const processedRanges = new Set();
 
             annotations.forEach(a => {
                 const searchText = a.text;
-                for (const [node, originalText] of textNodeMap) {
-                    if (existingNodes.has(node)) continue;
-                    const idx = originalText.indexOf(searchText);
+                const walker = document.createTreeWalker(
+                    contentBody,
+                    NodeFilter.SHOW_TEXT,
+                    {
+                        acceptNode: function(node) {
+                            if (!node.textContent.trim() || node.parentElement?.closest('.annotation-marker')) {
+                                return NodeFilter.FILTER_REJECT;
+                            }
+                            return NodeFilter.FILTER_ACCEPT;
+                        }
+                    }
+                );
+
+                let node;
+                while ((node = walker.nextNode())) {
+                    if (processedRanges.has(node)) continue;
+
+                    const text = node.textContent;
+                    const idx = text.indexOf(searchText);
+                    
                     if (idx !== -1) {
                         const span = document.createElement('span');
                         span.className = 'annotation-marker';
+                        span.dataset.id = a.id;
                         span.dataset.note = a.note;
                         span.dataset.text = a.text;
                         span.textContent = searchText;
                         span.onclick = function(e) {
                             e.stopPropagation();
-                            const ann = getAnnotations().find(x => x.text === a.text);
+                            const ann = getAnnotations().find(x => x.id === a.id);
                             showAnnotationPopup(a.text, a.note, ann ? ann.id : null);
                         };
 
                         const parent = node.parentNode;
-                        const beforeText = originalText.substring(0, idx);
-                        const afterText = originalText.substring(idx + searchText.length);
+                        const beforeText = text.substring(0, idx);
+                        const afterText = text.substring(idx + searchText.length);
 
                         if (beforeText) {
                             node.textContent = beforeText;
+                            processedRanges.add(node);
                         }
 
                         if (afterText) {
                             const afterNode = document.createTextNode(afterText);
                             parent.insertBefore(afterNode, node.nextSibling);
-                            textNodeMap.set(afterNode, afterText);
+                            processedRanges.add(afterNode);
                         }
 
                         parent.insertBefore(span, node.nextSibling);
-                        existingNodes.add(node);
                         break;
                     }
                 }
