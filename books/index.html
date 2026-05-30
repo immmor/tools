@@ -1176,7 +1176,9 @@
         async function parseEpub(file) {
             return new Promise(async (resolve, reject) => {
                 try {
+                    console.log('📖 开始解析EPUB文件...');
                     const zip = await JSZip.loadAsync(file);
+                    console.log('✅ ZIP加载成功');
 
                     const containerFile = zip.file('META-INF/container.xml');
                     if (!containerFile) {
@@ -1185,35 +1187,89 @@
                     }
 
                     const containerText = await containerFile.async('text');
+                    console.log('📄 Container XML:', containerText.substring(0, 200));
+
                     const opfPathMatch = containerText.match(/full-path=["']([^"']+)["']/i);
                     if (!opfPathMatch) {
                         reject(new Error('无法找到OPF文件路径'));
                         return;
                     }
 
-                    const opfPath = opfPathMatch[1];
-                    const opfDir = opfPath.substring(0, opfPath.lastIndexOf('/') + 1);
-                    const opfFile = zip.file(opfPath);
+                    let opfPath = opfPathMatch[1];
+                    console.log('📍 OPF文件路径:', opfPath);
 
+                    opfPath = decodeURIComponent(opfPath);
+                    const opfDir = opfPath.substring(0, opfPath.lastIndexOf('/') + 1);
+                    console.log('📁 OPF目录:', opfDir);
+
+                    const opfFile = zip.file(opfPath);
                     if (!opfFile) {
+                        const allFiles = Object.keys(zip.files).join('\n');
+                        console.error('❌ ZIP中的所有文件:\n', allFiles);
                         reject(new Error(`无法找到OPF文件：${opfPath}`));
                         return;
                     }
 
                     const opfText = await opfFile.async('text');
+                    console.log('📋 OPF内容前500字符:', opfText.substring(0, 500));
 
                     const manifestItems = {};
-                    const manifestMatch = opfText.match(/<manifest>([\s\S]*?)<\/manifest>/i);
-                    if (manifestMatch) {
-                        const itemRegex = /<item[^>]*id=["']([^"']+)["'][^>]*href=["']([^"']+)["'][^>]*media-type=["']([^"']+)["'][^>]*\/?>/gi;
-                        let match;
-                        while ((match = itemRegex.exec(manifestMatch[1])) !== null) {
-                            manifestItems[match[1]] = {
-                                href: match[2],
-                                mediaType: match[3]
-                            };
+
+                    let manifestContent = '';
+                    const manifestMatchNS = opfText.match(/<manifest[^>]*>([\s\S]*?)<\/manifest>/i);
+                    if (manifestMatchNS) {
+                        manifestContent = manifestMatchNS[1];
+                        console.log('✅ 找到Manifest块');
+                    } else {
+                        console.warn('⚠️ 未找到标准Manifest，尝试宽松匹配...');
+                        const looseMatch = opfText.match(/<manifest([\s\S]*?)<\/manifest>/i);
+                        if (looseMatch) {
+                            manifestContent = looseMatch[1];
+                            console.log('✅ 宽松匹配成功');
                         }
                     }
+
+                    if (manifestContent) {
+                        const itemRegex = /<item\s+[^>]*?id=["']([^"']+)["'][^>]*?href=["']([^"']+)["'][^>]*?(?:media-type=["']([^"']+)["'])?[^>]*\/?>/gi;
+                        let match;
+                        while ((match = itemRegex.exec(manifestContent)) !== null) {
+                            const itemId = match[1];
+                            let itemHref = decodeURIComponent(match[2]);
+                            const mediaType = match[3] || '';
+                            manifestItems[itemId] = {
+                                href: itemHref,
+                                mediaType: mediaType
+                            };
+                            console.log(`📚 Manifest项: id=${itemId}, href=${itemHref}, type=${mediaType}`);
+                        }
+
+                        if (Object.keys(manifestItems).length === 0) {
+                            console.warn('⚠️ 标准正则未匹配，尝试更宽松的匹配...');
+                            const looseItemRegex = /<item[^>]+?>/gi;
+                            let itemMatch;
+                            while ((itemMatch = looseItemRegex.exec(manifestContent)) !== null) {
+                                const itemStr = itemMatch[0];
+                                const idMatch = itemStr.match(/id=["']([^"']+)["']/i);
+                                const hrefMatch = itemStr.match(/href=["']([^"']+)["']/i);
+                                const typeMatch = itemStr.match(/media-type=["']([^"']+)["']/i);
+
+                                if (idMatch && hrefMatch) {
+                                    const itemId = idMatch[1];
+                                    let itemHref = decodeURIComponent(hrefMatch[1]);
+                                    const mediaType = typeMatch ? typeMatch[1] : '';
+                                    manifestItems[itemId] = {
+                                        href: itemHref,
+                                        mediaType: mediaType
+                                    };
+                                    console.log(`📚 宽松Manifest项: id=${itemId}, href=${itemHref}, type=${mediaType}`);
+                                }
+                            }
+                        }
+                    } else {
+                        console.error('❌ 完全无法解析Manifest');
+                    }
+
+                    console.log(`📊 共找到 ${Object.keys(manifestItems).length} 个manifest项`);
 
                     const spineOrder = [];
                     const spineMatch = opfText.match(/<spine[^>]*>([\s\S]*?)<\/spine>/i);
@@ -1224,56 +1280,254 @@
                             spineOrder.push(match[1]);
                         }
                     }
+                    console.log(`📑 Spine顺序 (${spineOrder.length}项):`, spineOrder);
 
                     let content = '';
+                    let filesProcessed = 0;
+                    let filesFound = 0;
 
-                    if (spineOrder.length > 0) {
-                        for (const idref of spineOrder) {
-                            const item = manifestItems[idref];
-                            if (item && (item.mediaType.includes('html') || item.mediaType.includes('xhtml'))) {
-                                const fullPath = opfDir + item.href;
-                                const htmlFile = zip.file(fullPath);
+                    const imageCache = new Map();
 
-                                if (htmlFile) {
-                                    const htmlContent = await htmlFile.async('text');
-                                    const textContent = htmlContent
-                                        .replace(/<script[\s\S]*?<\/script>/gi, '')
-                                        .replace(/<style[\s\S]*?<\/style>/gi, '')
-                                        .replace(/<[^>]+>/g, ' ')
-                                        .replace(/\s+/g, ' ')
-                                        .trim();
+                    function findFileInZip(zip, path) {
+                        let file = zip.file(path);
+                        if (file) return file;
 
-                                    if (textContent) {
-                                        content += textContent + '\n\n';
-                                    }
-                                }
+                        const decodedPath = decodeURIComponent(path);
+                        file = zip.file(decodedPath);
+                        if (file) return file;
+
+                        const encodedPath = encodeURIComponent(path);
+                        file = zip.file(encodedPath);
+                        if (file) return file;
+
+                        const lowerPath = path.toLowerCase();
+                        for (const fileName of Object.keys(zip.files)) {
+                            if (fileName.toLowerCase() === lowerPath ||
+                                decodeURIComponent(fileName).toLowerCase() === lowerPath) {
+                                return zip.file(fileName);
                             }
                         }
-                    } else {
-                        for (const [id, item] of Object.entries(manifestItems)) {
-                            if (item.mediaType.includes('html') || item.mediaType.includes('xhtml')) {
+
+                        return null;
+                    }
+
+                    async function getImageUrl(zip, imagePath) {
+                        if (imageCache.has(imagePath)) {
+                            return imageCache.get(imagePath);
+                        }
+
+                        const imageFile = findFileInZip(zip, imagePath);
+                        if (!imageFile) {
+                            console.warn(`⚠️ 找不到图片: ${imagePath}`);
+                            return null;
+                        }
+
+                        try {
+                            const blob = await imageFile.async('blob');
+                            const url = URL.createObjectURL(blob);
+                            
+                            const actualPath = imagePath;
+                            const fileName = actualPath.split('/').pop();
+                            const lowerFileName = fileName.toLowerCase();
+                            
+                            imageCache.set(actualPath, url);
+                            
+                            let dirPath = actualPath.substring(0, actualPath.lastIndexOf('/') + 1);
+                            if (dirPath.endsWith('/')) dirPath = dirPath.slice(0, -1);
+                            
+                            const pathVariants = [
+                                fileName,
+                                '/' + fileName,
+                                './' + fileName,
+                                'Images/' + fileName,
+                                '/Images/' + fileName,
+                                'images/' + fileName,
+                                '/images/' + fileName
+                            ];
+                            
+                            if (dirPath) {
+                                const dirName = dirPath.split('/').pop() || '';
+                                if (dirName) {
+                                    pathVariants.push(
+                                        dirName + '/' + fileName,
+                                        '/' + dirName + '/' + fileName
+                                    );
+                                }
+                            }
+                            
+                            for (const variant of pathVariants) {
+                                if (!imageCache.has(variant)) {
+                                    imageCache.set(variant, url);
+                                }
+                            }
+                            
+                            console.log(`✅ 缓存图片: ${actualPath} (+${pathVariants.length}个别名)`);
+                            return url;
+                        } catch (e) {
+                            console.error(`❌ 读取图片失败: ${imagePath}`, e);
+                            return null;
+                        }
+                    }
+
+                    function extractContentFromHtml(htmlContent, currentFilePath) {
+                        let processed = htmlContent
+                            .replace(/<script[\s\S]*?<\/script>/gi, '')
+                            .replace(/<style[\s\S]*?<\/style>/gi, '');
+
+                        const imgPlaceholders = [];
+                        let imgIndex = 0;
+
+                        processed = processed.replace(/<img[^>]+?>/gi, (imgTag) => {
+                            const placeholder = `__EPUB_IMG_${imgIndex}__`;
+                            const styledImgTag = imgTag
+                                .replace(/width\s*=\s*["'][^"']*["']/gi, '')
+                                .replace(/height\s*=\s*["'][^"']*["']/gi, '')
+                                .replace(/style\s*=\s*["'][^"']*["']/gi, '')
+                                .replace('<img', '<img style="max-width:100%;height:auto;display:block;margin:10px auto;"');
+                            
+                            imgPlaceholders.push({ placeholder, content: styledImgTag });
+                            imgIndex++;
+                            return placeholder;
+                        });
+
+                        processed = processed
+                            .replace(/<[^>]+>/g, ' ')
+                            .replace(/&nbsp;/g, ' ')
+                            .replace(/&amp;/g, '&')
+                            .replace(/&lt;/g, '<')
+                            .replace(/&gt;/g, '>')
+                            .replace(/&quot;/g, '"')
+                            .replace(/&#39;/g, "'")
+                            .replace(/\s+/g, ' ');
+
+                        for (const { placeholder, content } of imgPlaceholders) {
+                            processed = processed.replace(placeholder, '\n' + content + '\n');
+                        }
+
+                        return processed.trim();
+                    }
+
+                    async function processHtmlFileWithImages(htmlFile, filePath) {
+                        return new Promise(async (resolve) => {
+                            try {
+                                filesFound++;
+                                const htmlContent = await htmlFile.async('text');
+
+                                const textContent = extractContentFromHtml(htmlContent, filePath);
+
+                                if (textContent && textContent.length > 10) {
+                                    content += textContent + '\n\n';
+                                    filesProcessed++;
+                                    console.log(`✅ 成功提取: ${textContent.length} 字符`);
+                                    resolve(true);
+                                } else {
+                                    console.log(`⚠️ 内容为空或太短: "${textContent.substring(0, 50)}..."`);
+                                    resolve(false);
+                                }
+                            } catch (e) {
+                                console.error(`❌ 处理文件时出错:`, e);
+                                resolve(false);
+                            }
+                        });
+                    }
+
+                    if (spineOrder.length > 0 && Object.keys(manifestItems).length > 0) {
+                        console.log('🔄 按Spine顺序处理章节...');
+                        for (const idref of spineOrder) {
+                            const item = manifestItems[idref];
+                            if (!item) {
+                                console.log(`⚠️ 找不到idref=${idref}对应的manifest项`);
+
+                                const possibleFile = idref.replace(/^x/, '');
+                                const htmlExtensions = ['.xhtml', '.html', '.htm', '.xhtml.html', '.html.xhtml'];
+
+                                for (const ext of htmlExtensions) {
+                                    const testPaths = [
+                                        opfDir + 'Text/' + possibleFile + ext,
+                                        opfDir + possibleFile + ext,
+                                        opfDir + 'text/' + possibleFile + ext,
+                                        possibleFile + ext,
+                                        'OEBPS/Text/' + possibleFile + ext
+                                    ];
+
+                                    for (const testPath of testPaths) {
+                                        const htmlFile = findFileInZip(zip, testPath);
+                                        if (htmlFile) {
+                                            console.log(`🔍 通过猜测找到文件: ${testPath}`);
+                                            await processHtmlFileWithImages(htmlFile, testPath);
+                                            break;
+                                        }
+                                    }
+                                }
+
+                                continue;
+                            }
+
+                            const isHtmlContent = item.mediaType.includes('html') || item.mediaType.includes('xhtml') || item.href.endsWith('.xhtml') || item.href.endsWith('.html') || item.href.endsWith('.htm');
+
+                            if (isHtmlContent) {
                                 const fullPath = opfDir + item.href;
-                                const htmlFile = zip.file(fullPath);
+                                console.log(`\n🔍 处理文件: ${fullPath}`);
+
+                                const htmlFile = findFileInZip(zip, fullPath);
 
                                 if (htmlFile) {
-                                    const htmlContent = await htmlFile.async('text');
-                                    const textContent = htmlContent
-                                        .replace(/<script[\s\S]*?<\/script>/gi, '')
-                                        .replace(/<style[\s\S]*?<\/style>/gi, '')
-                                        .replace(/<[^>]+>/g, ' ')
-                                        .replace(/\s+/g, ' ')
-                                        .trim();
-
-                                    if (textContent) {
-                                        content += textContent + '\n\n';
-                                    }
+                                    await processHtmlFileWithImages(htmlFile, fullPath);
+                                } else {
+                                    console.error(`❌ 找不到文件: ${fullPath}`);
+                                    console.error('   可用文件:', Object.keys(zip.files).filter(f => f.includes('.xhtml') || f.includes('.html')).slice(0, 10));
                                 }
                             }
                         }
                     }
 
-                    resolve(content.trim() || 'EPUB文件解析失败：无法提取文本内容');
+                    if (content.trim().length === 0) {
+                        console.log('\n🆘 Spine/Manifest方法失败，使用备用方案：扫描所有HTML文件...');
+
+                        const allFiles = Object.keys(zip.files)
+                            .filter(f => !f.startsWith('__MACOSX') &&
+                                   (f.endsWith('.xhtml') || f.endsWith('.html') || f.endsWith('.htm')))
+                            .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+                        console.log(`📂 找到 ${allFiles.length} 个HTML文件:`);
+                        allFiles.slice(0, 20).forEach(f => console.log(`   - ${f}`));
+                        if (allFiles.length > 20) console.log(`   ... 还有 ${allFiles.length - 20} 个文件`);
+
+                        for (const filePath of allFiles) {
+                            const htmlFile = zip.file(filePath);
+                            if (htmlFile) {
+                                console.log(`\n📄 处理备用文件: ${filePath}`);
+                                await processHtmlFileWithImages(htmlFile, filePath);
+                            }
+                        }
+                    } else {
+                        console.log('\n✅ Spine/Manifest方法成功，跳过备用方案');
+                    }
+
+                    console.log(`\n📊 解析统计:`);
+                    console.log(`   - 找到HTML文件: ${filesFound}`);
+                    console.log(`   - 成功处理: ${filesProcessed}`);
+                    console.log(`   - 总内容长度: ${content.length} 字符`);
+
+                    if (content.trim()) {
+                        console.log('✅ EPUB解析成功!');
+                        resolve(content.trim());
+                    } else {
+                        console.error('❌ 无法提取文本内容');
+                        
+                        const allXhtmlFiles = Object.keys(zip.files)
+                            .filter(f => f.endsWith('.xhtml') || f.endsWith('.html') || f.endsWith('.htm'))
+                            .slice(0, 20);
+                        console.error('ZIP中的HTML文件:', allXhtmlFiles);
+                        
+                        reject(new Error(
+                            `EPUB文件解析失败：无法提取文本内容\n` +
+                            `找到 ${filesFound} 个HTML文件，但无法提取有效文本。\n` +
+                            `请检查浏览器控制台(F12)查看详细日志。`
+                        ));
+                    }
                 } catch (error) {
+                    console.error('💥 EPUB解析异常:', error);
                     reject(new Error('EPUB解析失败: ' + error.message));
                 }
             });
