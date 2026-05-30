@@ -420,7 +420,6 @@
             font-size: 14px;
             color: var(--footer-color);
             user-select: none;
-            pointer-events: none;
         }
 
         /* 响应式适配：手机端屏幕 */
@@ -660,6 +659,7 @@
                 currentPage = 0;
                 contentBody.style.transform = 'translateX(0px)';
                 pageIndicator.innerText = `第 1 / 1 页`;
+                renderPageIndicator();
                 return;
             }
 
@@ -674,7 +674,8 @@
             const translateX = -currentPage * actualStep;
             contentBody.style.transform = `translateX(${translateX}px)`;
 
-            pageIndicator.innerText = `第 ${currentPage + 1} / ${totalPages} 页`;
+            pageIndicator.innerHTML = `第 ${currentPage + 1} / ${totalPages} 页`;
+            pageIndicator.style.cursor = 'pointer';
         }
 
         // 翻页逻辑
@@ -721,6 +722,44 @@
                 });
             }
         }
+
+        function goToPage(pageNum) {
+            const target = Math.max(1, Math.min(pageNum, totalPages));
+            if (target - 1 !== currentPage) {
+                doPageTransition(() => {
+                    currentPage = target - 1;
+                    updateLayout();
+                    localStorage.setItem(`progress_${bookTitle.textContent}`, currentPage);
+                });
+            } else {
+                renderPageIndicator();
+            }
+        }
+
+        function renderPageIndicator() {
+            pageIndicator.innerHTML = `第 ${currentPage + 1} / ${totalPages} 页`;
+            pageIndicator.style.cursor = 'pointer';
+        }
+
+        pageIndicator.addEventListener('click', () => {
+            if (pageIndicator.querySelector('input')) return;
+            const input = document.createElement('input');
+            input.type = 'number';
+            input.min = 1;
+            input.max = totalPages;
+            input.value = currentPage + 1;
+            input.style.cssText = 'width:60px;text-align:center;background:var(--bg-color);color:var(--text-color);border:1px solid var(--text-color);border-radius:4px;font-size:14px;font-family:inherit;outline:none;';
+            pageIndicator.innerHTML = '';
+            pageIndicator.appendChild(input);
+            pageIndicator.insertBefore(document.createTextNode(` / ${totalPages} 页`), null);
+            input.focus();
+            input.select();
+            const confirm = () => { goToPage(parseInt(input.value) || 1); };
+            input.addEventListener('keydown', e => { if (e.key === 'Enter') confirm(); if (e.key === 'Escape') renderPageIndicator(); });
+            input.addEventListener('blur', confirm);
+        });
+
+        renderPageIndicator();
 
         // 事件绑定：点击触发 - 智能判断翻页区域
         mainContainer.addEventListener('mousedown', (e) => {
@@ -1023,6 +1062,7 @@
             bookTitle.textContent = name;
             localStorage.setItem('bookContent', content);
             localStorage.setItem('bookTitle', name);
+            localStorage.setItem('lastReadBook', name);
 
             const savedProgress = localStorage.getItem(`progress_${name}`);
             currentPage = savedProgress !== null ? parseInt(savedProgress) : 0;
@@ -1615,7 +1655,7 @@
             { name: '初遇在那个秋天', file: '初遇在那个秋天.txt' }
         ];
 
-        // 初始化书架和加载第一本书
+        // 初始化书架并恢复上次阅读的书籍
         async function initBooks() {
             try {
                 for (const book of defaultBooks) {
@@ -1627,9 +1667,20 @@
                 }
 
                 const shelf = getShelf();
-                if (shelf.length > 0) {
+                const lastRead = localStorage.getItem('lastReadBook');
+                let loaded = false;
+
+                if (lastRead) {
+                    const lastBook = shelf.find(b => b.name === lastRead);
+                    if (lastBook) {
+                        loadBook(lastBook.name, lastBook.content);
+                        loaded = true;
+                    }
+                }
+
+                if (!loaded && shelf.length > 0) {
                     loadBook(shelf[0].name, shelf[0].content);
-                } else if (savedBookContent && savedBookTitle) {
+                } else if (!loaded && savedBookContent && savedBookTitle) {
                     loadBook(savedBookTitle, savedBookContent);
                 }
             } catch (error) {
