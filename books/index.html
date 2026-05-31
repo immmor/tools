@@ -878,6 +878,7 @@
             contentBody.style.width = 'auto';
             contentBody.style.minWidth = '100%';
             contentBody.style.columnWidth = availableWidth + 'px';
+            contentBody.style.columnCount = '';
 
             const scrollWidth = contentBody.scrollWidth;
 
@@ -890,15 +891,19 @@
                 return;
             }
 
-            totalPages = Math.max(1, Math.round(scrollWidth / windowWidth));
-            const actualStep = scrollWidth / totalPages;
+            const estimatedColumns = scrollWidth / availableWidth;
+            totalPages = Math.max(1, Math.ceil(estimatedColumns));
+
+            contentBody.style.columnWidth = '';
+            contentBody.style.columnCount = totalPages;
+            contentBody.style.width = (totalPages * windowWidth) + 'px';
 
             if (currentPage >= totalPages) {
                 currentPage = totalPages - 1;
             }
             if (currentPage < 0) currentPage = 0;
 
-            const translateX = -currentPage * actualStep;
+            const translateX = -currentPage * windowWidth;
             contentBody.style.transform = `translateX(${translateX}px)`;
 
             pageIndicator.innerHTML = `第 ${currentPage + 1} / ${totalPages} 页`;
@@ -968,22 +973,45 @@
             pageIndicator.style.cursor = 'pointer';
         }
 
+        let sliderMode = false;
+
         pageIndicator.addEventListener('click', () => {
-            if (pageIndicator.querySelector('input')) return;
-            const input = document.createElement('input');
-            input.type = 'number';
-            input.min = 1;
-            input.max = totalPages;
-            input.value = currentPage + 1;
-            input.style.cssText = 'width:60px;text-align:center;background:var(--bg-color);color:var(--text-color);border:1px solid var(--text-color);border-radius:4px;font-size:14px;font-family:inherit;outline:none;';
+            if (sliderMode) { renderPageIndicator(); sliderMode = false; return; }
+            const container = document.createElement('div');
+            container.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:10px;';
+
+            const slider = document.createElement('input');
+            slider.type = 'range';
+            slider.min = 1;
+            slider.max = totalPages;
+            slider.value = currentPage + 1;
+            slider.style.cssText = 'width:150px;cursor:pointer;-webkit-appearance:none;appearance:none;height:6px;background:var(--text-color);border-radius:3px;outline:none;opacity:0.8;';
+
+            const valueDisplay = document.createElement('span');
+            valueDisplay.textContent = currentPage + 1;
+            valueDisplay.style.cssText = 'color:var(--text-color);font-size:14px;min-width:20px;text-align:center;';
+
+            container.appendChild(slider);
+            container.appendChild(valueDisplay);
+
             pageIndicator.innerHTML = '';
-            pageIndicator.appendChild(input);
-            pageIndicator.insertBefore(document.createTextNode(` / ${totalPages} 页`), null);
-            input.focus();
-            input.select();
-            const confirm = () => { goToPage(parseInt(input.value) || 1); };
-            input.addEventListener('keydown', e => { if (e.key === 'Enter') confirm(); if (e.key === 'Escape') renderPageIndicator(); });
-            input.addEventListener('blur', confirm);
+            pageIndicator.appendChild(container);
+            pageIndicator.style.cursor = 'default';
+            sliderMode = true;
+
+            const updateAndClose = () => {
+                const page = parseInt(slider.value);
+                sliderMode = false;
+                goToPage(page);
+            };
+
+            slider.addEventListener('input', () => {
+                valueDisplay.textContent = slider.value;
+            });
+
+            slider.addEventListener('change', updateAndClose);
+
+            slider.focus();
         });
 
         renderPageIndicator();
