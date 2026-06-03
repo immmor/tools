@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>赛博霓虹 - 炫酷老虎机</title>
+    <style>
+        :root {
+            --neon-purple: #d112ff;
+            --neon-blue: #00f3ff;
+            --neon-pink: #ff0055;
+            --gold: #ffe600;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background: radial-gradient(circle at center, #1a0b2e 0%, #05010d 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            overflow: hidden;
+            color: #fff;
+        }
+
+        /* 游戏整体容器 */
+        .game-container {
+            position: relative;
+            background: rgba(20, 10, 35, 0.65);
+            padding: 30px;
+            border-radius: 24px;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.8),
+                        0 0 15px var(--neon-purple),
+                        inset 0 0 20px rgba(209, 18, 255, 0.2);
+            border: 2px solid var(--neon-purple);
+            backdrop-filter: blur(10px);
+            width: 450px;
+            text-align: center;
+        }
+
+        h1 {
+            margin: 0 0 25px 0;
+            font-size: 2.5rem;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            color: #fff;
+            text-shadow: 0 0 10px var(--neon-blue),
+                         0 0 20px var(--neon-blue),
+                         0 0 40px var(--neon-blue);
+            animation: pulse 2s infinite alternate;
+        }
+
+        /* 状态与余额面板 */
+        .panel {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 25px;
+            background: rgba(0, 0, 0, 0.4);
+            padding: 12px 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(0, 243, 255, 0.3);
+            font-size: 1.1rem;
+            font-weight: bold;
+        }
+
+        .balance span {
+            color: var(--gold);
+            text-shadow: 0 0 10px rgba(255, 230, 0, 0.5);
+        }
+
+        /* 老虎机核心视窗 */
+        .slot-machine {
+            display: flex;
+            justify-content: space-between;
+            background: #000;
+            padding: 20px;
+            border-radius: 16px;
+            border: 3px solid var(--neon-blue);
+            box-shadow: 0 0 20px rgba(0, 243, 255, 0.4),
+                        inset 0 0 25px rgba(0, 0, 0, 0.9);
+            position: relative;
+            overflow: hidden;
+            margin-bottom: 30px;
+        }
+
+        /* 贯穿中间的判定线 */
+        .slot-machine::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(90deg, transparent, var(--neon-pink), transparent);
+            box-shadow: 0 0 10px var(--neon-pink);
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        /* 滚轮通道 */
+        .reel-container {
+            width: 100px;
+            height: 120px;
+            background: #0d0614;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .reel {
+            position: absolute;
+            top: -120px; /* 初始对齐中间的元素 */
+            left: 0;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 每一个图标样式 */
+        .symbol {
+            width: 100%;
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 4.5rem;
+            user-select: none;
+            text-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
+            transition: transform 0.1s;
+        }
+
+        /* 旋转时的模糊滤镜（通过JS动态添加） */
+        .blur {
+            filter: blur(4px);
+            transform: scaleY(1.2);
+        }
+
+        /* 控制按钮 */
+        .spin-btn {
+            width: 100%;
+            padding: 16px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            letter-spacing: 2px;
+            color: #fff;
+            background: linear-gradient(135deg, var(--neon-pink) 0%, #b3003b 100%);
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            box-shadow: 0 0 15px var(--neon-pink),
+                        0 5px 0 #80002a;
+            transition: all 0.1s ease;
+            text-transform: uppercase;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .spin-btn:hover {
+            background: linear-gradient(135deg, #ff3377 0%, var(--neon-pink) 100%);
+            box-shadow: 0 0 25px var(--neon-pink);
+        }
+
+        .spin-btn:active {
+            transform: translateY(4px);
+            box-shadow: 0 0 10px var(--neon-pink), 0 1px 0 #80002a;
+        }
+
+        .spin-btn:disabled {
+            background: #444 !important;
+            box-shadow: none !important;
+            color: #888;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        /* 提示消息 */
+        .msg-box {
+            height: 30px;
+            margin-top: 15px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            min-height: 30px;
+        }
+
+        .win-glow {
+            animation: win-flash 0.5s ease infinite alternate;
+        }
+
+        /* 金币粒子掉落特效容器 */
+        #coin-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: 999;
+        }
+
+        .coin {
+            position: absolute;
+            font-size: 2rem;
+            animation: fall linear forwards;
+        }
+
+        /* 动画定义 */
+        @keyframes pulse {
+            from { text-shadow: 0 0 10px var(--neon-blue), 0 0 20px var(--neon-blue); }
+            to { text-shadow: 0 0 15px var(--neon-blue), 0 0 30px var(--neon-blue), 0 0 40px var(--neon-purple); }
+        }
+
+        @keyframes win-flash {
+            from { color: #fff; text-shadow: 0 0 10px var(--gold); }
+            to { color: var(--gold); text-shadow: 0 0 25px var(--gold), 0 0 40px #ff7700; }
+        }
+
+        @keyframes fall {
+            0% { transform: translateY(-50px) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(105vh) rotate(720deg); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="game-container">
+        <h1>NEON SLOTS</h1>
+        
+        <div class="panel">
+            <div class="bet">单注: <span>10</span></div>
+            <div class="balance">余额: $<span id="balance-val">100</span></div>
+        </div>
+
+        <div class="slot-machine">
+            <div class="reel-container">
+                <div class="reel" id="reel1"></div>
+            </div>
+            <div class="reel-container">
+                <div class="reel" id="reel2"></div>
+            </div>
+            <div class="reel-container">
+                <div class="reel" id="reel3"></div>
+            </div>
+        </div>
+
+        <button class="spin-btn" id="spin-btn" onclick="spin()">SPIN</button>
+        
+        <div class="msg-box" id="msg-box"></div>
+    </div>
+
+    <div id="coin-container"></div>
+
+    <script>
+        // 游戏配置
+        const SYMBOLS = ['🍒', '🍋', '🍉', '🍇', '💎', '7️⃣'];
+        const SYMBOL_HEIGHT = 120; // 每个图标的高度
+        const MIN_TURNS = 3;       // 最小圈数
+        let balance = 100;
+        let isSpinning = false;
+
+        // 音频上下文（Web Audio API 免引入外部文件）
+        let audioCtx = null;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        // 播放合成音效
+        function playSound(type) {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            if (type === 'spin') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(600, audioCtx.currentTime + 0.15);
+                gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.15);
+            } else if (type === 'stop') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.1);
+            } else if (type === 'win') {
+                osc.type = 'sine';
+                const now = audioCtx.currentTime;
+                osc.frequency.setValueAtTime(400, now);
+                osc.frequency.setValueAtTime(600, now + 0.1);
+                osc.frequency.setValueAtTime(900, now + 0.2);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                osc.start();
+                osc.stop(now + 0.4);
+            } else if (type === 'gameover') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+                osc.frequency.linearRampToValueAtTime(70, audioCtx.currentTime + 0.5);
+                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.5);
+            }
+        }
+
+        // 初始化滚轮DOM结构
+        function initReels() {
+            for (let i = 1; i <= 3; i++) {
+                const reel = document.getElementById(`reel${i}`);
+                reel.innerHTML = '';
+                
+                // 预先填入3个随机图标 [上, 中(主判定显示), 下]
+                for (let j = 0; j < 3; j++) {
+                    const sym = SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
+                    const div = document.createElement('div');
+                    div.className = 'symbol';
+                    div.innerText = sym;
+                    reel.appendChild(div);
+                }
+            }
+        }
+
+        // 开始抽奖
+        async function spin() {
+            if (isSpinning) return;
+            initAudio(); // 确保用户交互后初始化音频
+
+            if (balance < 10) {
+                document.getElementById('msg-box').innerText = '余额不足！请刷新页面重置';
+                playSound('gameover');
+                return;
+            }
+
+            // 扣除本金
+            balance -= 10;
+            document.getElementById('balance-val').innerText = balance;
+            
+            // 重置状态
+            isSpinning = true;
+            document.getElementById('spin-btn').disabled = true;
+            const msgBox = document.getElementById('msg-box');
+            msgBox.innerText = '旋转中...';
+            msgBox.className = 'msg-box';
+
+            // 决定最终中奖结果
+            const results = [
+                SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
+                SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)],
+                SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)]
+            ];
+
+            // 异步依次启动并停止三个滚轮
+            const promises = [];
+            for (let i = 1; i <= 3; i++) {
+                // 每个滚轮的延迟停止时间
+                const delay = (i - 1) * 400; 
+                promises.push(animateReel(i, results[i-1], delay));
+            }
+
+            await Promise.all(promises);
+
+            // 结算逻辑
+            checkResult(results);
+            isSpinning = false;
+            document.getElementById('spin-btn').disabled = false;
+        }
+
+        // 核心动画控制
+        function animateReel(reelNum, finalSymbol, delay) {
+            return new Promise(resolve => {
+                const reel = document.getElementById(`reel${reelNum}`);
+                
+                // 生成一串长长的随机路径用于营造高速旋转视觉
+                const extraTurns = MIN_TURNS + reelNum; // 后面滚轮转得久一点
+                const totalSymbolsNeeded = extraTurns * SYMBOLS.length;
+                
+                const spinList = [];
+                for(let k=0; k<totalSymbolsNeeded; k++) {
+                    spinList.push(SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)]);
+                }
+                
+                // 确保最后停在正确的 [上, 中(目标结果), 下] 上
+                const finalIdx = SYMBOLS.indexOf(finalSymbol);
+                const prevIdx = (finalIdx - 1 + SYMBOLS.length) % SYMBOLS.length;
+                const nextIdx = (finalIdx + 1) % SYMBOLS.length;
+                
+                spinList.push(SYMBOLS[prevIdx]);
+                spinList.push(SYMBOLS[finalIdx]); // 最终会落在中间
+                spinList.push(SYMBOLS[nextIdx]);
+
+                // 重组DOM列表
+                reel.innerHTML = '';
+                spinList.forEach(sym => {
+                    const div = document.createElement('div');
+                    div.className = 'symbol blur'; // 开启高速旋转模糊
+                    div.innerText = sym;
+                    reel.appendChild(div);
+                });
+
+                // 计算由于添加了大量节点后，应该往上偏移的总距离
+                const totalHeight = (spinList.length - 3) * SYMBOL_HEIGHT;
+                
+                // 使用 CSS Transition 启动高帧率平滑动画
+                reel.style.transition = 'none';
+                reel.style.top = '0px';
+                
+                // 强制触发重绘
+                reel.offsetHeight; 
+
+                // 启动动画音效周期
+                const soundInterval = setInterval(() => playSound('spin'), 120);
+
+                setTimeout(() => {
+                    // 丝滑滚动到目标位置
+                    reel.style.transition = `top ${1.5 + reelNum*0.4}s cubic-bezier(0.25, 1, 0.5, 1)`;
+                    reel.style.top = `-${totalHeight}px`;
+
+                    // 动画结束后的善后工作
+                    setTimeout(() => {
+                        clearInterval(soundInterval);
+                        playSound('stop');
+
+                        // 去除模糊滤镜
+                        Array.from(reel.children).forEach(child => child.classList.remove('blur'));
+                        
+                        // 裁剪多余节点，重置回初始小尺寸DOM状态避免内存过大
+                        reel.style.transition = 'none';
+                        reel.innerHTML = '';
+                        [SYMBOLS[prevIdx], SYMBOLS[finalIdx], SYMBOLS[nextIdx]].forEach(sym => {
+                            const div = document.createElement('div');
+                            div.className = 'symbol';
+                            div.innerText = sym;
+                            reel.appendChild(div);
+                        });
+                        reel.style.top = `-${SYMBOL_HEIGHT}px`;
+
+                        resolve();
+                    }, (1.5 + reelNum*0.4) * 1000);
+
+                }, delay);
+            });
+        }
+
+        // 判定胜负
+        function checkResult(results) {
+            const msgBox = document.getElementById('msg-box');
+            
+            // 3个全中 (大奖)
+            if (results[0] === results[1] && results[1] === results[2]) {
+                let prize = 100;
+                // 幸运数字7拿超级大奖
+                if(results[0] === '7️⃣') prize = 500; 
+                
+                balance += prize;
+                msgBox.innerText = `🔥 绝杀大奖! +$${prize} 🔥`;
+                msgBox.classList.add('win-glow');
+                playSound('win');
+                spawnCoins();
+            } 
+            // 2个相同 (小奖)
+            else if (results[0] === results[1] || results[1] === results[2] || results[0] === results[2]) {
+                balance += 20;
+                msgBox.innerText = '🎉 赢得彩金! +$20 🎉';
+                msgBox.classList.add('win-glow');
+                playSound('win');
+                spawnCoins(15);
+            } 
+            // 没中
+            else {
+                msgBox.innerText = '未中奖，再试一次吧！';
+            }
+
+            document.getElementById('balance-val').innerText = balance;
+        }
+
+        // 爆金币特效
+        function spawnCoins(amount = 40) {
+            const container = document.getElementById('coin-container');
+            const coinIcons = ['🪙', '✨', '💰', '💎'];
+            
+            for (let i = 0; i < amount; i++) {
+                const coin = document.createElement('div');
+                coin.className = 'coin';
+                coin.innerText = coinIcons[Math.floor(Math.random() * coinIcons.length)];
+                
+                // 随机落点与延时
+                coin.style.left = Math.random() * 100 + 'vw';
+                coin.style.animationDuration = (Math.random() * 2 + 1) + 's';
+                coin.style.animationDelay = Math.random() * 0.4 + 's';
+                
+                container.appendChild(coin);
+                
+                // 动画播完自动移除释放内存
+                coin.addEventListener('animationend', () => {
+                    coin.remove();
+                });
+            }
+        }
+
+        // 初始化
+        window.onload = initReels;
+    </script>
+</body>
+</html>

@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>赛博霓虹 - 炫酷老虎机</title>
+    <style>
+        :root {
+            --neon-purple: #a124ff;
+            --neon-blue: #00f3ff;
+            --neon-pink: #ff007f;
+            --gold: #ffd700;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background: radial-gradient(circle at center, #1a0b2e 0%, #05010d 100%);
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            color: #fff;
+        }
+
+        /* 游戏外壳 */
+        .slot-machine {
+            background: linear-gradient(135deg, #2c124d 0%, #0c0414 100%);
+            padding: 30px;
+            border-radius: 24px;
+            box-shadow: 0 0 50px rgba(161, 36, 255, 0.3),
+                        inset 0 0 20px rgba(0, 243, 255, 0.2);
+            border: 3px solid var(--neon-purple);
+            position: relative;
+            width: 450px;
+            text-align: center;
+        }
+
+        /* 霓虹跑马灯外框 */
+        .slot-machine::before {
+            content: '';
+            position: absolute;
+            top: -8px; left: -8px; right: -8px; bottom: -8px;
+            border-radius: 30px;
+            border: 2px solid var(--neon-blue);
+            z-index: -1;
+            opacity: 0.5;
+            animation: pulse 2s infinite alternate;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 0.4; }
+            100% { transform: scale(1.01); opacity: 0.8; filter: drop-shadow(0 0 15px var(--neon-blue)); }
+        }
+
+        h1 {
+            margin: 0 0 20px 0;
+            font-size: 2.5rem;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            background: linear-gradient(to right, var(--neon-blue), var(--neon-pink));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 0 10px rgba(0,243,255,0.5));
+        }
+
+        /* 状态显示栏 */
+        .display-panel {
+            background: rgba(0, 0, 0, 0.6);
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 25px;
+            display: flex;
+            justify-content: space-around;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .stat-box {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            color: #8a7fa4;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 1.6rem;
+            font-weight: bold;
+            color: var(--gold);
+            text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+        }
+
+        /* 滚轮容器 */
+        .reels-container {
+            display: flex;
+            justify-content: space-between;
+            background: #000;
+            padding: 15px;
+            border-radius: 16px;
+            border: 2px solid var(--neon-pink);
+            position: relative;
+            box-shadow: inset 0 0 30px rgba(0,0,0,0.9);
+            overflow: hidden;
+        }
+
+        /* 3D 阴影遮罩，营造滚轮凹陷下沉感 */
+        .reels-container::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(to bottom, 
+                rgba(0,0,0,0.9) 0%, 
+                rgba(0,0,0,0) 25%, 
+                rgba(0,0,0,0) 75%, 
+                rgba(0,0,0,0.9) 100%);
+            pointer-events: none;
+        }
+
+        /* 单个滚轮轨道 */
+        .reel-window {
+            width: 110px;
+            height: 120px;
+            background: #110724;
+            border-radius: 8px;
+            overflow: hidden;
+            position: relative;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .reel-strip {
+            position: absolute;
+            top: -120px; /* 初始对齐中间的元素 */
+            left: 0;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .symbol {
+            width: 100%;
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 4rem;
+            user-select: none;
+            transition: transform 0.1s;
+        }
+
+        /* 模糊滤镜，用于旋转时 */
+        .blur {
+            filter: blur(4px);
+            transform: scaleY(1.2);
+        }
+
+        /* 控制按钮 */
+        .spin-btn {
+            margin-top: 30px;
+            width: 100%;
+            padding: 18px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            letter-spacing: 2px;
+            color: #fff;
+            background: linear-gradient(135deg, var(--neon-pink) 0%, #bc00dd 100%);
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            box-shadow: 0 0 20px rgba(255, 0, 127, 0.4);
+            transition: all 0.2s;
+            text-transform: uppercase;
+        }
+
+        .spin-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 0 30px rgba(255, 0, 127, 0.7);
+            background: linear-gradient(135deg, #ff2a96 0%, #d600ff 100%);
+        }
+
+        .spin-btn:active:not(:disabled) {
+            transform: translateY(1px);
+        }
+
+        .spin-btn:disabled {
+            background: #3d2b47;
+            color: #72617a;
+            box-shadow: none;
+            cursor: not-allowed;
+        }
+
+        /* 提示信息 */
+        .message-banner {
+            margin-top: 20px;
+            height: 24px;
+            font-size: 1.2rem;
+            font-weight: 500;
+            color: var(--neon-blue);
+            text-shadow: 0 0 8px rgba(0,243,255,0.4);
+        }
+
+        .win-glow {
+            animation: win-flash 0.5s ease infinite alternate;
+        }
+
+        @keyframes win-flash {
+            0% { color: var(--gold); filter: drop-shadow(0 0 2px var(--gold)); }
+            100% { color: #fff; filter: drop-shadow(0 0 15px var(--gold)); }
+        }
+
+        /* 中奖震动效果 */
+        .shake {
+            animation: shake 0.8s ease-in-out;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-6px); }
+            20%, 40%, 60%, 80% { transform: translateX(6px); }
+        }
+
+        /* 中奖背景闪烁 */
+        .bg-flash {
+            animation: bg-flash 2.5s ease-out;
+        }
+
+        @keyframes bg-flash {
+            0%   { background: radial-gradient(circle at center, #3a1a6e 0%, #1a0b2e 100%); }
+            30%  { background: radial-gradient(circle at center, #4a1a8e 0%, #2a0b4e 100%); }
+            60%  { background: radial-gradient(circle at center, #3a1a6e 0%, #1a0b2e 100%); }
+            100% { background: radial-gradient(circle at center, #1a0b2e 0%, #05010d 100%); }
+        }
+
+        /* 激光射线层 */
+        .laser-layer {
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 200vmax; height: 200vmax;
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0;
+        }
+
+        .laser-layer.active {
+            animation: laser-burst 2.5s ease-out forwards;
+        }
+
+        @keyframes laser-burst {
+            0%   { opacity: 0; transform: translate(-50%, -50%) scale(0); }
+            15%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+            60%  { opacity: 0.8; }
+            100% { opacity: 0; transform: translate(-50%, -50%) scale(1.5); }
+        }
+
+        .laser-beam {
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 50px;
+            height: 100vmax;
+            background: linear-gradient(to bottom,
+                transparent 0%,
+                var(--neon-blue) 30%,
+                var(--neon-pink) 50%,
+                transparent 70%
+            );
+            transform-origin: center top;
+            border-radius: 4px;
+            box-shadow: 0 0 25px var(--neon-blue), 0 0 50px var(--neon-pink);
+        }
+
+        /* 粒子画布（庆祝特效） */
+        #confetti-canvas {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="confetti-canvas"></canvas>
+
+    <div id="laser-layer" class="laser-layer"></div>
+
+    <div class="slot-machine">
+        <h1>NEON SLOTS</h1>
+        
+        <div class="display-panel">
+            <div class="stat-box">
+                <span class="stat-label">🔥 积分 (CREDITS)</span>
+                <span id="balance-display" class="stat-value">1000</span>
+            </div>
+            <div class="stat-box">
+                <span class="stat-label">💎 单注 (BET)</span>
+                <span id="bet-display" class="stat-value">10</span>
+            </div>
+        </div>
+
+        <div class="reels-container">
+            <div class="reel-window">
+                <div id="reel1" class="reel-strip"></div>
+            </div>
+            <div class="reel-window">
+                <div id="reel2" class="reel-strip"></div>
+            </div>
+            <div class="reel-window">
+                <div id="reel3" class="reel-strip"></div>
+            </div>
+        </div>
+
+        <button id="spin-button" class="spin-btn">🎰 SPIN! 🎰</button>
+
+        <div id="msg-banner" class="message-banner">祝你好运！点击SPIN开始</div>
+    </div>
+
+    <script>
+        // --- 游戏配置 ---
+        const SYMBOLS = ['🍒', '🍋', '🍇', '🍉', '⭐', '💎', '7️⃣'];
+        // 中奖倍率映射
+        const PAYOUTS = {
+            '🍒': 2, '🍋': 3, '🍇': 4, '🍉': 5, '⭐': 10, '💎': 20, '7️⃣': 50
+        };
+        
+        let credits = 1000;
+        const BET = 10;
+        let isSpinning = false;
+
+        // 获取DOM节点
+        const reelStrips = [
+            document.getElementById('reel1'),
+            document.getElementById('reel2'),
+            document.getElementById('reel3')
+        ];
+        const spinButton = document.getElementById('spin-button');
+        const balanceDisplay = document.getElementById('balance-display');
+        const msgBanner = document.getElementById('msg-banner');
+        const canvas = document.getElementById('confetti-canvas');
+        const ctx = canvas.getContext('2d');
+
+        // 初始化画布大小
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // --- Web Audio 声音合成器 (无需外部音频文件) ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function playTone(freq, type, duration, startTime = 0) {
+            setTimeout(() => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                
+                gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                // 声音渐弱
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+                
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            }, startTime * 1000);
+        }
+
+        function playSpinSound() {
+            playTone(150, 'sawtooth', 0.1);
+        }
+
+        function playStopSound(index) {
+            playTone(300 + (index * 100), 'triangle', 0.15);
+        }
+
+        function playWinSound() {
+            const now = 0;
+            playTone(523.25, 'sine', 0.1, now);     // C5
+            playTone(659.25, 'sine', 0.1, now + 0.1); // E5
+            playTone(783.99, 'sine', 0.1, now + 0.2); // G5
+            playTone(1046.50, 'sine', 0.4, now + 0.3); // C6
+        }
+
+        function playLoseSound() {
+            playTone(220, 'sawtooth', 0.2, 0);
+            playTone(180, 'sawtooth', 0.3, 0.15);
+        }
+
+        // --- 初始化滚轮构建 ---
+        // 每一个滚轮实际上是一个包含多个图标的垂直长条，通过改变 top 属性实现滚动
+        function initReels() {
+            reelStrips.forEach(strip => {
+                strip.innerHTML = '';
+                // 填充3个元素：[0]是上方看不见的缓冲，[1]是当前显示的，[2]是下方看不见的
+                for(let i = 0; i < 3; i++) {
+                    const symDiv = document.createElement('div');
+                    symDiv.classList.add('symbol');
+                    symDiv.innerText = getRandomSymbol();
+                    strip.appendChild(symDiv);
+                }
+                strip.style.top = '-120px'; // 露出中间([1])的元素
+            });
+        }
+
+        function getRandomSymbol() {
+            return SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
+        }
+
+        // --- 老虎机核心核心逻辑 ---
+        function spin() {
+            if (isSpinning || credits < BET) return;
+
+            // 扣除积分
+            isSpinning = true;
+            credits -= BET;
+            balanceDisplay.innerText = credits;
+            spinButton.disabled = true;
+            msgBanner.innerText = "正在摇奖...";
+            msgBanner.classList.remove('win-glow');
+
+            // 预先计算出本轮的最终结果
+            const finalResults = [getRandomSymbol(), getRandomSymbol(), getRandomSymbol()];
+            
+            // 每一个滚轮的配置：控制旋转圈数和最终停止时间
+            const spinConfig = [
+                { minCycles: 15, delay: 1000 }, // 滚轮1
+                { minCycles: 23, delay: 1800 }, // 滚轮2
+                { minCycles: 31, delay: 2600 }  // 滚轮3
+            ];
+
+            reelStrips.forEach((strip, index) => {
+                const config = spinConfig[index];
+                let currentCycle = 0;
+                let speed = 20; // 初始高速度（毫秒/帧）
+                
+                // 给滚轮内所有元素加上模糊滤镜
+                Array.from(strip.children).forEach(el => el.classList.add('blur'));
+
+                function animate() {
+                    // 播放滚动音效（降低频率避免太吵）
+                    if (currentCycle % 3 === 0) playSpinSound();
+
+                    // 1. 获取最下方的元素，移到最上方
+                    const lastChild = strip.lastElementChild;
+                    strip.removeChild(lastChild);
+                    
+                    // 2. 决定新移到上方的元素是什么
+                    // 如果接近尾声，就把准备好的最终结果塞进去，强制使其停在正确位置
+                    if (currentCycle >= config.minCycles) {
+                        lastChild.innerText = finalResults[index];
+                    } else {
+                        lastChild.innerText = getRandomSymbol();
+                    }
+                    
+                    strip.insertBefore(lastChild, strip.firstChild);
+
+                    // 3. 循环递增
+                    currentCycle++;
+
+                    // 4. 判断是继续极速旋转、还是减速、还是停止
+                    if (currentCycle < config.minCycles) {
+                        // 极速期
+                        setTimeout(animate, speed);
+                    } else if (currentCycle < config.minCycles + 2) {
+                        // 临近停止前急速减速，增加戏剧性阻尼感
+                        speed += 80;
+                        setTimeout(animate, speed);
+                    } else {
+                        // 停下来！对齐位置，移除模糊
+                        strip.style.top = '-120px';
+                        Array.from(strip.children).forEach(el => el.classList.remove('blur'));
+                        playStopSound(index);
+
+                        // 如果是最后一个滚轮停下，结算游戏
+                        if (index === 2) {
+                            checkResult(finalResults);
+                        }
+                    }
+                }
+
+                // 启动当前滚轮的动画
+                animate();
+            });
+        }
+
+        // --- 结算结果 ---
+        function checkResult(results) {
+            isSpinning = false;
+            spinButton.disabled = false;
+
+            const [s1, s2, s3] = results;
+
+            // 场景 1: 三连线 (Jackpot!)
+            if (s1 === s2 && s2 === s3) {
+                const multiplier = PAYOUTS[s1];
+                const winAmount = BET * multiplier;
+                credits += winAmount;
+                balanceDisplay.innerText = credits;
+                
+                msgBanner.innerText = `🎉 绝杀! 三个 ${s1} 赢取 ${winAmount} 积分!`;
+                msgBanner.classList.add('win-glow');
+                playWinSound();
+                triggerConfetti();
+                triggerLaser();
+                // 触发震动
+                document.querySelector('.slot-machine').classList.add('shake');
+                document.body.classList.add('bg-flash');
+                setTimeout(() => {
+                    document.querySelector('.slot-machine').classList.remove('shake');
+                    document.body.classList.remove('bg-flash');
+                }, 2500);
+            } 
+            // 场景 2: 两连线 (单对)
+            else if (s1 === s2 || s2 === s3 || s1 === s3) {
+                // 找出配对的符号
+                const pairedSymbol = (s1 === s2 || s1 === s3) ? s1 : s2;
+                const winAmount = Math.floor(BET * (PAYOUTS[pairedSymbol] * 0.5));
+                credits += winAmount;
+                balanceDisplay.innerText = credits;
+
+                msgBanner.innerText = `✨ 好运! 两个 ${pairedSymbol} 赢取 ${winAmount} 积分!`;
+                playTone(440, 'sine', 0.2); 
+                playTone(554, 'sine', 0.3, 0.1);
+                // 触发震动 + 背景闪烁 + 激光
+                document.querySelector('.slot-machine').classList.add('shake');
+                document.body.classList.add('bg-flash');
+                triggerLaser();
+                setTimeout(() => {
+                    document.querySelector('.slot-machine').classList.remove('shake');
+                    document.body.classList.remove('bg-flash');
+                }, 2500);
+            } 
+            // 场景 3: 未中奖
+            else {
+                msgBanner.innerText = "没中奖，再试一次吧！";
+                playLoseSound();
+            }
+
+            // 余额不足处理
+            if (credits < BET) {
+                msgBanner.innerText = " 积分破产！自动赠送您 500 积分。";
+                credits = 500;
+                setTimeout(() => {
+                    balanceDisplay.innerText = credits;
+                }, 1000);
+            }
+        }
+
+        // --- 炫酷彩带粒子特效 (Canvas Confetti) ---
+        let particles = [];
+        function triggerConfetti() {
+            particles = [];
+            for (let i = 0; i < 150; i++) {
+                particles.push({
+                    x: canvas.width / 2,
+                    y: canvas.height / 2 - 100,
+                    vx: (Math.random() - 0.5) * 15,
+                    vy: (Math.random() - 0.7) * 15 - 5,
+                    size: Math.random() * 8 + 4,
+                    color: ['#ff007f', '#00f3ff', '#ffd700', '#a124ff', '#00ff66'][Math.floor(Math.random() * 5)],
+                    rotation: Math.random() * 360,
+                    rotationSpeed: (Math.random() - 0.5) * 10,
+                    opacity: 1
+                });
+            }
+            animateParticles();
+        }
+
+        function animateParticles() {
+            if (particles.length === 0) return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            particles.forEach((p, index) => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.3; // 重力加速度
+                p.vx *= 0.98; // 空气阻力
+                p.rotation += p.rotationSpeed;
+                p.opacity -= 0.01;
+
+                ctx.save();
+                ctx.translate(p.x, p.y);
+                ctx.rotate(p.rotation * Math.PI / 180);
+                ctx.fillStyle = p.color;
+                ctx.globalAlpha = p.opacity;
+                ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+                ctx.restore();
+
+                // 移除透明或出界的粒子
+                if (p.opacity <= 0 || p.y > canvas.height) {
+                    particles.splice(index, 1);
+                }
+            });
+
+            if (particles.length > 0) {
+                requestAnimationFrame(animateParticles);
+            } else {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+        }
+
+        // 按钮事件绑定
+        spinButton.addEventListener('click', spin);
+
+        // --- 初始化激光射线 ---
+        const laserLayer = document.getElementById('laser-layer');
+        const BEAM_COUNT = 36;
+        for (let i = 0; i < BEAM_COUNT; i++) {
+            const beam = document.createElement('div');
+            beam.classList.add('laser-beam');
+            beam.style.transform = `translateX(-50%) rotate(${(360 / BEAM_COUNT) * i}deg)`;
+            laserLayer.appendChild(beam);
+        }
+
+        function triggerLaser() {
+            laserLayer.classList.remove('active');
+            void laserLayer.offsetWidth; // 强制 reflow，重置动画
+            laserLayer.classList.add('active');
+            setTimeout(() => laserLayer.classList.remove('active'), 2500);
+        }
+
+        // 初始化
+        initReels();
+    </script>
+</body>
+</html>
