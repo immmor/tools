@@ -248,9 +248,12 @@ export default {
           pricePlanStr = JSON.stringify(defaultPrice);
         }
 
+        // 根据URL参数决定not_trusted值：nt=n时设为空字符串（信任）
+        const notTrustedValue = url.searchParams.get('nt') === 'n' ? '' : 'yes';
+
         const result = await DB
           .prepare('INSERT INTO user (username, password, balance, v_expire_date, learn_vip_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code, v_token, v_link_clash, v_link_v2ray, price_plan, survey, security_answer, fetch_link, source, not_trusted, auto_rewn) VALUES (?, ?, ?, NULL, NULL, 307200, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)')
-          .bind(username, password, finalBalance, new Date().toISOString().slice(0, 19).replace('T', ' '), userInviteCode, '', '', '', pricePlanStr, '{}', securityAnswer || '', '[]', source || '', 'yes')
+          .bind(username, password, finalBalance, new Date().toISOString().slice(0, 19).replace('T', ' '), userInviteCode, '', '', '', pricePlanStr, '{}', securityAnswer || '', '[]', source || '', notTrustedValue)
           .run();
 
         if (result.success) {
