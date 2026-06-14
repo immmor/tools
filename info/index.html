@@ -391,7 +391,8 @@
                     <h3 style="font-size: 1.2rem; font-weight: 700; color: #333;"><i class="fa-solid fa-briefcase" style="color: var(--primary); margin-right: 8px;"></i>求职招聘</h3>
                     <span style="font-size: 13px; color: var(--primary); font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 4px;" onclick="openCategoryDetail('求职招聘', 'fa-briefcase', 'job')">查看更多<i class="fa-solid fa-chevron-right" style="font-size: 10px;"></i></span>
                 </div>
-                <div class="grid-feed">
+                <div class="grid-feed" id="homeJobCards">
+                    <!-- 由 loadJobData() 动态填充真实招聘数据 -->
                     <article class="card" style="cursor: pointer;" onclick="openItemDetailFromHome('job', 0)">
                         <img src="https://images.unsplash.com/photo-1559339352-11d035aa65de?auto=format&fit=crop&w=600&q=80">
                         <div class="card-body">
@@ -637,6 +638,13 @@
             <div class="card" style="padding: 24px; margin-bottom: 20px;">
                 <h3 style="font-size: 1rem; font-weight: 800; margin-bottom: 12px;">详细描述</h3>
                 <p id="itemDetailDesc" style="color: #555; line-height: 1.8; font-size: 14px;"></p>
+            </div>
+
+            <div class="card" id="itemDetailContactCard" style="padding: 24px; margin-bottom: 20px; display: none;">
+                <h3 style="font-size: 1rem; font-weight: 800; margin-bottom: 15px;"><i class="fa-solid fa-address-book" style="color: var(--primary); margin-right: 6px;"></i>联系方式</h3>
+                <div id="itemDetailContactList" style="display: flex; flex-direction: column; gap: 12px;">
+                    <!-- 动态填充 -->
+                </div>
             </div>
 
             <div class="card" style="padding: 24px;">
@@ -1003,14 +1011,7 @@
                 ]
             },
             job: {
-                items: [
-                    { title: '软件工程师 - 全栈开发', price: '$85K-$120K', unit: '/年', location: 'Vancouver', tag: '急招', img: 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=600&q=80' },
-                    { title: '咖啡师 - 市中心连锁店', price: '$18/hr', unit: '', location: 'Downtown', tag: '兼职', img: 'https://images.unsplash.com/photo-1554118811-1e0d58224f24?auto=format&fit=crop&w=600&q=80' },
-                    { title: '中文家教 - 小学辅导', price: '$25/hr', unit: '', location: 'Richmond', tag: '灵活时间', img: 'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?auto=format&fit=crop&w=600&q=80' },
-                    { title: '仓库管理员 - 物流公司', price: '$22/hr', unit: '', location: 'Burnaby', tag: '全职', img: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=600&q=80' },
-                    { title: '前台接待 - 美容诊所', price: '$20/hr', unit: '', location: 'Coquitlam', tag: '今日发布', img: 'https://images.unsplash.com/photo-1497366811353-6870744d04b2?auto=format&fit=crop&w=600&q=80' },
-                    { title: '会计助理 - 华人事务所', price: '$50K/年', unit: '', location: 'Richmond', tag: '经验优先', img: 'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=600&q=80' },
-                ]
+                items: [] // 由 loadJobData() 从 data.json 动态填充
             },
             food: {
                 items: [
@@ -1155,13 +1156,52 @@
             document.getElementById('itemDetailPrice').innerHTML = item.price + (item.unit ? `<small style="font-size: 13px; color: #999; font-weight: normal;">${item.unit}</small>` : '');
             document.getElementById('itemDetailLocation').innerHTML = `<i class="fa-solid fa-location-dot"></i> ${item.location}`;
 
-            const descs = [
-                '这是一处非常优质的房源，位置便利，周边配套设施齐全。房间采光良好，南北通透，装修精致。步行5分钟可达天车站，10分钟内有超市、餐厅、银行等生活设施。适合上班族或小家庭居住。',
-                '车况极佳，全程4S店保养，无事故记录。配备全景天窗、真皮座椅、倒车影像等高端配置。油耗低，动力充沛，驾驶体验一流。因换新车诚意出售，价格可小议。',
-                '公司位于温哥华市中心，交通便利，团队氛围好。提供有竞争力的薪资待遇和完善的福利体系，包括健康保险、带薪假期、职业培训等。欢迎有激情、有能力的你加入我们！',
-                '本店主打正宗川菜，厨师团队来自四川，食材每日新鲜采购。环境优雅舒适，适合家庭聚餐或朋友聚会。目前推出多款特价套餐，性价比超高，欢迎品尝！'
-            ];
-            document.getElementById('itemDetailDesc').textContent = descs[index % descs.length];
+            // 优先使用真实数据（_raw），否则使用默认描述
+            if (item._raw) {
+                const raw = item._raw;
+
+                // 描述：只保留正文描述
+                document.getElementById('itemDetailDesc').textContent = raw.description || '暂无详细描述';
+
+                // 联系方式卡片
+                const contactCard = document.getElementById('itemDetailContactCard');
+                const contactList = document.getElementById('itemDetailContactList');
+                let contacts = [];
+                if (raw.contact) contacts.push({ icon: 'fa-user', label: '联系人', value: raw.contact });
+                if (raw.phone) contacts.push({ icon: 'fa-phone', label: '电话', value: raw.phone, href: `tel:${raw.phone.replace(/[\s()-]/g,'')}` });
+                if (raw.other_phone) contacts.push({ icon: 'fa-phone-flip', label: '其他电话', value: raw.other_phone, href: `tel:${raw.other_phone.replace(/[\s()-]/g,'')}` });
+                if (raw.email && raw.email !== 'N.A') contacts.push({ icon: 'fa-envelope', label: '邮箱', value: raw.email, href: `mailto:${raw.email}` });
+                if (raw.wechat && raw.wechat !== 'N.A') contacts.push({ icon: 'fa-brands fa-weixin', label: '微信', value: raw.wechat });
+                if (raw.address) contacts.push({ icon: 'fa-location-dot', label: '地址', value: raw.address });
+
+                if (contacts.length > 0) {
+                    contactCard.style.display = '';
+                    contactList.innerHTML = contacts.map(c => `
+                        <div style="display: flex; align-items: center; gap: 14px; padding: 12px 16px; background: #f8fafc; border-radius: 12px;">
+                            <i class="fa-solid ${c.icon}" style="color: var(--primary); font-size: 16px; width: 20px; text-align: center;"></i>
+                            <span style="font-size: 12px; color: #999; min-width: 56px;">${c.label}</span>
+                            ${c.href ? `<a href="${c.href}" style="font-size: 14px; color: var(--text-main); font-weight: 600; text-decoration: none;">${c.value}</a>` : `<span style="font-size: 14px; color: var(--text-main); font-weight: 600;">${c.value}</span>`}
+                        </div>
+                    `).join('');
+                } else {
+                    contactCard.style.display = 'none';
+                }
+
+                // 更新作者区域信息
+                const authorName = document.querySelector('#item-detail .card .card-body > div > div > p:first-child');
+                const authorTime = document.getElementById('itemDetailTime');
+                if (authorName) authorName.textContent = raw.contact || '匿名';
+                if (authorTime) authorTime.textContent = raw.date ? `发布于 ${raw.date}` : '';
+            } else {
+                const descs = [
+                    '这是一处非常优质的房源，位置便利，周边配套设施齐全。房间采光良好，南北通透，装修精致。步行5分钟可达天车站，10分钟内有超市、餐厅、银行等生活设施。适合上班族或小家庭居住。',
+                    '车况极佳，全程4S店保养，无事故记录。配备全景天窗、真皮座椅、倒车影像等高端配置。油耗低，动力充沛，驾驶体验一流。因换新车诚意出售，价格可小议。',
+                    '公司位于温哥华市中心，交通便利，团队氛围好。提供有竞争力的薪资待遇和完善的福利体系，包括健康保险、带薪假期、职业培训等。欢迎有激情、有能力的你加入我们！',
+                    '本店主打正宗川菜，厨师团队来自四川，食材每日新鲜采购。环境优雅舒适，适合家庭聚餐或朋友聚会。目前推出多款特价套餐，性价比超高，欢迎品尝！'
+                ];
+                document.getElementById('itemDetailDesc').textContent = descs[index % descs.length];
+                document.getElementById('itemDetailContactCard').style.display = 'none';
+            }
 
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
@@ -1188,9 +1228,83 @@
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
+        // 从 data.json 加载真实招聘数据
+        const JOB_DEFAULT_IMG = 'https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&w=600&q=80';
+
+        function extractSalary(desc) {
+            // 从描述中提取薪资信息
+            if (!desc) return { price: '薪资面议', unit: '' };
+            const patterns = [
+                /\$(\d[\d,]*)\s*[-~～]\s*\$?(\d[\d,]*)\s*\/?(年|月|小时|hr|时薪)/i,
+                /月薪?\s*\$?(\d[\d,]*)\s*(起|以上|左右)?/i,
+                /时薪?\s*\$?(\d[\d,]*)\s*(-\s*\$?(\d[\d,]*))?/i,
+                /\$(\d[\d,]*)\s*\/?(hr|小时|时薪)/i,
+                /年薪?\s*\$?(\d[\d,]*)/i,
+                /(\d[\d,]*)\s*-?\s*(\d[\d,]*)\s*\/?月/i,
+            ];
+            for (const p of patterns) {
+                const m = desc.match(p);
+                if (m) {
+                    let price, unit = '';
+                    if (m[3] && /年/.test(m[3])) { price = `$${m[1]}-$${m[2]}`; unit = '/年'; }
+                    else if (m[3] && /月/.test(m[3])) { price = `$${m[1]}-$${m[2]}`; unit = '/月'; }
+                    else if (/时薪|hr|小时/.test(m[3] || '')) { price = `$${m[1]}-${m[2] || m[1]}`; unit = '/hr'; }
+                    else if (/月薪/.test(desc.substring(0, desc.indexOf(m[0]) + 20))) { price = `$${m[1]}起`; unit = '/月'; }
+                    else if (/时薪/.test(desc.substring(0, desc.indexOf(m[0]) + 20))) { price = `$${m[1]}`; unit = '/hr'; }
+                    else if (m[2] && !m[3]) { price = `$${m[1]}-$${m[2]}`; }
+                    else { price = `$${m[1]}`; }
+                    return { price, unit };
+                }
+            }
+            return { price: '薪资面议', unit: '' };
+        }
+
+        async function loadJobData() {
+            try {
+                const res = await fetch('data.json');
+                const data = await res.json();
+                categoryData.job.items = data.map(item => {
+                    const { price, unit } = extractSalary(item.description);
+                    return {
+                        title: item.title || '招聘信息',
+                        price: price,
+                        unit: unit,
+                        location: item.area || '大温地区',
+                        tag: item.sub_category || '招聘',
+                        img: (item.images && item.images.length > 0) ? item.images[0] : JOB_DEFAULT_IMG,
+                        // 保留原始数据供详情页使用
+                        _raw: item
+                    };
+                });
+                console.log(`✅ 已加载 ${categoryData.job.items.length} 条真实招聘数据`);
+
+                // 动态刷新首页的3个招聘卡片
+                const homeCards = document.getElementById('homeJobCards');
+                if (homeCards && categoryData.job.items.length >= 3) {
+                    const top3 = categoryData.job.items.slice(0, 3);
+                    homeCards.innerHTML = top3.map((item, i) => `
+                        <article class="card" style="cursor: pointer;" onclick="openItemDetailFromHome('job', ${i})">
+                            <img src="${item.img}" alt="">
+                            <div class="card-body">
+                                <span class="card-tag">${item.tag}</span>
+                                <h3 class="card-title">${item.title}</h3>
+                                <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #f5f5f5; padding-top: 20px;">
+                                    <span class="price">${item.price}<small style="font-size: 12px; color: #999; font-weight: normal;">${item.unit}</small></span>
+                                    <span style="font-size: 12px; color: #999;"><i class="fa-solid fa-location-dot"></i> ${item.location}</span>
+                                </div>
+                            </div>
+                        </article>
+                    `).join('');
+                }
+            } catch (e) {
+                console.warn('⚠️ 加载 data.json 失败，使用空数据:', e.message);
+            }
+        }
+
         // 初始化
             window.onload = () => {
                 initHeroSlider();
+                loadJobData();
             };
 
             // 轮播图功能
