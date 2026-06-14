@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>12选5 赛车王</title>
+    <style>
+        :root {
+            --bg-dark: #12131a;
+            --panel-bg: #1c1d26;
+            --accent-gold: #ffb700;
+            --text-light: #e3e4e8;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            color: var(--text-light);
+            overflow-x: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        /* 游戏主容器，完美适配大小屏 */
+        .game-container {
+            width: 100%;
+            max-width: 1024px;
+            background: #171821;
+            border: 3px solid #323545;
+            border-radius: 16px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        /* 头部状态栏 */
+        .header-bar {
+            background: linear-gradient(180deg, #252836 0%, #1a1c26 100%);
+            padding: 12px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #2a2d3d;
+        }
+
+        .timer-box {
+            display: flex;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.4);
+            padding: 6px 16px;
+            border-radius: 20px;
+            border: 1px solid #ff4a4a;
+        }
+
+        .timer-clock {
+            font-size: 20px;
+            margin-right: 8px;
+        }
+
+        .timer-text {
+            font-size: 18px;
+            font-weight: bold;
+            color: #ff4a4a;
+            font-family: monospace;
+        }
+
+        .game-title {
+            font-size: 22px;
+            font-weight: 900;
+            text-transform: uppercase;
+            background: linear-gradient(180deg, #fff 0%, #aaa 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+
+        /* 下注主界面 (分左右布局) */
+        .betting-view {
+            display: flex;
+            flex-direction: row;
+            height: 520px;
+        }
+
+        @media (max-width: 768px) {
+            .betting-view {
+                flex-direction: column;
+                height: auto;
+            }
+        }
+
+        /* 左侧足球比分占位(如UI图左半边) / 这里用作说明及玩法快速指引 */
+        .left-info-panel {
+            flex: 1;
+            background: #1b281b; /* 暗绿足球场风 */
+            border-right: 2px solid #2a2d3d;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            overflow-y: auto;
+        }
+        
+        .ratio-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+        }
+        .ratio-card {
+            background: linear-gradient(135deg, #2e5c2e 0%, #183318 100%);
+            border: 1px solid #458a45;
+            border-radius: 6px;
+            padding: 6px;
+            text-align: center;
+            font-size: 13px;
+        }
+        .ratio-card .odds { color: var(--accent-gold); font-weight: bold; }
+
+        /* 右侧核心投注面板 */
+        .right-bet-panel {
+            flex: 1.2;
+            padding: 15px;
+            background: #1c1d26;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        /* 玩法网格 */
+        .modes-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .mode-btn {
+            background: linear-gradient(180deg, #3a3d52 0%, #252733 100%);
+            border: 2px solid #4a4e69;
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .mode-btn:hover {
+            border-color: #7278a1;
+        }
+
+        .mode-btn.selected {
+            background: linear-gradient(180deg, #e6a100 0%, #996b00 100%) !important;
+            border-color: #fff;
+            box-shadow: 0 0 12px rgba(230,161,0,0.6);
+        }
+
+        .mode-name {
+            font-size: 16px;
+            font-weight: bold;
+            color: #fff;
+            margin-bottom: 2px;
+        }
+
+        .mode-odds {
+            font-size: 12px;
+            color: rgba(255,255,255,0.7);
+        }
+        .mode-btn.selected .mode-odds {
+            color: #fff;
+        }
+
+        /* 数字选择圈 */
+        .number-selector {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+            background: rgba(0,0,0,0.2);
+            padding: 12px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+        }
+
+        .num-ball {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            font-size: 16px;
+            cursor: pointer;
+            border: 2px solid #fff;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.4);
+            text-shadow: 1px 1px 2px #000;
+        }
+
+        /* 1-12车号各自专属彩球色 */
+        .ball-1 { background: #d27828; } .ball-2 { background: #8192a3; } .ball-3 { background: #2463bf; }
+        .ball-4 { background: #d4b41c; } .ball-5 { background: #4ba637; } .ball-6 { background: #945125; }
+        .ball-7 { background: #7124b3; } .ball-8 { background: #b01e3e; } .ball-9 { background: #a61ca1; }
+        .ball-10 { background: #199494; } .ball-11 { background: #212529; } .ball-12 { background: #c72674; }
+
+        .num-ball.selected {
+            transform: scale(1.15);
+            box-shadow: 0 0 15px #fff;
+            border-color: #ffeb3b;
+        }
+        .num-ball.disabled {
+            opacity: 0.25;
+            cursor: not-allowed;
+            transform: scale(0.9);
+        }
+
+        /* 底部操作控制台 */
+        .control-console {
+            background: #13141a;
+            padding: 15px;
+            border-top: 2px solid #2a2d3d;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .bet-record-zone {
+            display: flex;
+            align-items: center;
+            background: rgba(255,255,255,0.05);
+            padding: 6px 12px;
+            border-radius: 8px;
+            border: 1px solid #333;
+            min-width: 220px;
+        }
+
+        .record-balls {
+            display: flex;
+            gap: 4px;
+            margin-right: 8px;
+        }
+
+        .mini-ball {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            font-size: 10px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+        }
+
+        .chip-display {
+            background: #28a745;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .amount-controller {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-circle {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #3a3d52;
+            border: none;
+            color: white;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .btn-circle:hover { background: #4e526f; }
+
+        .input-amount {
+            width: 90px;
+            background: #000;
+            border: 1px solid #444;
+            color: var(--accent-gold);
+            text-align: center;
+            padding: 6px;
+            font-weight: bold;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .action-btns {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-game {
+            padding: 10px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            border: none;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+        }
+
+        .btn-cancel {
+            background: #dc3545;
+            color: white;
+        }
+        .btn-cancel:hover { background: #bd2130; }
+
+        .btn-confirm {
+            background: linear-gradient(180deg, #28a745 0%, #1e7e34 100%);
+            color: white;
+            box-shadow: 0 3px 0 #155724;
+        }
+        .btn-confirm:hover { background: #218838; }
+        .btn-confirm:disabled {
+            background: #495057 !important;
+            color: #ced4da !important;
+            box-shadow: none !important;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        /* 赛车动画大厅界面 (默认隐藏，进入开奖状态时激活) */
+        .race-track-view {
+            display: none;
+            position: relative;
+            background: #222;
+            height: 520px;
+            overflow: hidden;
+            background-image: 
+                linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        /* 终点线在左侧（车头朝向左侧终点） */
+        .finish-line {
+            position: absolute;
+            left: 50px;
+            top: 0;
+            bottom: 0;
+            width: 12px;
+            background-color: #fff;
+            background-image: 
+                linear-gradient(45deg, #000 25%, transparent 25%, transparent 75%, #000 75%, #000), 
+                linear-gradient(45deg, #000 25%, transparent 25%, transparent 75%, #000 75%, #000);
+            background-size: 12px 12px;
+            background-position: 0 0, 6px 6px;
+            z-index: 2;
+            box-shadow: 2px 0 10px rgba(0,0,0,0.5);
+        }
+
+        .track-lane {
+            position: relative;
+            height: 8.33%; /* 12条跑道 */
+            border-bottom: 1px dashed rgba(255,255,255,0.1);
+            display: flex;
+            align-items: center;
+        }
+
+        /* 赛车元素：车头朝左 */
+        .race-car {
+            position: absolute;
+            right: 10px; /* 初始靠右侧起跑线 */
+            width: 65px;
+            height: 32px;
+            transition: right 0.15s linear;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            z-index: 3;
+        }
+
+        .car-emoji {
+            line-height: 1;
+        }
+
+        .car-number-label {
+            color: #fff;
+            font-size: 11px;
+            font-weight: 900;
+            z-index: 5;
+            position: absolute;
+            right: 8px;
+            text-shadow: 1px 1px 2px #000;
+            background: rgba(0,0,0,0.3);
+            padding: 1px 3px;
+            border-radius: 3px;
+        }
+
+        /* 粒子特效：车尾喷射 */
+        .exhaust-particles {
+            position: absolute;
+            right: -6px;
+            top: 50%;
+            transform: translateY(-50%);
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        .particle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            opacity: 0;
+        }
+
+        @keyframes particle-burst {
+            0% {
+                opacity: 1;
+                transform: translate(0, 0) scale(1);
+            }
+            100% {
+                opacity: 0;
+                transform: translate(var(--tx), var(--ty)) scale(0);
+            }
+        }
+
+        /* 巨型大奖杯结算特效弹窗 */
+        .podium-overlay {
+            display: none;
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.85);
+            z-index: 100;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+
+        .trophy-box {
+            text-align: center;
+            transform: scale(0.5);
+            animation: popUp 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        .trophy-icon {
+            font-size: 80px;
+            filter: drop-shadow(0 0 20px #ffb700);
+            animation: float 2s ease-in-out infinite;
+        }
+
+        .result-title {
+            font-size: 28px;
+            color: var(--accent-gold);
+            font-weight: 900;
+            margin-top: 15px;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+        }
+
+        .result-balls-container {
+            display: flex;
+            gap: 12px;
+            margin: 25px 0;
+            justify-content: center;
+        }
+
+        .winner-ball {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            font-weight: bold;
+            color: white;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+            border: 2px solid white;
+        }
+
+        .payout-info {
+            font-size: 20px;
+            color: #28a745;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+
+        .btn-restart {
+            background: linear-gradient(180deg, #007bff 0%, #0056b3 100%);
+            color: white;
+            padding: 12px 40px;
+            border-radius: 30px;
+            font-size: 18px;
+            font-weight: bold;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0,123,255,0.4);
+        }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes popUp { to { transform: scale(1); } }
+        @keyframes float { 
+            0%, 100% { transform: translateY(0); } 
+            50% { transform: translateY(-10px); } 
+        }
+
+        /* 快捷辅助排版 */
+        .d-none { display: none !important; }
+    </style>
+</head>
+<body>
+
+<div class="game-container">
+    
+    <div class="header-bar">
+        <div class="game-title">🏎️ 12选5 极速赛车</div>
+        <div class="timer-box">
+            <span class="timer-clock">⏰</span>
+            <span id="timerStatus" class="timer-text">下注中 04:30</span>
+        </div>
+    </div>
+
+    <div id="bettingView" class="betting-view">
+        <div class="left-info-panel">
+            <h4 style="color:var(--accent-gold); font-size:14px; margin-bottom:5px;">📋 游戏规则速览</h4>
+            <p style="font-size:12px; color:#aaa; line-height:1.4;">
+                每期随机开出5辆赛车。投注“前几名”无需考虑具体顺序，只要包含在最终前几名即可！任选玩法只要包含在5辆开奖车内即中奖。
+            </p>
+            <div style="border-bottom:1px solid #333; margin:5px 0;"></div>
+            <h4 style="color:#28a745; font-size:14px; margin-bottom:5px;">🎰 热门独热赔率</h4>
+            <div class="ratio-grid">
+                <div class="ratio-card"><div>Top 2</div><div class="odds">30倍</div></div>
+                <div class="ratio-card"><div>Top 3</div><div class="odds">110倍</div></div>
+                <div class="ratio-card"><div>Pick 5</div><div class="odds">400倍</div></div>
+                <div class="ratio-card"><div>Pick 6</div><div class="odds">60倍</div></div>
+            </div>
+        </div>
+
+        <div class="right-bet-panel">
+            <div>
+                <h4 style="font-size:14px; margin-bottom:8px; color:#9fa4dd;">1. 选择玩法 (Mode)</h4>
+                <div class="modes-grid">
+                    <div class="mode-btn selected" data-mode="top2" data-count="2" data-odds="30">
+                        <div class="mode-name">前2名 (Top 2)</div>
+                        <div class="mode-odds">30x</div>
+                    </div>
+                    <div class="mode-btn" data-mode="top3" data-count="3" data-odds="110">
+                        <div class="mode-name">前3名 (Top 3)</div>
+                        <div class="mode-odds">110x</div>
+                    </div>
+                    <div class="mode-btn" data-mode="top4" data-count="4" data-odds="240">
+                        <div class="mode-name">前4名 (Top 4)</div>
+                        <div class="mode-odds">240x</div>
+                    </div>
+                    <div class="mode-btn" data-mode="pick2" data-count="2" data-odds="3">
+                        <div class="mode-name">任选2 (Pick 2)</div>
+                        <div class="mode-odds">3x</div>
+                    </div>
+                    <div class="mode-btn" data-mode="pick3" data-count="3" data-odds="10">
+                        <div class="mode-name">任选3 (Pick 3)</div>
+                        <div class="mode-odds">10x</div>
+                    </div>
+                    <div class="mode-btn" data-mode="pick4" data-count="4" data-odds="50">
+                        <div class="mode-name">任选4 (Pick 4)</div>
+                        <div class="mode-odds">50x</div>
+                    </div>
+                    <div class="mode-btn" data-mode="pick5" data-count="5" data-odds="400">
+                        <div class="mode-name">任选5 (Pick 5)</div>
+                        <div class="mode-odds">400x</div>
+                    </div>
+                    <div class="mode-btn" data-mode="pick6" data-count="6" data-odds="60">
+                        <div class="mode-name">任选6 (Pick 6)</div>
+                        <div class="mode-odds">60x</div>
+                    </div>
+                </div>
+
+                <h4 style="font-size:14px; margin-bottom:8px; color:#9fa4dd;">2. 选择车辆号码 (仅限选符合玩法的数量)</h4>
+                <div class="number-selector" id="numberSelector">
+                    </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="raceTrackView" class="race-track-view">
+        <div class="finish-line"></div>
+        <div id="lanesContainer" style="height:100%; width:100%;"></div>
+    </div>
+
+    <div class="control-console">
+        <div class="bet-record-zone">
+            <div style="font-size:12px; color:#888; margin-right:8px;">当前投注:</div>
+            <div id="recordContainer" style="display:flex; align-items:center;">
+                <span style="font-size:13px; color:#aaa;">暂无投注</span>
+            </div>
+        </div>
+
+        <div class="amount-controller">
+            <button class="btn-circle" id="btnMinus">-</button>
+            <input type="text" class="input-amount" id="betAmount" value="100.00" readonly>
+            <button class="btn-circle" id="btnPlus">+</button>
+        </div>
+
+        <div class="action-btns">
+            <button class="btn-game btn-cancel" id="btnCancel">取消投注</button>
+            <button class="btn-game btn-confirm" id="btnConfirm" disabled>确 定</button>
+        </div>
+    </div>
+
+    <div class="podium-overlay" id="podiumOverlay">
+        <div class="trophy-box">
+            <div class="trophy-icon">🏆</div>
+            <div class="result-title" id="resultTitle">开奖结果</div>
+            <div class="result-balls-container" id="resultBallsContainer">
+                </div>
+            <div class="payout-info" id="payoutInfo">中奖状态计算中...</div>
+            <button class="btn-restart" id="btnRestart">继续下一期</button>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    // 基础配置与核心状态
+    let currentMode = "top2";
+    let requiredCount = 2;
+    let currentOdds = 30;
+    let selectedNumbers = [];
+    let activeBet = null; // 存储确认锁定的投注单
+    let timerInterval = null;
+    let countdownSeconds = 15; // 为了方便测试，下注倒计时设为15秒。正式环境中可以随意调整。
+    let isRacing = false;
+
+    // 1-12车颜色映射表
+    const carColors = {
+        1: '#d27828', 2: '#8192a3', 3: '#2463bf', 4: '#d4b41c', 5: '#4ba637', 6: '#945125',
+        7: '#7124b3', 8: '#b01e3e', 9: '#a61ca1', 10: '#199494', 11: '#212529', 12: '#c72674'
+    };
+
+    // 预计算每辆车的色相偏移量（用于 hue-rotate 变色）
+    const carHueMap = {
+        1: 20, 2: 210, 3: 210, 4: 45, 5: 110, 6: 15,
+        7: 280, 8: 345, 9: 300, 10: 175, 11: 0, 12: 330
+    };
+    function getHueFromColor(color) { return carHueMap[Object.keys(carColors).find(k => carColors[k] === color)] || 0; }
+
+    // DOM 元素引用
+    const numberSelector = document.getElementById('numberSelector');
+    const modeButtons = document.querySelectorAll('.mode-btn');
+    const btnConfirm = document.getElementById('btnConfirm');
+    const btnCancel = document.getElementById('btnCancel');
+    const btnPlus = document.getElementById('btnPlus');
+    const btnMinus = document.getElementById('btnMinus');
+    const betAmountInput = document.getElementById('betAmount');
+    const recordContainer = document.getElementById('recordContainer');
+    const timerStatus = document.getElementById('timerStatus');
+    const bettingView = document.getElementById('bettingView');
+    const raceTrackView = document.getElementById('raceTrackView');
+    const lanesContainer = document.getElementById('lanesContainer');
+    const podiumOverlay = document.getElementById('podiumOverlay');
+    const resultBallsContainer = document.getElementById('resultBallsContainer');
+    const payoutInfo = document.getElementById('payoutInfo');
+    const btnRestart = document.getElementById('btnRestart');
+
+    // 初始化加载
+    function init() {
+        renderNumberBalls();
+        startCountdown();
+        setupEventListeners();
+    }
+
+    // 渲染12个号的球
+    function renderNumberBalls() {
+        numberSelector.innerHTML = '';
+        for(let i=1; i<=12; i++) {
+            const ball = document.createElement('div');
+            ball.className = `num-ball ball-${i}`;
+            ball.innerText = i;
+            ball.dataset.num = i;
+            numberSelector.appendChild(ball);
+        }
+    }
+
+    // 倒计时核心控制
+    function startCountdown() {
+        clearInterval(timerInterval);
+        timerInterval = setInterval(() => {
+            if (countdownSeconds > 0) {
+                countdownSeconds--;
+                let min = Math.floor(countdownSeconds / 60).toString().padStart(2, '0');
+                let sec = (countdownSeconds % 60).toString().padStart(2, '0');
+                timerStatus.innerText = `下注中 ${min}:${sec}`;
+            } else {
+                clearInterval(timerInterval);
+                triggerRaceStart();
+            }
+        }, 1000);
+    }
+
+    // 事件绑定集合
+    function setupEventListeners() {
+        // 玩法按钮点击切换
+        modeButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                if(isRacing) return;
+                modeButtons.forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+                
+                currentMode = btn.dataset.mode;
+                requiredCount = parseInt(btn.dataset.count);
+                currentOdds = parseInt(btn.dataset.odds);
+                
+                // 切换玩法时清空已选数字重新匹配
+                selectedNumbers = [];
+                updateBallsStatus();
+                validateBettingCondition();
+            });
+        });
+
+        // 选号点击事件
+        numberSelector.addEventListener('click', (e) => {
+            if(isRacing || !e.target.classList.contains('num-ball')) return;
+            const ball = e.target;
+            const num = parseInt(ball.dataset.num);
+
+            if(selectedNumbers.includes(num)) {
+                // 已选则取消
+                selectedNumbers = selectedNumbers.filter(n => n !== num);
+            } else {
+                // 限制不能超过当前玩法的硬性规定数量
+                if(selectedNumbers.length < requiredCount) {
+                    selectedNumbers.push(num);
+                }
+            }
+            updateBallsStatus();
+            validateBettingCondition();
+        });
+
+        // 加减单注筹码金额
+        btnPlus.addEventListener('click', () => {
+            let cur = parseFloat(betAmountInput.value);
+            betAmountInput.value = (cur + 100).toFixed(2);
+        });
+        btnMinus.addEventListener('click', () => {
+            let cur = parseFloat(betAmountInput.value);
+            if(cur > 100) betAmountInput.value = (cur - 100).toFixed(2);
+        });
+
+        // 点击确定按钮锁定投注
+        btnConfirm.addEventListener('click', () => {
+            if(selectedNumbers.length !== requiredCount) return;
+            
+            // 自动对选择的号码从小到大排序
+            selectedNumbers.sort((a, b) => a - b);
+            
+            activeBet = {
+                mode: currentMode,
+                nums: [...selectedNumbers],
+                amount: parseFloat(betAmountInput.value),
+                odds: currentOdds
+            };
+
+            // 更新左下角投注展示状态
+            renderActiveBetRecord();
+            btnConfirm.disabled = true;
+        });
+
+        // 取消投注
+        btnCancel.addEventListener('click', () => {
+            if(isRacing) return;
+            activeBet = null;
+            selectedNumbers = [];
+            updateBallsStatus();
+            validateBettingCondition();
+            recordContainer.innerHTML = `<span style="font-size:13px; color:#aaa;">暂无投注</span>`;
+        });
+
+        // 结算重新开始按钮
+        btnRestart.addEventListener('click', () => {
+            podiumOverlay.style.display = 'none';
+            bettingView.style.display = 'flex';
+            raceTrackView.style.display = 'none';
+            isRacing = false;
+            activeBet = null;
+            selectedNumbers = [];
+            countdownSeconds = 15; // 重置15秒下注时间
+            recordContainer.innerHTML = `<span style="font-size:13px; color:#aaa;">暂无投注</span>`;
+            renderNumberBalls();
+            startCountdown();
+            validateBettingCondition();
+        });
+    }
+
+    // 根据选择数量高亮数字球或置灰
+    function updateBallsStatus() {
+        const balls = numberSelector.querySelectorAll('.num-ball');
+        balls.forEach(ball => {
+            const num = parseInt(ball.dataset.num);
+            if(selectedNumbers.includes(num)) {
+                ball.classList.add('selected');
+                ball.classList.remove('disabled');
+            } else {
+                ball.classList.remove('selected');
+                // 如果选满了，其它未选变暗
+                if(selectedNumbers.length >= requiredCount) {
+                    ball.classList.add('disabled');
+                } else {
+                    ball.classList.remove('disabled');
+                }
+            }
+        });
+    }
+
+    // 校验确定键状态：数量必须恰好等于玩法硬性要求的数量，否则为灰色状态
+    function validateBettingCondition() {
+        if(selectedNumbers.length === requiredCount && !activeBet) {
+            btnConfirm.disabled = false;
+        } else {
+            btnConfirm.disabled = true;
+        }
+    }
+
+    // 渲染左下角锁定成功的投注记录组合
+    function renderActiveBetRecord() {
+        recordContainer.innerHTML = '';
+        const wrapper = document.createElement('div');
+        wrapper.className = 'record-balls';
+        
+        activeBet.nums.forEach(n => {
+            const b = document.createElement('div');
+            b.className = 'mini-ball';
+            b.style.backgroundColor = carColors[n];
+            b.innerText = n;
+            wrapper.appendChild(b);
+        });
+
+        const chip = document.createElement('span');
+        chip.className = 'chip-display';
+        chip.innerText = `￥${activeBet.amount}`;
+
+        recordContainer.appendChild(wrapper);
+        recordContainer.appendChild(chip);
+    }
+
+    /* ================= 赛车核心动画逻辑 ================= */
+
+    // 粒子喷射特效：在车尾生成多个彩色粒子向四周爆散
+    function spawnParticles(car, color) {
+        const container = car.querySelector('.exhaust-particles');
+        if (!container) return;
+        const colors = [color, '#ffaa00', '#ff5500', '#fff', '#ffcc00'];
+        for (let j = 0; j < 5; j++) {
+            const p = document.createElement('div');
+            p.className = 'particle';
+            p.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+            const angle = (Math.random() * 60 - 30) * Math.PI / 180; // -30~30度扇形
+            const dist = 15 + Math.random() * 25;
+            const tx = Math.cos(angle) * dist + Math.random() * 20;
+            const ty = Math.sin(angle) * dist * 1.5;
+            p.style.setProperty('--tx', `${tx}px`);
+            p.style.setProperty('--ty', `${ty}px`);
+            p.style.animation = `particle-burst ${0.3 + Math.random() * 0.3}s ease-out forwards`;
+            container.appendChild(p);
+            setTimeout(() => p.remove(), 600);
+        }
+    }
+
+    function triggerRaceStart() {
+        isRacing = true;
+        timerStatus.innerText = "🏎️ 正在激战开奖中...";
+        bettingView.style.display = 'none';
+        raceTrackView.style.display = 'block';
+
+        // 生成后台或前端随机的最终确定排名结果 (1-12不重复随机)
+        const finalRanking = [];
+        while(finalRanking.length < 12) {
+            let r = Math.floor(Math.random() * 12) + 1;
+            if(!finalRanking.includes(r)) finalRanking.push(r);
+        }
+        // 前5名就是唯一的开奖结果
+        const lotteryResult = finalRanking.slice(0, 5);
+
+        // 渲染跑道和12辆赛车
+        lanesContainer.innerHTML = '';
+        const carElements = {};
+
+        for(let i=1; i<=12; i++) {
+            const lane = document.createElement('div');
+            lane.className = 'track-lane';
+            
+            const car = document.createElement('div');
+            car.className = 'race-car';
+            car.id = `car_${i}`;
+            car.style.right = '10px'; // 初始靠右
+
+            const emoji = document.createElement('div');
+            emoji.className = 'car-emoji';
+            emoji.innerText = '🏎️';
+            emoji.style.fontSize = '26px';
+            /* 用 filter 给每辆车变色 */
+            const hue = getHueFromColor(carColors[i]);
+            emoji.style.filter = `drop-shadow(0 0 3px ${carColors[i]}) hue-rotate(${hue}deg) saturate(1.5)`;
+
+            const label = document.createElement('div');
+            label.className = 'car-number-label';
+            label.innerText = i;
+
+            const particles = document.createElement('div');
+            particles.className = 'exhaust-particles';
+
+            car.appendChild(emoji);
+            car.appendChild(label);
+            car.appendChild(particles);
+            lane.appendChild(car);
+            lanesContainer.appendChild(lane);
+
+            carElements[i] = car;
+        }
+
+        // 赛车超车及推进仿真动画（5秒决胜负）
+        let duration = 5000; 
+        let intervalTime = 100;
+        let elapsed = 0;
+
+        let raceInterval = setInterval(() => {
+            elapsed += intervalTime;
+            let ratio = elapsed / duration;
+
+            for(let i=1; i<=12; i++) {
+                let car = carElements[i];
+                // 获取当前车最终名次
+                let finalPos = finalRanking.indexOf(i); 
+
+                // 随机加速/随机超车物理效果模拟 + 粒子喷射
+                let isBoosting = Math.random() > 0.65;
+                if(isBoosting && ratio < 0.9) {
+                    car.classList.add('boosting');
+                    spawnParticles(car, carColors[i]);
+                } else {
+                    car.classList.remove('boosting');
+                }
+
+                // 动态计算在轨道上的推进距离 (车头朝左推进，即right值变大)
+                // 赛道最大宽按 100% 减去左边终点线和车身后宽
+                let maxRight = raceTrackView.clientWidth - 130; 
+                let targetRight = 10;
+
+                if (ratio >= 1.0) {
+                    // 到达终点，完全依据最终的名次排开身位距离
+                    targetRight = maxRight + ((12 - finalPos) * 8);
+                    car.classList.remove('boosting');
+                } else {
+                    // 过程中根据最终名次做线性分布，加上随机微调扰动，实现极具真实感的“来回超车”效果
+                    let baseProgress = ratio * maxRight;
+                    let rankWeight = (12 - finalPos) * 4 * ratio; 
+                    let randomDrift = Math.sin(elapsed + i) * 15;
+                    targetRight = 10 + baseProgress + rankWeight + randomDrift;
+                }
+
+                car.style.right = `${targetRight}px`;
+            }
+
+            if(elapsed >= duration) {
+                clearInterval(raceInterval);
+                setTimeout(() => {
+                    showFinalPayout(lotteryResult);
+                }, 800);
+            }
+        }, intervalTime);
+    }
+
+    // 结算中奖情况并激活震撼奖杯浮现效果
+    function showFinalPayout(lotteryResult) {
+        resultBallsContainer.innerHTML = '';
+        
+        // 渲染前5名开奖号码球
+        lotteryResult.forEach(num => {
+            const ball = document.createElement('div');
+            ball.className = `winner-ball ball-${num}`;
+            ball.innerText = num;
+            resultBallsContainer.appendChild(ball);
+        });
+
+        // 默认未中奖状态
+        let winAmount = 0;
+        let isWin = false;
+
+        if (activeBet) {
+            const betNums = activeBet.nums;
+            const top2Result = lotteryResult.slice(0, 2);
+            const top3Result = lotteryResult.slice(0, 3);
+            const top4Result = lotteryResult.slice(0, 4);
+
+            // 依据文档核心算法进行比对判断
+            if (activeBet.mode === 'top2') {
+                // 前2名：买的两个数只要全部存在于开奖结果前2名中(不限顺序)即中奖
+                isWin = betNums.every(n => top2Result.includes(n));
+            } else if (activeBet.mode === 'top3') {
+                isWin = betNums.every(n => top3Result.includes(n));
+            } else if (activeBet.mode === 'top4') {
+                isWin = betNums.every(n => top4Result.includes(n));
+            } else {
+                // 任选2、3、4、5、6玩法：买的数全部包含在开奖5个数字内即中奖
+                isWin = betNums.every(n => lotteryResult.includes(n));
+            }
+
+            if(isWin) {
+                winAmount = activeBet.amount * activeBet.odds;
+            }
+        }
+
+        // 修改结算文本面板
+        if(isWin) {
+            payoutInfo.style.color = '#28a745';
+            payoutInfo.innerHTML = `🎉 恭喜中奖！倍率: ${activeBet.odds}倍<br>赢得奖金: ￥${winAmount.toFixed(2)}`;
+        } else {
+            payoutInfo.style.color = '#dc3545';
+            payoutInfo.innerHTML = activeBet ? "❌ 很遗憾，本期未中奖，继续加油！" : "💤 本期您未参与投注。";
+        }
+
+        podiumOverlay.style.display = 'flex';
+    }
+
+    // 启动系统
+    window.onload = init;
+</script>
+
+</body>
+</html>

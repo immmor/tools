@@ -113,16 +113,6 @@ export default {
           return resJson({ success: false, message: '用户名和密码不能为空！' }, 400);
         }
 
-        // 检查用户名是否已存在
-        const existingUser = await DB
-          .prepare('SELECT * FROM user WHERE username = ?')
-          .bind(username)
-          .first();
-
-        if (existingUser) {
-          return resJson({ success: false, message: '用户名已存在！' }, 409);
-        }
-
         // 生成唯一的6位邀请码（字母+数字）
         const generateInviteCode = () => {
           const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -137,13 +127,13 @@ export default {
         let userInviteCode = generateInviteCode();
         let isUnique = false;
         let attempts = 0;
-        
+
         while (!isUnique && attempts < 10) {
           const existingInvite = await DB
             .prepare('SELECT * FROM user WHERE invite_code = ?')
             .bind(userInviteCode)
             .first();
-          
+
           if (!existingInvite) {
             isUnique = true;
           } else {
@@ -166,20 +156,20 @@ export default {
             .prepare('SELECT * FROM user WHERE invite_code = ?')
             .bind(inviteCode)
             .first();
-          
+
           if (inviterUser) {
             inviterUsername = inviterUser.username;
             // 被邀请人奖励2元
             finalBalance = 2;
-            
+
             // 邀请人奖励2元
             await DB
               .prepare('UPDATE user SET balance = balance + 2 WHERE username = ?')
               .bind(inviterUser.username)
               .run();
-            
+
             const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
-            
+
             // 给被邀请人发送奖励通知
             await DB
               .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
@@ -237,7 +227,7 @@ export default {
           'f4': { monthly_original: 50, monthly_discount: 40, annual_original: 600, annual_discount: 450, annual_savings: 150 },
           'f': { monthly_original: 62.5, monthly_discount: 50, annual_original: 750, annual_discount: 550, annual_savings: 200 }
         };
-        
+
         let pricePlanStr;
         if (priceParam && pricePlans[priceParam]) {
           pricePlanStr = JSON.stringify(pricePlans[priceParam]);
@@ -251,10 +241,22 @@ export default {
         // 根据前端传入的nt参数决定not_trusted值：nt=n时设为空字符串（信任）
         const notTrustedValue = params.nt === 'n' ? '' : 'yes';
 
-        const result = await DB
-          .prepare('INSERT INTO user (username, password, balance, v_expire_date, learn_vip_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code, v_token, v_link_clash, v_link_v2ray, price_plan, survey, security_answer, fetch_link, source, not_trusted, auto_rewn) VALUES (?, ?, ?, NULL, NULL, 307200, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)')
-          .bind(username, password, finalBalance, new Date().toISOString().slice(0, 19).replace('T', ' '), userInviteCode, '', '', '', pricePlanStr, '{}', securityAnswer || '', '[]', source || '', notTrustedValue)
-          .run();
+        // 原子插入：利用数据库 UNIQUE 约束防止并发重复注册
+        // 不再单独 SELECT 检查，直接 INSERT，由数据库保证原子性
+        let result;
+        try {
+          result = await DB
+            .prepare('INSERT INTO user (username, password, balance, v_expire_date, learn_vip_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code, v_token, v_link_clash, v_link_v2ray, price_plan, survey, security_answer, fetch_link, source, not_trusted, auto_rewn) VALUES (?, ?, ?, NULL, NULL, 307200, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)')
+            .bind(username, password, finalBalance, new Date().toISOString().slice(0, 19).replace('T', ' '), userInviteCode, '', '', '', pricePlanStr, '{}', securityAnswer || '', '[]', source || '', notTrustedValue)
+            .run();
+        } catch (e) {
+          // 捕获 UNIQUE 约束冲突 → 用户名已存在（并发注册竞争时触发）
+          if (e.message && (e.message.includes('UNIQUE') || e.message.includes('constraint') || e.message.includes('duplicate'))) {
+            return resJson({ success: false, message: '用户名已存在！' }, 409);
+          }
+          console.error('注册插入失败:', e);
+          return resJson({ success: false, message: '注册失败，请重试！' }, 500);
+        }
 
         if (result.success) {
           const now = new Date().toISOString().slice(0, 19).replace('T', ' ');

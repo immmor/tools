@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>赛车极速投注飙车赛</title>
+    <style>
+        :root {
+            --neon-blue: #00f3ff;
+            --neon-pink: #ff007f;
+            --neon-purple: #a124ff;
+            --bg-dark: #0a0a12;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow-x: hidden;
+            padding: 10px;
+        }
+
+        h1 {
+            font-size: 2rem;
+            text-align: center;
+            margin: 15px 0;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: #fff;
+            text-shadow: 0 0 10px var(--neon-blue), 0 0 20px var(--neon-blue);
+        }
+
+        /* 游戏主面板 */
+        .game-container {
+            width: 100%;
+            max-width: 1000px;
+            background: rgba(20, 20, 35, 0.8);
+            border: 2px solid #222542;
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+        }
+
+        /* 仪表盘/信息栏 */
+        .dashboard {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: rgba(10, 10, 20, 0.6);
+            border-radius: 8px;
+            border-left: 4px solid var(--neon-pink);
+        }
+
+        .balance {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #ffcc00;
+            text-shadow: 0 0 5px rgba(255,204,0,0.5);
+        }
+
+        /* 投注控制区 */
+        .bet-controls {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+            width: 100%;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+            min-width: 180px;
+        }
+
+        label {
+            font-size: 0.9rem;
+            color: #aaa;
+            white-space: nowrap;
+        }
+
+        select, input {
+            width: 100%;
+            padding: 10px;
+            background: #161626;
+            border: 1px solid #3d3f6d;
+            color: #fff;
+            border-radius: 6px;
+            font-size: 1rem;
+            outline: none;
+            transition: 0.3s;
+        }
+
+        select:focus, input:focus {
+            border-color: var(--neon-blue);
+            box-shadow: 0 0 8px rgba(0, 243, 255, 0.5);
+        }
+
+        /* 炫酷按钮 */
+        .btn-start {
+            background: linear-gradient(45deg, var(--neon-pink), var(--neon-purple));
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: 0.3s;
+            box-shadow: 0 0 15px rgba(255, 0, 127, 0.4);
+            width: 100%;
+        }
+
+        .btn-start:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 0 25px rgba(255, 0, 127, 0.8);
+        }
+
+        .btn-start:disabled {
+            background: #333;
+            color: #777;
+            box-shadow: none;
+            cursor: not-allowed;
+        }
+
+        /* 赛场区域 */
+        .race-track-container {
+            position: relative;
+            background: #11111e;
+            border-radius: 12px;
+            padding: 10px 0;
+            overflow: hidden;
+            border: 1px solid #2d2d4d;
+        }
+
+        /* 终点线 */
+        .finish-line {
+            position: absolute;
+            right: 40px;
+            top: 0;
+            bottom: 0;
+            width: 12px;
+            background-color: #fff;
+            background-image: 
+                linear-gradient(45deg, #000 25%, transparent 25%, transparent 75%, #000 75%, #000),
+                linear-gradient(45deg, #000 25%, #fff 25%, #fff 75%, #000 75%, #000);
+            background-size: 12px 12px;
+            background-position: 0 0, 6px 6px;
+            z-index: 2;
+            box-shadow: 0 0 10px rgba(255,255,255,0.5);
+        }
+
+        /* 跑道 */
+        .track {
+            position: relative;
+            height: 70px;
+            border-bottom: 2px dashed rgba(255,255,255,0.1);
+            display: flex;
+            align-items: center;
+        }
+
+        .track:last-child {
+            border-bottom: none;
+        }
+
+        .track-name {
+            position: absolute;
+            left: 10px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            color: rgba(255,255,255,0.3);
+            z-index: 1;
+            text-transform: uppercase;
+        }
+
+        /* 赛车本体 */
+        .car-wrapper {
+            position: absolute;
+            left: 10px;
+            width: 65px;
+            height: 35px;
+            transition: left 0.05s linear;
+            z-index: 3;
+        }
+
+        /* 赛车SVG图形 (车头朝右) */
+        .car {
+            width: 100%;
+            height: 100%;
+            filter: drop-shadow(0 0 5px rgba(255,255,255,0.3));
+        }
+
+        /* 粒子画布层 */
+        .particle-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        /* 结果弹窗 */
+        .result-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.85);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            opacity: 0;
+            pointer-events: none;
+            transition: 0.5s;
+            backdrop-filter: blur(5px);
+        }
+
+        .result-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .result-card {
+            background: #1a1a2e;
+            border: 2px solid var(--neon-blue);
+            padding: 30px;
+            border-radius: 16px;
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: 0 0 30px var(--neon-blue);
+            transform: scale(0.7);
+            transition: 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .result-overlay.active .result-card {
+            transform: scale(1);
+        }
+
+        .result-title {
+            font-size: 2rem;
+            margin-bottom: 15px;
+            color: var(--neon-blue);
+        }
+
+        .result-detail {
+            font-size: 1.2rem;
+            margin-bottom: 25px;
+            line-height: 1.6;
+        }
+
+        .btn-close {
+            background: var(--neon-blue);
+            color: #000;
+            border: none;
+            padding: 10px 25px;
+            font-size: 1rem;
+            font-weight: bold;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .btn-close:hover {
+            background: #fff;
+            box-shadow: 0 0 15px #fff;
+        }
+
+        /* 响应式适配 */
+        @media (max-width: 600px) {
+            h1 { font-size: 1.5rem; }
+            .dashboard { flex-direction: column; align-items: stretch; }
+            .bet-controls { flex-direction: column; }
+            .control-group { width: 100%; }
+            .track { height: 60px; }
+            .car-wrapper { width: 50px; height: 28px; }
+            .finish-line { right: 25px; }
+        }
+    </style>
+</head>
+<body>
+
+    <h1>NEON RUSH 极速竞技</h1>
+
+    <div class="game-container">
+        <div class="dashboard">
+            <div class="balance">当前积分: <span id="balance-val">1000</span> 金币</div>
+            
+            <div class="bet-controls">
+                <div class="control-group">
+                    <label for="car-select">押注赛车:</label>
+                    <select id="car-select">
+                        <option value="0" style="color:#ff3333;">1号 闪电红</option>
+                        <option value="1" style="color:#3388ff;">2号 狂暴蓝</option>
+                        <option value="2" style="color:#33ff33;">3号 极光绿</option>
+                        <option value="3" style="color:#ffaa00;">4号 烈焰黄</option>
+                    </select>
+                </div>
+                
+                <div class="control-group">
+                    <label for="bet-amount">下注金额:</label>
+                    <input type="number" id="bet-amount" value="100" min="10" step="10">
+                </div>
+                
+                <button class="btn-start" id="btn-start" onclick="startRace()">开始冲刺</button>
+            </div>
+        </div>
+
+        <div class="race-track-container">
+            <div class="finish-line"></div>
+            <canvas class="particle-canvas" id="particle-canvas"></canvas>
+
+            <div class="track" id="track-0">
+                <div class="track-name">Lane 1</div>
+                <div class="car-wrapper" id="car-0">
+                    <svg class="car" viewBox="0 0 60 30">
+                        <path d="M5,10 L35,10 L45,15 L55,15 L58,18 L55,22 L45,22 L35,26 L5,26 Z" fill="#ff3333"/>
+                        <path d="M25,10 L35,10 L40,15 L25,15 Z" fill="#111"/> <circle cx="15" cy="26" r="5" fill="#333" stroke="#fff" stroke-width="1"/>
+                        <circle cx="45" cy="26" r="5" fill="#333" stroke="#fff" stroke-width="1"/>
+                        <path d="M2,7 L8,7 L8,29 L2,29 Z" fill="#222"/> </svg>
+                </div>
+            </div>
+
+            <div class="track" id="track-1">
+                <div class="track-name">Lane 2</div>
+                <div class="car-wrapper" id="car-1">
+                    <svg class="car" viewBox="0 0 60 30">
+                        <path d="M5,10 L35,10 L45,15 L55,15 L58,18 L55,22 L45,22 L35,26 L5,26 Z" fill="#3388ff"/>
+                        <path d="M25,10 L35,10 L40,15 L25,15 Z" fill="#111"/>
+                        <circle cx="15" cy="26" r="5" fill="#333" stroke="#fff" stroke-width="1"/>
+                        <circle cx="45" cy="26" r="5" fill="#333" stroke="#fff" stroke-width="1"/>
+                        <path d="M2,7 L8,7 L8,29 L2,29 Z" fill="#222"/>
+                    </svg>
+                </div>
+            </div>
+
+            <div class="track" id="track-2">
+                <div class="track-name">Lane 3</div>
+                <div class="car-wrapper" id="car-2">
+                    <svg class="car" viewBox="0 0 60 30">
+                        <path d="M5,10 L35,10 L45,15 L55,15 L58,18 L55,22 L45,22 L35,26 L5,26 Z" fill="#33ff33"/>
+                        <path d="M25,10 L35,10 L40,15 L25,15 Z" fill="#111"/>
+                        <circle cx="15" cy="26" r="5" fill="#333" stroke="#fff" stroke-width="1"/>
+                        <circle cx="45" cy="26" r="5" fill="#333" stroke="#fff" stroke-width="1"/>
+                        <path d="M2,7 L8,7 L8,29 L2,29 Z" fill="#222"/>
+                    </svg>
+                </div>
+            </div>
+
+            <div class="track" id="track-3">
+                <div class="track-name">Lane 4</div>
+                <div class="car-wrapper" id="car-3">
+                    <svg class="car" viewBox="0 0 60 30">
+                        <path d="M5,10 L35,10 L45,15 L55,15 L58,18 L55,22 L45,22 L35,26 L5,26 Z" fill="#ffaa00"/>
+                        <path d="M25,10 L35,10 L40,15 L25,15 Z" fill="#111"/>
+                        <circle cx="15" cy="26" r="5" fill="#333" stroke="#fff" stroke-width="1"/>
+                        <circle cx="45" cy="26" r="5" fill="#333" stroke="#fff" stroke-width="1"/>
+                        <path d="M2,7 L8,7 L8,29 L2,29 Z" fill="#222"/>
+                    </svg>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <div class="result-overlay" id="result-overlay">
+        <div class="result-card">
+            <div class="result-title" id="result-title">比赛结束</div>
+            <div class="result-detail" id="result-detail">--</div>
+            <button class="btn-close" onclick="closeResult()">继续挑战</button>
+        </div>
+    </div>
+
+    <script>
+        // 游戏状态
+        let balance = 1000;
+        let isRacing = false;
+        const carColors = ['#ff3333', '#3388ff', '#33ff33', '#ffaa00'];
+        const carNames = ['1号 闪电红', '2号 狂暴蓝', '3号 极光绿', '4号 烈焰黄'];
+        
+        // 粒子系统变量
+        const canvas = document.getElementById('particle-canvas');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+        let animationFrameId;
+
+        // 初始化画布大小
+        function resizeCanvas() {
+            const container = document.querySelector('.race-track-container');
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // 粒子类 (产生于车尾，向左方喷射飘散)
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                // 喷射速度（向左爆破）
+                this.vx = - (Math.random() * 3 + 2);
+                this.vy = (Math.random() - 0.5) * 1.5;
+                this.alpha = 1;
+                this.size = Math.random() * 4 + 2;
+                this.decay = Math.random() * 0.03 + 0.02;
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.alpha -= this.decay;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = this.alpha;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fillStyle = this.color;
+                // 增加霓虹发光感
+                ctx.shadowBlur = 8;
+                ctx.shadowColor = this.color;
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        // 粒子动画主循环
+        function animateParticles() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 如果在比赛中，持续在各赛车尾部生成粒子
+            if (isRacing) {
+                for (let i = 0; i < 4; i++) {
+                    const carWrapper = document.getElementById(`car-${i}`);
+                    const track = document.getElementById(`track-${i}`);
+                    
+                    // 计算车尾在Canvas中的相对坐标
+                    // 车子本体宽约 65px (移动端 50px)，粒子应该从车子左侧边缘(尾部)喷出
+                    const carLeft = parseFloat(carWrapper.style.left) || 10;
+                    const carHeight = carWrapper.offsetHeight;
+                    const trackTop = track.offsetTop;
+                    
+                    const tailX = carLeft + 5; // 稍微往内收一点点
+                    const tailY = trackTop + (carHeight / 2) + 5; // 居中偏排气管位置
+                    
+                    // 每帧为每辆车生成 2 个尾气粒子
+                    if(Math.random() > 0.2) {
+                        particles.push(new Particle(tailX, tailY, carColors[i]));
+                    }
+                }
+            }
+
+            // 更新和绘制现有粒子
+            for (let i = particles.length - 1; i >= 0; i--) {
+                particles[i].update();
+                if (particles[i].alpha <= 0) {
+                    particles.splice(i, 1);
+                } else {
+                    particles[i].draw();
+                }
+            }
+
+            animationFrameId = requestAnimationFrame(animateParticles);
+        }
+
+        // 开始比赛
+        function startRace() {
+            if (isRacing) return;
+
+            const betAmountInput = document.getElementById('bet-amount');
+            const betAmount = parseInt(betAmountInput.value);
+            const selectedCar = parseInt(document.getElementById('car-select').value);
+
+            // 验证下注
+            if (isNaN(betAmount) || betAmount <= 0) {
+                alert('请输入合法的下注金额！');
+                return;
+            }
+            if (betAmount > balance) {
+                alert('余额不足，请调整下注金额！');
+                return;
+            }
+
+            // 扣除积分并更新显示
+            balance -= betAmount;
+            document.getElementById('balance-val').innerText = balance;
+
+            // 锁定控制台
+            isRacing = true;
+            document.getElementById('btn-start').disabled = true;
+            betAmountInput.disabled = true;
+            document.getElementById('car-select').disabled = true;
+
+            // 重置车辆位置
+            const cars = [];
+            for (let i = 0; i < 4; i++) {
+                const car = document.getElementById(`car-${i}`);
+                car.style.left = '10px';
+                cars.push({
+                    element: car,
+                    pos: 10,
+                    speed: 0,
+                    id: i
+                });
+            }
+
+            // 获取终点线位置
+            const trackWidth = document.querySelector('.race-track-container').clientWidth;
+            const finishLineElement = document.querySelector('.finish-line');
+            // 计算车辆停止冲刺的绝对临界点(车头触线)
+            const finishPos = finishLineElement.offsetLeft - cars[0].element.clientWidth;
+
+            // 启动粒子循环
+            resizeCanvas();
+            if(!animationFrameId) animateParticles();
+
+            // 赛车核心物理移动定时器
+            const raceInterval = setInterval(() => {
+                let winner = null;
+
+                cars.forEach(car => {
+                    // 随机多段加速度，模拟真实赛车的起伏与超车快感
+                    const acc = Math.random() * 1.5 + 0.2;
+                    // 随机制动微调，避免拉开过大绝对差距
+                    car.speed += (Math.random() - 0.45) * 2; 
+                    car.speed = Math.max(2, Math.min(car.speed + acc, 12)); // 限制时速上限 
+                    
+                    car.pos += car.speed;
+                    
+                    // 临界适配
+                    if (car.pos >= finishPos) {
+                        car.pos = finishPos;
+                        if (winner === null) {
+                            winner = car.id;
+                        }
+                    }
+                    car.element.style.left = car.pos + 'px';
+                });
+
+                // 检测出冠军，终止比赛
+                if (winner !== null) {
+                    clearInterval(raceInterval);
+                    isRacing = false;
+                    settleGame(winner, selectedCar, betAmount);
+                }
+            }, 30);
+        }
+
+        // 结果结算
+        function settleGame(winnerId, selectedCar, betAmount) {
+            const isWin = (winnerId === selectedCar);
+            let reward = 0;
+
+            if (isWin) {
+                reward = betAmount * 4; // 4辆车，独赢4倍收益
+                balance += reward;
+            }
+
+            // 更新显示
+            document.getElementById('balance-val').innerText = balance;
+
+            // 填充弹窗内容
+            const titleEl = document.getElementById('result-title');
+            const detailEl = document.getElementById('result-detail');
+
+            if (isWin) {
+                titleEl.innerText = "🏆 竞猜成功！";
+                titleEl.style.color = "var(--neon-blue)";
+                detailEl.innerHTML = `本场冠军是：<b style="color:${carColors[winnerId]}">${carNames[winnerId]}</b><br><br>恭喜获得：<span style="color:#ffcc00; font-weight:bold;">+${reward}</span> 金币！`;
+            } else {
+                titleEl.innerText = "❌ 遗憾落败";
+                titleEl.style.color = "var(--neon-pink)";
+                detailEl.innerHTML = `本场冠军是：<b style="color:${carColors[winnerId]}">${carNames[winnerId]}</b><br>你支持的 ${carNames[selectedCar]} 没能成功突围。<br><br>损失：<span style="color:var(--neon-pink); font-weight:bold;">-${betAmount}</span> 金币`;
+            }
+
+            // 延时展现弹窗增加仪式感
+            setTimeout(() => {
+                document.getElementById('result-overlay').classList.add('active');
+            }, 500);
+        }
+
+        // 关闭结算视窗
+        function closeResult() {
+            document.getElementById('result-overlay').classList.remove('active');
+            
+            // 恢复控制台可用性
+            document.getElementById('btn-start').disabled = false;
+            document.getElementById('bet-amount').disabled = false;
+            document.getElementById('car-select').disabled = false;
+
+            // 破产保护机制
+            if(balance <= 0) {
+                alert('检测到你已破产，赛车工会免费赞助你 500 启动金币！');
+                balance = 500;
+                document.getElementById('balance-val').innerText = balance;
+            }
+        }
+    </script>
+</body>
+</html>

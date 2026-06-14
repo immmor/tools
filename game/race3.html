@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEON RUSH - 赛车竞猜</title>
+    <style>
+        :root {
+            --bg-color: #0a0a16;
+            --panel-bg: rgba(16, 16, 36, 0.85);
+            --neon-blue: #00f0ff;
+            --neon-pink: #ff007f;
+            --neon-green: #39ff14;
+            --neon-yellow: #ffdf00;
+            --text-color: #ffffff;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow-x: hidden;
+            background-image: 
+                radial-gradient(at 20% 20%, rgba(26, 21, 44, 1) 0px, transparent 50%),
+                radial-gradient(at 80% 80%, rgba(15, 32, 67, 1) 0px, transparent 50%);
+        }
+
+        /* 游戏容器 */
+        .game-container {
+            width: 100%;
+            max-width: 1000px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* 头部UI */
+        header {
+            text-align: center;
+            padding: 10px;
+            position: relative;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            color: #fff;
+            text-shadow: 0 0 10px var(--neon-blue), 0 0 20px var(--neon-blue);
+            font-style: italic;
+        }
+
+        /* 资产面板 */
+        .status-panel {
+            display: flex;
+            justify-content: space-between;
+            background: var(--panel-bg);
+            padding: 15px 25px;
+            border-radius: 12px;
+            border: 1px solid rgba(0, 240, 255, 0.3);
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.1);
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+
+        .balance span {
+            color: var(--neon-yellow);
+            text-shadow: 0 0 10px rgba(255, 223, 0, 0.5);
+        }
+
+        /* 赛道区域 */
+        .track-container {
+            background: #111122;
+            border-radius: 16px;
+            padding: 20px 40px 20px 20px;
+            position: relative;
+            border: 2px solid #222244;
+            overflow: hidden;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+        }
+
+        /* 终点线 */
+        .finish-line {
+            position: absolute;
+            right: 40px;
+            top: 10px;
+            bottom: 10px;
+            width: 12px;
+            background-image: linear-gradient(45deg, #fff 25%, transparent 25%), 
+                              linear-gradient(-45deg, #fff 25%, transparent 25%), 
+                              linear-gradient(45deg, transparent 75%, #fff 75%), 
+                              linear-gradient(-45deg, transparent 75%, #fff 75%);
+            background-size: 12px 12px;
+            background-position: 0 0, 0 6px, 6px -6px, -6px 0px;
+            border-left: 2px solid var(--neon-pink);
+            box-shadow: 0 0 10px var(--neon-pink);
+            z-index: 2;
+        }
+
+        .track-lane {
+            height: 70px;
+            position: relative;
+            border-bottom: 2px dashed rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+        }
+
+        .track-lane:last-child {
+            border-bottom: none;
+        }
+
+        /* 赛车标签样式 */
+        .lane-label {
+            position: absolute;
+            left: 5px;
+            font-size: 0.8rem;
+            color: rgba(255,255,255,0.4);
+            font-weight: bold;
+            z-index: 2;
+        }
+
+        /* 赛车主体 */
+        .car-wrapper {
+            position: absolute;
+            left: 50px; /* 起跑线位置 */
+            width: 70px;
+            height: 40px;
+            transition: left 0.1s linear;
+            z-index: 3;
+        }
+
+        .car {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        /* 用CSS画一个酷炫的车头朝右的赛车 */
+        .car-body {
+            width: 60px;
+            height: 24px;
+            background: #333;
+            position: absolute;
+            top: 8px;
+            left: 0;
+            border-radius: 4px 12px 8px 4px;
+            box-shadow: 0 0 15px currentColor;
+        }
+
+        /* 车窗/驾驶舱 */
+        .car-cabin {
+            position: absolute;
+            width: 18px;
+            height: 16px;
+            background: rgba(255, 255, 255, 0.7);
+            top: 12px;
+            left: 25px;
+            border-radius: 4px 8px 0 0;
+            transform: skewX(-20deg);
+        }
+
+        /* 尾翼 */
+        .car-spoiler {
+            position: absolute;
+            width: 6px;
+            height: 18px;
+            top: 3px;
+            left: 2px;
+            border-radius: 2px;
+        }
+
+        /* 轮子 */
+        .wheel {
+            position: absolute;
+            width: 12px;
+            height: 8px;
+            background: #111;
+            border: 1px solid #555;
+            border-radius: 2px;
+        }
+        .w-top-left  { top: 2px; left: 10px; }
+        .w-bottom-left { bottom: 2px; left: 10px; }
+        .w-top-right { top: 2px; right: 15px; }
+        .w-bottom-right { bottom: 2px; right: 15px; }
+
+        /* 赛车颜色定义 */
+        .car-1 { color: var(--neon-pink); }
+        .car-1 .car-body, .car-1 .car-spoiler { background: var(--neon-pink); }
+        .car-2 { color: var(--neon-blue); }
+        .car-2 .car-body, .car-2 .car-spoiler { background: var(--neon-blue); }
+        .car-3 { color: var(--neon-green); }
+        .car-3 .car-body, .car-3 .car-spoiler { background: var(--neon-green); }
+        .car-4 { color: var(--neon-yellow); }
+        .car-4 .car-body, .car-4 .car-spoiler { background: var(--neon-yellow); }
+
+        /* 粒子画布 */
+        .particle-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        /* 投注控制面板 */
+        .control-panel {
+            background: var(--panel-bg);
+            border-radius: 16px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+        }
+
+        .panel-title {
+            font-size: 1.1rem;
+            text-transform: uppercase;
+            color: #aaa;
+            margin-bottom: 15px;
+            letter-spacing: 1px;
+            border-left: 4px solid var(--neon-blue);
+            padding-left: 8px;
+        }
+
+        .bet-options {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .bet-card {
+            background: rgba(255,255,255,0.03);
+            border: 2px solid #333;
+            border-radius: 12px;
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .bet-card:hover {
+            transform: translateY(-3px);
+            background: rgba(255,255,255,0.05);
+        }
+
+        .bet-card.selected {
+            background: rgba(0, 240, 255, 0.1);
+            border-color: var(--neon-blue);
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.3);
+        }
+
+        /* 针对不同车的选中高亮 */
+        .bet-card.selected.c1 { border-color: var(--neon-pink); box-shadow: 0 0 15px rgba(255, 0, 127, 0.3); }
+        .bet-card.selected.c2 { border-color: var(--neon-blue); box-shadow: 0 0 15px rgba(0, 240, 255, 0.3); }
+        .bet-card.selected.c3 { border-color: var(--neon-green); box-shadow: 0 0 15px rgba(57, 255, 20, 0.3); }
+        .bet-card.selected.c4 { border-color: var(--neon-yellow); box-shadow: 0 0 15px rgba(255, 223, 0, 0.3); }
+
+        .car-thumb {
+            width: 30px;
+            height: 12px;
+            margin: 0 auto 10px;
+            border-radius: 3px;
+        }
+
+        .bet-input-zone {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+        }
+
+        .input-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .input-group label {
+            font-weight: bold;
+            color: #ccc;
+        }
+
+        input[type="number"] {
+            background: #000;
+            border: 1px solid #444;
+            color: #fff;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            width: 120px;
+            outline: none;
+            text-align: center;
+        }
+
+        input[type="number"]:focus {
+            border-color: var(--neon-blue);
+            box-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+        }
+
+        /* 炫酷动作按钮 */
+        .btn-start {
+            background: linear-gradient(135deg, #00f0ff, #7000ff);
+            color: white;
+            border: none;
+            padding: 12px 40px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            transition: all 0.3s;
+            box-shadow: 0 5px 15px rgba(0, 240, 255, 0.4);
+        }
+
+        .btn-start:hover:not(:disabled) {
+            transform: scale(1.05);
+            box-shadow: 0 5px 25px rgba(0, 240, 255, 0.6);
+        }
+
+        .btn-start:disabled {
+            background: #444;
+            color: #888;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        /* 弹窗结果 */
+        .result-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            z-index: 100;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.5s ease;
+        }
+
+        .result-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .result-box {
+            background: #15152a;
+            border: 2px solid var(--neon-blue);
+            border-radius: 20px;
+            padding: 40px;
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+            transform: scale(0.7);
+            transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 0 30px rgba(0,240,255,0.3);
+        }
+
+        .result-overlay.active .result-box {
+            transform: scale(1);
+        }
+
+        .result-title {
+            font-size: 2rem;
+            margin-bottom: 15px;
+            font-style: italic;
+        }
+
+        .result-title.win { color: var(--neon-green); text-shadow: 0 0 15px rgba(57,255,20,0.5); }
+        .result-title.lose { color: var(--neon-pink); text-shadow: 0 0 15px rgba(255,0,127,0.5); }
+
+        .result-msg {
+            font-size: 1.1rem;
+            margin-bottom: 25px;
+            line-height: 1.6;
+        }
+
+        .btn-close {
+            background: transparent;
+            border: 2px solid #fff;
+            color: #fff;
+            padding: 10px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+
+        .btn-close:hover {
+            background: #fff;
+            color: #000;
+        }
+
+        /* 响应式适配移动端 */
+        @media (max-width: 768px) {
+            h1 { font-size: 1.8rem; }
+            .bet-options {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 10px;
+            }
+            .track-container {
+                padding: 15px 30px 15px 10px;
+            }
+            .finish-line {
+                right: 30px;
+            }
+            .car-wrapper {
+                width: 50px;
+                height: 30px;
+                left: 35px;
+            }
+            .car-body { width: 42px; height: 18px; top: 6px; }
+            .car-cabin { width: 12px; height: 12px; top: 8px; left: 18px; }
+            .wheel { width: 9px; height: 6px; }
+            .track-lane { height: 55px; }
+            .bet-input-zone {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .input-group {
+                justify-content: space-between;
+            }
+            input[type="number"] { width: 100%; }
+            .btn-start { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="game-container">
+        <header>
+            <h1>Neon Rush</h1>
+        </header>
+
+        <div class="status-panel">
+            <div class="balance">我的资产: <span id="balance-amount">1000</span>币</div>
+            <div class="status-text" id="status-text" style="color: #aaa;">准备下注...</div>
+        </div>
+
+        <div class="track-container">
+            <canvas class="particle-canvas" id="particleCanvas"></canvas>
+            <div class="finish-line"></div>
+            
+            <div class="track-lane">
+                <div class="lane-label">LANE 1</div>
+                <div class="car-wrapper car-1" id="car1">
+                    <div class="car">
+                        <div class="car-body"></div>
+                        <div class="car-cabin"></div>
+                        <div class="car-spoiler"></div>
+                        <div class="wheel w-top-left"></div>
+                        <div class="wheel w-bottom-left"></div>
+                        <div class="wheel w-top-right"></div>
+                        <div class="wheel w-bottom-right"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="track-lane">
+                <div class="lane-label">LANE 2</div>
+                <div class="car-wrapper car-2" id="car2">
+                    <div class="car">
+                        <div class="car-body"></div>
+                        <div class="car-cabin"></div>
+                        <div class="car-spoiler"></div>
+                        <div class="wheel w-top-left"></div>
+                        <div class="wheel w-bottom-left"></div>
+                        <div class="wheel w-top-right"></div>
+                        <div class="wheel w-bottom-right"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="track-lane">
+                <div class="lane-label">LANE 3</div>
+                <div class="car-wrapper car-3" id="car3">
+                    <div class="car">
+                        <div class="car-body"></div>
+                        <div class="car-cabin"></div>
+                        <div class="car-spoiler"></div>
+                        <div class="wheel w-top-left"></div>
+                        <div class="wheel w-bottom-left"></div>
+                        <div class="wheel w-top-right"></div>
+                        <div class="wheel w-bottom-right"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="track-lane">
+                <div class="lane-label">LANE 4</div>
+                <div class="car-wrapper car-4" id="car4">
+                    <div class="car">
+                        <div class="car-body"></div>
+                        <div class="car-cabin"></div>
+                        <div class="car-spoiler"></div>
+                        <div class="wheel w-top-left"></div>
+                        <div class="wheel w-bottom-left"></div>
+                        <div class="wheel w-top-right"></div>
+                        <div class="wheel w-bottom-right"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="control-panel">
+            <div class="panel-title">选择获胜赛车 (赔率 3.5x)</div>
+            <div class="bet-options">
+                <div class="bet-card c1" onclick="selectCar(1)" id="card-1">
+                    <div class="car-thumb" style="background: var(--neon-pink);"></div>
+                    <div>1 号电音粉</div>
+                </div>
+                <div class="bet-card c2" onclick="selectCar(2)" id="card-2">
+                    <div class="car-thumb" style="background: var(--neon-blue);"></div>
+                    <div>2 号幻影蓝</div>
+                </div>
+                <div class="bet-card c3" onclick="selectCar(3)" id="card-3">
+                    <div class="car-thumb" style="background: var(--neon-green);"></div>
+                    <div>3 号极光绿</div>
+                </div>
+                <div class="bet-card c4" onclick="selectCar(4)" id="card-4">
+                    <div class="car-thumb" style="background: var(--neon-yellow);"></div>
+                    <div>4 号脉冲黄</div>
+                </div>
+            </div>
+
+            <div class="bet-input-zone">
+                <div class="input-group">
+                    <label for="bet-amount">下注金额:</label>
+                    <input type="number" id="bet-amount" value="100" min="10">
+                </div>
+                <button class="btn-start" id="start-btn" onclick="startRace()">开始比赛</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="result-overlay" id="resultOverlay">
+        <div class="result-box">
+            <div class="result-title" id="resultTitle">WIN</div>
+            <div class="result-msg" id="resultMsg">恭喜！你支持的赛车获得了第一名！</div>
+            <button class="btn-close" onclick="closeResult()">继续挑战</button>
+        </div>
+    </div>
+
+    <script>
+        // 游戏核心数据
+        let balance = 1000;
+        let selectedCarId = null;
+        let isRacing = false;
+        let animationFrameId = null;
+
+        // 获取DOM元素
+        const cars = [
+            { id: 1, element: document.getElementById('car1'), pos: 0, color: '#ff007f' },
+            { id: 2, element: document.getElementById('car2'), pos: 0, color: '#00f0ff' },
+            { id: 3, element: document.getElementById('car3'), pos: 0, color: '#39ff14' },
+            { id: 4, element: document.getElementById('car4'), pos: 0, color: '#ffdf00' }
+        ];
+        
+        const canvas = document.getElementById('particleCanvas');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+
+        // 响应式画布尺寸
+        function resizeCanvas() {
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // 粒子类 (负责车尾喷气粒子效果)
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                this.size = Math.random() * 4 + 2;
+                this.speedX = -(Math.random() * 3 + 2); // 向后喷射
+                this.speedY = (Math.random() - 0.5) * 1.5;
+                this.alpha = 1;
+                this.decay = Math.random() * 0.04 + 0.02;
+            }
+            update() {
+                this.x += this.speedX;
+                this.y += this.speedY;
+                this.alpha -= this.decay;
+            }
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = this.alpha;
+                ctx.fillStyle = this.color;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        // 选择赛车
+        function selectCar(id) {
+            if (isRacing) return;
+            selectedCarId = id;
+            
+            // 清除旧选中
+            document.querySelectorAll('.bet-card').forEach(card => card.classList.remove('selected'));
+            // 添加新选中
+            document.getElementById(`card-${id}`).classList.add('selected');
+            document.getElementById('status-text').innerText = `已锁定 ${id} 号车，请输入金额并开赛！`;
+            document.getElementById('status-text').style.color = cars[id-1].color;
+        }
+
+        // 游戏主循环 (物理+粒子渲染)
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const startX = window.innerWidth <= 768 ? 35 : 50;
+            const finishX = canvas.width - (window.innerWidth <= 768 ? 40 : 60); 
+            const maxTravel = finishX - startX;
+
+            let winner = null;
+
+            // 1. 更新赛车位置
+            cars.forEach(car => {
+                if (car.pos < 100) {
+                    // 每帧随机加速，营造紧张刺激的拉锯感
+                    const speed = Math.random() * 0.4 + 0.1;
+                    // 给微落后的车一点点补偿，比赛更紧凑
+                    const catchUp = (100 - car.pos) * 0.002;
+                    car.pos += speed + catchUp;
+                    
+                    if (car.pos >= 100) {
+                        car.pos = 100;
+                    }
+                }
+
+                // 计算车头在赛道容器内的实时绝对像素坐标
+                const currentLeft = startX + (car.pos / 100) * maxTravel;
+                car.element.style.left = `${currentLeft}px`;
+
+                // 2. 生成车尾粒子 (车尾在视觉左侧)
+                const carRect = car.element.getBoundingClientRect();
+                const containerRect = canvas.getBoundingClientRect();
+                
+                // 计算车尾在画布中的具体坐标
+                const emitterX = carRect.left - containerRect.left + 5;
+                const emitterY = carRect.top - containerRect.top + (carRect.height / 2);
+
+                // 如果还在跑，就持续喷气
+                if (car.pos < 100) {
+                    for(let i=0; i<2; i++) {
+                        particles.push(new Particle(emitterX, emitterY, car.color));
+                    }
+                }
+            });
+
+            // 3. 更新和绘制所有粒子
+            particles = particles.filter(p => p.alpha > 0);
+            particles.forEach(p => {
+                p.update();
+                p.draw();
+            });
+
+            // 4. 检查是否有车冲过终点
+            const finishedCars = cars.filter(c => c.pos >= 100);
+            if (finishedCars.length > 0 && !winner) {
+                // 如果同时过线，按高精度排序或随机抓一个
+                isRacing = false;
+                handleRaceEnd(finishedCars[0].id);
+                return;
+            }
+
+            if (isRacing) {
+                animationFrameId = requestAnimationFrame(gameLoop);
+            }
+        }
+
+        // 开始比赛
+        function startRace() {
+            if (isRacing) return;
+            
+            if (!selectedCarId) {
+                alert("请先点击选择您想投注的赛车！");
+                return;
+            }
+
+            const betInput = document.getElementById('bet-amount');
+            const betAmount = parseInt(betInput.value);
+
+            if (isNaN(betAmount) || betAmount <= 0) {
+                alert("请输入合法的下注金额！");
+                return;
+            }
+
+            if (betAmount > balance) {
+                alert("余额不足，您没有足够的电竞币！");
+                return;
+            }
+
+            // 扣除本金
+            balance -= betAmount;
+            document.getElementById('balance-amount').innerText = balance;
+            document.getElementById('status-text').innerText = "比赛正在激烈进行中... 🏎️💨";
+            document.getElementById('status-text').style.color = "#fff";
+
+            // 禁用按钮和输入
+            isRacing = true;
+            document.getElementById('start-btn').disabled = true;
+            betInput.disabled = true;
+
+            // 赛车重置
+            cars.forEach(car => {
+                car.pos = 0;
+                car.element.style.left = window.innerWidth <= 768 ? '35px' : '50px';
+            });
+            particles = [];
+
+            // 触发主动画循环
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        // 比赛结束结算
+        function handleRaceEnd(winnerId) {
+            cancelAnimationFrame(animationFrameId);
+            
+            const betAmount = parseInt(document.getElementById('bet-amount').value);
+            const isWin = (winnerId === selectedCarId);
+            
+            const overlay = document.getElementById('resultOverlay');
+            const title = document.getElementById('resultTitle');
+            const msg = document.getElementById('resultMsg');
+
+            let reward = 0;
+            if (isWin) {
+                reward = Math.floor(betAmount * 3.5);
+                balance += reward;
+                title.innerText = "VICTORY";
+                title.className = "result-title win";
+                msg.innerHTML = `恭喜！<span style="color:${cars[winnerId-1].color}; font-weight:bold;">${winnerId}号车</span>夺冠！<br>你赢得了 <span style="color:var(--neon-yellow); font-weight:bold;">+${reward}</span> 币！`;
+            } else {
+                title.innerText = "DEFEAT";
+                title.className = "result-title lose";
+                msg.innerHTML = `遗憾！冠军是 <span style="color:${cars[winnerId-1].color}; font-weight:bold;">${winnerId}号车</span>。<br>你失去了 ${betAmount} 币，再接再厉！`;
+            }
+
+            // 更新资产显示
+            document.getElementById('balance-amount').innerText = balance;
+            
+            // 弹出酷炫结算窗
+            setTimeout(() => {
+                overlay.classList.add('active');
+            }, 500);
+        }
+
+        // 关闭结算窗，恢复状态
+        function closeResult() {
+            document.getElementById('resultOverlay').classList.remove('active');
+            document.getElementById('start-btn').disabled = false;
+            document.getElementById('bet-amount').disabled = false;
+            document.getElementById('status-text').innerText = "准备下注...";
+            document.getElementById('status-text').style.color = "#aaa";
+
+            if (balance <= 0) {
+                alert("噢不，你破产了！免费为您充值 500 筹码重返赛场！");
+                balance = 500;
+                document.getElementById('balance-amount').innerText = balance;
+            }
+        }
+    </script>
+</body>
+</html>

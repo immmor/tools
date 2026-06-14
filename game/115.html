@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>街机点球大战彩票</title>
+    <style>
+        :root {
+            --bg-blue: #2196F3;
+            --bg-red: #F44336;
+            --panel-bg: #1565C0;
+            --text-yellow: #FFEB3B;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Arial Black', -apple-system, sans-serif;
+            user-select: none;
+        }
+
+        body {
+            background-color: #0d47a1;
+            color: #fff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        /* 游戏主容器 */
+        #game-container {
+            width: 1024px;
+            height: 576px;
+            background: var(--panel-bg);
+            border: 4px solid #000;
+            border-radius: 12px;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            overflow: hidden;
+        }
+
+        /* 顶部状态栏 */
+        .top-bar {
+            height: 60px;
+            background: #1976D2;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 20px;
+            border-bottom: 3px solid #0d47a1;
+        }
+
+        .menu-btn {
+            width: 40px;
+            height: 35px;
+            background: #2196F3;
+            border: 2px solid #fff;
+            border-radius: 5px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-around;
+            padding: 5px;
+            cursor: pointer;
+        }
+        .menu-btn span { height: 4px; background: white; width: 100%; border-radius: 2px; }
+
+        .vs-panel {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .flag {
+            width: 60px;
+            height: 35px;
+            border: 2px solid #fff;
+            border-radius: 4px;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px #000;
+        }
+        .timer-box {
+            background: #000;
+            border: 2px solid var(--text-yellow);
+            border-radius: 20px;
+            padding: 2px 15px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            color: #fff;
+            font-size: 18px;
+        }
+        .timer-box span { color: #FF5722; font-weight: bold;}
+
+        /* 核心赔率面板 */
+        .odds-grid {
+            flex: 1;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr) repeat(4, 1fr);
+            gap: 4px;
+            padding: 10px;
+            background: #0a3d80;
+        }
+
+        .odds-card {
+            border: 2px solid #000;
+            border-radius: 6px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            position: relative;
+            transition: transform 0.1s;
+            font-weight: bold;
+        }
+        .odds-card:active { transform: scale(0.95); }
+
+        /* 主队风格(蓝色) */
+        .odds-card.home {
+            background: linear-gradient(180deg, #64B5F6 0%, #1E88E5 100%);
+        }
+        /* 客队风格(红色) */
+        .odds-card.away {
+            background: linear-gradient(180deg, #E57373 0%, #D32F2F 100%);
+        }
+
+        .odds-card .score {
+            font-size: 24px;
+            color: var(--text-yellow);
+            text-shadow: -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 2px 2px 0 #000;
+            margin-bottom: 2px;
+        }
+        .odds-card .rate {
+            font-size: 14px;
+            color: #fff;
+            background: rgba(0,0,0,0.3);
+            padding: 1px 8px;
+            border-radius: 10px;
+        }
+
+        /* 选中状态 */
+        .odds-card.selected {
+            animation: blink 0.5s infinite alternate;
+            border-color: #fff;
+            box-shadow: 0 0 15px #FFF;
+            z-index: 2;
+        }
+        @keyframes blink {
+            0% { background: #FFF9C4; }
+            100% { background: #FBC02D; }
+        }
+        .odds-card.selected .score { color: #d32f2f; text-shadow: none;}
+
+        /* 底部历史记录与控制台 */
+        .bottom-panel {
+            background: #1565C0;
+            padding: 10px;
+            border-top: 3px solid #0d47a1;
+        }
+
+        .history-row {
+            display: flex;
+            gap: 5px;
+            overflow-x: hidden;
+            background: #0d47a1;
+            padding: 5px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+        .hist-badge {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            color: #fff;
+        }
+        .hist-badge.home { background: #1976D2; }
+        .hist-badge.away { background: #D32F2F; }
+
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .chip-box {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: #0d47a1;
+            padding: 5px 15px;
+            border-radius: 20px;
+        }
+        .balance {
+            font-size: 20px;
+            color: #81C784;
+        }
+
+        .btn {
+            padding: 10px 30px;
+            font-size: 18px;
+            font-weight: bold;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            text-shadow: 1px 1px 1px rgba(0,0,0,0.5);
+        }
+        .btn-cancel { background: #FF9800; color: white; }
+        .btn-confirm { background: #4CAF50; color: white; box-shadow: 0 4px #388E3C;}
+        .btn-confirm:active { transform: translateY(4px); box-shadow: none;}
+
+        /* 炫酷的开奖动画全屏大棚 */
+        #animation-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #1b5e20; /* 草绿色 */
+            z-index: 100;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #match-canvas {
+            background: #2e7d32;
+            border: 4px solid #fff;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+        }
+
+        .match-hud {
+            width: 100%;
+            display: flex;
+            justify-content: space-around;
+            color: white;
+            font-size: 24px;
+            padding: 10px;
+            background: rgba(0,0,0,0.5);
+            position: absolute;
+            top: 0;
+        }
+        .announcer {
+            position: absolute;
+            bottom: 40px;
+            font-size: 32px;
+            color: var(--text-yellow);
+            font-weight: bold;
+            text-shadow: 2px 2px 4px #000;
+            animation: pulse 0.5s infinite alternate;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            100% { transform: scale(1.1); }
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <div class="top-bar">
+        <div class="menu-btn"><span></span><span></span><span></span></div>
+        <div class="vs-panel">
+            <div id="home-flag" class="flag" style="background: #002B7F;">🇨🇳</div>
+            <div class="timer-box">
+                期号:<span id="period-id">288180226</span> 
+                ⏱️<span id="countdown">05:00</span>
+            </div>
+            <div id="away-flag" class="flag" style="background: #CE1126;">🇧🇷</div>
+        </div>
+        <div style="font-size: 24px; cursor:pointer;" id="close-game">❌</div>
+    </div>
+
+    <div class="odds-grid" id="odds-container"></div>
+
+    <div class="bottom-panel">
+        <div class="history-row" id="history-box">
+            </div>
+        <div class="controls">
+            <div class="chip-box">
+                <span>💰 余额:</span>
+                <span class="balance" id="user-balance">100000.00</span>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn btn-cancel" id="btn-clear">取消</button>
+                <button class="btn btn-confirm" id="btn-bet">确定投注</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="animation-overlay">
+        <div class="match-hud">
+            <div id="hud-home">主队: 0</div>
+            <div id="hud-round" style="color:var(--text-yellow)">第 1 轮 (射门手 1)</div>
+            <div id="hud-away">客队: 0</div>
+        </div>
+        <canvas id="match-canvas" width="800" height="450"></canvas>
+        <div class="announcer" id="match-announcer">READY? GO!</div>
+    </div>
+</div>
+
+<script>
+    // --- 1. 核心游戏配置与数据 ---
+    const COUNTDOWN_TOTAL = 300; // 5分钟一期 (300秒)
+    const ANIMATION_LEAD_TIME = 45; // 倒计时最后45秒锁单并强制进入开奖动画
+
+    const flagsPool = [
+        {name:"中国", icon:"🇨🇳"}, {name:"巴西", icon:"🇧🇷"}, {name:"德国", icon:"🇩🇪"}, {name:"法国", icon:"🇫🇷"},
+        {name:"阿根廷", icon:"🇦🇷"}, {name:"意大利", icon:"🇮🇹"}, {name:"英国", icon:"🇬🇧"}, {name:"西班牙", icon:"🇪🇸"},
+        {name:"葡萄牙", icon:"🇵🇹"}, {name:"荷兰", icon:"🇳🇱"}, {name:"日本", icon:"🇯🇵"}, {name:"韩国", icon:"🇰🇷"},
+        {name:"乌拉圭", icon:"🇺🇾"}, {name:"克罗地亚", icon:"🇭🇷"}, {name:"比利时", icon:"🇧🇪"}, {name:"墨西哥", icon:"🇲🇽"},
+        {name:"塞内加尔", icon:"🇸🇳"}, {name:"喀麦隆", icon:"🇨🇲"}, {name:"智利", icon:"🇨🇱"}, {name:"美国", icon:"🇺🇸"},
+        {name:"哥伦比亚", icon:"🇨🇴"}, {name:"摩洛哥", icon:"🇲🇦"}, {name:"沙特", icon:"🇸🇦"}, {name:"澳洲", icon:"🇦🇺"}
+    ];
+
+    // 严格严格按照你的文字赔率配置
+    const oddsConfig = [
+        // 主胜 (11个)
+        {score: "1:0", rate: 400, type: "home"}, {score: "2:0", rate: 80, type: "home"},
+        {score: "2:1", rate: 40, type: "home"},  {score: "3:0", rate: 50, type: "home"},
+        {score: "3:1", rate: 30, type: "home"},  {score: "3:2", rate: 6, type: "home"},
+        {score: "4:1", rate: 20, type: "home"},  {score: "4:2", rate: 15, type: "home"},
+        {score: "4:3", rate: 10, type: "home"},  {score: "5:3", rate: 9, type: "home"},
+        {score: "5:4", rate: 11, type: "home"},
+        // 客胜 (11个)
+        {score: "0:1", rate: 120, type: "away"}, {score: "0:2", rate: 55, type: "away"},
+        {score: "1:2", rate: 35, type: "away"},  {score: "0:3", rate: 45, type: "away"},
+        {score: "1:3", rate: 25, type: "away"},  {score: "2:3", rate: 5, type: "away"},
+        {score: "1:4", rate: 18, type: "away"},  {score: "2:4", rate: 12, type: "away"},
+        {score: "3:4", rate: 10, type: "away"},  {score: "3:5", rate: 8, type: "away"},
+        {score: "4:5", rate: 11, type: "away"}
+    ];
+
+    // --- 状态变量 ---
+    let currentPeriod = 288180226;
+    let timeRemaining = COUNTDOWN_TOTAL;
+    let selectedBet = null;
+    let userBalance = 100000.00;
+    let currentHomeFlag = {};
+    let currentAwayFlag = {};
+    let isLocked = false;
+
+    // --- Canvas 引擎变量 ---
+    const canvas = document.getElementById('match-canvas');
+    const ctx = canvas.getContext('2d');
+
+    // --- 2. 初始化与视图渲染 ---
+    function initGame() {
+        renderOddsGrid();
+        setupEvents();
+        rollMatchTeams();
+        generateFakeHistory();
+        
+        // 24小时无人值守循环核心定时器
+        setInterval(tick, 1000);
+    }
+
+    function renderOddsGrid() {
+        const container = document.getElementById('odds-container');
+        container.innerHTML = '';
+        oddsConfig.forEach(item => {
+            const card = document.createElement('div');
+            card.className = `odds-card ${item.type}`;
+            card.dataset.score = item.score;
+            card.innerHTML = `
+                <div class="score">${item.score}</div>
+                <div class="rate">${item.rate}x</div>
+            `;
+            container.appendChild(card);
+        });
+    }
+
+    function rollMatchTeams() {
+        let idx1 = Math.floor(Math.random() * flagsPool.length);
+        let idx2 = Math.floor(Math.random() * flagsPool.length);
+        while(idx1 === idx2) { idx2 = Math.floor(Math.random() * flagsPool.length); }
+        currentHomeFlag = flagsPool[idx1];
+        currentAwayFlag = flagsPool[idx2];
+
+        document.getElementById('home-flag').innerText = currentHomeFlag.icon;
+        document.getElementById('away-flag').innerText = currentAwayFlag.icon;
+    }
+
+    function generateFakeHistory() {
+        const box = document.getElementById('history-box');
+        box.innerHTML = '';
+        for(let i=0; i<12; i++) {
+            const mockItem = oddsConfig[Math.floor(Math.random()*oddsConfig.length)];
+            const b = document.createElement('span');
+            b.className = `hist-badge ${mockItem.type}`;
+            b.innerText = mockItem.score;
+            box.appendChild(b);
+        }
+    }
+
+    function setupEvents() {
+        document.getElementById('odds-container').addEventListener('click', (e) => {
+            if(isLocked) return;
+            const card = e.target.closest('.odds-card');
+            if(!card) return;
+            
+            document.querySelectorAll('.odds-card').forEach(c => c.classList.remove('selected'));
+            card.classList.add('selected');
+            selectedBet = card.dataset.score;
+        });
+
+        document.getElementById('btn-clear').addEventListener('click', () => {
+            if(isLocked) return;
+            document.querySelectorAll('.odds-card').forEach(c => c.classList.remove('selected'));
+            selectedBet = null;
+        });
+
+        document.getElementById('btn-bet').addEventListener('click', () => {
+            if(isLocked) return;
+            if(!selectedBet) { alert('请先选择一个比分预测！'); return; }
+            alert(`下注成功！[${selectedBet}] 扣除10.00元`);
+            userBalance -= 10;
+            document.getElementById('user-balance').innerText = userBalance.toFixed(2);
+        });
+    }
+
+    // --- 3. 核心时间循环 ---
+    function tick() {
+        timeRemaining--;
+        if(timeRemaining <= 0) {
+            timeRemaining = COUNTDOWN_TOTAL;
+            isLocked = false;
+            document.getElementById('animation-overlay').style.display = 'none';
+            currentPeriod++;
+            document.getElementById('period-id').innerText = currentPeriod;
+            rollMatchTeams();
+        }
+
+        // 倒计时格式化
+        let mins = Math.floor(timeRemaining / 60);
+        let secs = timeRemaining % 60;
+        document.getElementById('countdown').innerText = 
+            `${mins.toString().padStart(2,'0')}:${secs.toString().padStart(2,'0')}`;
+
+        // 进入触发开奖点球动画阈值
+        if(timeRemaining === ANIMATION_LEAD_TIME) {
+            isLocked = true;
+            runLotteryDraw();
+        }
+    }
+
+    // --- 4. 核心开奖方案与动画逻辑计算 ---
+    function runLotteryDraw() {
+        // 从有效配置里随机挑选一个结果作为本期开奖数值方案
+        const finalWinningResult = oddsConfig[Math.floor(Math.random() * oddsConfig.length)];
+        const scores = finalWinningResult.score.split(':').map(Number);
+        const homeTargetScore = scores[0];
+        const awayTargetScore = scores[1];
+
+        // 拆解并构建 5轮 点球大战的动作脚本 (每队各5次射门动作)
+        // 动作类型定义: 0=左射进, 1=右射进, 2=左被扑, 3=右被扑
+        let homeActions = allocateActions(homeTargetScore);
+        let awayActions = allocateActions(awayTargetScore);
+
+        // 唤醒动画蒙层
+        document.getElementById('animation-overlay').style.display = 'flex';
+        
+        // 调度两队共10名球员的演出轮次线 (每个球员动画精准4秒)
+        executePenaltyTheater(homeActions, awayActions, finalWinningResult.score);
+    }
+
+    // 辅助工具：根据最终目标比分，将进球/不进球合理分配给5个球员
+    function allocateActions(targetScore) {
+        let actions = [];
+        let goalsLeft = targetScore;
+        for(let i=0; i<5; i++) {
+            let remainingSlots = 5 - i;
+            // 如果必须进球或者运气进球
+            if(goalsLeft > 0 && (goalsLeft >= remainingSlots || Math.random() > 0.4)) {
+                actions.push(Math.random() > 0.5 ? 0 : 1); // 进球动画(左/右)
+                goalsLeft--;
+            } else {
+                actions.push(Math.random() > 0.5 ? 2 : 3); // 没进动画(左/右)
+            }
+        }
+        return actions;
+    }
+
+    // 剧场控制：精准掌控5轮、10个球员的依次轮替
+    async function executePenaltyTheater(homeActions, awayActions, finalScore) {
+        let currentHomeScore = 0;
+        let currentAwayScore = 0;
+
+        for(let round = 0; round < 5; round++) {
+            // ----- 主队射门手时间 (4秒) -----
+            document.getElementById('hud-round').innerText = `第 ${round+1} 轮 (主队射门手 ${round+1})`;
+            let hAct = homeActions[round];
+            let hIsGoal = (hAct === 0 || hAct === 1);
+            await playOneShooterAnimation(true, hAct);
+            if(hIsGoal) currentHomeScore++;
+            document.getElementById('hud-home').innerText = `主队: ${currentHomeScore}`;
+
+            // ----- 客队射门手时间 (4秒) -----
+            document.getElementById('hud-round').innerText = `第 ${round+1} 轮 (客队射门手 ${round+1})`;
+            let aAct = awayActions[round];
+            let aIsGoal = (aAct === 0 || aAct === 1);
+            await playOneShooterAnimation(false, aAct);
+            if(aIsGoal) currentAwayScore++;
+            document.getElementById('hud-away').innerText = `客队: ${currentAwayScore}`;
+        }
+
+        // 终场宣告
+        document.getElementById('match-announcer').innerText = `比赛结束! 比分 ${finalScore}`;
+        
+        // 追加至历史记录栏
+        const box = document.getElementById('history-box');
+        const b = document.createElement('span');
+        const isHomeWin = parseInt(finalScore.split(':')[0]) > parseInt(finalScore.split(':')[1]);
+        b.className = `hist-badge ${isHomeWin ? 'home':'away'}`;
+        b.innerText = finalScore;
+        box.insertBefore(b, box.firstChild);
+
+        // 如果中奖则结算结算
+        if(selectedBet === finalScore) {
+            let configItem = oddsConfig.find(o => o.score === finalScore);
+            let winMoney = 10 * configItem.rate;
+            userBalance += winMoney;
+            document.getElementById('user-balance').innerText = userBalance.toFixed(2);
+            alert(`🎉 恭喜中奖！猜中比分 ${finalScore}，赢得 ${winMoney}元！`);
+        }
+    }
+
+    // --- 5. Canvas 卡通物理动画模拟渲染器 (每人4秒) ---
+    function playOneShooterAnimation(isHomeTeam, actionType) {
+        return new Promise((resolve) => {
+            const startTime = Date.now();
+            const duration = 4000; // 纯4秒动画
+
+            // 基础物理位置配置
+            let ball = { x: 400, y: 380, radius: 12, vx: 0, vy: 0 };
+            let keeper = { x: 400, y: 150, width: 40, height: 70, vx: 0 };
+            let kicker = { x: 400, y: 420 };
+
+            let textAnnounce = "准备射门...";
+            let ballKicked = false;
+
+            // 动作映射解析
+            // 0: 左进, 1: 右进, 2: 左被扑, 3: 右被扑
+            let targetX = 400; // 足球射向的X目标
+            if(actionType === 0) targetX = 260; 
+            if(actionType === 1) targetX = 540;
+            if(actionType === 2) targetX = 320;
+            if(actionType === 3) targetX = 480;
+
+            function updateFrame() {
+                let elapsed = Date.now() - startTime;
+                let progress = elapsed / duration;
+
+                if (elapsed >= duration) {
+                    resolve();
+                    return;
+                }
+
+                // --- 极其简单的状态机模拟时间线 ---
+                if(elapsed < 1200) {
+                    textAnnounce = isHomeTeam ? "主队 助跑中..." : "客队 助跑中...";
+                    // 球员跑向球
+                    kicker.y = 420 - (elapsed/1200)*30;
+                } 
+                else if(elapsed >= 1200 && !ballKicked) {
+                    // 击球瞬间，计算足球轨迹物理速度
+                    ballKicked = true;
+                    textAnnounce = " 射门！";
+                    let framesNeeded = 45; // 约0.75秒飞入球门
+                    ball.vx = (targetX - ball.x) / framesNeeded;
+                    ball.vy = (130 - ball.y) / framesNeeded;
+
+                    // 守门员智能决定防守扑救方向
+                    if(actionType === 0 || actionType === 2) keeper.vx = -3.2; // 往左扑
+                    if(actionType === 1 || actionType === 3) keeper.vx = 3.2;  // 往右扑
+                }
+
+                // 物理位移注入
+                if(ballKicked && ball.y > 125) {
+                    ball.x += ball.vx;
+                    ball.y += ball.vy;
+                    keeper.x += keeper.vx;
+                    // 防止守门员过分出界
+                    keeper.x = Math.max(240, Math.min(560, keeper.x));
+                }
+
+                // 进球判定及文案展示更新
+                if(elapsed > 2000) {
+                    if(actionType === 0 || actionType === 1) {
+                        textAnnounce = "⚽ GOAL!! 进球了！";
+                    } else {
+                        textAnnounce = "❌ SAVED!! 被守门员扑出！";
+                    }
+                }
+
+                document.getElementById('match-announcer').innerText = textAnnounce;
+
+                // --- 渲染画布 Canvas 画笔 ---
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                // 1. 画球场草坪线
+                ctx.fillStyle = '#2e7d32';
+                ctx.fillRect(0,0, canvas.width, canvas.height);
+                ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+                ctx.lineWidth = 4;
+                ctx.strokeRect(100, 100, 600, 350);
+
+                // 2. 画球门
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 6;
+                ctx.strokeRect(220, 80, 360, 80); // 球门框
+                // 网格线效果
+                ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+                ctx.lineWidth = 1;
+                for(let l=220; l<=580; l+=15) { ctx.beginPath(); ctx.moveTo(l,80); ctx.lineTo(l,160); ctx.stroke(); }
+
+                // 3. 画守门员 (紫色方块人)
+                ctx.fillStyle = '#9c27b0';
+                ctx.fillRect(keeper.x - keeper.width/2, keeper.y - keeper.height, keeper.width, keeper.height);
+                ctx.fillStyle = '#ffcc80'; // 头部
+                ctx.beginPath(); ctx.arc(keeper.x, keeper.y - keeper.height - 12, 12, 0, Math.PI*2); ctx.fill();
+
+                // 4. 画射门球员 (浅蓝色/橙色方块人)
+                ctx.fillStyle = isHomeTeam ? '#00e5ff' : '#ff6d00';
+                ctx.fillRect(kicker.x - 15, kicker.y - 60, 30, 60);
+                ctx.fillStyle = '#ffcc80';
+                ctx.beginPath(); ctx.arc(kicker.x, kicker.y - 72, 10, 0, Math.PI*2); ctx.fill();
+
+                // 5. 画足球
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI*2);
+                ctx.fill();
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                requestAnimationFrame(updateFrame);
+            }
+
+            requestAnimationFrame(updateFrame);
+        });
+    }
+
+    // 执行启动
+    window.onload = initGame;
+</script>
+
+</body>
+</html>
