@@ -243,6 +243,27 @@
             color: var(--primary); font-weight: 800; background: rgba(61,122,53,0.08);
             padding: 0 2px; border-radius: 3px;
         }
+
+        /* --- 分页样式 --- */
+        .pagination {
+            display: flex; align-items: center; justify-content: center;
+            gap: 6px; margin-top: 30px; padding: 20px 0; flex-wrap: wrap;
+        }
+        .pagination button {
+            min-width: 38px; height: 38px; border: 1px solid #e5e7eb;
+            background: var(--white); border-radius: 10px; font-size: 14px;
+            font-weight: 600; color: #555; cursor: pointer; transition: 0.25s;
+            display: flex; align-items: center; justify-content: center;
+            padding: 0 12px;
+        }
+        .pagination button:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+        .pagination button.active {
+            background: var(--primary); color: white; border-color: var(--primary);
+        }
+        .pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
+        .pagination .page-info {
+            font-size: 13px; color: #999; margin: 0 10px;
+        }
     </style>
 </head>
 <body>
@@ -582,13 +603,12 @@
         </main>
         <main id="category-detail" class="page-content">
             <!-- 返回导航栏 -->
-            <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 25px;">
+            <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 25px; position: sticky; top: 70px; background: var(--bg); z-index: 100; padding-top: 10px; padding-bottom: 5px;">
                 <div style="width: 42px; height: 42px; background: var(--white); border-radius: 14px; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.04); transition: 0.3s;" onclick="closeCategoryDetail()">
                     <i class="fa-solid fa-arrow-left" style="color: var(--text-main); font-size: 16px;"></i>
                 </div>
                 <div style="flex: 1;">
                     <h2 id="detailCategoryTitle" style="font-size: 1.3rem; font-weight: 800;">房屋租赁</h2>
-                    <p id="detailCategoryCount" style="font-size: 12px; color: #999; margin-top: 2px;">共 128 条信息</p>
                 </div>
                 <div class="icon-btn" style="width: 40px; height: 40px;"><i class="fa-solid fa-sliders"></i></div>
             </div>
@@ -606,6 +626,9 @@
             <div id="detailListContent" class="grid-feed">
                 <!-- 动态填充 -->
             </div>
+
+            <!-- 分页控件 -->
+            <div class="pagination" id="detailPagination"></div>
         </main>
         <main id="item-detail" class="page-content">
             <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 25px;">
@@ -1085,7 +1108,6 @@
 
             const data = categoryData[key] || categoryData.house;
             currentDetailItems = data.items;
-            document.getElementById('detailCategoryCount').textContent = '共 ' + data.items.length * 20 + ' 条信息';
 
             // 重置筛选
             document.querySelectorAll('.filter-chip').forEach((chip, i) => {
@@ -1122,10 +1144,18 @@
             el.style.color = 'white';
         }
 
+        let detailPageSize = 15;
+        let detailCurrentPage = 1;
+
         function renderDetailList(items) {
             const container = document.getElementById('detailListContent');
-            container.innerHTML = items.map((item, idx) => `
-                <article class="card" style="cursor: pointer;" onclick="itemDetailFrom='category-detail';openItemDetail(${idx})">
+            detailCurrentPage = 1;
+            const totalPages = Math.ceil(items.length / detailPageSize);
+            const start = (detailCurrentPage - 1) * detailPageSize;
+            const pageItems = items.slice(start, start + detailPageSize);
+
+            container.innerHTML = pageItems.map((item, idx) => `
+                <article class="card" style="cursor: pointer;" onclick="itemDetailFrom='category-detail';openItemDetail(${start + idx})">
                     <img src="${item.img}" alt="">
                     <div class="card-body">
                         <span class="card-tag">${item.tag}</span>
@@ -1137,6 +1167,60 @@
                     </div>
                 </article>
             `).join('');
+
+            renderPagination(totalPages);
+        }
+
+        function renderPagination(totalPages) {
+            const pager = document.getElementById('detailPagination');
+            if (totalPages <= 1) { pager.innerHTML = ''; return; }
+
+            let html = '';
+            html += `<button onclick="goDetailPage(${detailCurrentPage - 1})" ${detailCurrentPage <= 1 ? 'disabled' : ''}><i class="fa-solid fa-chevron-left"></i></button>`;
+
+            const maxVisible = 3;
+            let startPage = Math.max(1, detailCurrentPage - Math.floor(maxVisible / 2));
+            let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+            if (endPage - startPage < maxVisible - 1) startPage = Math.max(1, endPage - maxVisible + 1);
+
+            if (startPage > 1) {
+                html += `<button onclick="goDetailPage(1)">1</button>`;
+                if (startPage > 2) html += `<span class="page-info">...</span>`;
+            }
+            for (let i = startPage; i <= endPage; i++) {
+                html += `<button class="${i === detailCurrentPage ? 'active' : ''}" onclick="goDetailPage(${i})">${i}</button>`;
+            }
+            if (endPage < totalPages) {
+                if (endPage < totalPages - 1) html += `<span class="page-info">...</span>`;
+                html += `<button onclick="goDetailPage(${totalPages})">${totalPages}</button>`;
+            }
+
+            html += `<button onclick="goDetailPage(${detailCurrentPage + 1})" ${detailCurrentPage >= totalPages ? 'disabled' : ''}><i class="fa-solid fa-chevron-right"></i></button>`;
+            pager.innerHTML = html;
+        }
+
+        function goDetailPage(page) {
+            const totalPages = Math.ceil(currentDetailItems.length / detailPageSize);
+            if (page < 1 || page > totalPages) return;
+            detailCurrentPage = page;
+            const start = (page - 1) * detailPageSize;
+            const pageItems = currentDetailItems.slice(start, start + detailPageSize);
+            const container = document.getElementById('detailListContent');
+            container.innerHTML = pageItems.map((item, idx) => `
+                <article class="card" style="cursor: pointer;" onclick="itemDetailFrom='category-detail';openItemDetail(${start + idx})">
+                    <img src="${item.img}" alt="">
+                    <div class="card-body">
+                        <span class="card-tag">${item.tag}</span>
+                        <h3 class="card-title">${item.title}</h3>
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #f5f5f5; padding-top: 20px;">
+                            <span class="price">${item.price}<small style="font-size: 12px; color: #999; font-weight: normal;">${item.unit}</small></span>
+                            <span style="font-size: 12px; color: #999;"><i class="fa-solid fa-location-dot"></i> ${item.location}</span>
+                        </div>
+                    </div>
+                </article>
+            `).join('');
+            renderPagination(totalPages);
+            window.scrollTo({ top: document.getElementById('category-detail').offsetTop - 80, behavior: 'smooth' });
         }
 
         let currentDetailItems = [];
