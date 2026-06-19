@@ -30,6 +30,21 @@
     } catch (e) { return utcStr; }
   }
 
+  function getBeijingTodayStartTs() {
+    try {
+      const s = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
+      const [y, m, d] = s.split('-');
+      const dt = new Date(`${y}/${m}/${d} 00:00:00 GMT+0800`);
+      return dt.getTime();
+    } catch (e) {
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, '0');
+      const d = String(now.getDate()).padStart(2, '0');
+      return new Date(`${y}/${m}/${d} 00:00:00 GMT+0800`).getTime();
+    }
+  }
+
   // 国家名称中文到 key 的映射（用于翻译）
   const countryKeyMap = {
     '墨西哥': 'country_mexico', '南非': 'country_south_africa', '韩国': 'country_korea',
@@ -154,6 +169,17 @@
           m._displayTime = m.matchTime || '';
         }
       });
+
+      const showUntilTs = getBeijingTodayStartTs() + 2 * 86400000 - 1;
+      allMatches = allMatches.filter(m => m._ts === Infinity || m._ts <= showUntilTs);
+
+      if (allMatches.length === 0) {
+        container.innerHTML = `<p class="text-zinc-500 text-sm text-center py-6">${t('fb_no_matches')}</p>`;
+        const countEl = $('fb-match-count');
+        if (countEl) countEl.textContent = '';
+        return;
+      }
+
       allMatches.sort((a, b) => {
         // 已结算排最后
         if (a.status === 'settled' && b.status !== 'settled') return 1;
