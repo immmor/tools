@@ -1748,6 +1748,185 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
         }
       }
 
+      // ========== 世界杯竞猜：获取比赛列表 ==========
+      if (path === '/api/football/match' && request.method === 'GET') {
+        try {
+          const row = await DB.prepare('SELECT value FROM link WHERE key = ?').bind('fb_match').first();
+          const matches = row?.value ? JSON.parse(row.value) : [];
+          return resJson({ success: true, matches });
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
+        }
+      }
+
+      // ========== 世界杯竞猜：下注 ==========
+      if (path === '/api/football/bet' && request.method === 'POST') {
+        try {
+          const params = await request.json();
+          const { username, password, choice, amount, matchId } = params;
+
+          if (!username || !password || !choice || !amount || matchId === undefined) {
+            return resJson({ success: false, message: '参数不完整' }, 400);
+          }
+          if (!['a', 'draw', 'b'].includes(choice)) {
+            return resJson({ success: false, message: '无效的选择' }, 400);
+          }
+          if (amount < 1) return resJson({ success: false, message: '下注金额至少1元' }, 400);
+
+          // 验证用户
+          const user = await DB.prepare('SELECT rowid, username, balance FROM user WHERE username = ? AND password = ?')
+            .bind(username, password).first();
+          if (!user) return resJson({ success: false, message: '用户名或密码错误' }, 401);
+
+          // 查找指定比赛
+          const fbRow = await DB.prepare('SELECT value FROM link WHERE key = ?').bind('fb_match').first();
+          const matches = fbRow?.value ? JSON.parse(fbRow.value) : [];
+          const matchData = matches.find(m => m.id == matchId);
+          if (!matchData) return resJson({ success: false, message: '比赛不存在' }, 404);
+          if (matchData.status !== 'open') return resJson({ success: false, message: '该比赛不在下注时间' }, 400);
+
+          // 获取赔率
+          const oddsMap = { a: 'oddsA', draw: 'oddsDraw', b: 'oddsB' };
+          const odds = parseFloat(matchData[oddsMap[choice]] || '1');
+
+          // 检查余额
+          const amt = parseFloat(amount);
+          if (user.balance < amt) return resJson({ success: false, message: '余额不足' }, 400);
+
+          // 扣款 + 记录下注
+          await DB.prepare('UPDATE user SET balance = balance - ? WHERE username = ?').bind(amt, username).run();
+
+          const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+          await DB.prepare('INSERT INTO football_bet (username, match_id, choice, amount, odds, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+            .bind(username, matchId, choice, amt, odds, 'pending', now).run();
+
+          return resJson({ success: true, message: `下注成功！${matchData.teamA} vs ${matchData.teamB} - ${choice}，金额：${amount}，赔率：${odds}x` });
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
+        }
+      }
+
+      // ========== 世界杯竞猜：获取我的下注记录 ==========
+      if (path === '/api/football/history' && request.method === 'POST') {
+        try {
+          const { username, password } = await request.json();
+          if (!username || !password) return resJson({ success: false, message: '请先登录' }, 401);
+
+          const user = await DB.prepare('SELECT rowid FROM user WHERE username = ? AND password = ?')
+            .bind(username, password).first();
+          if (!user) return resJson({ success: false, message: '用户名或密码错误' }, 401);
+
+          const bets = await DB.prepare('SELECT * FROM football_bet WHERE username = ? ORDER BY id DESC LIMIT 50')
+            .bind(username).all();
+
+          // 附带比赛信息
+          const fbRow = await DB.prepare('SELECT value FROM link WHERE key = ?').bind('fb_match').first();
+          const allMatches = fbRow?.value ? JSON.parse(fbRow.value) : [];
+          const matchMap = {};
+          allMatches.forEach(m => { matchMap[m.id] = m; });
+
+          const enrichedBets = (bets.results || []).map(b => ({
+            ...b,
+            matchInfo: matchMap[b.match_id] || null
+          }));
+
+          return resJson({ success: true, bets: enrichedBets });
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
+        }
+      }
+
+      // ========== 世界杯竞猜：管理员设置结果（开奖） ==========
+      if (path === '/api/football/settle' && request.method === 'POST') {
+        try {
+          const params = await request.json();
+          const { username, password, result, matchId } = params;
+          if (username !== 'immmor') return resJson({ success: false, message: '无权限' }, 403);
+          if (!['a', 'draw', 'b'].includes(result)) return resJson({ success: false, message: '无效的结果' }, 400);
+          if (matchId === undefined) return resJson({ success: false, message: '缺少 matchId' }, 400);
+
+          // 读取并更新指定比赛
+          const fbRow = await DB.prepare('SELECT value FROM link WHERE key = ?').bind('fb_match').first();
+          let matches = fbRow?.value ? JSON.parse(fbRow.value) : [];
+          const idx = matches.findIndex(m => m.id == matchId);
+          if (idx === -1) return resJson({ success: false, message: '比赛不存在' }, 404);
+
+          matches[idx].status = 'settled';
+          matches[idx].result = result;
+          const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+          await DB.prepare('UPDATE link SET value = ? WHERE key = ?')
+            .bind(JSON.stringify(matches), 'fb_match').run();
+
+          // 处理该比赛的 pending 下注
+          const pendingBets = await DB.prepare("SELECT * FROM football_bet WHERE status = 'pending' AND match_id = ?")
+            .bind(matchId).all();
+          let totalPayout = 0;
+          let winCount = 0;
+
+          for (const bet of pendingBets.results || []) {
+            const isWin = bet.choice === result;
+            const payout = isWin ? Math.floor(bet.amount * bet.odds) : 0;
+            const newStatus = isWin ? 'win' : 'lose';
+
+            await DB.prepare('UPDATE football_bet SET status = ?, payout = ? WHERE id = ?')
+              .bind(newStatus, payout, bet.id).run();
+
+            if (isWin) {
+              await DB.prepare('UPDATE user SET balance = balance + ? WHERE username = ?')
+                .bind(payout, bet.username).run();
+              totalPayout += payout;
+              winCount++;
+
+              await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
+                .bind(bet.username, nt({
+                  cn: `🎉 世界杯竞猜中奖！${matches[idx].teamA} vs ${matches[idx].teamB} - 您猜对了，获得 ¥${payout} 奖励`,
+                  en: `🎉 World Cup bet won! ${matches[idx].teamA} vs ${matches[idx].teamB} - You guessed correctly and won ¥${payout}`,
+                  jp: `🎉 ワールドカップ予想的中！${matches[idx].teamA} vs ${matches[idx].teamB} - 正解で ¥${payout} を獲得`,
+                  kr: `🎉 월드컵 베팅 당첨! ${matches[idx].teamA} vs ${matches[idx].teamB} - 맞춰서 ¥${payout} 획득`,
+                  es: `🎉 ¡Apuesta del Mundial ganada! ${matches[idx].teamA} vs ${matches[idx].teamB} - Acertaste y ganaste ¥${payout}`,
+                  vi: `🎉 Dự đoán World Cup trúng thưởng! ${matches[idx].teamA} vs ${matches[idx].teamB} - Bạn đoán đúng và nhận được ¥${payout}`,
+                  ar: `🎉 ربح الرهان على كأس العالم! ${matches[idx].teamA} vs ${matches[idx].teamB} - خمنت بشكل صحيح وفزت بـ ¥${payout}`,
+                  ru: `🎉 Ставка на ЧМ выиграна! ${matches[idx].teamA} vs ${matches[idx].teamB} - Вы угадали и получили ¥${payout}`
+                }), now).run();
+            }
+          }
+
+          await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
+            .bind('immmor', `⚽ 竞猜开奖！${matches[idx].teamA} vs ${matches[idx].teamB} → 结果：${result}，派奖 ¥${totalPayout}，中奖 ${winCount} 人`, now).run();
+
+          return resJson({
+            success: true,
+            message: `开奖完成！${matches[idx].teamA} vs ${matches[idx].teamB} 结果：${result}，中奖 ${winCount} 人，总派奖 ¥${totalPayout}`
+          });
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
+        }
+      }
+
+      // ========== 世界杯竞猜：管理员重置比赛（新一轮） ==========
+      if (path === '/api/football/reset' && request.method === 'POST') {
+        try {
+          const { username, password, matchId } = await request.json();
+          if (username !== 'immmor') return resJson({ success: false, message: '无权限' }, 403);
+          if (matchId === undefined) return resJson({ success: false, message: '缺少 matchId' }, 400);
+
+          const fbRow = await DB.prepare('SELECT value FROM link WHERE key = ?').bind('fb_match').first();
+          let matches = fbRow?.value ? JSON.parse(fbRow.value) : [];
+          const idx = matches.findIndex(m => m.id == matchId);
+          if (idx === -1) return resJson({ success: false, message: '比赛不存在' }, 404);
+
+          matches[idx].status = 'open';
+          matches[idx].result = '';
+          matches[idx].score = '';
+          await DB.prepare('UPDATE link SET value = ? WHERE key = ?')
+            .bind(JSON.stringify(matches), 'fb_match').run();
+
+          return resJson({ success: true, message: `${matches[idx].teamA} vs ${matches[idx].teamB} 已重置` });
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
+        }
+      }
+
       // ========== 默认接口提示 ==========
       return resJson({
         code: 200,
