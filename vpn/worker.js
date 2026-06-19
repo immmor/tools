@@ -12,7 +12,7 @@ async function autoRenewUser(DB, user) {
   const isVipValid = expireDate && expireDate > now;
   
   // 计算还有多久过期（毫秒）
-  const timeUntilExpire = expireDate ? expireDate - now : Infinity;
+  const timeUntilExpire = expireDate ? expireDate.getTime() - now.getTime() : Infinity;
   const oneDayInMs = 24 * 60 * 60 * 1000;
   
   // 如果未开启自动续费，直接返回
@@ -515,7 +515,6 @@ export default {
         return resJson({ success: true, message: '密码重置成功' });
       }
 
-      // ========== 按用户名查询（测试kkk专用） ==========
       if (path === '/api/get-user' && request.method === 'GET') {
         const name = url.searchParams.get('name');
         if (!name) return resJson({ code: 400, msg: '请传入name参数，例：?name=kkk' }, 400);
@@ -821,7 +820,7 @@ export default {
       if (path === '/api/user/edit' && request.method === 'POST') {
         try {
           const params = await request.json();
-          const { username, password, balance, v_expire_date, learn_vip_expire_date, v_token, invite_code, v_link_clash, v_link_v2ray, not_trusted, login_info, price_plan } = params;
+          const { username, password, balance, v_expire_date, learn_vip_expire_date, v_token, invite_code, v_link_clash, v_link_v2ray, not_trusted, login_info, price_plan, vorders, fetch_link, security_answer, auto_rewn } = params;
           
           if (!username) {
             return resJson({ code: 400, msg: '缺少username参数' }, 400);
@@ -882,6 +881,22 @@ export default {
           if (login_info !== undefined) {
             updates.push('login_info = ?');
             values.push(login_info);
+          }
+          if (vorders !== undefined) {
+            updates.push('vorders = ?');
+            values.push(vorders);
+          }
+          if (fetch_link !== undefined) {
+            updates.push('fetch_link = ?');
+            values.push(fetch_link);
+          }
+          if (security_answer !== undefined) {
+            updates.push('security_answer = ?');
+            values.push(security_answer);
+          }
+          if (auto_rewn !== undefined) {
+            updates.push('auto_rewn = ?');
+            values.push(auto_rewn);
           }
           
           if (updates.length === 0) {

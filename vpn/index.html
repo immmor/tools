@@ -2024,12 +2024,31 @@
             const updateBalance = async () => {
                 if (!userInfo) return;
                 try {
-                    const res = await fetch(`${API}/api/balance?username=${encodeURIComponent(userInfo.username)}`);
+                    const res = await fetch(`${API}/api/get-user?name=${encodeURIComponent(userInfo.username)}`);
                     const data = await res.json();
                     if (data.code === 200) {
-                        els.balance.textContent = `¥${data.balance.toFixed(2)}`;
+                        const userData = data.data;
+                        els.balance.textContent = `¥${Number(userData.balance || 0).toFixed(2)}`;
+                        
+                        // 同步数据到本地
+                        let orders = [];
+                        if (userData.vorders) {
+                            try {
+                                orders = typeof userData.vorders === 'string' ? JSON.parse(userData.vorders) : userData.vorders;
+                            } catch (e) {
+                                console.error('解析购买记录失败:', e);
+                            }
+                        }
+                        
+                        userInfo.vorders = Array.isArray(orders) ? orders : [];
+                        userInfo.balance = userData.balance;
+                        if (userData.invite_code) userInfo.invite_code = userData.invite_code;
+                        
+                        localStorage.setItem('userInfo', JSON.stringify(userInfo));
                     }
-                } catch {}
+                } catch (err) {
+                    console.error('更新用户信息失败:', err);
+                }
             };
             
             const updateQuota = async () => {
@@ -2242,7 +2261,7 @@
                     div.innerHTML = `
                         <div class="flex justify-between items-start">
                             <div>
-                                <p class="text-sm text-white font-bold">${getVorderText(order)}</p>
+                                <p class="text-sm text-zinc-400">${getVorderText(order)}</p>
                                 <p class="text-xs text-zinc-600 mt-1">${formatTime(order?.created_at)}</p>
                             </div>
                         </div>
