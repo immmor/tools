@@ -905,6 +905,16 @@
                     </div>
                 </div>
             </div>
+            <div id="vorders-container" class="relative">
+                <div id="vorders-dropdown" class="dropdown-menu fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-[70%] z-[100] flex flex-col hidden">
+                    <div class="px-4 py-3 border-b border-zinc-800 text-center shrink-0">
+                        <h3 class="text-sm font-bold text-white" data-i18n="nav_vorders">购买记录</h3>
+                    </div>
+                    <div id="vorders-list" class="flex-1 overflow-y-auto">
+                        <div class="px-4 py-3 text-sm text-zinc-400 text-center" data-i18n="no_vorders">暂无购买记录</div>
+                    </div>
+                </div>
+            </div>
             <div id="user-menu-container" class="relative">
                 <button id="auth-toggle" class="btn-cyber">Login</button>
                 <!-- 下拉菜单 -->
@@ -932,6 +942,7 @@
                 <button id="invest-btn" class="dropdown-item block w-full px-4 py-3 text-sm border-b border-zinc-800 text-center text-[var(--neon-orange)] hover:text-white cursor-pointer" data-i18n="nav_invest">投资入股</button>
                 <button id="complaint-btn" class="dropdown-item block w-full px-4 py-3 text-sm border-b border-zinc-800 text-center text-zinc-400 hover:text-white" data-i18n="nav_complaint">投诉</button>
                 <a href="https://immmor.com/pay" id="recharge-btn" class="dropdown-item block px-4 py-3 text-sm border-b border-zinc-800 text-center" data-i18n="nav_recharge">充值</a>
+                <button id="vorders-btn" class="dropdown-item block w-full px-4 py-3 text-sm border-b border-zinc-800 text-center text-zinc-400 hover:text-white" data-i18n="nav_vorders">购买记录</button>
                 <button id="logout-btn" class="dropdown-item block w-full px-4 py-3 text-sm text-[var(--neon-red)] hover:text-[var(--neon-red)] text-center" data-i18n="nav_logout">退出</button>
                 </div>
             </div>
@@ -1473,11 +1484,36 @@
                 if (response.ok && data.code === 200) {
                     const openSuccess = translations[currentLang]?.alert_open_success || 'VIP开通成功！';
                     alert(openSuccess);
-                    const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
-                    userInfo.balance = data.data.balance;
-                    localStorage.setItem('userInfo', JSON.stringify(userInfo));
+                    const savedUserInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
+                    
+                    // 使用后端返回的购买记录
+                    if (data.data.vorders) {
+                        try {
+                            savedUserInfo.vorders = typeof data.data.vorders === 'string' ? JSON.parse(data.data.vorders) : data.data.vorders;
+                        } catch (e) {
+                            console.error('解析购买记录失败:', e);
+                        }
+                    } else {
+                        if (!Array.isArray(savedUserInfo.vorders)) savedUserInfo.vorders = [];
+                        savedUserInfo.vorders.unshift({
+                            type: 'vip',
+                            duration,
+                            price,
+                            created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+                            method: 'balance',
+                            status: 'success'
+                        });
+                        if (savedUserInfo.vorders.length > 50) savedUserInfo.vorders = savedUserInfo.vorders.slice(0, 50);
+                    }
+                    
+                    savedUserInfo.balance = data.data.balance;
+                    localStorage.setItem('userInfo', JSON.stringify(savedUserInfo));
+                    if (typeof userInfo !== 'undefined' && userInfo?.username === savedUserInfo.username) {
+                        userInfo.balance = savedUserInfo.balance;
+                        userInfo.vorders = savedUserInfo.vorders;
+                    }
 
-                    const modals = document.querySelectorAll('.fixed');
+                    const modals = document.querySelectorAll('.fixed.inset-0');
                     modals.forEach(modal => {
                         if (modal.id !== 'complaint-modal' && modal.id !== 'auth-modal') {
                             modal.remove();
@@ -2177,6 +2213,67 @@
                 });
             }
 
+            const vordersBtn = document.getElementById('vorders-btn');
+            const vordersDropdown = document.getElementById('vorders-dropdown');
+            const vordersContainer = document.getElementById('vorders-container');
+
+            const getVorderText = (order) => {
+                const dict = translations[currentLang] || {};
+                const dur = Number(order?.duration);
+                const plan = dur === 365 ? (dict.plan_annual || '年付套餐') : (dict.plan_monthly || '月付套餐');
+                const p = order?.price !== undefined && order?.price !== null && !Number.isNaN(Number(order.price)) ? `¥${Number(order.price).toFixed(2)}` : '';
+                return `VIP ${plan}${p ? ` • ${p}` : ''}`;
+            };
+
+            const renderVorders = (dataOrders = []) => {
+                const list = document.getElementById('vorders-list');
+                const dict = translations[currentLang] || {};
+                list.innerHTML = '';
+
+                const orders = Array.isArray(dataOrders) ? dataOrders : [];
+                if (!orders.length) {
+                    list.innerHTML = `<div class="px-4 py-3 text-sm text-zinc-400 text-center" data-i18n="no_vorders">${dict.no_vorders || '暂无购买记录'}</div>`;
+                    return;
+                }
+
+                orders.forEach((order) => {
+                    const div = document.createElement('div');
+                    div.className = 'px-4 py-3 border-b border-zinc-800/50 hover:bg-zinc-800/50 transition-colors notification-item relative';
+                    div.innerHTML = `
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <p class="text-sm text-white font-bold">${getVorderText(order)}</p>
+                                <p class="text-xs text-zinc-600 mt-1">${formatTime(order?.created_at)}</p>
+                            </div>
+                        </div>
+                    `;
+                    list.appendChild(div);
+                });
+            };
+
+            if (vordersBtn && vordersDropdown) {
+                vordersBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (!userInfo) {
+                        openModal();
+                        return;
+                    }
+                    closeDropdown();
+                    notificationDropdown?.classList.add('hidden');
+                    renderVorders(userInfo.vorders || []);
+                    vordersDropdown.classList.toggle('hidden');
+                    lucide.createIcons();
+                });
+
+                vordersDropdown.addEventListener('click', (e) => e.stopPropagation());
+
+                document.addEventListener('click', (e) => {
+                    if (vordersContainer && !vordersContainer.contains(e.target) && !vordersBtn.contains(e.target)) {
+                        vordersDropdown.classList.add('hidden');
+                    }
+                });
+            }
+
             // 联系客服按钮点击事件
             const contactBtn = document.getElementById('contact-btn');
             contactBtn?.addEventListener('click', (e) => {
@@ -2214,6 +2311,10 @@
             const updateNav = (user) => {
                 userInfo = user;
                 if (user) {
+                    if (!Array.isArray(userInfo.vorders)) {
+                        userInfo.vorders = [];
+                        localStorage.setItem('userInfo', JSON.stringify(userInfo));
+                    }
                     const maxLen = 6;
                     const displayName = user.username.length > maxLen ? user.username.substring(0, maxLen) + '*' : user.username;
                     els.btn.textContent = displayName;
@@ -2249,6 +2350,7 @@
                     els.dropdown.classList.add('hidden');
                     document.getElementById('invite-btn').classList.add('hidden');
                     notificationDropdown.classList.add('hidden');
+                    document.getElementById('vorders-dropdown')?.classList.add('hidden');
                 }
             };
             

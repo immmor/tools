@@ -246,8 +246,8 @@ export default {
         let result;
         try {
           result = await DB
-            .prepare('INSERT INTO user (username, password, balance, v_expire_date, learn_vip_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code, v_token, v_link_clash, v_link_v2ray, price_plan, survey, security_answer, fetch_link, source, not_trusted, auto_rewn) VALUES (?, ?, ?, NULL, NULL, 307200, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)')
-            .bind(username, password, finalBalance, new Date().toISOString().slice(0, 19).replace('T', ' '), userInviteCode, '', '', '', pricePlanStr, '{}', securityAnswer || '', '[]', source || '', notTrustedValue)
+            .prepare('INSERT INTO user (username, password, balance, v_expire_date, learn_vip_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code, v_token, v_link_clash, v_link_v2ray, price_plan, survey, security_answer, fetch_link, source, not_trusted, auto_rewn, vorders) VALUES (?, ?, ?, NULL, NULL, 307200, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)')
+            .bind(username, password, finalBalance, new Date().toISOString().slice(0, 19).replace('T', ' '), userInviteCode, '', '', '', pricePlanStr, '{}', securityAnswer || '', '[]', source || '', notTrustedValue, '[]')
             .run();
         } catch (e) {
           // 捕获 UNIQUE 约束冲突 → 用户名已存在（并发注册竞争时触发）
@@ -352,7 +352,7 @@ export default {
         }
 
         const user = await DB
-          .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link FROM user WHERE username = ? AND password = ?')
+          .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders FROM user WHERE username = ? AND password = ?')
           .bind(username, password)
           .first();
 
@@ -373,7 +373,7 @@ export default {
 
           const pricePlan = user.price_plan ? JSON.parse(user.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
 
-          return resJson({ success: true, message: '登录成功！', userInfo: { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '' }, pricePlan });
+          return resJson({ success: true, message: '登录成功！', userInfo: { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders }, pricePlan });
         } else {
           return resJson({ success: false, message: '用户名或密码错误' }, 401);
         }
@@ -521,7 +521,7 @@ export default {
         if (!name) return resJson({ code: 400, msg: '请传入name参数，例：?name=kkk' }, 400);
         
         const result = await DB
-          .prepare('SELECT * FROM user WHERE username = ?')
+          .prepare('SELECT rowid as id, username, balance, v_expire_date, v_token, v_link_clash, v_link_v2ray, invite_code, vorders FROM user WHERE username = ?')
           .bind(name)
           .first();
         
@@ -566,7 +566,7 @@ export default {
           });
           
           const user = await DB
-            .prepare('SELECT balance, v_expire_date, v_token, v_link_clash, v_link_v2ray FROM user WHERE username = ?')
+            .prepare('SELECT balance, v_expire_date, v_token, v_link_clash, v_link_v2ray, vorders FROM user WHERE username = ?')
             .bind(username)
             .first();
           
@@ -596,13 +596,34 @@ export default {
           const vLinkClash = user.v_link_clash || (isYearly ? config.clash_yearly : config.clash_monthly);
           const vLinkV2ray = user.v_link_v2ray || (isYearly ? config.v2ray_yearly : config.v2ray_monthly);
           
+          // 更新购买记录
+          let vorders = [];
+          try {
+            vorders = JSON.parse(user.vorders || '[]');
+          } catch (e) {
+            vorders = [];
+          }
+          
+          const newOrder = {
+            type: 'vip',
+            duration: duration,
+            price: vipPrice,
+            created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+            method: 'balance',
+            status: 'success'
+          };
+          
+          vorders.unshift(newOrder);
+          if (vorders.length > 50) vorders = vorders.slice(0, 50);
+          const vordersStr = JSON.stringify(vorders);
+          
           const result = await DB
-            .prepare('UPDATE user SET balance = balance - ?, v_expire_date = ?, v_token = ?, v_link_clash = ?, v_link_v2ray = ? WHERE username = ?')
-            .bind(vipPrice, newExpireDate.toISOString().slice(0, 19).replace('T', ' '), vToken, vLinkClash, vLinkV2ray, username)
+            .prepare('UPDATE user SET balance = balance - ?, v_expire_date = ?, v_token = ?, v_link_clash = ?, v_link_v2ray = ?, vorders = ? WHERE username = ?')
+            .bind(vipPrice, newExpireDate.toISOString().slice(0, 19).replace('T', ' '), vToken, vLinkClash, vLinkV2ray, vordersStr, username)
             .run();
           
           if (result.success && result.meta.changes > 0) {
-            const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+            const nowTime = new Date().toISOString().slice(0, 19).replace('T', ' ');
             const msg = nt({
               cn: `用户 ${username} 开通VIP成功！金额：${vipPrice}元，天数：${duration}天`,
               en: `User ${username} activated VIP successfully! Amount: ¥${vipPrice}, Days: ${duration}`,
@@ -616,11 +637,11 @@ export default {
 
             await DB
               .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
-              .bind('immmor', msg, now)
+              .bind('immmor', msg, nowTime)
               .run();
             
             const updatedUser = await DB
-              .prepare('SELECT username, balance, v_expire_date, v_token, v_link_clash, v_link_v2ray FROM user WHERE username = ?')
+              .prepare('SELECT username, balance, v_expire_date, v_token, v_link_clash, v_link_v2ray, vorders FROM user WHERE username = ?')
               .bind(username)
               .first();
             
@@ -634,7 +655,8 @@ export default {
                 v_token: updatedUser.v_token,
                 v_link_clash: updatedUser.v_link_clash,
                 v_link_v2ray: updatedUser.v_link_v2ray,
-                duration: duration
+                duration: duration,
+                vorders: updatedUser.vorders
               }
             });
           } else {
