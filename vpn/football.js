@@ -30,6 +30,31 @@
     } catch (e) { return utcStr; }
   }
 
+  // 国家名称中文到 key 的映射（用于翻译）
+  const countryKeyMap = {
+    '墨西哥': 'country_mexico', '南非': 'country_south_africa', '韩国': 'country_korea',
+    '捷克': 'country_czech', '加拿大': 'country_canada', '波黑': 'country_bosnia',
+    '卡塔尔': 'country_qatar', '瑞士': 'country_switzerland', '巴西': 'country_brazil',
+    '摩洛哥': 'country_morocco', '海地': 'country_haiti', '苏格兰': 'country_scotland',
+    '美国': 'country_usa', '巴拉圭': 'country_paraguay', '澳大利亚': 'country_australia',
+    '土耳其': 'country_turkey', '德国': 'country_germany', '库拉索': 'country_curacao',
+    '科特迪瓦': 'country_ivory_coast', '厄瓜多尔': 'country_ecuador', '荷兰': 'country_netherlands',
+    '日本': 'country_japan', '瑞典': 'country_sweden', '突尼斯': 'country_tunisia',
+    '比利时': 'country_belgium', '埃及': 'country_egypt', '伊朗': 'country_iran',
+    '新西兰': 'country_new_zealand', '西班牙': 'country_spain', '佛得角': 'country_cape_verde',
+    '沙特阿拉伯': 'country_saudi_arabia', '乌拉圭': 'country_uruguay', '法国': 'country_france',
+    '塞内加尔': 'country_senegal', '伊拉克': 'country_iraq', '挪威': 'country_norway',
+    '阿根廷': 'country_argentina', '阿尔及利亚': 'country_algeria', '奥地利': 'country_austria',
+    '约旦': 'country_jordan', '葡萄牙': 'country_portugal', '刚果': 'country_congo',
+    '乌兹别克斯坦': 'country_uzbekistan', '哥伦比亚': 'country_colombia', '英格兰': 'country_england',
+    '克罗地亚': 'country_croatia', '加纳': 'country_ghana', '巴拿马': 'country_panama'
+  };
+  function translateCountry(name) {
+    if (!name) return name;
+    const key = countryKeyMap[name.trim()];
+    return key ? t(key) : name;
+  }
+
   const statusMap = {
     open: { textKey: 'fb_status_open', color: 'var(--neon-green)' },
     closed: { textKey: 'fb_status_closed', color: '#888' },
@@ -59,14 +84,14 @@
           <div class="fb-vs-row">
             <div class="fb-team">
               <div class="fb-team-flag">${m.flagA || '🏴'}</div>
-              <div class="fb-team-name">${m.teamA}</div>
+              <div class="fb-team-name">${translateCountry(m.teamA)}</div>
             </div>
             <div class="fb-vs-score">
               <div class="fb-vs-score-val" style="color: ${m.result ? (choiceColor[m.result] || '#666') : '#555'};">${scoreText || '-'}</div>
             </div>
             <div class="fb-team">
               <div class="fb-team-flag">${m.flagB || '🇦🇷'}</div>
-              <div class="fb-team-name">${m.teamB}</div>
+              <div class="fb-team-name">${translateCountry(m.teamB)}</div>
             </div>
           </div>
 
@@ -265,7 +290,7 @@
     const choiceTextKey = { a: 'fb_home', draw: 'fb_draw', b: 'fb_away' };
     if ($('bet-selected-text')) {
       $('bet-selected-text').textContent =
-        `${match.teamA} vs ${match.teamB} · ${t(choiceTextKey[choice])} @${selectedBet.odds}x`;
+        `${translateCountry(match.teamA)} vs ${translateCountry(match.teamB)} · ${t(choiceTextKey[choice])} @${selectedBet.odds}x`;
     }
     updatePotentialWin();
   }
@@ -351,7 +376,7 @@
         const div = document.createElement('div');
         div.className = `bet-item ${bet.status}`;
         const mi = bet.matchInfo;
-        const matchStr = mi ? `${mi.teamA} vs ${mi.teamB}` : `#${bet.match_id}`;
+        const matchStr = mi ? `${translateCountry(mi.teamA)} vs ${translateCountry(mi.teamB)}` : `#${bet.match_id}`;
         const statusTag = bet.status === 'win'
           ? `<span class="font-bold" style="color: var(--neon-green);">+¥${bet.payout}</span>`
           : bet.status === 'lose'
