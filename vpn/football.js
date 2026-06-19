@@ -357,7 +357,13 @@
   // 加载历史记录
   async function loadHistory() {
     const user = getUserInfo();
-    if (!user || !user.username) return;
+    if (!user || !user.username) {
+      // 未登录时隐藏记录区域并清空内容
+      const listEl = $('football-bet-list');
+      if (listEl) listEl.innerHTML = '';
+      if ($('football-my-bets')) $('football-my-bets').classList.add('hidden');
+      return;
+    }
 
     try {
       const res = await fetch(`${API_BASE}/api/football/history`, {
