@@ -20,6 +20,16 @@
     return key;
   }
 
+  // 将 UTC 时间字符串转为用户本地时区显示
+  function toLocalTime(utcStr) {
+    if (!utcStr) return '';
+    try {
+      const d = new Date(utcStr.replace(/-/g, '/').replace('T', ' ').replace('Z', '') + 'Z');
+      if (isNaN(d.getTime())) return utcStr;
+      return d.toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    } catch (e) { return utcStr; }
+  }
+
   const statusMap = {
     open: { textKey: 'fb_status_open', color: 'var(--neon-green)' },
     closed: { textKey: 'fb_status_closed', color: '#888' },
@@ -355,7 +365,7 @@
           </div>
           <div class="text-right">
             <div>${statusTag}</div>
-            <div class="text-[10px] text-zinc-600 mt-0.5">${bet.created_at || ''}</div>
+            <div class="text-[10px] text-zinc-600 mt-0.5">${toLocalTime(bet.created_at)}</div>
           </div>
         `;
         listEl.appendChild(div);
