@@ -409,13 +409,14 @@
         body: JSON.stringify({ username: user.username, password: user.password || '' })
       });
       const data = await res.json();
-      if (!data.success || !data.bets || data.bets.length === 0) return;
+      const myBets = (data.bets || []).filter(bet => bet.username === user.username);
+      if (!data.success || myBets.length === 0) return;
 
       const listEl = $('football-bet-list');
       if (!listEl) return;
       listEl.innerHTML = '';
 
-      data.bets.forEach(bet => {
+      myBets.forEach(bet => {
         const div = document.createElement('div');
         div.className = `bet-item ${bet.status}`;
         const mi = bet.matchInfo;

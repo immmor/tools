@@ -1851,15 +1851,21 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
       // ========== 世界杯竞猜：获取我的下注记录 ==========
       if (path === '/api/football/history' && request.method === 'POST') {
         try {
-          const { username, password } = await request.json();
+          const { username, password, all } = await request.json();
           if (!username || !password) return resJson({ success: false, message: '请先登录' }, 401);
 
           const user = await DB.prepare('SELECT rowid FROM user WHERE username = ? AND password = ?')
             .bind(username, password).first();
           if (!user) return resJson({ success: false, message: '用户名或密码错误' }, 401);
 
-          const bets = await DB.prepare('SELECT * FROM football_bet WHERE username = ? ORDER BY id DESC LIMIT 50')
-            .bind(username).all();
+          // 管理后台显式传 all=true 时查看全部，前台只返回当前用户记录
+          let bets;
+          if (all && username === 'immmor') {
+            bets = await DB.prepare('SELECT * FROM football_bet ORDER BY id DESC LIMIT 200').all();
+          } else {
+            bets = await DB.prepare('SELECT * FROM football_bet WHERE username = ? ORDER BY id DESC LIMIT 50')
+              .bind(username).all();
+          }
 
           // 附带比赛信息
           const fbRow = await DB.prepare('SELECT value FROM link WHERE key = ?').bind('fb_match').first();
