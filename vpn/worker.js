@@ -10,6 +10,197 @@ function fbChoiceLabel(_match, choice) {
   return map[choice] || choice;
 }
 
+// 获取FIFA API比赛结果
+async function fetchFifaMatchResults() {
+  try {
+    const headers = {
+      'Accept': 'application/json, text/plain, */*',
+      'Accept-Language': 'zh-CN,zh;q=0.9',
+      'Origin': 'https://www.fifa.com',
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36',
+    };
+    
+    const params = new URLSearchParams({
+      'from': '2026-06-10T00:00:00Z',
+      'to': '2026-07-20T23:59:59Z',
+      'language': 'en',
+      'count': '500',
+    });
+    
+    const response = await fetch(`https://api.fifa.com/api/v3/calendar/matches?${params}`, {
+      headers: headers,
+      method: 'GET',
+    });
+    
+    if (!response.ok) {
+      throw new Error(`FIFA API request failed: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    return data.Results || [];
+  } catch (error) {
+    console.error('获取FIFA比赛结果失败:', error);
+    return [];
+  }
+}
+
+// 将FIFA API结果转换为内部比赛数据格式
+function convertFifaMatch(fifaMatch) {
+  const homeTeamName = fifaMatch.Home?.TeamName?.[0]?.Description || 'Unknown';
+  const awayTeamName = fifaMatch.Away?.TeamName?.[0]?.Description || 'Unknown';
+  
+  return {
+    id: fifaMatch.IdMatch,
+    teamA: homeTeamName,
+    teamB: awayTeamName,
+    date: fifaMatch.Date,
+    status: fifaMatch.HomeTeamScore !== null && fifaMatch.AwayTeamScore !== null ? 'settled' : 'open',
+    score: fifaMatch.HomeTeamScore !== null ? `${fifaMatch.HomeTeamScore}-${fifaMatch.AwayTeamScore}` : '',
+    result: fifaMatch.HomeTeamScore !== null ? (
+      fifaMatch.HomeTeamScore > fifaMatch.AwayTeamScore ? 'a' :
+      fifaMatch.HomeTeamScore < fifaMatch.AwayTeamScore ? 'b' : 'draw'
+    ) : '',
+    oddsA: '1.80',
+    oddsDraw: '3.20',
+    oddsB: '2.50',
+    competition: fifaMatch.CompetitionName?.[0]?.Description || '',
+    stadium: fifaMatch.Stadium?.Name?.[0]?.Description || '',
+  };
+}
+
+// 更新比赛结果并自动开奖
+async function updateMatchResults(DB) {
+  console.log('开始更新比赛结果...');
+  
+  try {
+    // 获取FIFA最新比赛数据
+    const fifaMatches = await fetchFifaMatchResults();
+    if (fifaMatches.length === 0) {
+      console.log('未获取到FIFA比赛数据');
+      return { updated: 0, settled: 0 };
+    }
+    
+    // 获取当前数据库中的比赛数据
+    const fbRow = await DB.prepare('SELECT value FROM link WHERE key = ?').bind('fb_match').first();
+    let currentMatches = fbRow?.value ? JSON.parse(fbRow.value) : [];
+    
+    let updatedCount = 0;
+    let settledCount = 0;
+    const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    
+    // 创建FIFA比赛数据的映射
+    const fifaMap = {};
+    fifaMatches.forEach(m => {
+      fifaMap[m.IdMatch] = convertFifaMatch(m);
+    });
+    
+    // 更新现有比赛或添加新比赛
+    for (let i = 0; i < currentMatches.length; i++) {
+      const match = currentMatches[i];
+      const fifaData = fifaMap[match.id];
+      
+      if (fifaData) {
+        // 更新比赛状态和比分
+        const wasOpen = match.status === 'open';
+        const scoreChanged = match.score !== fifaData.score;
+        const resultChanged = match.result !== fifaData.result;
+        
+        match.date = fifaData.date;
+        match.competition = fifaData.competition;
+        match.stadium = fifaData.stadium;
+        
+        // 如果比赛已结束且比分已更新
+        if (fifaData.status === 'settled' && wasOpen && scoreChanged) {
+          match.status = 'settled';
+          match.score = fifaData.score;
+          match.result = fifaData.result;
+          
+          // 自动开奖
+          await settleMatch(DB, match);
+          settledCount++;
+          updatedCount++;
+          
+          console.log(`自动开奖: ${match.teamA} vs ${match.teamB} = ${match.score}`);
+        } else if (scoreChanged) {
+          match.score = fifaData.score;
+          updatedCount++;
+        }
+      }
+    }
+    
+    // 保存更新后的比赛数据
+    if (updatedCount > 0) {
+      await DB.prepare('UPDATE link SET value = ? WHERE key = ?')
+        .bind(JSON.stringify(currentMatches), 'fb_match').run();
+      
+      // 通知管理员
+      await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
+        .bind('immmor', `⚽ 比赛结果自动更新：更新 ${updatedCount} 场比赛，自动开奖 ${settledCount} 场`, now).run();
+    }
+    
+    console.log(`比赛结果更新完成：更新 ${updatedCount} 场，自动开奖 ${settledCount} 场`);
+    return { updated: updatedCount, settled: settledCount };
+    
+  } catch (error) {
+    console.error('更新比赛结果失败:', error);
+    return { updated: 0, settled: 0, error: error.message };
+  }
+}
+
+// 自动开奖函数（复用settle逻辑）
+async function settleMatch(DB, match) {
+  const matchId = match.id;
+  const result = match.result;
+  
+  if (!result) return;
+  
+  try {
+    // 处理该比赛的 pending 下注
+    const pendingBets = await DB.prepare("SELECT * FROM football_bet WHERE status = 'pending' AND match_id = ?")
+      .bind(matchId).all();
+    
+    let totalPayout = 0;
+    let winCount = 0;
+    
+    for (const bet of pendingBets.results || []) {
+      const isWin = bet.choice === result;
+      const payout = isWin ? Math.floor(bet.amount * bet.odds) : 0;
+      const newStatus = isWin ? 'win' : 'lose';
+      
+      await DB.prepare('UPDATE football_bet SET status = ?, payout = ? WHERE id = ?')
+        .bind(newStatus, payout, bet.id).run();
+      
+      if (isWin) {
+        await DB.prepare('UPDATE user SET balance = balance + ? WHERE username = ?')
+          .bind(payout, bet.username).run();
+        totalPayout += payout;
+        winCount++;
+        
+        await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
+          .bind(bet.username, nt({
+            cn: `🎉 世界杯竞猜中奖！${match.teamA} vs ${match.teamB} - 您猜对了，获得 ¥${payout} 奖励`,
+            en: `🎉 World Cup bet won! ${match.teamA} vs ${match.teamB} - You guessed correctly and won ¥${payout}`,
+            jp: `🎉 ワールドカップ予想的中！${match.teamA} vs ${match.teamB} - 正解で ¥${payout} を獲得`,
+            kr: `🎉 월드컵 베팅 당첨! ${match.teamA} vs ${match.teamB} - 맞춰서 ¥${payout} 획득`,
+            es: `🎉 ¡Apuesta del Mundial ganada! ${match.teamA} vs ${match.teamB} - Acertaste y ganaste ¥${payout}`,
+            vi: `🎉 Dự đoán World Cup trúng thưởng! ${match.teamA} vs ${match.teamB} - Bạn đoán đúng và nhận được ¥${payout}`,
+            ar: `🎉 ربح الرهان على كأس العالم! ${match.teamA} vs ${match.teamB} - خمنت بشكل صحيح وفزت بـ ¥${payout}`,
+            ru: `🎉 Ставка на ЧМ выиграна! ${match.teamA} vs ${match.teamB} - Вы угадали и получили ¥${payout}`
+          }), new Date().toISOString().slice(0, 19).replace('T', ' ')).run();
+      }
+    }
+    
+    if (winCount > 0) {
+      const resultLabel = fbChoiceLabel(match, result);
+      await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
+        .bind('immmor', `⚽ 自动开奖！${match.teamA} vs ${match.teamB} → ${resultLabel}，派奖 ¥${totalPayout}，中奖 ${winCount} 人`, new Date().toISOString().slice(0, 19).replace('T', ' ')).run();
+    }
+    
+  } catch (error) {
+    console.error(`自动开奖失败 matchId=${matchId}:`, error);
+  }
+}
+
 // 自动续费单个用户的函数
 async function autoRenewUser(DB, user) {
   const now = new Date();
@@ -2052,6 +2243,11 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
         const totalAmount = results.reduce((sum, r) => sum + r.amount, 0);
         await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)').bind('immmor', `定时任务执行完成！共续费 ${results.length} 个用户，总金额 ¥${totalAmount}`, now).run();
       }
+      
+      // ========== 第二步：自动获取比赛结果并开奖 ==========
+      console.log('开始执行比赛结果自动更新...');
+      const matchResult = await updateMatchResults(DB);
+      console.log(`比赛结果更新完成：更新 ${matchResult.updated} 场，自动开奖 ${matchResult.settled} 场`);
       
     } catch (err) {
       console.error('定时任务执行出错:', err);
