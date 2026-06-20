@@ -877,9 +877,18 @@ function getLanguageFromFileName(fileName) {
                 quickSuggestions: false // 移动端建议框有时会遮挡选区
             });
             
+            // 初始化diff管理器 - 保存原始内容
+            if (window.fileDiffManager) {
+                fileDiffManager.setOriginalContent(fileName, fileContent);
+            }
+            
             // 监听内容变化
             editor.onDidChangeModelContent(() => {
                 markFileModified(fileName);
+                // 更新diff装饰器
+                if (window.fileDiffManager) {
+                    fileDiffManager.updateDecorations(fileName, editor);
+                }
             });
             
             // 双竖杠移动端文本选中支持
@@ -1072,6 +1081,22 @@ function getLanguageFromFileName(fileName) {
                 const dot = tab.querySelector('.modified-dot');
                 if (dot) dot.style.display = 'none';
             }
+        }
+        // 保存后更新diff的原始内容
+        if (window.fileDiffManager && editorTabs[fileName] && editorTabs[fileName].editor) {
+            const editor = editorTabs[fileName].editor;
+            const content = editor.getValue ? editor.getValue() : (editor.value || '');
+            fileDiffManager.setOriginalContent(fileName, content);
+            fileDiffManager.updateDecorations(fileName, editor);
+        }
+    }
+    
+    function showDiffView() {
+        if (!activeEditorTab || !editorTabs[activeEditorTab]) return;
+        
+        const editor = editorTabs[activeEditorTab].editor;
+        if (window.fileDiffManager) {
+            fileDiffManager.showDiffPanel(activeEditorTab, editor);
         }
     }
     
