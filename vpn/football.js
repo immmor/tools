@@ -70,6 +70,18 @@
     return key ? t(key) : name;
   }
 
+  // 将 a/draw/b 转为翻译后的主胜/平局/客胜
+  function translateChoice(choice) {
+    if (!choice) return '';
+    return t(choiceLabelKey[choice]) || choice;
+  }
+
+  function formatMatchResult(m) {
+    if (m.score) return m.score;
+    if (m.status === 'settled' && m.result) return translateChoice(m.result);
+    return '';
+  }
+
   const statusMap = {
     open: { textKey: 'fb_status_open', color: 'var(--neon-green)' },
     closed: { textKey: 'fb_status_closed', color: '#888' },
@@ -82,7 +94,7 @@
   function renderMatchCard(m) {
     const st = statusMap[m.status] || statusMap.open;
     const canBet = m.status === 'open' && !m._started;
-    const scoreText = m.score || (m.status === 'settled' && m.result ? t(choiceLabelKey[m.result]) : (m.matchTime ? '' : 'VS'));
+    const scoreText = formatMatchResult(m) || (m.matchTime ? '' : 'VS');
     // 状态标签：已开始 > 原状态
     const displayStatus = (m.status === 'open' && m._started) ? { text: t('fb_status_live'), color: 'var(--neon-red)' } : { text: t(st.textKey), color: st.color };
 
@@ -313,10 +325,9 @@
     // 显示下注面板
     const panel = $('football-bet-panel');
     if (panel) panel.classList.remove('hidden');
-    const choiceTextKey = { a: 'fb_home', draw: 'fb_draw', b: 'fb_away' };
     if ($('bet-selected-text')) {
       $('bet-selected-text').textContent =
-        `${translateCountry(match.teamA)} vs ${translateCountry(match.teamB)} · ${t(choiceTextKey[choice])} @${selectedBet.odds}x`;
+        `${translateCountry(match.teamA)} vs ${translateCountry(match.teamB)} · ${translateChoice(choice)} @${selectedBet.odds}x`;
     }
     updatePotentialWin();
   }
@@ -409,6 +420,10 @@
         div.className = `bet-item ${bet.status}`;
         const mi = bet.matchInfo;
         const matchStr = mi ? `${translateCountry(mi.teamA)} vs ${translateCountry(mi.teamB)}` : `#${bet.match_id}`;
+        const choiceStr = translateChoice(bet.choice);
+        const resultSuffix = (mi && mi.status === 'settled' && mi.result)
+          ? ` · ${t('fb_match_result')}: ${translateChoice(mi.result)}`
+          : '';
         const statusTag = bet.status === 'win'
           ? `<span class="font-bold" style="color: var(--neon-green);">+¥${bet.payout}</span>`
           : bet.status === 'lose'
@@ -418,7 +433,7 @@
         div.innerHTML = `
           <div>
             <div class="font-mono text-zinc-300">${matchStr}</div>
-            <div class="text-[10px] text-zinc-500 mt-0.5">${t(choiceLabelKey[bet.choice])} · ¥${bet.amount} × ${bet.odds}x</div>
+            <div class="text-[10px] text-zinc-500 mt-0.5">${choiceStr} · ¥${bet.amount} × ${bet.odds}x${resultSuffix}</div>
           </div>
           <div class="text-right">
             <div>${statusTag}</div>

@@ -5,6 +5,11 @@ const t = (d) => JSON.stringify(Object.fromEntries(LK.map(k => [k, d[k] ?? '']))
 const NP = { cn:'[系统通知]', en:'[System Notification]', jp:'[システム通知]', kr:'[시스템 알림]', es:'[Notificación del Sistema]', vi:'[Thông báo Hệ thống]', ar:'[إشعار النظام]', ru:'[Системное уведомление]' };
 const nt = (d) => t(Object.fromEntries(LK.map(k => [k, `${NP[k]} ${d[k] ?? ''}`])));
 
+function fbChoiceLabel(_match, choice) {
+  const map = { a: '主胜', draw: '平局', b: '客胜' };
+  return map[choice] || choice;
+}
+
 // 自动续费单个用户的函数
 async function autoRenewUser(DB, user) {
   const now = new Date();
@@ -1837,7 +1842,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           await DB.prepare('INSERT INTO football_bet (username, match_id, choice, amount, odds, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
             .bind(username, matchId, choice, amt, odds, 'pending', now).run();
 
-          return resJson({ success: true, message: `下注成功！${matchData.teamA} vs ${matchData.teamB} - ${choice}，金额：${amount}，赔率：${odds}x` });
+          return resJson({ success: true, message: `下注成功！${matchData.teamA} vs ${matchData.teamB} - ${fbChoiceLabel(matchData, choice)}，金额：${amount}，赔率：${odds}x` });
         } catch (err) {
           return resJson({ success: false, message: err.message }, 500);
         }
@@ -1928,12 +1933,13 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
             }
           }
 
+          const resultLabel = fbChoiceLabel(matches[idx], result);
           await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
-            .bind('immmor', `⚽ 竞猜开奖！${matches[idx].teamA} vs ${matches[idx].teamB} → 结果：${result}，派奖 ¥${totalPayout}，中奖 ${winCount} 人`, now).run();
+            .bind('immmor', `⚽ 竞猜开奖！${matches[idx].teamA} vs ${matches[idx].teamB} → 结果：${resultLabel}，派奖 ¥${totalPayout}，中奖 ${winCount} 人`, now).run();
 
           return resJson({
             success: true,
-            message: `开奖完成！${matches[idx].teamA} vs ${matches[idx].teamB} 结果：${result}，中奖 ${winCount} 人，总派奖 ¥${totalPayout}`
+            message: `开奖完成！${matches[idx].teamA} vs ${matches[idx].teamB} 结果：${resultLabel}，中奖 ${winCount} 人，总派奖 ¥${totalPayout}`
           });
         } catch (err) {
           return resJson({ success: false, message: err.message }, 500);
