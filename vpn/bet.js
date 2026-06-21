@@ -32,59 +32,95 @@
             });
         });
 
-        // 幸运转盘功能
-        const wheel = document.getElementById('wheel');
+        // 幸运转盘
+        const WHEEL_PRIZES = [100, 50, 200, 10, 500, 20, 1000, 5];
+        const WHEEL_COLORS = [
+            '#00e676',  // 翠绿 ¥100
+            '#00d4ff',  // 天蓝 ¥50
+            '#ff9100',  // 橙金 ¥200
+            '#b388ff',  // 紫罗兰 ¥10
+            '#ff4081',  // 玫红 ¥500
+            '#ffd600',  // 金黄 ¥20
+            '#ff5252',  // 珊瑚红 ¥1000
+            '#448aff'   // 宝蓝 ¥5
+        ];
+        const wheelFace = document.getElementById('wheel-face');
         const spinBtn = document.getElementById('spin-wheel');
         const wheelResult = document.getElementById('wheel-result');
-        
+        let wheelRotation = 0;
+        let isWheelSpinning = false;
+
+        const normalizeDeg = (deg) => ((deg % 360) + 360) % 360;
+
+        const getWheelStep = () => 360 / WHEEL_PRIZES.length;
+
+        // 根据当前旋转角度，反算指针（顶部）指向的扇区
+        const getIndexAtPointer = (rotation) => {
+            const step = getWheelStep();
+            const mod = normalizeDeg(rotation);
+            const centerAtTop = normalizeDeg(360 - mod);
+            return Math.floor(centerAtTop / step) % WHEEL_PRIZES.length;
+        };
+
+        const initWheel = () => {
+            if (!wheelFace) return;
+
+            const step = getWheelStep();
+            const gradientStops = WHEEL_PRIZES.map((_, i) =>
+                `${WHEEL_COLORS[i]} ${i * step}deg ${(i + 1) * step}deg`
+            ).join(', ');
+
+            wheelFace.style.background = `conic-gradient(from -90deg, ${gradientStops})`;
+            wheelFace.innerHTML = WHEEL_PRIZES.map((prize, i) => {
+                const angle = i * step + step / 2;
+                const textColor = i === 5 ? '#1a1a2e' : '#fff';
+                return `<span class="wheel-label" style="--angle:${angle}deg;color:${textColor}">¥${prize}</span>`;
+            }).join('');
+        };
+
+        initWheel();
+
         spinBtn.addEventListener('click', () => {
+            if (isWheelSpinning) return;
             if (!checkLogin()) return;
             if (spinBtn.disabled) return;
-            
+
             const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
             const balance = parseFloat(userInfo.balance || 0);
-            
+
             if (balance < 10) {
                 alert('余额不足！每次抽奖需要10元');
                 return;
             }
-            
+
+            isWheelSpinning = true;
             spinBtn.disabled = true;
             wheelResult.textContent = '';
-            
-            // 重置转盘状态，确保每次旋转都是从相同状态开始
-            wheel.style.transition = 'none';
-            wheel.style.transform = 'rotate(0deg)';
-            
-            // 强制重绘
-            void wheel.offsetWidth;
-            
-            // 设置新的旋转角度和过渡效果
-            const spinDegrees = Math.floor(Math.random() * 360) + 1080;
-            wheel.style.transition = 'transform 4s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
-            wheel.style.transform = `rotate(${spinDegrees}deg)`;
-            
+
+            const step = getWheelStep();
+            const targetIndex = Math.floor(Math.random() * WHEEL_PRIZES.length);
+            const segmentCenter = targetIndex * step + step / 2;
+            const targetMod = normalizeDeg(360 - segmentCenter);
+            const currentMod = normalizeDeg(wheelRotation);
+            let delta = targetMod - currentMod;
+            if (delta <= 0) delta += 360;
+            const extraSpins = 4 + Math.floor(Math.random() * 2);
+            wheelRotation += delta + extraSpins * 360;
+
+            wheelFace.style.transition = 'transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99)';
+            wheelFace.style.transform = `rotate(${wheelRotation}deg)`;
+
             setTimeout(() => {
-                const segments = wheel.querySelectorAll('.wheel-segment');
-                const angle = spinDegrees % 360;
-                const segmentAngle = 45;
-                // 每个扇形占据45度，指针在顶部(0度)
-                // 计算指针指向的扇形索引
-                const adjustedAngle = (360 - angle + 22.5) % 360;
-                const activeIndex = Math.floor(adjustedAngle / segmentAngle) % segments.length;
-                const prizeText = segments[activeIndex].getAttribute('data-prize');
-                const prize = parseFloat(prizeText);
-                
-                // 扣除余额，增加奖励
+                const actualIndex = getIndexAtPointer(wheelRotation);
+                const prize = WHEEL_PRIZES[actualIndex];
+
                 userInfo.balance = (balance - 10) + prize;
                 localStorage.setItem('userInfo', JSON.stringify(userInfo));
-                
-                // 更新显示的余额
                 updateBalanceDisplay(userInfo.balance);
-                
                 wheelResult.textContent = `🎉 恭喜获得 ¥${prize}！`;
+                isWheelSpinning = false;
                 spinBtn.disabled = false;
-            }, 4000);
+            }, 4200);
         });
 
         // 老虎机功能
@@ -147,21 +183,16 @@
                 return;
             }
             
-            // 每个符号的高度是90px，显示区域能看到3个符号
             const symbolHeight = 90;
-            const visibleSymbols = 3;
             
-            // 生成随机停止位置（确保最终中间位置显示目标符号）
-            // stopIndex 0-6 对应7个符号，加上21个额外符号（3圈）确保滚动流畅
             const stopIndex1 = Math.floor(Math.random() * 7);
             const stopIndex2 = Math.floor(Math.random() * 7);
             const stopIndex3 = Math.floor(Math.random() * 7);
             
-            // 计算滚动位置：(额外圈数 + 停止索引) * 符号高度 + 中间位置偏移
-            // 中间位置是第2个符号的位置（索引1），所以需要向上滚动1个符号的高度
-            const totalSpin1 = (7 + stopIndex1) * symbolHeight - symbolHeight;
-            const totalSpin2 = (8 + stopIndex2) * symbolHeight - symbolHeight;
-            const totalSpin3 = (9 + stopIndex3) * symbolHeight - symbolHeight;
+            // 每轮转 N 圈（7 的倍数）后停在 stopIndex，使可见符号 = symbols[stopIndex]
+            const totalSpin1 = (7 + stopIndex1) * symbolHeight;
+            const totalSpin2 = (14 + stopIndex2) * symbolHeight;
+            const totalSpin3 = (14 + stopIndex3) * symbolHeight;
             
             // 重置位置到起点
             reel1.style.transition = 'none';
@@ -194,13 +225,25 @@
                 const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
                 const balance = parseFloat(userInfo.balance || 0);
                 
-                if (symbols[stopIndex1] === symbols[stopIndex2] && symbols[stopIndex2] === symbols[stopIndex3]) {
-                    let prize = 0;
-                    if (symbols[stopIndex1] === '7️⃣') prize = 200;
-                    else if (symbols[stopIndex1] === '💎') prize = 100;
-                    else if (symbols[stopIndex1] === '⭐') prize = 50;
+                const s1 = symbols[stopIndex1];
+                const s2 = symbols[stopIndex2];
+                const s3 = symbols[stopIndex3];
+                let prize = 0;
+
+                if (s1 === s2 && s2 === s3) {
+                    if (s1 === '7️⃣') prize = 200;
+                    else if (s1 === '💎') prize = 100;
+                    else if (s1 === '⭐') prize = 50;
                     else prize = 30;
-                    
+                } else if (s1 === s2 || s2 === s3 || s1 === s3) {
+                    const pairSymbol = s1 === s2 ? s1 : (s2 === s3 ? s2 : s1);
+                    if (pairSymbol === '7️⃣') prize = 100;
+                    else if (pairSymbol === '💎') prize = 50;
+                    else if (pairSymbol === '⭐') prize = 25;
+                    else prize = 15;
+                }
+
+                if (prize > 0) {
                     userInfo.balance = (balance - 20) + prize;
                     localStorage.setItem('userInfo', JSON.stringify(userInfo));
                     updateBalanceDisplay(userInfo.balance);
