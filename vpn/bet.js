@@ -348,6 +348,7 @@
                 scratchCtx.fillStyle = '#888';
                 scratchCtx.font = 'bold 14px Arial';
                 scratchCtx.textAlign = 'center';
+                scratchCtx.textBaseline = 'middle';
                 scratchCtx.fillText(dict.scratch_buy_first || '请先购买刮刮卡', canvas.width / 2, canvas.height / 2);
                 return;
             }
@@ -364,6 +365,7 @@
             scratchCtx.fillStyle = '#999';
             scratchCtx.font = 'bold 16px Arial';
             scratchCtx.textAlign = 'center';
+            scratchCtx.textBaseline = 'middle';
             scratchCtx.fillText(dict.scratch_here || '👆 刮开此处', canvas.width / 2, canvas.height / 2);
             
             // 添加网格纹理效果
