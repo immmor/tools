@@ -5,6 +5,40 @@
         initGameCenter();
     });
 
+    // 显示游戏结果弹窗
+    const showGameResult = (isWin, amount, icon) => {
+        const modal = document.getElementById('game-result-modal');
+        const iconEl = document.getElementById('game-result-icon');
+        const titleEl = document.getElementById('game-result-title');
+        const amountEl = document.getElementById('game-result-amount');
+        const closeBtn = document.getElementById('game-result-close');
+        
+        const dict = window.translations?.[window.currentLang] || {};
+        
+        modal.classList.remove('win', 'lose');
+        modal.classList.add(isWin ? 'win' : 'lose');
+        
+        iconEl.textContent = icon || (isWin ? '🎉' : '😔');
+        titleEl.textContent = isWin ? (dict.game_result_win_title || '恭喜中奖！') : (dict.game_result_lose_title || '未中奖');
+        amountEl.textContent = isWin ? `¥${amount}` : '';
+        amountEl.style.display = isWin ? 'block' : 'none';
+        
+        // 更新关闭按钮文字
+        closeBtn.textContent = dict.game_result_close || '确定';
+        
+        modal.classList.add('show');
+        
+        closeBtn.onclick = () => {
+            modal.classList.remove('show');
+        };
+        
+        modal.onclick = (e) => {
+            if (e.target === modal) {
+                modal.classList.remove('show');
+            }
+        };
+    };
+
     const initGameCenter = () => {
         // Tab切换功能
         const gameTabs = document.querySelectorAll('.game-tab');
@@ -26,6 +60,12 @@
                     
                     // 如果是刮刮乐，初始化canvas
                     if (tabId === 'scratch') {
+                        // 如果之前的卡片已经刮完，重置状态
+                        if (isPrizeAdded) {
+                            hasValidCard = false;
+                            isPrizeAdded = false;
+                            scratchPrizeAmount = 0;
+                        }
                         setTimeout(() => initScratchCard(), 100);
                     }
                 }
@@ -89,7 +129,8 @@
             const balance = parseFloat(userInfo.balance || 0);
 
             if (balance < 10) {
-                alert('余额不足！每次抽奖需要10元');
+                const dict = window.translations?.[window.currentLang] || {};
+                alert(dict.alert_wheel_balance || '余额不足！每次抽奖需要10元');
                 return;
             }
 
@@ -117,7 +158,10 @@
                 userInfo.balance = (balance - 10) + prize;
                 localStorage.setItem('userInfo', JSON.stringify(userInfo));
                 updateBalanceDisplay(userInfo.balance);
-                wheelResult.textContent = `🎉 恭喜获得 ¥${prize}！`;
+                
+                // 显示弹窗结果
+                showGameResult(true, prize, '🎡');
+                
                 isWheelSpinning = false;
                 spinBtn.disabled = false;
             }, 4200);
@@ -164,7 +208,8 @@
             const balance = parseFloat(userInfo.balance || 0);
             
             if (balance < 20) {
-                alert('余额不足！每次游戏需要20元');
+                const dict = window.translations?.[window.currentLang] || {};
+                alert(dict.alert_slot_balance || '余额不足！每次游戏需要20元');
                 return;
             }
             
@@ -247,12 +292,16 @@
                     userInfo.balance = (balance - 20) + prize;
                     localStorage.setItem('userInfo', JSON.stringify(userInfo));
                     updateBalanceDisplay(userInfo.balance);
-                    slotResult.textContent = `🎊 恭喜中奖！获得 ¥${prize}！`;
+                    
+                    // 显示中奖弹窗
+                    showGameResult(true, prize, '🎰');
                 } else {
                     userInfo.balance = balance - 20;
                     localStorage.setItem('userInfo', JSON.stringify(userInfo));
                     updateBalanceDisplay(userInfo.balance);
-                    slotResult.textContent = '😔 未中奖，再接再厉！';
+                    
+                    // 显示未中奖弹窗
+                    showGameResult(false, 0, '🎰');
                 }
                 
                 isSlotSpinning = false;
@@ -266,6 +315,8 @@
         let scratchPrizeAmount = 0;
         let isPrizeAdded = false;
         let hasValidCard = false;
+        let scratchIsDrawing = false;
+        let scratchEventsInitialized = false;
         
         const initScratchCard = () => {
             const canvas = document.getElementById('scratch-canvas');
@@ -286,8 +337,9 @@
             scratchCtx = canvas.getContext('2d');
             
             // 如果还没有购买卡片，显示提示
+            const dict = window.translations?.[window.currentLang] || {};
             if (!hasValidCard) {
-                scratchPrize.textContent = '👆 点击下方按钮购买刮刮卡';
+                scratchPrize.textContent = '';
                 
                 // 绘制半透明覆盖层
                 scratchCtx.fillStyle = 'rgba(60, 60, 60, 0.95)';
@@ -296,7 +348,7 @@
                 scratchCtx.fillStyle = '#888';
                 scratchCtx.font = 'bold 14px Arial';
                 scratchCtx.textAlign = 'center';
-                scratchCtx.fillText('请先购买刮刮卡', canvas.width / 2, canvas.height / 2);
+                scratchCtx.fillText(dict.scratch_buy_first || '请先购买刮刮卡', canvas.width / 2, canvas.height / 2);
                 return;
             }
             
@@ -312,7 +364,7 @@
             scratchCtx.fillStyle = '#999';
             scratchCtx.font = 'bold 16px Arial';
             scratchCtx.textAlign = 'center';
-            scratchCtx.fillText('👆 刮开此处', canvas.width / 2, canvas.height / 2);
+            scratchCtx.fillText(dict.scratch_here || '👆 刮开此处', canvas.width / 2, canvas.height / 2);
             
             // 添加网格纹理效果
             scratchCtx.strokeStyle = 'rgba(255,255,255,0.1)';
@@ -330,14 +382,15 @@
                 scratchCtx.stroke();
             }
             
-            // 添加刮擦事件
-            initScratchEvents();
+            // 添加刮擦事件（只初始化一次）
+            if (!scratchEventsInitialized) {
+                initScratchEvents();
+                scratchEventsInitialized = true;
+            }
         };
         
         const initScratchEvents = () => {
-            if (!scratchCanvas || !scratchCtx || !hasValidCard) return;
-            
-            let isDrawing = false;
+            if (!scratchCanvas) return;
             
             const getPos = (e) => {
                 const rect = scratchCanvas.getBoundingClientRect();
@@ -357,7 +410,7 @@
             };
             
             const draw = (e) => {
-                if (!isDrawing || !hasValidCard) return;
+                if (!scratchIsDrawing || !hasValidCard) return;
                 
                 const pos = getPos(e);
                 scratchCtx.globalCompositeOperation = 'destination-out';
@@ -371,22 +424,22 @@
             
             scratchCanvas.addEventListener('mousedown', (e) => { 
                 if (hasValidCard) {
-                    isDrawing = true; 
+                    scratchIsDrawing = true; 
                     draw(e); 
                 }
             });
             scratchCanvas.addEventListener('mousemove', draw);
-            scratchCanvas.addEventListener('mouseup', () => { isDrawing = false; });
-            scratchCanvas.addEventListener('mouseleave', () => { isDrawing = false; });
+            scratchCanvas.addEventListener('mouseup', () => { scratchIsDrawing = false; });
+            scratchCanvas.addEventListener('mouseleave', () => { scratchIsDrawing = false; });
             
             scratchCanvas.addEventListener('touchstart', (e) => { 
                 if (hasValidCard) {
-                    isDrawing = true; 
+                    scratchIsDrawing = true; 
                     draw(e); 
                 }
             });
             scratchCanvas.addEventListener('touchmove', draw);
-            scratchCanvas.addEventListener('touchend', () => { isDrawing = false; });
+            scratchCanvas.addEventListener('touchend', () => { scratchIsDrawing = false; });
         };
         
         // 检查刮开进度
@@ -417,7 +470,6 @@
             if (isPrizeAdded || !hasValidCard) return;
             
             isPrizeAdded = true;
-            const scratchResult = document.getElementById('scratch-result');
             
             // 添加奖金到余额
             const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
@@ -425,7 +477,8 @@
             localStorage.setItem('userInfo', JSON.stringify(userInfo));
             updateBalanceDisplay(userInfo.balance);
             
-            scratchResult.textContent = `🎉 恭喜获得 ¥${scratchPrizeAmount}！`;
+            // 显示弹窗结果
+            showGameResult(true, scratchPrizeAmount, '🎁');
         };
 
         const newScratchBtn = document.getElementById('new-scratch');
@@ -439,7 +492,8 @@
             const balance = parseFloat(userInfo.balance || 0);
             
             if (balance < 15) {
-                alert('余额不足！每张刮刮卡需要15元');
+                const dict = window.translations?.[window.currentLang] || {};
+                alert(dict.alert_scratch_balance || '余额不足！每张刮刮卡需要15元');
                 return;
             }
             
@@ -465,7 +519,8 @@
             // 设置有效卡片状态和奖金
             hasValidCard = true;
             scratchPrizeAmount = prize;
-            scratchPrize.textContent = `🎁 恭喜获得 ¥${prize}`;
+            const dict = window.translations?.[window.currentLang] || {};
+            scratchPrize.textContent = (dict.scratch_win || '🎁 恭喜获得') + ` ¥${prize}`;
             scratchResult.textContent = '';
             isPrizeAdded = false;
             
@@ -477,7 +532,8 @@
         const checkLogin = () => {
             const userInfo = JSON.parse(localStorage.getItem('userInfo') || 'null');
             if (!userInfo) {
-                alert('请先登录！');
+                const dict = window.translations?.[window.currentLang] || {};
+                alert(dict.alert_login || '请先登录！');
                 document.getElementById('auth-toggle').click();
                 return false;
             }
@@ -505,10 +561,18 @@
         
         updateGameButtons();
         
+        // 初始化刮刮乐（确保翻译正确显示）
+        setTimeout(() => initScratchCard(), 100);
+        
         // 监听登录状态变化
         document.addEventListener('userLoggedIn', updateGameButtons);
         document.addEventListener('userLoggedOut', () => {
             updateGameButtons();
+        });
+
+        // 监听语言切换事件，重新初始化刮刮乐翻译
+        document.addEventListener('languageChanged', () => {
+            initScratchCard();
         });
     };
 })();
