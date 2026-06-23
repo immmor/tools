@@ -109,6 +109,118 @@ export default {
         }, 500);
       }
 
+      // ========== 发送邮箱验证码接口 ==========
+      if (path === '/api/send-verify-code' && request.method === 'POST') {
+        const params = await request.json();
+        const { email } = params;
+
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          return resJson({ success: false, message: '请输入有效的邮箱地址！' }, 400);
+        }
+
+        // 检查频率限制：同一邮箱60秒内只能发送一次
+        const lastSent = await DB.prepare('SELECT value FROM link WHERE key = ?').bind(`verify_code_time_${email}`).first();
+        if (lastSent) {
+          const elapsed = Date.now() - parseInt(lastSent.value);
+          if (elapsed < 60000) {
+            const remaining = Math.ceil((60000 - elapsed) / 1000);
+            return resJson({ success: false, message: `请 ${remaining} 秒后再试！` }, 429);
+          }
+        }
+
+        // 生成6位数字验证码
+        const verifyCode = Math.floor(100000 + Math.random() * 900000).toString();
+        const now = Date.now().toString();
+
+        // 存储验证码和时间戳（5分钟有效）
+        await DB.prepare('INSERT OR REPLACE INTO link (key, value) VALUES (?, ?)').bind(`verify_code_${email}`, verifyCode).run();
+        await DB.prepare('INSERT OR REPLACE INTO link (key, value) VALUES (?, ?)').bind(`verify_code_time_${email}`, now).run();
+
+        // 通过 Resend 发送验证码
+        const RESEND_API_KEY = env.RESEND_API_KEY;
+        if (!RESEND_API_KEY) {
+          return resJson({ success: false, message: '邮件服务未配置，请联系管理员！' }, 500);
+        }
+
+        const emailSubject = 'PHANTOM VPN - 邮箱验证码';
+        const emailHtml = `
+          <div style="font-family: monospace; background: #050505; color: #00ff41; padding: 20px; max-width: 500px;">
+            <h2 style="color: #00ff41; border-bottom: 1px solid #333; padding-bottom: 10px;">PHANTOM VPN</h2>
+            <p style="color: #fff;">您的邮箱验证码是：</p>
+            <div style="background: #111; border: 1px solid #00ff41; padding: 15px; text-align: center; margin: 20px 0;">
+              <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #00ff41;">${verifyCode}</span>
+            </div>
+            <p style="color: #888; font-size: 12px;">此验证码有效期为 5 分钟，请勿泄露给他人。</p>
+            <p style="color: #888; font-size: 12px;">如果您没有请求此验证码，请忽略此邮件。</p>
+          </div>
+        `;
+
+        try {
+          const resendResponse = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${RESEND_API_KEY}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              from: 'PHANTOM VPN <noreply@phantom.immmor.com>',
+              to: [email],
+              subject: emailSubject,
+              html: emailHtml
+            })
+          });
+
+          if (!resendResponse.ok) {
+            const errorData = await resendResponse.json().catch(() => ({}));
+            console.error('Resend API 错误:', errorData);
+            return resJson({ success: false, message: '邮件发送失败，请稍后重试！' }, 500);
+          }
+
+          return resJson({ success: true, message: '验证码已发送到您的邮箱！' });
+        } catch (e) {
+          console.error('发送邮件异常:', e);
+          return resJson({ success: false, message: '邮件发送失败，请稍后重试！' }, 500);
+        }
+      }
+
+      // ========== 验证邮箱验证码接口 ==========
+      if (path === '/api/verify-code' && request.method === 'POST') {
+        const params = await request.json();
+        const { email, code } = params;
+
+        if (!email || !code) {
+          return resJson({ success: false, message: '邮箱和验证码不能为空！' }, 400);
+        }
+
+        const storedCode = await DB.prepare('SELECT value FROM link WHERE key = ?').bind(`verify_code_${email}`).first();
+
+        if (!storedCode) {
+          return resJson({ success: false, message: '请先获取验证码！' }, 400);
+        }
+
+        // 检查验证码是否过期（5分钟）
+        const timeRow = await DB.prepare('SELECT value FROM link WHERE key = ?').bind(`verify_code_time_${email}`).first();
+        if (timeRow) {
+          const elapsed = Date.now() - parseInt(timeRow.value);
+          if (elapsed > 5 * 60 * 1000) {
+            // 验证码已过期，清理
+            await DB.prepare('DELETE FROM link WHERE key = ?').bind(`verify_code_${email}`).run();
+            await DB.prepare('DELETE FROM link WHERE key = ?').bind(`verify_code_time_${email}`).run();
+            return resJson({ success: false, message: '验证码已过期，请重新获取！' }, 400);
+          }
+        }
+
+        if (storedCode.value !== code) {
+          return resJson({ success: false, message: '验证码错误！' }, 400);
+        }
+
+        // 验证成功，清理验证码
+        await DB.prepare('DELETE FROM link WHERE key = ?').bind(`verify_code_${email}`).run();
+        await DB.prepare('DELETE FROM link WHERE key = ?').bind(`verify_code_time_${email}`).run();
+
+        return resJson({ success: true, message: '验证成功！' });
+      }
+
       // ========== 注册接口（核心）→ 用户名密码注册 ==========
       if (path === '/api/register' && request.method === 'POST') {
         const params = await request.json();
@@ -116,6 +228,16 @@ export default {
         
         if (!username || !password) {
           return resJson({ success: false, message: '用户名和密码不能为空！' }, 400);
+        }
+
+        // 检查用户是否已存在
+        const existingUser = await DB
+          .prepare('SELECT username FROM user WHERE username = ?')
+          .bind(username)
+          .first();
+
+        if (existingUser) {
+          return resJson({ success: false, message: '该邮箱已注册！' }, 409);
         }
 
         // 生成唯一的6位邀请码（字母+数字）

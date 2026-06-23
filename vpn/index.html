@@ -1320,7 +1320,29 @@
             <form id="auth-form">
                 <div class="mb-6">
                     <label class="block text-xs text-zinc-500 mb-2 uppercase tracking-widest" data-i18n="modal_username">邮箱</label>
-                    <input type="text" id="username" class="w-full bg-zinc-900 border border-zinc-700 px-4 py-3 text-white focus:border-[var(--neon-blue)] focus:outline-none" required>
+                    <div class="flex gap-2 items-center">
+                        <input type="text" id="username" class="flex-1 bg-zinc-900 border border-zinc-700 px-4 py-3 text-white focus:border-[var(--neon-blue)] focus:outline-none" placeholder="输入邮箱" required>
+                        <div id="email-domain-wrapper" class="hidden">
+                            <select id="email-domain" class="bg-zinc-900 border border-zinc-700 px-3 py-3 text-white focus:border-[var(--neon-blue)] focus:outline-none min-w-[120px] appearance-none cursor-pointer text-center">
+                            <option value="qq.com">@qq.com</option>
+                            <option value="foxmail.com">@foxmail.com</option>
+                            <option value="gmail.com">@gmail.com</option>
+                            <option value="outlook.com">@outlook.com</option>
+                            <option value="hotmail.com">@hotmail.com</option>
+                            <option value="163.com">@163.com</option>
+                            <option value="126.com">@126.com</option>
+                            <option value="yahoo.com">@yahoo.com</option>
+                            <option value="icloud.com">@icloud.com</option>
+                        </select>
+                        </div>
+                    </div>
+                </div>
+                <div id="verify-code-container" class="mb-6 hidden">
+                    <label class="block text-xs text-zinc-500 mb-2 uppercase tracking-widest" data-i18n="modal_verify_code">邮箱验证码</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="verify-code" maxlength="6" class="flex-1 bg-zinc-900 border border-zinc-700 px-4 py-3 text-white focus:border-[var(--neon-blue)] focus:outline-none" placeholder="输入6位验证码" data-i18n-placeholder="modal_verify_code_placeholder">
+                        <button type="button" id="send-code-btn" class="btn-cyber px-4 py-3 whitespace-nowrap text-sm" data-i18n="modal_send_code">发送验证码</button>
+                    </div>
                 </div>
                 <div class="mb-6 relative">
                     <label class="block text-xs text-zinc-500 mb-2 uppercase tracking-widest" data-i18n="modal_password">密码</label>
@@ -2268,6 +2290,10 @@
             title: $('modal-title'),
             form: $('auth-form'),
             user: $('username'),
+            emailDomain: $('email-domain'),
+            verifyCode: $('verify-code'),
+            verifyCodeContainer: $('verify-code-container'),
+            sendCodeBtn: $('send-code-btn'),
             pass: $('password'),
             inviteCode: $('invite-code'),
             inviteCodeContainer: $('invite-code-container'),
@@ -2400,8 +2426,16 @@
                 els.switch.textContent = dict ? dict[c.switch] : c.switch;
                 els.msg.classList.add('hidden');
                 els.inviteCodeContainer.classList.toggle('hidden', isLogin);
+                els.verifyCodeContainer.classList.toggle('hidden', isLogin);
                 els.securityAnswerContainer.classList.toggle('hidden', isLogin);
                 els.forgotPwdBtn.classList.toggle('hidden', !isLogin);
+                // 登录模式隐藏邮箱后缀选择器，注册模式显示
+                const domainWrapper = $('email-domain-wrapper');
+                if (domainWrapper) {
+                    domainWrapper.classList.toggle('hidden', isLogin);
+                    // 切换 placeholder
+                    els.user.placeholder = isLogin ? '输入邮箱' : '输入邮箱';
+                }
                 if (!isLogin) {
                     const urlParams = new URLSearchParams(window.location.search);
                     const urlInviteCode = urlParams.get('invite');
@@ -2431,6 +2465,7 @@
                 els.form.reset();
                 els.msg.classList.add('hidden');
                 els.inviteCodeContainer.classList.add('hidden');
+                els.verifyCodeContainer.classList.add('hidden');
                 els.securityAnswerContainer.classList.add('hidden');
                 const passwordRequirements = document.getElementById('password-requirements');
                 if (passwordRequirements) {
@@ -2945,6 +2980,16 @@
                 }
             };
             
+            // 获取完整邮箱地址（注册模式：用户名 + 选择的后缀；登录模式：直接返回输入值）
+            const getFullEmail = () => {
+                const prefix = els.user.value.trim();
+                if (isLogin) {
+                    return prefix;
+                }
+                const domain = els.emailDomain?.value || 'gmail.com';
+                return `${prefix}@${domain}`;
+            };
+            
             const handleBtnClick = () => {
                 if (userInfo) {
                     updateBalance();
@@ -2956,15 +3001,19 @@
             
             const handleSubmit = async (e) => {
                 e.preventDefault();
-                const [user, pass] = [els.user.value.trim(), els.pass.value.trim()];
                 const dict = translations[currentLang];
+                
+                // 注册模式下拼接完整邮箱，登录模式直接使用输入值
+                const user = getFullEmail();
+                const pass = els.pass.value.trim();
+                
                 if (!user || !pass) return showMsg(dict?.please_fill_credentials || '请填写用户名和密码', true);
                 if (!isTurnstileVerified) return showMsg(dict?.turnstile_verify_first || '请先完成人机验证', true);
                 
                 if (!isLogin) {
-                    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-                    if (!emailRegex.test(user)) {
-                        return showMsg(dict?.invalid_email_format || '用户名必须是有效的邮箱格式', true);
+                    const prefix = els.user.value.trim();
+                    if (!prefix) {
+                        return showMsg(dict?.invalid_email_format || '请输入邮箱前缀', true);
                     }
                     
                     if (pass.length < 8) {
@@ -2986,6 +3035,12 @@
                     }
                     if (!/^[a-zA-Z0-9\u4e00-\u9fa5]+$/.test(secAnswer)) {
                         return showMsg(dict?.answer_invalid_chars || '密保答案只能包含中文、英文和数字', true);
+                    }
+                    
+                    // 验证邮箱验证码
+                    const verifyCode = els.verifyCode.value.trim();
+                    if (!verifyCode || verifyCode.length !== 6) {
+                        return showMsg(dict?.verify_code_required || '请输入6位邮箱验证码', true);
                     }
                 }
                 
@@ -3036,7 +3091,12 @@
                             setTimeout(closeModal, 1000);
                         } else {
                             localStorage.setItem('lastRegisterTime', Date.now().toString());
-                            setTimeout(toggleMode, 1000);
+                            // 注册成功后切换到登录模式，并填入完整邮箱
+                            const fullEmail = getFullEmail();
+                            setTimeout(() => {
+                                toggleMode();
+                                els.user.value = fullEmail;
+                            }, 1000);
                         }
                     } else {
                         const dict = translations[currentLang];
@@ -3078,6 +3138,77 @@
                 els.modal.addEventListener('click', (e) => e.target === els.modal && closeModal());
                 els.switch.addEventListener('click', toggleMode);
                 els.form.addEventListener('submit', handleSubmit);
+                
+                // 发送验证码按钮
+                let sendCodeCooldown = false;
+                
+                els.sendCodeBtn.addEventListener('click', async () => {
+                    if (sendCodeCooldown) return;
+                    
+                    const email = getFullEmail();
+                    const prefix = els.user.value.trim();
+                    const dict = translations[currentLang];
+                    
+                    if (!prefix) {
+                        showMsg(dict?.invalid_email_format || '请先输入邮箱前缀', true);
+                        return;
+                    }
+                    
+                    // 检查邮箱是否已注册
+                    try {
+                        const checkRes = await fetch(`${API}/api/get-user?name=${encodeURIComponent(email)}`);
+                        const checkData = await checkRes.json();
+                        if (checkData.code === 200 && checkData.data) {
+                            showMsg('该邮箱已注册，请直接登录！', true);
+                            return;
+                        }
+                    } catch {
+                        // 查询失败不阻塞流程，继续发送验证码
+                    }
+                    
+                    sendCodeCooldown = true;
+                    els.sendCodeBtn.disabled = true;
+                    let countdown = 60;
+                    els.sendCodeBtn.textContent = `${countdown}s`;
+                    
+                    const timer = setInterval(() => {
+                        countdown--;
+                        els.sendCodeBtn.textContent = `${countdown}s`;
+                        if (countdown <= 0) {
+                            clearInterval(timer);
+                            sendCodeCooldown = false;
+                            els.sendCodeBtn.disabled = false;
+                            els.sendCodeBtn.textContent = dict?.modal_send_code || '发送验证码';
+                        }
+                    }, 1000);
+                    
+                    try {
+                        const res = await fetch(`${API}/api/send-verify-code`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ email })
+                        });
+                        const data = await res.json();
+                        
+                        if (data.success) {
+                            showMsg(data.message);
+                        } else {
+                            showMsg(data.message || '发送失败，请稍后重试', true);
+                            // 如果发送失败，重置倒计时
+                            clearInterval(timer);
+                            sendCodeCooldown = false;
+                            els.sendCodeBtn.disabled = false;
+                            els.sendCodeBtn.textContent = dict?.modal_send_code || '发送验证码';
+                        }
+                    } catch {
+                        showMsg(dict?.network_error || '网络错误，请稍后重试', true);
+                        clearInterval(timer);
+                        sendCodeCooldown = false;
+                        els.sendCodeBtn.disabled = false;
+                        els.sendCodeBtn.textContent = dict?.modal_send_code || '发送验证码';
+                    }
+                });
+                
                 els.logout.addEventListener('click', logout);
                 els.recharge.addEventListener('click', handleRecharge);
                 const togglePasswordVisibility = (btnId, inputId) => {
