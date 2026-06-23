@@ -146,6 +146,72 @@
   }
 
   let currentSlide = 0;
+  let selectedDate = '';
+
+  function formatDateLabel(key) {
+    if (!key) return '-';
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
+    const [y, mo, d] = key.split('-');
+    const text = new Date(`${y}/${mo}/${d} 00:00:00 GMT+0800`).toLocaleDateString([], { month: '2-digit', day: '2-digit' });
+    return key === today ? `${t('fb_today')} ${text}` : text;
+  }
+
+  function updateDateSelect() {
+    const sel = $('fb-match-select');
+    if (!sel) return;
+    const dates = [...new Set(allMatches.map(m => m._dateKey).filter(Boolean))].sort();
+    if (!dates.length) { sel.innerHTML = ''; sel.classList.add('hidden'); return; }
+    if (!dates.includes(selectedDate)) {
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
+      selectedDate = dates.includes(today) ? today : dates[0];
+    }
+    sel.classList.remove('hidden');
+    sel.innerHTML = dates.map(d => `<option value="${d}">${formatDateLabel(d)}</option>`).join('');
+    sel.value = selectedDate;
+    sel.disabled = dates.length <= 1;
+  }
+
+  function renderSlider() {
+    const container = $('football-matches');
+    if (!container) return;
+    const list = allMatches.filter(m => m._dateKey === selectedDate);
+    if (!list.length) {
+      container.innerHTML = `<p class="text-zinc-500 text-sm text-center py-6">${t('fb_no_matches')}</p>`;
+      return;
+    }
+
+    currentSlide = list.findIndex(m => !m._started || m.status === 'open');
+    if (currentSlide < 0) currentSlide = 0;
+    const total = list.length;
+    const showArrows = total > 1;
+
+    container.innerHTML = `
+      <div id="fb-slider-wrap">
+        ${showArrows ? `<button id="fb-prev"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg></button>` : ''}
+        <div id="fb-slider-track" class="overflow-hidden rounded-lg">
+          <div id="fb-slides">${list.map(renderMatchCard).join('')}</div>
+        </div>
+        ${showArrows ? `<button id="fb-next"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg></button>` : ''}
+      </div>`;
+
+    container.querySelectorAll('.bet-option').forEach(btn => {
+      btn.addEventListener('click', () => handleSelectBet(parseInt(btn.dataset.matchId), btn.dataset.bet, btn));
+    });
+
+    if (!showArrows) return;
+    updateSlider();
+    $('fb-prev').addEventListener('click', () => { currentSlide = (currentSlide - 1 + total) % total; updateSlider(); });
+    $('fb-next').addEventListener('click', () => { currentSlide = (currentSlide + 1) % total; updateSlider(); });
+    let touchStartX = 0;
+    container.querySelector('#fb-slider-track').addEventListener('touchstart', e => { touchStartX = e.changedTouches[0].screenX; }, { passive: true });
+    container.querySelector('#fb-slider-track').addEventListener('touchend', e => {
+      const diff = touchStartX - e.changedTouches[0].screenX;
+      if (Math.abs(diff) > 50) {
+        currentSlide = diff > 0 ? Math.min(currentSlide + 1, total - 1) : Math.max(currentSlide - 1, 0);
+        updateSlider();
+      }
+    }, { passive: true });
+  }
 
   // 加载比赛列表并渲染（轮播模式）
   async function loadMatches() {
@@ -160,6 +226,7 @@
 
       if (allMatches.length === 0) {
         container.innerHTML = `<p class="text-zinc-500 text-sm text-center py-6">${t('fb_no_matches')}</p>`;
+        updateDateSelect();
         return;
       }
 
@@ -177,8 +244,10 @@
         if (m.matchTime && !isNaN(ts)) {
           const bjDate = new Date(m.matchTime.replace(/-/g, '/') + ' GMT+0800');
           m._displayTime = bjDate.toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+          m._dateKey = bjDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Shanghai' });
         } else {
           m._displayTime = m.matchTime || '';
+          m._dateKey = '';
         }
       });
 
@@ -187,103 +256,20 @@
 
       if (allMatches.length === 0) {
         container.innerHTML = `<p class="text-zinc-500 text-sm text-center py-6">${t('fb_no_matches')}</p>`;
-        const countEl = $('fb-match-count');
-        if (countEl) countEl.textContent = '';
+        updateDateSelect();
         return;
       }
 
       allMatches.sort((a, b) => {
-        // 已结算排最后
         if (a.status === 'settled' && b.status !== 'settled') return 1;
         if (b.status === 'settled' && a.status !== 'settled') return -1;
-        // 已关闭排后面
         if (a.status === 'closed' && b.status !== 'closed') return 1;
         if (b.status === 'closed' && a.status !== 'closed') return -1;
-        // 剩余按比赛时间升序（最近的在前）
         return a._ts - b._ts;
       });
 
-      // 自动定位到最近的未开始/进行中的比赛
-      currentSlide = 0;
-      for (let i = 0; i < allMatches.length; i++) {
-        if (!allMatches[i]._started || allMatches[i].status === 'open') { currentSlide = i; break; }
-      }
-      const total = allMatches.length;
-      const showArrows = total > 1;
-
-      // 比赛计数（仅今天）
-      const todayBJ = new Date(new Date().toLocaleDateString('en-US', { timeZone: 'Asia/Shanghai' })).getTime();
-      const todayCount = allMatches.filter(m => {
-        if (!m._ts || m._ts === Infinity) return false;
-        const d = new Date(m._ts);
-        const matchDay = new Date(d.toLocaleDateString('en-US', { timeZone: 'Asia/Shanghai' })).getTime();
-        return matchDay === todayBJ;
-      }).length;
-      const countEl = $('fb-match-count');
-      if (countEl) countEl.textContent = `${t('fb_today')} ${todayCount} ${t('fb_matches')}`;
-
-      container.innerHTML = `
-        <div id="fb-slider-wrap">
-          ${showArrows ? `
-            <button id="fb-prev">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
-            </button>
-          ` : ''}
-          <div id="fb-slider-track" class="overflow-hidden rounded-lg">
-            <div id="fb-slides">
-              ${allMatches.map(renderMatchCard).join('')}
-            </div>
-          </div>
-          ${showArrows ? `
-            <button id="fb-next">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
-            </button>
-          ` : ''}
-        </div>
-        ${showArrows ? `<div id="fb-dots"></div>` : ''}
-      `;
-
-      // 绑定下注选项点击事件
-      container.querySelectorAll('.bet-option').forEach(btn => {
-        btn.addEventListener('click', () => handleSelectBet(
-          parseInt(btn.dataset.matchId),
-          btn.dataset.bet,
-          btn
-        ));
-      });
-
-      // 轮播控制
-      if (showArrows) {
-        updateSlider();
-
-        $('fb-prev').addEventListener('click', () => { currentSlide = (currentSlide - 1 + total) % total; updateSlider(); });
-        $('fb-next').addEventListener('click', () => { currentSlide = (currentSlide + 1) % total; updateSlider(); });
-
-        // 触摸滑动
-        let touchStartX = 0, touchEndX = 0;
-        const track = container.querySelector('#fb-slider-track');
-        track.addEventListener('touchstart', e => { touchStartX = e.changedTouches[0].screenX; }, { passive: true });
-        track.addEventListener('touchend', e => {
-          touchEndX = e.changedTouches[0].screenX;
-          const diff = touchStartX - touchEndX;
-          if (Math.abs(diff) > 50) {
-            currentSlide = diff > 0 ? Math.min(currentSlide + 1, total - 1) : Math.max(currentSlide - 1, 0);
-            updateSlider();
-          }
-        }, { passive: true });
-
-        // 圆点指示器
-        const dotsContainer = $('fb-dots');
-        if (dotsContainer) {
-          for (let i = 0; i < total; i++) {
-            const dot = document.createElement('div');
-            dot.className = `${i === 0 ? 'active' : ''}`;
-            dot.addEventListener('click', () => { currentSlide = i; updateSlider(); });
-            dotsContainer.appendChild(dot);
-          }
-        }
-      }
-
+      updateDateSelect();
+      renderSlider();
       loadHistory();
 
     } catch (e) {
@@ -293,13 +279,7 @@
 
   function updateSlider() {
     const slidesEl = $('fb-slides');
-    if (!slidesEl) return;
-    slidesEl.style.transform = `translateX(-${currentSlide * 100}%)`;
-
-    // 更新圆点
-    document.querySelectorAll('#fb-dots > div').forEach((dot, i) => {
-      dot.className = `${i === currentSlide ? 'active' : ''}`;
-    });
+    if (slidesEl) slidesEl.style.transform = `translateX(-${currentSlide * 100}%)`;
   }
 
   // 选择下注选项
@@ -462,6 +442,9 @@
       amtInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitBet(); });
       amtInput.addEventListener('input', updatePotentialWin);
     }
+
+    const selectEl = $('fb-match-select');
+    if (selectEl) selectEl.addEventListener('change', () => { selectedDate = selectEl.value; cancelBet(); renderSlider(); });
 
     loadMatches();
   }

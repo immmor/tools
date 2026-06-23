@@ -1126,11 +1126,13 @@ export default {
           const expireDate = user.v_expire_date ? new Date(user.v_expire_date) : null;
           
           if (!expireDate || expireDate < now) {
-            // VIP 已过期，重定向到免费节点接口
-            const freeUrl = `/free/clash?username=${encodeURIComponent(user.username)}`;
-            return new Response(null, {
-              status: 307,
-              headers: { 'Location': freeUrl }
+            // VIP 已过期，返回空链接文件
+            return new Response('', {
+              headers: {
+                'Content-Type': 'text/yaml; charset=utf-8',
+                'Access-Control-Allow-Origin': '*',
+                'Content-Disposition': `attachment; filename="phantom-expired.yaml"`
+              }
             });
           }
           
@@ -1190,11 +1192,13 @@ export default {
           const expireDate = user.v_expire_date ? new Date(user.v_expire_date) : null;
           
           if (!expireDate || expireDate < now) {
-            // VIP 已过期，重定向到免费节点接口
-            const freeUrl = `/free/v2ray?username=${encodeURIComponent(user.username)}`;
-            return new Response(null, {
-              status: 307,
-              headers: { 'Location': freeUrl }
+            // VIP 已过期，返回空链接文件
+            return new Response('', {
+              headers: {
+                'Content-Type': 'text/plain; charset=utf-8',
+                'Access-Control-Allow-Origin': '*',
+                'Content-Disposition': `attachment; filename="phantom-expired.txt"`
+              }
             });
           }
           

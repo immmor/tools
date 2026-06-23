@@ -5,6 +5,117 @@
         initGameCenter();
     });
 
+    const getGameAudioCtx = () => {
+        if (!window._gameAudioCtx) {
+            window._gameAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        const ctx = window._gameAudioCtx;
+        if (ctx.state === 'suspended') ctx.resume();
+        return ctx;
+    };
+
+    const playGameTone = (freq, duration, type = 'square', volume = 0.08) => {
+        try {
+            const ctx = getGameAudioCtx();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = type;
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(volume, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            osc.stop(ctx.currentTime + duration);
+        } catch (e) {}
+    };
+
+    let slotSoundRaf = null;
+    let slotLastTickIndex = 0;
+
+    const getReelTranslateY = (reel) => {
+        const m = getComputedStyle(reel).transform;
+        if (!m || m === 'none') return 0;
+        const vals = m.match(/matrix\(([^)]+)\)/);
+        if (vals) return Math.abs(parseFloat(vals[1].split(',')[5]) || 0);
+        const ty = m.match(/translateY\(([^)]+)\)/);
+        return ty ? Math.abs(parseFloat(ty[1])) : 0;
+    };
+
+    const stopSlotSpinSound = () => {
+        if (slotSoundRaf) { cancelAnimationFrame(slotSoundRaf); slotSoundRaf = null; }
+        slotLastTickIndex = 0;
+    };
+
+    const startSlotSpinSound = (reel, symbolHeight, duration) => {
+        stopSlotSpinSound();
+        const start = performance.now();
+        const loop = (now) => {
+            if (now - start > duration + 80) return;
+            const idx = Math.floor(getReelTranslateY(reel) / symbolHeight);
+            if (idx > slotLastTickIndex) {
+                playGameTone(550 + Math.random() * 250, 0.04, 'square', 0.05);
+                slotLastTickIndex = idx;
+            }
+            slotSoundRaf = requestAnimationFrame(loop);
+        };
+        slotSoundRaf = requestAnimationFrame(loop);
+    };
+    const playSlotReelStop = () => {
+        playGameTone(180, 0.12, 'triangle', 0.1);
+        setTimeout(() => playGameTone(120, 0.08, 'triangle', 0.07), 40);
+    };
+    const playSlotWinSound = () => {
+        [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => playGameTone(f, 0.18, 'sine', 0.09), i * 100));
+    };
+
+    const getElementRotation = (el) => {
+        const m = getComputedStyle(el).transform;
+        if (!m || m === 'none') return 0;
+        const p = m.match(/matrix\(([^)]+)\)/);
+        if (!p) return 0;
+        const v = p[1].split(',').map(parseFloat);
+        return Math.atan2(v[1], v[0]) * (180 / Math.PI);
+    };
+
+    let wheelSoundRaf = null;
+    let wheelTickCount = 0;
+
+    const stopWheelSpinSound = () => {
+        if (wheelSoundRaf) { cancelAnimationFrame(wheelSoundRaf); wheelSoundRaf = null; }
+        wheelTickCount = 0;
+    };
+
+    const startWheelSpinSound = (wheelEl, duration, stepDeg) => {
+        stopWheelSpinSound();
+        let prevAngle = null;
+        let cumulative = 0;
+        const start = performance.now();
+        const loop = (now) => {
+            if (now - start > duration + 80) return;
+            const angle = getElementRotation(wheelEl);
+            if (prevAngle !== null) {
+                let delta = angle - prevAngle;
+                if (delta > 180) delta -= 360;
+                if (delta < -180) delta += 360;
+                cumulative += Math.abs(delta);
+                const count = Math.floor(cumulative / stepDeg);
+                while (wheelTickCount < count) {
+                    playGameTone(420 + Math.random() * 180, 0.035, 'square', 0.04);
+                    wheelTickCount++;
+                }
+            }
+            prevAngle = angle;
+            wheelSoundRaf = requestAnimationFrame(loop);
+        };
+        wheelSoundRaf = requestAnimationFrame(loop);
+    };
+
+    const playWheelStopSound = () => {
+        playGameTone(160, 0.14, 'triangle', 0.1);
+        setTimeout(() => playGameTone(90, 0.1, 'triangle', 0.07), 45);
+    };
+
     const showGameResult = (isWin, amount, icon) => {
         const modal = document.getElementById('game-result-modal');
         const iconEl = document.getElementById('game-result-icon');
@@ -216,10 +327,16 @@
             const extraSpins = 4 + Math.floor(Math.random() * 2);
             wheelRotation += delta + extraSpins * 360;
 
-            wheelFace.style.transition = 'transform 4s cubic-bezier(0.17, 0.67, 0.12, 0.99)';
+            const WHEEL_SPIN_MS = 4000;
+            playGameTone(280, 0.06, 'sine', 0.05);
+            startWheelSpinSound(wheelFace, WHEEL_SPIN_MS, step);
+            wheelFace.style.transition = `transform ${WHEEL_SPIN_MS}ms cubic-bezier(0.17, 0.67, 0.12, 0.99)`;
             wheelFace.style.transform = `rotate(${wheelRotation}deg)`;
 
             setTimeout(() => {
+                playWheelStopSound();
+                stopWheelSpinSound();
+                playSlotWinSound();
                 const actualIndex = getIndexAtPointer(wheelRotation);
                 const prize = WHEEL_PRIZES[actualIndex];
 
@@ -235,7 +352,7 @@
                 
                 isWheelSpinning = false;
                 spinBtn.disabled = false;
-            }, 4200);
+            }, WHEEL_SPIN_MS + 100);
         });
 
         // 老虎机功能
@@ -299,7 +416,7 @@
                 return;
             }
             
-            const symbolHeight = 90;
+            const symbolHeight = parseInt(getComputedStyle(document.querySelector('.slot-reel') || document.body).height, 10) || 120;
             
             const stopIndex1 = Math.floor(Math.random() * 7);
             const stopIndex2 = Math.floor(Math.random() * 7);
@@ -327,6 +444,11 @@
             const spinDuration1 = 2000;
             const spinDuration2 = 2500;
             const spinDuration3 = 3000;
+
+            startSlotSpinSound(reel3, symbolHeight, spinDuration3);
+            setTimeout(playSlotReelStop, spinDuration1);
+            setTimeout(playSlotReelStop, spinDuration2);
+            setTimeout(() => { playSlotReelStop(); stopSlotSpinSound(); }, spinDuration3);
             
             reel1.style.transition = `transform ${spinDuration1}ms cubic-bezier(0.175, 0.885, 0.32, 1.275)`;
             reel2.style.transition = `transform ${spinDuration2}ms cubic-bezier(0.175, 0.885, 0.32, 1.275)`;
@@ -360,6 +482,7 @@
                 }
 
                 if (prize > 0) {
+                    playSlotWinSound();
                     userInfo.balance = (balance - 20) + prize;
                     localStorage.setItem('userInfo', JSON.stringify(userInfo));
                     updateBalanceDisplay(userInfo.balance);
