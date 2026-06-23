@@ -214,9 +214,10 @@ export default {
           return resJson({ success: false, message: '验证码错误！' }, 400);
         }
 
-        // 验证成功，清理验证码
+        // 验证成功：清理验证码，存储 verified 标记（5分钟有效，用于注册时校验）
         await DB.prepare('DELETE FROM link WHERE key = ?').bind(`verify_code_${email}`).run();
         await DB.prepare('DELETE FROM link WHERE key = ?').bind(`verify_code_time_${email}`).run();
+        await DB.prepare('INSERT OR REPLACE INTO link (key, value) VALUES (?, ?)').bind(`verify_passed_${email}`, String(Date.now())).run();
 
         return resJson({ success: true, message: '验证成功！' });
       }
@@ -228,6 +229,24 @@ export default {
         
         if (!username || !password) {
           return resJson({ success: false, message: '用户名和密码不能为空！' }, 400);
+        }
+
+        // 校验邮箱格式：只能包含一个 @，且 @ 前后必须有内容
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(username)) {
+          return resJson({ success: false, message: '邮箱格式不正确！' }, 400);
+        }
+
+        // 校验验证码：必须完成邮箱验证后才能注册
+        const verifyPassed = await DB.prepare('SELECT value FROM link WHERE key = ?').bind(`verify_passed_${username}`).first();
+        if (!verifyPassed) {
+          return resJson({ success: false, message: '请先完成邮箱验证！' }, 400);
+        }
+        // 检查验证标记是否过期（5分钟）
+        const verifyPassedTime = parseInt(verifyPassed.value);
+        if (Date.now() - verifyPassedTime > 5 * 60 * 1000) {
+          await DB.prepare('DELETE FROM link WHERE key = ?').bind(`verify_passed_${username}`).run();
+          return resJson({ success: false, message: '验证已过期，请重新验证邮箱！' }, 400);
         }
 
         // 检查用户是否已存在
@@ -386,6 +405,9 @@ export default {
         }
 
         if (result.success) {
+          // 注册成功，清理验证标记
+          await DB.prepare('DELETE FROM link WHERE key = ?').bind(`verify_passed_${username}`).run();
+
           const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
           const msg = nt({
             cn: `用户 ${username} 注册成功！`,

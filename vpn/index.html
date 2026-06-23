@@ -3074,17 +3074,22 @@
                 e.preventDefault();
                 const dict = translations[currentLang];
                 
-                // 注册模式下拼接完整邮箱，登录模式直接使用输入值
-                const user = getFullEmail();
                 const pass = els.pass.value.trim();
-                
-                if (!user || !pass) return showMsg(dict?.please_fill_credentials || '请填写用户名和密码', true);
+                if (!pass) return showMsg(dict?.please_fill_credentials || '请填写密码', true);
                 if (!isTurnstileVerified) return showMsg(dict?.turnstile_verify_first || '请先完成人机验证', true);
                 
                 if (!isLogin) {
                     const prefix = els.user.value.trim();
                     if (!prefix) {
                         return showMsg(dict?.invalid_email_format || '请输入邮箱前缀', true);
+                    }
+                    if (prefix.includes('@')) {
+                        return showMsg(dict?.invalid_email_format || '邮箱前缀不能包含 @ 符号', true);
+                    }
+                    // QQ邮箱前缀必须为纯数字
+                    const domain = els.emailDomain?.value || 'gmail.com';
+                    if (domain === 'qq.com' && !/^\d+$/.test(prefix)) {
+                        return showMsg(dict?.invalid_email_format, true);
                     }
                     
                     if (pass.length < 8) {
@@ -3108,13 +3113,35 @@
                         return showMsg(dict?.answer_invalid_chars || '密保答案只能包含中文、英文和数字', true);
                     }
                     
-                    // 验证邮箱验证码
+                    // 验证邮箱验证码：调用后端接口真正校验
                     const verifyCode = els.verifyCode.value.trim();
                     if (!verifyCode || verifyCode.length !== 6) {
                         return showMsg(dict?.verify_code_required || '请输入6位邮箱验证码', true);
                     }
+                    const verifyEmail = getFullEmail();
+                    setLoading(true);
+                    try {
+                        const verifyRes = await fetch(`${API}/api/verify-code`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ email: verifyEmail, code: verifyCode })
+                        });
+                        const verifyData = await verifyRes.json();
+                        if (!verifyData.success) {
+                            setLoading(false);
+                            return showMsg(verifyData.message || '验证码错误或已过期！', true);
+                        }
+                    } catch {
+                        setLoading(false);
+                        return showMsg(dict?.network_error || '网络错误，请稍后重试', true);
+                    }
+                    setLoading(false);
                 }
                 
+                // 获取完整邮箱（注册模式：前缀@域名；登录模式：直接使用输入值）
+                const user = getFullEmail();
+                if (!user) return showMsg(dict?.please_fill_credentials || '请填写用户名', true);
+
                 const urlParams = new URLSearchParams(window.location.search);
                 const urlInviteCode = urlParams.get('invite');
                 const inputInviteCode = els.inviteCode.value.trim();
@@ -3222,6 +3249,12 @@
                     
                     if (!prefix) {
                         showMsg(dict?.invalid_email_format || '请先输入邮箱前缀', true);
+                        return;
+                    }
+                    // QQ邮箱前缀必须为纯数字
+                    const codePrefixDomain = els.emailDomain?.value || 'gmail.com';
+                    if (codePrefixDomain === 'qq.com' && !/^\d+$/.test(prefix)) {
+                        showMsg(dict?.invalid_email_format, true);
                         return;
                     }
                     
