@@ -195,7 +195,7 @@
       </div>`;
 
     container.querySelectorAll('.bet-option').forEach(btn => {
-      btn.addEventListener('click', () => handleSelectBet(parseInt(btn.dataset.matchId), btn.dataset.bet, btn));
+      btn.addEventListener('click', () => handleSelectBet(btn.dataset.matchId, btn.dataset.bet, btn));
     });
 
     if (!showArrows) return;
@@ -284,8 +284,8 @@
 
   // 选择下注选项
   function handleSelectBet(matchId, choice, btnEl) {
-    const match = allMatches.find(m => m.id == matchId);
-    if (!match) return;
+    const match = allMatches.find(m => String(m.id) === String(matchId));
+    if (!match) { console.warn('match not found', matchId, allMatches.map(m => m.id)); return; }
 
     // 比赛已开始则禁止下注
     if (match._started) {
@@ -296,27 +296,48 @@
     if (match.status !== 'open') { alert(t('fb_alert_closed') || 'Betting is closed'); return; }
 
     const oddsMap = { a: 'oddsA', draw: 'oddsDraw', b: 'oddsB' };
-    selectedBet = { matchId, choice, odds: parseFloat(match[oddsMap[choice]]) };
+    const odds = parseFloat(match[oddsMap[choice]]);
 
     // 清除所有选中态，只高亮当前
     document.querySelectorAll('.bet-option.selected').forEach(b => b.classList.remove('selected'));
     btnEl.classList.add('selected');
 
-    // 显示下注面板
-    const panel = $('football-bet-panel');
-    if (panel) panel.classList.remove('hidden');
-    if ($('bet-selected-text')) {
-      $('bet-selected-text').textContent =
-        `${translateCountry(match.teamA)} vs ${translateCountry(match.teamB)} · ${translateChoice(choice)} @${selectedBet.odds}x`;
-    }
-    updatePotentialWin();
+    // 动态创建下注弹窗
+    removeBetModal();
+    selectedBet = { matchId, choice, odds };
+    const modal = document.createElement('div');
+    modal.id = 'fb-bet-modal';
+    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:9999;';
+    modal.innerHTML = `
+      <div style="background:linear-gradient(135deg,#1a1a2e,#16213e);border:2px solid var(--neon-orange);border-radius:16px;padding:28px 24px 20px;width:90%;max-width:360px;text-align:center;box-shadow:0 0 50px rgba(255,170,0,0.3);">
+        <div style="font-size:18px;font-weight:bold;color:var(--neon-orange);margin-bottom:4px;">⚽ 确认下注</div>
+        <div id="fb-bet-modal-info" style="font-size:12px;color:#aaa;margin-bottom:20px;">${translateCountry(match.teamA)} vs ${translateCountry(match.teamB)} · ${translateChoice(choice)} @${selectedBet.odds}x</div>
+        <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;">
+          <input type="number" id="fb-bet-modal-amount" min="1" placeholder="输入金额" style="flex:1;background:rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.15);border-radius:10px;padding:12px 16px;font-size:16px;font-family:monospace;color:#fff;outline:none;">
+          <span style="font-size:11px;color:#888;font-family:monospace;">CNY</span>
+        </div>
+        <div id="fb-bet-modal-win" style="font-size:13px;font-family:monospace;color:var(--neon-green);margin-bottom:18px;min-height:20px;"></div>
+        <div style="display:flex;gap:10px;">
+          <button id="fb-bet-modal-cancel" style="flex:1;padding:12px;border-radius:10px;font-size:14px;font-weight:bold;cursor:pointer;background:rgba(255,255,255,0.05);color:#999;border:1px solid rgba(255,255,255,0.1);">取消</button>
+          <button id="fb-bet-modal-submit" style="flex:1;padding:12px;border-radius:10px;font-size:14px;font-weight:bold;cursor:pointer;background:linear-gradient(135deg,var(--neon-orange),#cc8800);color:#000;letter-spacing:1px;border:none;">${t('fb_bet_now')}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+
+    modal.addEventListener('click', (e) => { if (e.target === modal) removeBetModal(); });
+    modal.querySelector('#fb-bet-modal-cancel').addEventListener('click', removeBetModal);
+    modal.querySelector('#fb-bet-modal-submit').addEventListener('click', submitBet);
+    const amtInput = modal.querySelector('#fb-bet-modal-amount');
+    amtInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitBet(); });
+    amtInput.addEventListener('input', updatePotentialWin);
+    amtInput.focus();
   }
 
   // 实时计算预期收益
   function updatePotentialWin() {
-    const el = $('bet-potential-win');
+    const el = $('fb-bet-modal-win');
     if (!el || !selectedBet) return;
-    const amt = parseFloat($('bet-amount')?.value) || 0;
+    const amt = parseFloat($('fb-bet-modal-amount')?.value) || 0;
     el.textContent = amt > 0 ? `${t('fb_potential')} ¥${Math.floor(amt * selectedBet.odds)}` : '';
   }
 
@@ -326,11 +347,11 @@
     if (!user || !user.username) { alert(t('fb_alert_login') || 'Please login first'); return; }
     if (!selectedBet) { alert(t('fb_alert_select') || 'Please select an option'); return; }
 
-    const amtInput = $('bet-amount');
+    const amtInput = $('fb-bet-modal-amount');
     const amount = parseFloat(amtInput?.value);
     if (!amount || amount < 1) { alert(t('fb_alert_amount') || 'Enter valid amount (min 1)'); return; }
 
-    const submitBtn = $('btn-submit-bet');
+    const submitBtn = $('fb-bet-modal-submit');
     if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = t('fb_submitting') || 'Submitting...'; }
 
     try {
@@ -349,7 +370,7 @@
 
       if (data.success) {
         alert(data.message);
-        cancelBet();
+        removeBetModal();
         loadMatches();
         if (typeof updateBalanceDisplay === 'function') updateBalanceDisplay();
       } else {
@@ -362,14 +383,14 @@
     }
   }
 
-  function cancelBet() {
+  function removeBetModal() {
     selectedBet = null;
     document.querySelectorAll('.bet-option.selected').forEach(b => b.classList.remove('selected'));
-    const panel = $('football-bet-panel');
-    if (panel) panel.classList.add('hidden');
-    const amtInput = $('bet-amount');
-    if (amtInput) amtInput.value = '';
+    const modal = $('fb-bet-modal');
+    if (modal) modal.remove();
   }
+
+  function cancelBet() { removeBetModal(); }
 
   // 加载历史记录
   async function loadHistory() {
@@ -431,20 +452,8 @@
   }
 
   function init() {
-    const submitBtn = $('btn-submit-bet');
-    if (submitBtn) submitBtn.addEventListener('click', submitBet);
-
-    const cancelBtn = $('btn-cancel-bet');
-    if (cancelBtn) cancelBtn.addEventListener('click', cancelBet);
-
-    const amtInput = $('bet-amount');
-    if (amtInput) {
-      amtInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitBet(); });
-      amtInput.addEventListener('input', updatePotentialWin);
-    }
-
     const selectEl = $('fb-match-select');
-    if (selectEl) selectEl.addEventListener('change', () => { selectedDate = selectEl.value; cancelBet(); renderSlider(); });
+    if (selectEl) selectEl.addEventListener('change', () => { selectedDate = selectEl.value; removeBetModal(); renderSlider(); });
 
     loadMatches();
   }
