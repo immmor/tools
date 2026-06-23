@@ -5,7 +5,6 @@
         initGameCenter();
     });
 
-    // 显示游戏结果弹窗
     const showGameResult = (isWin, amount, icon) => {
         const modal = document.getElementById('game-result-modal');
         const iconEl = document.getElementById('game-result-icon');
@@ -39,6 +38,70 @@
         };
     };
 
+    // 游戏历史记录功能
+    const getGameHistory = (gameType) => {
+        const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
+        if (!userInfo) return [];
+        const key = `game_history_${gameType}`;
+        try {
+            return JSON.parse(localStorage.getItem(key) || '[]');
+        } catch {
+            return [];
+        }
+    };
+
+    const addGameHistory = (gameType, cost, prize, result) => {
+        const history = getGameHistory(gameType);
+        const now = new Date();
+        const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        history.unshift({ time: timeStr, cost, prize, result, date: now.toISOString() });
+        // 只保留最近20条
+        if (history.length > 20) history.length = 20;
+        localStorage.setItem(`game_history_${gameType}`, JSON.stringify(history));
+        renderGameHistory(gameType);
+    };
+
+    const renderGameHistory = (gameType) => {
+        const containerMap = {
+            'wheel': 'wheel-my-bets',
+            'slot': 'slot-my-bets',
+            'scratch': 'scratch-my-bets'
+        };
+        const listMap = {
+            'wheel': 'wheel-bet-list',
+            'slot': 'slot-bet-list',
+            'scratch': 'scratch-bet-list'
+        };
+        const container = document.getElementById(containerMap[gameType]);
+        const list = document.getElementById(listMap[gameType]);
+        if (!container || !list) return;
+
+        const history = getGameHistory(gameType);
+        if (history.length === 0) {
+            container.classList.add('hidden');
+            return;
+        }
+
+        container.classList.remove('hidden');
+        const dict = window.translations?.[window.currentLang] || {};
+        list.innerHTML = history.map(item => {
+            const isWin = item.prize > 0;
+            const net = item.prize + item.cost; // cost is negative
+            return `
+                <div class="bet-item ${isWin ? 'win' : 'lose'}">
+                    <div>
+                        <div class="text-zinc-300 font-mono">${item.result}</div>
+                        <div class="text-zinc-500 text-[10px] mt-0.5">${item.time}</div>
+                    </div>
+                    <div class="text-right">
+                        <div class="font-mono ${isWin ? 'text-[var(--neon-green)]' : 'text-zinc-500'}">${isWin ? '+' : ''}${net}</div>
+                        <div class="text-[10px] text-zinc-500">${item.cost < 0 ? '¥' + Math.abs(item.cost) : ''}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    };
+
     const initGameCenter = () => {
         // Tab切换功能
         const gameTabs = document.querySelectorAll('.game-tab');
@@ -57,6 +120,11 @@
                 const activeContent = document.getElementById(`tab-${tabId}`);
                 if (activeContent) {
                     activeContent.classList.remove('hidden');
+                    
+                    // 渲染对应游戏的历史记录
+                    if (['wheel', 'slot', 'scratch', 'football'].includes(tabId)) {
+                        renderGameHistory(tabId);
+                    }
                     
                     // 如果是刮刮乐，初始化canvas
                     if (tabId === 'scratch') {
@@ -158,6 +226,9 @@
                 userInfo.balance = (balance - 10) + prize;
                 localStorage.setItem('userInfo', JSON.stringify(userInfo));
                 updateBalanceDisplay(userInfo.balance);
+                
+                // 记录到历史
+                addGameHistory('wheel', -10, prize, `¥${prize}`);
                 
                 // 显示弹窗结果
                 showGameResult(true, prize, '🎡');
@@ -293,12 +364,18 @@
                     localStorage.setItem('userInfo', JSON.stringify(userInfo));
                     updateBalanceDisplay(userInfo.balance);
                     
+                    // 记录到历史
+                    addGameHistory('slot', -20, prize, `¥${prize}`);
+                    
                     // 显示中奖弹窗
                     showGameResult(true, prize, '🎰');
                 } else {
                     userInfo.balance = balance - 20;
                     localStorage.setItem('userInfo', JSON.stringify(userInfo));
                     updateBalanceDisplay(userInfo.balance);
+                    
+                    // 记录到历史
+                    addGameHistory('slot', -20, 0, '未中奖');
                     
                     // 显示未中奖弹窗
                     showGameResult(false, 0, '🎰');
@@ -478,6 +555,9 @@
             userInfo.balance = parseFloat(userInfo.balance) + scratchPrizeAmount;
             localStorage.setItem('userInfo', JSON.stringify(userInfo));
             updateBalanceDisplay(userInfo.balance);
+            
+            // 记录到历史
+            addGameHistory('scratch', -15, scratchPrizeAmount, `¥${scratchPrizeAmount}`);
             
             // 显示弹窗结果
             showGameResult(true, scratchPrizeAmount, '🎁');
