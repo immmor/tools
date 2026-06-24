@@ -292,7 +292,7 @@
             wheelFace.style.background = `conic-gradient(from -90deg, ${gradientStops})`;
             wheelFace.innerHTML = WHEEL_PRIZES.map((prize, i) => {
                 const angle = i * step + step / 2;
-                const textColor = i === 5 ? '#1a1a2e' : '#fff';
+                const textColor = '#fff';
                 return `<span class="wheel-label" style="--angle:${angle}deg;color:${textColor}">¥${prize}</span>`;
             }).join('');
         };
