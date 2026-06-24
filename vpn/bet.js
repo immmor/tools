@@ -252,17 +252,28 @@
         });
 
         // 幸运转盘
-        const WHEEL_PRIZES = [100, 50, 200, 10, 500, 20, 1000, 5];
+        const WHEEL_PRIZES = [3, 5, 5, 10, 10, 20, 50, 200];
+        const WHEEL_WEIGHTS = [0.25, 0.25, 0.18, 0.15, 0.08, 0.05, 0.03, 0.01];
         const WHEEL_COLORS = [
-            '#00e676',  // 翠绿 ¥100
-            '#00d4ff',  // 天蓝 ¥50
-            '#ff9100',  // 橙金 ¥200
+            '#448aff',  // 宝蓝 ¥3
+            '#00d4ff',  // 天蓝 ¥5
+            '#00e676',  // 翠绿 ¥5
             '#b388ff',  // 紫罗兰 ¥10
-            '#ff4081',  // 玫红 ¥500
-            '#ffd600',  // 金黄 ¥20
-            '#ff5252',  // 珊瑚红 ¥1000
-            '#448aff'   // 宝蓝 ¥5
+            '#ffd600',  // 金黄 ¥10
+            '#ff9100',  // 橙金 ¥20
+            '#ff4081',  // 玫红 ¥50
+            '#ff5252'   // 珊瑚红 ¥200 (极稀有)
         ];
+
+        // 加权随机：权重高的奖项更容易中
+        const getWeightedWheelIndex = () => {
+            let r = Math.random();
+            for (let i = 0; i < WHEEL_WEIGHTS.length; i++) {
+                r -= WHEEL_WEIGHTS[i];
+                if (r <= 0) return i;
+            }
+            return WHEEL_WEIGHTS.length - 1;
+        };
         const wheelFace = document.getElementById('wheel-face');
         const spinBtn = document.getElementById('spin-wheel');
         const wheelResult = document.getElementById('wheel-result');
@@ -318,7 +329,7 @@
             wheelResult.textContent = '';
 
             const step = getWheelStep();
-            const targetIndex = Math.floor(Math.random() * WHEEL_PRIZES.length);
+            const targetIndex = getWeightedWheelIndex();
             const segmentCenter = targetIndex * step + step / 2;
             const targetMod = normalizeDeg(360 - segmentCenter);
             const currentMod = normalizeDeg(wheelRotation);
