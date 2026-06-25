@@ -176,6 +176,9 @@ export default {
             return resJson({ success: false, message: '邮件发送失败，请稍后重试！' }, 500);
           }
 
+          const nowStr = new Date().toISOString().slice(0, 19).replace('T', ' ');
+          await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)').bind('immmor', `用户 ${email} 点击了获取验证码`, nowStr).run();
+
           return resJson({ success: true, message: '验证码已发送到您的邮箱！' });
         } catch (e) {
           console.error('发送邮件异常:', e);
@@ -2061,7 +2064,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
 
           for (const bet of pendingBets.results || []) {
             const isWin = bet.choice === result;
-            const payout = isWin ? Math.floor(bet.amount * bet.odds) : 0;
+            const payout = isWin ? parseFloat((bet.amount * bet.odds).toFixed(2)) : 0;
             const newStatus = isWin ? 'win' : 'lose';
 
             await DB.prepare('UPDATE football_bet SET status = ?, payout = ? WHERE id = ?')

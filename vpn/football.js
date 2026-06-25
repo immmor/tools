@@ -338,7 +338,7 @@
     const el = $('fb-bet-modal-win');
     if (!el || !selectedBet) return;
     const amt = parseFloat($('fb-bet-modal-amount')?.value) || 0;
-    el.textContent = amt > 0 ? `${t('fb_potential')} ¥${Math.floor(amt * selectedBet.odds)}` : '';
+    el.textContent = amt > 0 ? `${t('fb_potential')} ¥${(amt * selectedBet.odds).toFixed(2)}` : '';
   }
 
   // 提交下注
