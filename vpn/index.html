@@ -3062,6 +3062,24 @@
             // };
             
             const checkAuth = () => {
+                // 处理手机端 Google OAuth redirect 回来的 access_token
+                const hash = window.location.hash;
+                if (hash && hash.includes('access_token')) {
+                    const params = new URLSearchParams(hash.substring(1));
+                    const accessToken = params.get('access_token');
+                    const state = params.get('state');
+                    const savedState = localStorage.getItem('googleLoginState');
+                    
+                    // 清除 hash
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                    
+                    if (accessToken && state === savedState) {
+                        localStorage.removeItem('googleLoginState');
+                        handleGoogleToken(accessToken);
+                        return;
+                    }
+                }
+                
                 try {
                     const saved = localStorage.getItem('userInfo');
                     const loginTime = localStorage.getItem('loginTime');
@@ -3084,6 +3102,49 @@
                 } catch { 
                     localStorage.removeItem('userInfo');
                     localStorage.removeItem('loginTime');
+                }
+            };
+            
+            const handleGoogleToken = async (accessToken) => {
+                try {
+                    const res = await fetch(`${API}/api/google-login`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ token: accessToken })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        if (data.userInfo) {
+                            const userInfoWithPrice = { ...data.userInfo, pricePlan: data.pricePlan, password: '' };
+                            localStorage.setItem('userInfo', JSON.stringify(userInfoWithPrice));
+                            localStorage.setItem('loginTime', new Date().getTime());
+                            updateNav(userInfoWithPrice);
+                            window.FootballModule?.loadMatches();
+                            fetch(`${API}/api/get-user?name=${encodeURIComponent(data.userInfo.username)}`)
+                                .then(res => res.json())
+                                .then(userData => {
+                                    if (userData.code === 200 && userData.data.invite_code) {
+                                        const savedInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
+                                        savedInfo.invite_code = userData.data.invite_code;
+                                        localStorage.setItem('userInfo', JSON.stringify(savedInfo));
+                                        updateNav(savedInfo);
+                                    }
+                                }).catch(() => {});
+                            els.immmorWalletLanding.classList.add('hidden');
+                        } else if (data.needRegister) {
+                            isGoogleLogin = true;
+                            els.immmorWalletLanding.classList.add('hidden');
+                            openModal();
+                            setTimeout(() => {
+                                toggleMode();
+                                els.user.value = data.email.replace(/@gmail\.com$/, '');
+                            }, 300);
+                        }
+                    } else {
+                        showMsg(data.message || '谷歌登录失败', true);
+                    }
+                } catch {
+                    showMsg('网络错误，请稍后重试', true);
                 }
             };
             
@@ -3269,55 +3330,77 @@
                 });
                 
                 els.googleLoginBtn.addEventListener('click', () => {
-                    window.google.accounts.oauth2.initTokenClient({
-                        client_id: '560769820364-kror930ei6i85o5ggjr8f9telvc58quj.apps.googleusercontent.com',
-                        scope: 'email profile openid',
-                        callback: async (tokenResponse) => {
-                            if (tokenResponse && tokenResponse.access_token) {
-                                try {
-                                    const res = await fetch(`${API}/api/google-login`, {
-                                        method: 'POST',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ token: tokenResponse.access_token })
-                                    });
-                                    const data = await res.json();
-                                    if (data.success) {
-                                        const dict = translations[currentLang];
-                                        if (data.userInfo) {
-                                            const userInfoWithPrice = { ...data.userInfo, pricePlan: data.pricePlan, password: '' };
-                                            localStorage.setItem('userInfo', JSON.stringify(userInfoWithPrice));
-                                            localStorage.setItem('loginTime', new Date().getTime());
-                                            updateNav(userInfoWithPrice);
-                                            window.FootballModule?.loadMatches();
-                                            fetch(`${API}/api/get-user?name=${encodeURIComponent(data.userInfo.username)}`)
-                                                .then(res => res.json())
-                                                .then(userData => {
-                                                    if (userData.code === 200 && userData.data.invite_code) {
-                                                        const savedInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
-                                                        savedInfo.invite_code = userData.data.invite_code;
-                                                        localStorage.setItem('userInfo', JSON.stringify(savedInfo));
-                                                        updateNav(savedInfo);
-                                                    }
-                                                }).catch(() => {});
-                                            els.immmorWalletLanding.classList.add('hidden');
-                                        } else if (data.needRegister) {
-                                            isGoogleLogin = true;
-                                            els.immmorWalletLanding.classList.add('hidden');
-                                            openModal();
-                                            setTimeout(() => {
-                                                toggleMode();
-                                                els.user.value = data.email.replace(/@gmail\.com$/, '');
-                                            }, 300);
+                    // 手机端使用 redirect 模式，电脑端使用 popup 模式
+                    const isMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                    
+                    if (isMobile) {
+                        // 手机端：使用 Google Sign-In redirect 模式
+                        const clientId = '560769820364-kror930ei6i85o5ggjr8f9telvc58quj.apps.googleusercontent.com';
+                        const redirectUri = window.location.origin + window.location.pathname;
+                        const state = 'google_login_' + Date.now();
+                        localStorage.setItem('googleLoginState', state);
+                        
+                        const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({
+                            client_id: clientId,
+                            redirect_uri: redirectUri,
+                            response_type: 'token',
+                            scope: 'email profile openid',
+                            state: state
+                        });
+                        
+                        window.location.href = authUrl;
+                    } else {
+                        // 电脑端：使用 popup 模式
+                        window.google.accounts.oauth2.initTokenClient({
+                            client_id: '560769820364-kror930ei6i85o5ggjr8f9telvc58quj.apps.googleusercontent.com',
+                            scope: 'email profile openid',
+                            callback: async (tokenResponse) => {
+                                if (tokenResponse && tokenResponse.access_token) {
+                                    try {
+                                        const res = await fetch(`${API}/api/google-login`, {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ token: tokenResponse.access_token })
+                                        });
+                                        const data = await res.json();
+                                        if (data.success) {
+                                            const dict = translations[currentLang];
+                                            if (data.userInfo) {
+                                                const userInfoWithPrice = { ...data.userInfo, pricePlan: data.pricePlan, password: '' };
+                                                localStorage.setItem('userInfo', JSON.stringify(userInfoWithPrice));
+                                                localStorage.setItem('loginTime', new Date().getTime());
+                                                updateNav(userInfoWithPrice);
+                                                window.FootballModule?.loadMatches();
+                                                fetch(`${API}/api/get-user?name=${encodeURIComponent(data.userInfo.username)}`)
+                                                    .then(res => res.json())
+                                                    .then(userData => {
+                                                        if (userData.code === 200 && userData.data.invite_code) {
+                                                            const savedInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
+                                                            savedInfo.invite_code = userData.data.invite_code;
+                                                            localStorage.setItem('userInfo', JSON.stringify(savedInfo));
+                                                            updateNav(savedInfo);
+                                                        }
+                                                    }).catch(() => {});
+                                                els.immmorWalletLanding.classList.add('hidden');
+                                            } else if (data.needRegister) {
+                                                isGoogleLogin = true;
+                                                els.immmorWalletLanding.classList.add('hidden');
+                                                openModal();
+                                                setTimeout(() => {
+                                                    toggleMode();
+                                                    els.user.value = data.email.replace(/@gmail\.com$/, '');
+                                                }, 300);
+                                            }
+                                        } else {
+                                            showMsg(data.message || '谷歌登录失败', true);
                                         }
-                                    } else {
-                                        showMsg(data.message || '谷歌登录失败', true);
+                                    } catch {
+                                        showMsg('网络错误，请稍后重试', true);
                                     }
-                                } catch {
-                                    showMsg('网络错误，请稍后重试', true);
                                 }
                             }
-                        }
-                    }).requestAccessToken();
+                        }).requestAccessToken();
+                    }
                 });
                 
                 els.immmorWalletLanding.addEventListener('click', (e) => {
