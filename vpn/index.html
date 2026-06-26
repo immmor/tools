@@ -1370,7 +1370,7 @@
                     <i class="fab fa-google"></i>
                     <span data-i18n="google_login">谷歌登录</span>
                 </button>
-                <button class="w-full bg-zinc-800 border border-zinc-700 text-zinc-600 cursor-not-allowed uppercase font-bold py-3 px-4 text-sm tracking-wider" disabled data-i18n="web3_wallet_login">Web3钱包登录</button>
+                <button id="web3-wallet-btn" class="btn-cyber w-full py-3 px-4 text-sm" data-i18n="web3_wallet_login">Web3钱包登录</button>
             </div>
         </div>
     </div>
@@ -2407,7 +2407,8 @@
             turnstileCheckbox: $('turnstile-checkbox'),
             turnstileLabel: $('turnstile-label'),
             turnstileTimer: $('turnstile-timer'),
-            googleLoginBtn: $('google-login-btn')
+            googleLoginBtn: $('google-login-btn'),
+            web3WalletBtn: $('web3-wallet-btn')
         };
 
         // ==================== 认证模块 ====================
@@ -3258,6 +3259,10 @@
                     if (ntParam) registerData.nt = ntParam;
                     if (isGoogleLogin) registerData.fromGoogle = true;
                     
+                    // 如果是 Web3 钱包引导的注册，附加钱包地址
+                    const web3Addr = sessionStorage.getItem('web3Address');
+                    if (web3Addr) registerData.web3Address = web3Addr;
+                    
                     const res = await fetch(`${API}${isLogin ? '/api/login' : '/api/register'}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -3326,6 +3331,75 @@
                 els.immmorWalletBtn.addEventListener('click', () => {
                     els.immmorWalletLanding.classList.add('hidden');
                     openModal();
+                });
+                
+                const connectWeb3Wallet = async () => {
+                    if (typeof window.ethereum === 'undefined') {
+                        showMsg(translations[currentLang]?.web3_not_installed || '请安装 MetaMask 等 Web3 钱包', true);
+                        return null;
+                    }
+                    try {
+                        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                        return accounts[0];
+                    } catch (err) {
+                        showMsg(translations[currentLang]?.web3_connect_failed || '连接钱包失败', true);
+                        return null;
+                    }
+                };
+                
+                els.web3WalletBtn.addEventListener('click', async () => {
+                    const address = await connectWeb3Wallet();
+                    if (!address) return;
+                    
+                    // 保存 web3 地址到 sessionStorage，供注册时使用，统一用小写
+                    const addressLower = address.toLowerCase();
+                    sessionStorage.setItem('web3Address', addressLower);
+                    
+                    const email = addressLower;
+                    
+                    try {
+                        const res = await fetch(`${API}/api/web3-login`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ address: email })
+                        });
+                        const data = await res.json();
+                        
+                        if (data.success) {
+                            if (data.userInfo) {
+                                const userInfoWithPrice = { ...data.userInfo, pricePlan: data.pricePlan, password: '' };
+                                localStorage.setItem('userInfo', JSON.stringify(userInfoWithPrice));
+                                localStorage.setItem('loginTime', new Date().getTime());
+                                updateNav(userInfoWithPrice);
+                                window.FootballModule?.loadMatches();
+                                fetch(`${API}/api/get-user?name=${encodeURIComponent(data.userInfo.username)}`)
+                                    .then(res => res.json())
+                                    .then(userData => {
+                                        if (userData.code === 200 && userData.data.invite_code) {
+                                            const savedInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
+                                            savedInfo.invite_code = userData.data.invite_code;
+                                            localStorage.setItem('userInfo', JSON.stringify(savedInfo));
+                                            updateNav(savedInfo);
+                                        }
+                                    }).catch(() => {});
+                                els.immmorWalletLanding.classList.add('hidden');
+                            } else if (data.needRegister) {
+                                isLogin = false;
+                                els.immmorWalletLanding.classList.add('hidden');
+                                openModal();
+                                setTimeout(() => {
+                                    toggleMode();
+                                    els.msg.textContent = translations[currentLang]?.web3_bind_email_tip || '请绑定邮箱完成注册';
+                                    els.msg.classList.remove('hidden');
+                                    els.msg.classList.add('text-[var(--neon-blue)]');
+                                }, 300);
+                            }
+                        } else {
+                            showMsg(data.message || translations[currentLang]?.web3_login_failed, true);
+                        }
+                    } catch {
+                        showMsg(translations[currentLang]?.network_error, true);
+                    }
                 });
                 
                 els.googleLoginBtn.addEventListener('click', () => {
