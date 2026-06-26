@@ -1505,13 +1505,12 @@
                     <button id="open-metamask-btn" class="btn-cyber w-full py-2 px-3 text-xs mb-4">
                         打开 MetaMask App
                     </button>
-                    <p class="text-center text-zinc-500 text-xs mb-3">或扫码用 MetaMask 打开</p>
                     <div class="flex justify-center">
                         <img id="qrcode-img" class="bg-white p-2 rounded" style="width: 220px; height: 220px; display: none;" />
                         <div id="qrcode-loading" class="text-center text-zinc-500 text-sm py-16">正在加载...</div>
                     </div>
                     <p class="text-center text-zinc-500 text-xs mt-3">
-                        用 MetaMask App 扫描后，在 MetaMask 内置浏览器打开本页面
+                        扫码后在 MetaMask 内置浏览器打开本页面，再次点击 Web3 登录按钮
                     </p>
                 </div>
             </div>
@@ -3365,13 +3364,6 @@
                     els.msg.classList.add('hidden');
                     els.forgotSubmitBtn.classList.remove('hidden');
                 };
-                const init = () => {
-                els.btn.addEventListener('click', handleBtnClick);
-                els.immmorWalletBtn.addEventListener('click', () => {
-                    els.immmorWalletLanding.classList.add('hidden');
-                    openModal();
-                });
-                
                 // 处理 Web3 登录成功
                 const handleWeb3LoginSuccess = async (address) => {
                     // 保存 web3 地址到 sessionStorage，供注册时使用，统一用小写
@@ -3404,11 +3396,15 @@
                                         }
                                     }).catch(() => {});
                                 els.immmorWalletLanding.classList.add('hidden');
-                                document.getElementById('walletconnect-modal').classList.add('hidden');
+                                if (document.getElementById('walletconnect-modal')) {
+                                    document.getElementById('walletconnect-modal').classList.add('hidden');
+                                }
                             } else if (data.needRegister) {
                                 isLogin = false;
                                 els.immmorWalletLanding.classList.add('hidden');
-                                document.getElementById('walletconnect-modal').classList.add('hidden');
+                                if (document.getElementById('walletconnect-modal')) {
+                                    document.getElementById('walletconnect-modal').classList.add('hidden');
+                                }
                                 openModal();
                                 setTimeout(() => {
                                     toggleMode();
@@ -3437,6 +3433,30 @@
                         return null;
                     }
                 };
+                
+                const init = () => {
+                els.btn.addEventListener('click', handleBtnClick);
+                els.immmorWalletBtn.addEventListener('click', () => {
+                    els.immmorWalletLanding.classList.add('hidden');
+                    openModal();
+                });
+                
+                // 页面加载时，检测是否在 Web3 钱包浏览器中
+                const checkWeb3OnLoad = async () => {
+                    if (typeof window.ethereum !== 'undefined') {
+                        // 尝试获取当前已连接的账户
+                        try {
+                            const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+                            if (accounts && accounts.length > 0) {
+                                // 如果已连接，自动继续 web3 登录
+                                handleWeb3LoginSuccess(accounts[0]);
+                            }
+                        } catch (e) {
+                            // 静默失败
+                        }
+                    }
+                };
+                checkWeb3OnLoad();
                 
                 // 绑定事件：浏览器插件钱包按钮
                 document.getElementById('browser-wallet-btn').addEventListener('click', async () => {
