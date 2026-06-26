@@ -358,8 +358,6 @@
     <!-- <script src="../ai.js"></script> -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.6/build/qrcode.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@walletconnect/browser@1.8.0/dist/browser.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap');
@@ -1503,13 +1501,17 @@
                 </button>
                 <!-- QR 码区域 -->
                 <div class="border border-zinc-700 rounded p-4">
-                    <p class="text-center text-zinc-500 text-xs mb-3">或用钱包 App 扫码连接</p>
+                    <p class="text-center text-zinc-500 text-xs mb-3">或用 MetaMask App 打开</p>
+                    <button id="open-metamask-btn" class="btn-cyber w-full py-2 px-3 text-xs mb-4">
+                        打开 MetaMask App
+                    </button>
+                    <p class="text-center text-zinc-500 text-xs mb-3">或扫码用 MetaMask 打开</p>
                     <div class="flex justify-center">
                         <img id="qrcode-img" class="bg-white p-2 rounded" style="width: 220px; height: 220px; display: none;" />
-                        <div id="qrcode-loading" class="text-center text-zinc-500 text-sm py-16">正在加载连接二维码...</div>
+                        <div id="qrcode-loading" class="text-center text-zinc-500 text-sm py-16">正在加载...</div>
                     </div>
                     <p class="text-center text-zinc-500 text-xs mt-3">
-                        支持 MetaMask, imToken, Trust Wallet 等
+                        用 MetaMask App 扫描后，在 MetaMask 内置浏览器打开本页面
                     </p>
                 </div>
             </div>
@@ -3370,8 +3372,6 @@
                     openModal();
                 });
                 
-                let walletConnector = null;
-                
                 // 处理 Web3 登录成功
                 const handleWeb3LoginSuccess = async (address) => {
                     // 保存 web3 地址到 sessionStorage，供注册时使用，统一用小写
@@ -3428,74 +3428,13 @@
                 // 连接浏览器插件钱包
                 const connectBrowserWallet = async () => {
                     if (typeof window.ethereum === 'undefined') {
-                        showMsg(translations[currentLang]?.web3_not_installed || '请安装 MetaMask 等 Web3 钱包插件', true);
                         return null;
                     }
                     try {
                         const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
                         return accounts[0];
                     } catch (err) {
-                        showMsg(translations[currentLang]?.web3_connect_failed || '连接钱包失败', true);
                         return null;
-                    }
-                };
-                
-                // 初始化 WalletConnect
-                const initWalletConnect = async () => {
-                    try {
-                        walletConnector = new WalletConnect({
-                            bridge: 'https://bridge.walletconnect.org',
-                            qrcodeModal: {
-                                open: () => {
-                                    // 我们自己处理二维码显示
-                                },
-                                close: () => {
-                                    // 关闭二维码
-                                }
-                            }
-                        });
-                        
-                        if (walletConnector.connected) {
-                            // 已经连接
-                            const accounts = walletConnector.accounts;
-                            if (accounts && accounts.length > 0) {
-                                handleWeb3LoginSuccess(accounts[0]);
-                                return;
-                            }
-                        } 
-                        
-                        // 还没连接，创建连接
-                        await walletConnector.createSession();
-                        
-                        // 显示二维码 - 使用免费的 API
-                        const qrcodeImg = document.getElementById('qrcode-img');
-                        const qrcodeLoading = document.getElementById('qrcode-loading');
-                        if (walletConnector.uri) {
-                            qrcodeLoading.style.display = 'none';
-                            qrcodeImg.style.display = 'block';
-                            qrcodeImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(walletConnector.uri);
-                        }
-                        
-                        // 订阅事件
-                        walletConnector.on('connect', (error, payload) => {
-                            if (error) {
-                                console.error(error);
-                                showMsg(translations[currentLang]?.web3_connect_failed || '连接钱包失败', true);
-                                return;
-                            }
-                            const { accounts } = payload.params[0];
-                            handleWeb3LoginSuccess(accounts[0]);
-                        });
-                        
-                        walletConnector.on('disconnect', (error, payload) => {
-                            if (error) {
-                                console.error(error);
-                            }
-                        });
-                        
-                    } catch (err) {
-                        console.error(err);
-                        showMsg(translations[currentLang]?.web3_connect_failed || '连接钱包失败', true);
                     }
                 };
                 
@@ -3504,15 +3443,21 @@
                     const address = await connectBrowserWallet();
                     if (address) {
                         await handleWeb3LoginSuccess(address);
+                    } else {
+                        showMsg(translations[currentLang]?.web3_not_installed || '请安装 MetaMask 等 Web3 钱包插件', true);
                     }
                 });
                 
-                // 绑定事件：关闭 WalletConnect 弹窗
+                // 绑定事件：关闭弹窗
                 document.getElementById('walletconnect-close').addEventListener('click', () => {
                     document.getElementById('walletconnect-modal').classList.add('hidden');
-                    if (walletConnector && walletConnector.connected) {
-                        walletConnector.killSession().catch(() => {});
-                    }
+                });
+                
+                // 绑定事件：打开 MetaMask App
+                document.getElementById('open-metamask-btn').addEventListener('click', () => {
+                    const currentUrl = window.location.href;
+                    // 使用深度链接直接打开 MetaMask App
+                    window.location.href = 'metamask://dapp/' + currentUrl;
                 });
                 
                 // Web3 钱包按钮点击事件
@@ -3526,10 +3471,26 @@
                             await handleWeb3LoginSuccess(address);
                         }
                     } else {
-                        // 手机端或无插件，显示 WalletConnect 弹窗
+                        // 手机端
                         els.immmorWalletLanding.classList.add('hidden');
                         document.getElementById('walletconnect-modal').classList.remove('hidden');
-                        await initWalletConnect();
+                        
+                        // 检查是不是 MetaMask 或其他钱包内置浏览器
+                        const address = await connectBrowserWallet();
+                        if (address) {
+                            await handleWeb3LoginSuccess(address);
+                            return;
+                        }
+                        
+                        // 不是钱包内置浏览器，显示提示：手机端请用钱包 App 打开
+                        const qrcodeImg = document.getElementById('qrcode-img');
+                        const qrcodeLoading = document.getElementById('qrcode-loading');
+                        
+                        // 显示当前页面的二维码，提示用 MetaMask 扫码
+                        const currentUrl = window.location.href;
+                        qrcodeLoading.innerHTML = '请使用 MetaMask App 内置浏览器打开，或点击下方按钮';
+                        qrcodeImg.style.display = 'block';
+                        qrcodeImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(currentUrl);
                     }
                 });
                 
