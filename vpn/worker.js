@@ -228,7 +228,7 @@ export default {
       // ========== 注册接口（核心）→ 用户名密码注册 ==========
       if (path === '/api/register' && request.method === 'POST') {
         const params = await request.json();
-        const { username, password, inviteCode, securityAnswer, source, priceParam } = params;
+        const { username, password, inviteCode, securityAnswer, source, priceParam, fromGoogle } = params;
         
         if (!username || !password) {
           return resJson({ success: false, message: '用户名和密码不能为空！' }, 400);
@@ -240,16 +240,18 @@ export default {
           return resJson({ success: false, message: '邮箱格式不正确！' }, 400);
         }
 
-        // 校验验证码：必须完成邮箱验证后才能注册
-        const verifyPassed = await DB.prepare('SELECT value FROM link WHERE key = ?').bind(`verify_passed_${username}`).first();
-        if (!verifyPassed) {
-          return resJson({ success: false, message: '请先完成邮箱验证！' }, 400);
-        }
-        // 检查验证标记是否过期（5分钟）
-        const verifyPassedTime = parseInt(verifyPassed.value);
-        if (Date.now() - verifyPassedTime > 5 * 60 * 1000) {
-          await DB.prepare('DELETE FROM link WHERE key = ?').bind(`verify_passed_${username}`).run();
-          return resJson({ success: false, message: '验证已过期，请重新验证邮箱！' }, 400);
+        // 校验验证码：必须完成邮箱验证后才能注册（谷歌登录跳过此检查）
+        if (!fromGoogle) {
+          const verifyPassed = await DB.prepare('SELECT value FROM link WHERE key = ?').bind(`verify_passed_${username}`).first();
+          if (!verifyPassed) {
+            return resJson({ success: false, message: '请先完成邮箱验证！' }, 400);
+          }
+          // 检查验证标记是否过期（5分钟）
+          const verifyPassedTime = parseInt(verifyPassed.value);
+          if (Date.now() - verifyPassedTime > 5 * 60 * 1000) {
+            await DB.prepare('DELETE FROM link WHERE key = ?').bind(`verify_passed_${username}`).run();
+            return resJson({ success: false, message: '验证已过期，请重新验证邮箱！' }, 400);
+          }
         }
 
         // 检查用户是否已存在
@@ -528,6 +530,64 @@ export default {
           return resJson({ success: true, message: '登录成功！', userInfo: { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders }, pricePlan });
         } else {
           return resJson({ success: false, message: '用户名或密码错误' }, 401);
+        }
+      }
+
+      // ========== 谷歌快捷登录接口 ==========
+      if (path === '/api/google-login' && request.method === 'POST') {
+        const params = await request.json();
+        const { token } = params;
+
+        if (!token) {
+          return resJson({ success: false, message: '请提供谷歌登录token！' }, 400);
+        }
+
+        try {
+          const googleRes = await fetch('https://oauth2.googleapis.com/tokeninfo', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `access_token=${token}`
+          });
+
+          if (!googleRes.ok) {
+            return resJson({ success: false, message: '谷歌token验证失败！' }, 401);
+          }
+
+          const googleData = await googleRes.json();
+          const email = googleData.email;
+
+          if (!email) {
+            return resJson({ success: false, message: '无法获取谷歌账号邮箱！' }, 401);
+          }
+
+          const user = await DB
+            .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders FROM user WHERE username = ?')
+            .bind(email)
+            .first();
+
+          if (user) {
+            const now = new Date(new Date().getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+            const loginInfoEntry = { type: 'login', time: now, ip: request.headers.get('CF-Connecting-IP') || 'unknown', device: request.headers.get('User-Agent') || 'unknown', acceptLanguage: request.headers.get('Accept-Language') || 'unknown', country: request.headers.get('CF-IPCountry') || 'unknown' };
+
+            const loginInfo = await DB.prepare('SELECT login_info FROM user WHERE username = ?').bind(email).first();
+            let updatedLoginInfo = JSON.stringify([loginInfoEntry]);
+            if (loginInfo?.login_info) {
+              try {
+                const existingInfo = JSON.parse(loginInfo.login_info);
+                existingInfo.unshift(loginInfoEntry);
+                updatedLoginInfo = JSON.stringify(existingInfo.slice(0, 10));
+              } catch (e) {}
+            }
+            await DB.prepare('UPDATE user SET login_info = ? WHERE username = ?').bind(updatedLoginInfo, email).run();
+
+            const pricePlan = user.price_plan ? JSON.parse(user.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
+
+            return resJson({ success: true, message: '登录成功！', userInfo: { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders }, pricePlan });
+          } else {
+            return resJson({ success: true, needRegister: true, email: email, message: '该谷歌账号未注册，请完成注册！' });
+          }
+        } catch (err) {
+          return resJson({ success: false, message: '谷歌登录验证失败：' + err.message }, 500);
         }
       }
 

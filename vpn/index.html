@@ -358,6 +358,7 @@
     <!-- <script src="../ai.js"></script> -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://accounts.google.com/gsi/client" async></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap');
 
@@ -1354,7 +1355,7 @@
 
     <!-- 墨钱包登录引导页 -->
     <div id="immmor-wallet-landing" class="fixed inset-0 bg-black/95 z-[60] hidden flex items-center justify-center p-4">
-        <div class="text-center">
+        <div class="text-center max-w-xs mx-auto">
             <div class="mb-6">
                 <svg class="w-16 h-16 mx-auto mb-4 text-[var(--neon-blue)]" viewBox="0 0 100 100" fill="currentColor">
                     <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="3"/>
@@ -1365,6 +1366,10 @@
             </div>
             <div class="space-y-3">
                 <button id="immmor-wallet-btn" class="btn-cyber w-full py-3 px-4 text-sm" data-i18n="immmor_wallet_login">以墨钱包登录</button>
+                <button id="google-login-btn" class="btn-cyber w-full py-3 px-4 text-sm">
+                    <img src="https://www.google.com/favicon.ico" alt="Google" class="inline-block align-middle" style="vertical-align: middle; width: 18px; height: 18px;">
+                    <span data-i18n="google_login">谷歌登录</span>
+                </button>
                 <button class="w-full bg-zinc-800 border border-zinc-700 text-zinc-600 cursor-not-allowed uppercase font-bold py-3 px-4 text-sm tracking-wider" disabled data-i18n="web3_wallet_login">Web3钱包登录</button>
             </div>
         </div>
@@ -2401,7 +2406,8 @@
             turnstileWidget: $('turnstile-widget'),
             turnstileCheckbox: $('turnstile-checkbox'),
             turnstileLabel: $('turnstile-label'),
-            turnstileTimer: $('turnstile-timer')
+            turnstileTimer: $('turnstile-timer'),
+            googleLoginBtn: $('google-login-btn')
         };
 
         // ==================== 认证模块 ====================
@@ -2431,6 +2437,7 @@
             };
             
             let isTurnstileVerified = false;
+            let isGoogleLogin = false;
             
             const initTurnstile = () => {
                 isTurnstileVerified = false;
@@ -2518,13 +2525,21 @@
                 els.switch.textContent = dict ? dict[c.switch] : c.switch;
                 els.msg.classList.add('hidden');
                 els.inviteCodeContainer.classList.toggle('hidden', isLogin);
-                els.verifyCodeContainer.classList.toggle('hidden', isLogin);
+                els.verifyCodeContainer.classList.toggle('hidden', isLogin || isGoogleLogin);
                 els.securityAnswerContainer.classList.toggle('hidden', isLogin);
                 els.forgotPwdBtn.classList.toggle('hidden', !isLogin);
                 // 登录模式隐藏邮箱后缀选择器，注册模式显示
                 if (els.emailDomainWrapper) {
                     els.emailDomainWrapper.classList.toggle('hidden', isLogin);
-                    if (!isLogin) syncDomainWidth();
+                    if (!isLogin) {
+                        if (isGoogleLogin) {
+                            els.emailDomain.value = 'gmail.com';
+                            els.emailDomain.disabled = true;
+                        } else {
+                            els.emailDomain.disabled = false;
+                        }
+                        syncDomainWidth();
+                    }
                     // 切换 placeholder
                     els.user.placeholder = dict?.modal_username_placeholder || '输入邮箱';
                 }
@@ -3133,29 +3148,31 @@
                         return showMsg(dict?.answer_invalid_chars || '密保答案只能包含中文、英文和数字', true);
                     }
                     
-                    // 验证邮箱验证码：调用后端接口真正校验
-                    const verifyCode = els.verifyCode.value.trim();
-                    if (!verifyCode || verifyCode.length !== 6) {
-                        return showMsg(dict?.verify_code_required || '请输入6位邮箱验证码', true);
-                    }
-                    const verifyEmail = getFullEmail();
-                    setLoading(true);
-                    try {
-                        const verifyRes = await fetch(`${API}/api/verify-code`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ email: verifyEmail, code: verifyCode })
-                        });
-                        const verifyData = await verifyRes.json();
-                        if (!verifyData.success) {
-                            setLoading(false);
-                            return showMsg(verifyData.message || '验证码错误或已过期！', true);
+                    if (!isGoogleLogin) {
+                        // 验证邮箱验证码：调用后端接口真正校验
+                        const verifyCode = els.verifyCode.value.trim();
+                        if (!verifyCode || verifyCode.length !== 6) {
+                            return showMsg(dict?.verify_code_required || '请输入6位邮箱验证码', true);
                         }
-                    } catch {
+                        const verifyEmail = getFullEmail();
+                        setLoading(true);
+                        try {
+                            const verifyRes = await fetch(`${API}/api/verify-code`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ email: verifyEmail, code: verifyCode })
+                            });
+                            const verifyData = await verifyRes.json();
+                            if (!verifyData.success) {
+                                setLoading(false);
+                                return showMsg(verifyData.message || '验证码错误或已过期！', true);
+                            }
+                        } catch {
+                            setLoading(false);
+                            return showMsg(dict?.network_error || '网络错误，请稍后重试', true);
+                        }
                         setLoading(false);
-                        return showMsg(dict?.network_error || '网络错误，请稍后重试', true);
                     }
-                    setLoading(false);
                 }
                 
                 // 获取完整邮箱（注册模式：前缀@域名；登录模式：直接使用输入值）
@@ -3178,6 +3195,7 @@
                     if (source) registerData.source = source;
                     if (priceParam) registerData.priceParam = priceParam;
                     if (ntParam) registerData.nt = ntParam;
+                    if (isGoogleLogin) registerData.fromGoogle = true;
                     
                     const res = await fetch(`${API}${isLogin ? '/api/login' : '/api/register'}`, {
                         method: 'POST',
@@ -3208,6 +3226,7 @@
                                 }).catch(() => {});
                             setTimeout(closeModal, 1000);
                         } else {
+                            isGoogleLogin = false;
                             localStorage.setItem('lastRegisterTime', Date.now().toString());
                             // 注册成功后切换到登录模式，并填入完整邮箱
                             const fullEmail = getFullEmail();
@@ -3247,6 +3266,59 @@
                     els.immmorWalletLanding.classList.add('hidden');
                     openModal();
                 });
+                
+                els.googleLoginBtn.addEventListener('click', () => {
+                    window.google.accounts.oauth2.initTokenClient({
+                        client_id: '560769820364-kror930ei6i85o5ggjr8f9telvc58quj.apps.googleusercontent.com',
+                        scope: 'email profile openid',
+                        callback: async (tokenResponse) => {
+                            if (tokenResponse && tokenResponse.access_token) {
+                                try {
+                                    const res = await fetch(`${API}/api/google-login`, {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ token: tokenResponse.access_token })
+                                    });
+                                    const data = await res.json();
+                                    if (data.success) {
+                                        const dict = translations[currentLang];
+                                        if (data.userInfo) {
+                                            const userInfoWithPrice = { ...data.userInfo, pricePlan: data.pricePlan, password: '' };
+                                            localStorage.setItem('userInfo', JSON.stringify(userInfoWithPrice));
+                                            localStorage.setItem('loginTime', new Date().getTime());
+                                            updateNav(userInfoWithPrice);
+                                            window.FootballModule?.loadMatches();
+                                            fetch(`${API}/api/get-user?name=${encodeURIComponent(data.userInfo.username)}`)
+                                                .then(res => res.json())
+                                                .then(userData => {
+                                                    if (userData.code === 200 && userData.data.invite_code) {
+                                                        const savedInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
+                                                        savedInfo.invite_code = userData.data.invite_code;
+                                                        localStorage.setItem('userInfo', JSON.stringify(savedInfo));
+                                                        updateNav(savedInfo);
+                                                    }
+                                                }).catch(() => {});
+                                            els.immmorWalletLanding.classList.add('hidden');
+                                        } else if (data.needRegister) {
+                                            isGoogleLogin = true;
+                                            els.immmorWalletLanding.classList.add('hidden');
+                                            openModal();
+                                            setTimeout(() => {
+                                                toggleMode();
+                                                els.user.value = data.email.replace(/@gmail\.com$/, '');
+                                            }, 300);
+                                        }
+                                    } else {
+                                        showMsg(data.message || '谷歌登录失败', true);
+                                    }
+                                } catch {
+                                    showMsg('网络错误，请稍后重试', true);
+                                }
+                            }
+                        }
+                    }).requestAccessToken();
+                });
+                
                 els.immmorWalletLanding.addEventListener('click', (e) => {
                     if (e.target === els.immmorWalletLanding) {
                         els.immmorWalletLanding.classList.add('hidden');
