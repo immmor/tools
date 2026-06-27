@@ -5,6 +5,31 @@ const t = (d) => JSON.stringify(Object.fromEntries(LK.map(k => [k, d[k] ?? '']))
 const NP = { cn:'[系统通知]', en:'[System Notification]', jp:'[システム通知]', kr:'[시스템 알림]', es:'[Notificación del Sistema]', vi:'[Thông báo Hệ thống]', ar:'[إشعار النظام]', ru:'[Системное уведомление]' };
 const nt = (d) => t(Object.fromEntries(LK.map(k => [k, `${NP[k]} ${d[k] ?? ''}`])));
 
+// 密码加密工具函数（SHA-256 + 随机 Salt）
+async function hashPassword(password) {
+  const salt = crypto.getRandomValues(new Uint8Array(16)).reduce((s, b) => s + b.toString(16).padStart(2, '0'), '');
+  const encoder = new TextEncoder();
+  const data = encoder.encode(salt + password);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return `${salt}:${hashHex}`;
+}
+
+async function verifyPassword(password, storedHash) {
+  if (!storedHash || !storedHash.includes(':')) {
+    // 兼容旧明文密码
+    return password === storedHash;
+  }
+  const [salt, hash] = storedHash.split(':');
+  const encoder = new TextEncoder();
+  const data = encoder.encode(salt + password);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return hash === hashHex;
+}
+
 function fbChoiceLabel(_match, choice) {
   const map = { a: '主胜', draw: '平局', b: '客胜' };
   return map[choice] || choice;
@@ -395,13 +420,16 @@ export default {
         // 根据前端传入的nt参数决定not_trusted值：nt=n时设为空字符串（信任）
         const notTrustedValue = params.nt === 'n' ? '' : 'yes';
 
+        // 密码加密存储
+        const hashedPassword = await hashPassword(password);
+
         // 原子插入：利用数据库 UNIQUE 约束防止并发重复注册
         // 不再单独 SELECT 检查，直接 INSERT，由数据库保证原子性
         let result;
         try {
           result = await DB
             .prepare('INSERT INTO user (username, password, balance, v_expire_date, learn_vip_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code, v_token, v_link_clash, v_link_v2ray, price_plan, survey, security_answer, fetch_link, source, not_trusted, auto_rewn, vorders, web3_address) VALUES (?, ?, ?, NULL, NULL, 307200, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)')
-            .bind(username, password, finalBalance, new Date().toISOString().slice(0, 19).replace('T', ' '), userInviteCode, '', '', '', pricePlanStr, '{}', securityAnswer || '', '[]', source || '', notTrustedValue, '[]', web3AddressLower || '')
+            .bind(username, hashedPassword, finalBalance, new Date().toISOString().slice(0, 19).replace('T', ' '), userInviteCode, '', '', '', pricePlanStr, '{}', securityAnswer || '', '[]', source || '', notTrustedValue, '[]', web3AddressLower || '')
             .run();
         } catch (e) {
           // 捕获 UNIQUE 约束冲突 → 用户名已存在（并发注册竞争时触发）
@@ -509,31 +537,31 @@ export default {
         }
 
         const user = await DB
-          .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders FROM user WHERE username = ? AND password = ?')
-          .bind(username, password)
+          .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders, password FROM user WHERE username = ?')
+          .bind(username)
           .first();
 
-        if (user) {
-          const now = new Date(new Date().getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
-          const loginInfoEntry = { type: 'login', time: now, ip: request.headers.get('CF-Connecting-IP') || 'unknown', device: request.headers.get('User-Agent') || 'unknown', acceptLanguage: request.headers.get('Accept-Language') || 'unknown', country: request.headers.get('CF-IPCountry') || 'unknown' };
-
-          const loginInfo = await DB.prepare('SELECT login_info FROM user WHERE username = ?').bind(username).first();
-          let updatedLoginInfo = JSON.stringify([loginInfoEntry]);
-          if (loginInfo?.login_info) {
-            try {
-              const existingInfo = JSON.parse(loginInfo.login_info);
-              existingInfo.unshift(loginInfoEntry);
-              updatedLoginInfo = JSON.stringify(existingInfo.slice(0, 10));
-            } catch (e) {}
-          }
-          await DB.prepare('UPDATE user SET login_info = ? WHERE username = ?').bind(updatedLoginInfo, username).run();
-
-          const pricePlan = user.price_plan ? JSON.parse(user.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
-
-          return resJson({ success: true, message: '登录成功！', userInfo: { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders }, pricePlan });
-        } else {
-          return resJson({ success: false, message: '用户名或密码错误' }, 401);
+        if (!user || !(await verifyPassword(password, user.password))) {
+          return resJson({ success: false, message: '用户名或密码错误！' }, 401);
         }
+
+        const now = new Date(new Date().getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+        const loginInfoEntry = { type: 'login', time: now, ip: request.headers.get('CF-Connecting-IP') || 'unknown', device: request.headers.get('User-Agent') || 'unknown', acceptLanguage: request.headers.get('Accept-Language') || 'unknown', country: request.headers.get('CF-IPCountry') || 'unknown' };
+
+        const loginInfo = await DB.prepare('SELECT login_info FROM user WHERE username = ?').bind(username).first();
+        let updatedLoginInfo = JSON.stringify([loginInfoEntry]);
+        if (loginInfo?.login_info) {
+          try {
+            const existingInfo = JSON.parse(loginInfo.login_info);
+            existingInfo.unshift(loginInfoEntry);
+            updatedLoginInfo = JSON.stringify(existingInfo.slice(0, 10));
+          } catch (e) {}
+        }
+        await DB.prepare('UPDATE user SET login_info = ? WHERE username = ?').bind(updatedLoginInfo, username).run();
+
+        const pricePlan = user.price_plan ? JSON.parse(user.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
+
+        return resJson({ success: true, message: '登录成功！', userInfo: { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders }, pricePlan });
       }
 
       // ========== Web3钱包登录接口 ==========
@@ -766,7 +794,8 @@ export default {
         const user = await DB.prepare('SELECT security_answer FROM user WHERE username = ?').bind(username).first();
         if (!user) return resJson({ success: false, message: '用户不存在' }, 404);
         if (user.security_answer !== securityAnswer) return resJson({ success: false, message: '密保答案错误' }, 401);
-        await DB.prepare('UPDATE user SET password = ? WHERE username = ?').bind(newPassword, username).run();
+        const hashedNewPassword = await hashPassword(newPassword);
+        await DB.prepare('UPDATE user SET password = ? WHERE username = ?').bind(hashedNewPassword, username).run();
         return resJson({ success: true, message: '密码重置成功' });
       }
 
@@ -1095,7 +1124,7 @@ export default {
           
           if (password !== undefined && password !== null && password !== '') {
             updates.push('password = ?');
-            values.push(password);
+            values.push(await hashPassword(password));
           }
           if (balance !== undefined && balance !== null) {
             updates.push('balance = ?');
@@ -2059,9 +2088,9 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
       if (path === '/api/football/bet' && request.method === 'POST') {
         try {
           const params = await request.json();
-          const { username, password, choice, amount, matchId } = params;
+          const { username, choice, amount, matchId } = params;
 
-          if (!username || !password || !choice || !amount || matchId === undefined) {
+          if (!username || !choice || !amount || matchId === undefined) {
             return resJson({ success: false, message: '参数不完整' }, 400);
           }
           if (!['a', 'draw', 'b'].includes(choice)) {
@@ -2070,9 +2099,9 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           if (amount < 1) return resJson({ success: false, message: '下注金额至少1元' }, 400);
 
           // 验证用户
-          const user = await DB.prepare('SELECT rowid, username, balance FROM user WHERE username = ? AND password = ?')
-            .bind(username, password).first();
-          if (!user) return resJson({ success: false, message: '用户名或密码错误' }, 401);
+          const user = await DB.prepare('SELECT rowid, username, balance FROM user WHERE username = ?')
+            .bind(username).first();
+          if (!user) return resJson({ success: false, message: '用户不存在' }, 401);
 
           // 查找指定比赛
           const fbRow = await DB.prepare('SELECT value FROM link WHERE key = ?').bind('fb_match').first();
@@ -2105,12 +2134,12 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
       // ========== 世界杯竞猜：获取我的下注记录 ==========
       if (path === '/api/football/history' && request.method === 'POST') {
         try {
-          const { username, password, all } = await request.json();
-          if (!username || !password) return resJson({ success: false, message: '请先登录' }, 401);
+          const { username, all } = await request.json();
+          if (!username) return resJson({ success: false, message: '请先登录' }, 401);
 
-          const user = await DB.prepare('SELECT rowid FROM user WHERE username = ? AND password = ?')
-            .bind(username, password).first();
-          if (!user) return resJson({ success: false, message: '用户名或密码错误' }, 401);
+          const user = await DB.prepare('SELECT rowid FROM user WHERE username = ?')
+            .bind(username).first();
+          if (!user) return resJson({ success: false, message: '用户不存在' }, 401);
 
           // 管理后台显式传 all=true 时查看全部，前台只返回当前用户记录
           let bets;
@@ -2142,7 +2171,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
       if (path === '/api/football/settle' && request.method === 'POST') {
         try {
           const params = await request.json();
-          const { username, password, result, matchId } = params;
+          const { username, result, matchId } = params;
           if (username !== 'immmor') return resJson({ success: false, message: '无权限' }, 403);
           if (!['a', 'draw', 'b'].includes(result)) return resJson({ success: false, message: '无效的结果' }, 400);
           if (matchId === undefined) return resJson({ success: false, message: '缺少 matchId' }, 400);
@@ -2209,7 +2238,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
       // ========== 世界杯竞猜：管理员重置比赛（新一轮） ==========
       if (path === '/api/football/reset' && request.method === 'POST') {
         try {
-          const { username, password, matchId } = await request.json();
+          const { username, matchId } = await request.json();
           if (username !== 'immmor') return resJson({ success: false, message: '无权限' }, 403);
           if (matchId === undefined) return resJson({ success: false, message: '缺少 matchId' }, 400);
 
