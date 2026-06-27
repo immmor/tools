@@ -423,13 +423,16 @@ export default {
         // 密码加密存储
         const hashedPassword = await hashPassword(password);
 
+        // 密保答案加密存储
+        const hashedSecurityAnswer = securityAnswer ? await hashPassword(securityAnswer) : '';
+
         // 原子插入：利用数据库 UNIQUE 约束防止并发重复注册
         // 不再单独 SELECT 检查，直接 INSERT，由数据库保证原子性
         let result;
         try {
           result = await DB
             .prepare('INSERT INTO user (username, password, balance, v_expire_date, learn_vip_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code, v_token, v_link_clash, v_link_v2ray, price_plan, survey, security_answer, fetch_link, source, not_trusted, auto_rewn, vorders, web3_address) VALUES (?, ?, ?, NULL, NULL, 307200, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)')
-            .bind(username, hashedPassword, finalBalance, new Date().toISOString().slice(0, 19).replace('T', ' '), userInviteCode, '', '', '', pricePlanStr, '{}', securityAnswer || '', '[]', source || '', notTrustedValue, '[]', web3AddressLower || '')
+            .bind(username, hashedPassword, finalBalance, new Date().toISOString().slice(0, 19).replace('T', ' '), userInviteCode, '', '', '', pricePlanStr, '{}', hashedSecurityAnswer, '[]', source || '', notTrustedValue, '[]', web3AddressLower || '')
             .run();
         } catch (e) {
           // 捕获 UNIQUE 约束冲突 → 用户名已存在（并发注册竞争时触发）
@@ -793,7 +796,7 @@ export default {
         if (!username || !securityAnswer || !newPassword) return resJson({ success: false, message: '参数不完整' }, 400);
         const user = await DB.prepare('SELECT security_answer FROM user WHERE username = ?').bind(username).first();
         if (!user) return resJson({ success: false, message: '用户不存在' }, 404);
-        if (user.security_answer !== securityAnswer) return resJson({ success: false, message: '密保答案错误' }, 401);
+        if (!user.security_answer || !(await verifyPassword(securityAnswer, user.security_answer))) return resJson({ success: false, message: '密保答案错误' }, 401);
         const hashedNewPassword = await hashPassword(newPassword);
         await DB.prepare('UPDATE user SET password = ? WHERE username = ?').bind(hashedNewPassword, username).run();
         return resJson({ success: true, message: '密码重置成功' });
@@ -1176,7 +1179,7 @@ export default {
           }
           if (security_answer !== undefined) {
             updates.push('security_answer = ?');
-            values.push(security_answer);
+            values.push(security_answer ? await hashPassword(security_answer) : '');
           }
           if (auto_rewn !== undefined) {
             updates.push('auto_rewn = ?');
