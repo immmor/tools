@@ -2230,6 +2230,139 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
         }
       }
 
+      // ========== 游戏中心：幸运转盘 ==========
+      if (path === '/api/game/wheel' && request.method === 'POST') {
+        try {
+          const { username } = await request.json();
+          if (!username) return resJson({ success: false, message: '请先登录' }, 401);
+
+          const user = await DB.prepare('SELECT rowid, username, balance FROM user WHERE username = ?').bind(username).first();
+          if (!user) return resJson({ success: false, message: '用户不存在' }, 404);
+
+          const cost = 10;
+          if (user.balance < cost) return resJson({ success: false, message: '余额不足' }, 400);
+
+          const prizes = [3, 5, 5, 10, 10, 20, 50, 200];
+          const weights = [0.25, 0.25, 0.18, 0.15, 0.08, 0.05, 0.03, 0.01];
+          let r = Math.random();
+          let prizeIndex = 0;
+          for (let i = 0; i < weights.length; i++) {
+            r -= weights[i];
+            if (r <= 0) { prizeIndex = i; break; }
+          }
+          const prize = prizes[prizeIndex];
+          const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+          await DB.prepare('UPDATE user SET balance = balance - ? + ? WHERE username = ?').bind(cost, prize, username).run();
+          await DB.prepare('INSERT INTO game_bet (username, game_type, cost, prize, result, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+            .bind(username, 'wheel', cost, prize, `¥${prize}`, now).run();
+
+          return resJson({ success: true, prize, balance: user.balance - cost + prize });
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
+        }
+      }
+
+      // ========== 游戏中心：老虎机 ==========
+      if (path === '/api/game/slot' && request.method === 'POST') {
+        try {
+          const { username } = await request.json();
+          if (!username) return resJson({ success: false, message: '请先登录' }, 401);
+
+          const user = await DB.prepare('SELECT rowid, username, balance FROM user WHERE username = ?').bind(username).first();
+          if (!user) return resJson({ success: false, message: '用户不存在' }, 404);
+
+          const cost = 20;
+          if (user.balance < cost) return resJson({ success: false, message: '余额不足' }, 400);
+
+          const symbols = ['🍒', '🍊', '🍋', '⭐', '💎', '7️⃣', '🔔'];
+          const s1 = symbols[Math.floor(Math.random() * 7)];
+          const s2 = symbols[Math.floor(Math.random() * 7)];
+          const s3 = symbols[Math.floor(Math.random() * 7)];
+          let prize = 0;
+
+          if (s1 === s2 && s2 === s3) {
+            if (s1 === '7️⃣') prize = 200;
+            else if (s1 === '💎') prize = 100;
+            else if (s1 === '⭐') prize = 50;
+            else prize = 30;
+          } else if (s1 === s2 || s2 === s3 || s1 === s3) {
+            const pairSymbol = s1 === s2 ? s1 : (s2 === s3 ? s2 : s1);
+            if (pairSymbol === '7️⃣') prize = 100;
+            else if (pairSymbol === '💎') prize = 50;
+            else if (pairSymbol === '⭐') prize = 25;
+            else prize = 15;
+          }
+
+          const resultStr = (s1 === s2 && s2 === s3) ? `${s1}${s2}${s3}` : `${s1} ${s2} ${s3}`;
+          const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+          await DB.prepare('UPDATE user SET balance = balance - ? + ? WHERE username = ?').bind(cost, prize, username).run();
+          await DB.prepare('INSERT INTO game_bet (username, game_type, cost, prize, result, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+            .bind(username, 'slot', cost, prize, resultStr, now).run();
+
+          return resJson({ success: true, prize, symbols: [s1, s2, s3], balance: user.balance - cost + prize });
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
+        }
+      }
+
+      // ========== 游戏中心：刮刮乐 ==========
+      if (path === '/api/game/scratch' && request.method === 'POST') {
+        try {
+          const { username } = await request.json();
+          if (!username) return resJson({ success: false, message: '请先登录' }, 401);
+
+          const user = await DB.prepare('SELECT rowid, username, balance FROM user WHERE username = ?').bind(username).first();
+          if (!user) return resJson({ success: false, message: '用户不存在' }, 404);
+
+          const cost = 15;
+          if (user.balance < cost) return resJson({ success: false, message: '余额不足' }, 400);
+
+          const prizes = [5, 10, 20, 50, 100, 200];
+          const weights = [0.3, 0.25, 0.2, 0.15, 0.08, 0.02];
+          let random = Math.random();
+          let prize = 0;
+          for (let i = 0; i < prizes.length; i++) {
+            random -= weights[i];
+            if (random <= 0) { prize = prizes[i]; break; }
+          }
+
+          const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+          await DB.prepare('UPDATE user SET balance = balance - ? + ? WHERE username = ?').bind(cost, prize, username).run();
+          await DB.prepare('INSERT INTO game_bet (username, game_type, cost, prize, result, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+            .bind(username, 'scratch', cost, prize, `¥${prize}`, now).run();
+
+          return resJson({ success: true, prize, balance: user.balance - cost + prize });
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
+        }
+      }
+
+      // ========== 游戏中心：获取游戏历史记录 ==========
+      if (path === '/api/game/history' && request.method === 'POST') {
+        try {
+          const { username, gameType } = await request.json();
+          if (!username) return resJson({ success: false, message: '请先登录' }, 401);
+
+          const user = await DB.prepare('SELECT rowid FROM user WHERE username = ?').bind(username).first();
+          if (!user) return resJson({ success: false, message: '用户不存在' }, 404);
+
+          let query = 'SELECT * FROM game_bet WHERE username = ? ORDER BY id DESC LIMIT 50';
+          let params = [username];
+          if (gameType) {
+            query = 'SELECT * FROM game_bet WHERE username = ? AND game_type = ? ORDER BY id DESC LIMIT 50';
+            params = [username, gameType];
+          }
+
+          const result = await DB.prepare(query).bind(...params).all();
+          return resJson({ success: true, history: result.results || [] });
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
+        }
+      }
+
       // ========== 默认接口提示 ==========
       return resJson({
         code: 200,
