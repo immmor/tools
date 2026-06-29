@@ -2061,7 +2061,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           const params = await request.json();
           const { username, password, choice, amount, matchId } = params;
 
-          if (!username || !password || !choice || !amount || matchId === undefined) {
+          if (!username || !choice || !amount || matchId === undefined) {
             return resJson({ success: false, message: '参数不完整' }, 400);
           }
           if (!['a', 'draw', 'b'].includes(choice)) {
@@ -2069,10 +2069,10 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           }
           if (amount < 1) return resJson({ success: false, message: '下注金额至少1元' }, 400);
 
-          // 验证用户
-          const user = await DB.prepare('SELECT rowid, username, balance FROM user WHERE username = ? AND password = ?')
-            .bind(username, password).first();
-          if (!user) return resJson({ success: false, message: '用户名或密码错误' }, 401);
+          // 验证用户是否存在
+          const user = await DB.prepare('SELECT rowid, username, balance FROM user WHERE username = ?')
+            .bind(username).first();
+          if (!user) return resJson({ success: false, message: '请先登录' }, 401);
 
           // 查找指定比赛
           const fbRow = await DB.prepare('SELECT value FROM link WHERE key = ?').bind('fb_match').first();
@@ -2106,11 +2106,11 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
       if (path === '/api/football/history' && request.method === 'POST') {
         try {
           const { username, password, all } = await request.json();
-          if (!username || !password) return resJson({ success: false, message: '请先登录' }, 401);
+          if (!username) return resJson({ success: false, message: '请先登录' }, 401);
 
-          const user = await DB.prepare('SELECT rowid FROM user WHERE username = ? AND password = ?')
-            .bind(username, password).first();
-          if (!user) return resJson({ success: false, message: '用户名或密码错误' }, 401);
+          const user = await DB.prepare('SELECT rowid FROM user WHERE username = ?')
+            .bind(username).first();
+          if (!user) return resJson({ success: false, message: '请先登录' }, 401);
 
           // 管理后台显式传 all=true 时查看全部，前台只返回当前用户记录
           let bets;
