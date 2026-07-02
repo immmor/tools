@@ -228,7 +228,7 @@ export default {
       // ========== 注册接口（核心）→ 用户名密码注册 ==========
       if (path === '/api/register' && request.method === 'POST') {
         const params = await request.json();
-        const { username, password, inviteCode, securityAnswer, source, priceParam, fromGoogle, web3Address } = params;
+        const { username, password, inviteCode, securityAnswer, source, priceParam, fromGoogle, fromGithub, web3Address } = params;
         
         // 统一用小写处理 web3 地址
         const web3AddressLower = web3Address ? web3Address.toLowerCase() : '';
@@ -243,8 +243,8 @@ export default {
           return resJson({ success: false, message: '邮箱格式不正确！' }, 400);
         }
 
-        // 校验验证码：必须完成邮箱验证后才能注册（谷歌登录跳过此检查）
-        if (!fromGoogle) {
+        // 校验验证码：必须完成邮箱验证后才能注册（谷歌/GitHub 登录跳过此检查）
+        if (!fromGoogle && !fromGithub) {
           const verifyPassed = await DB.prepare('SELECT value FROM link WHERE key = ?').bind(`verify_passed_${username}`).first();
           if (!verifyPassed) {
             return resJson({ success: false, message: '请先完成邮箱验证！' }, 400);
@@ -631,6 +631,103 @@ export default {
           }
         } catch (err) {
           return resJson({ success: false, message: '谷歌登录验证失败：' + err.message }, 500);
+        }
+      }
+
+      // ========== GitHub OAuth Client ID 接口 ==========
+      if (path === '/api/github-client-id' && request.method === 'GET') {
+        const clientId = env.GITHUB_CLIENT_ID;
+        if (!clientId) {
+          return resJson({ success: false, message: 'GitHub登录未配置！' }, 500);
+        }
+        return resJson({ success: true, clientId });
+      }
+
+      // ========== GitHub 快捷登录接口 ==========
+      if (path === '/api/github-login' && request.method === 'POST') {
+        const params = await request.json();
+        const { code, redirectUri } = params;
+
+        if (!code || !redirectUri) {
+          return resJson({ success: false, message: '请提供 GitHub 授权信息！' }, 400);
+        }
+
+        const clientId = env.GITHUB_CLIENT_ID;
+        const clientSecret = env.GITHUB_CLIENT_SECRET;
+        if (!clientId || !clientSecret) {
+          return resJson({ success: false, message: 'GitHub登录未配置！' }, 500);
+        }
+
+        try {
+          const tokenRes = await fetch('https://github.com/login/oauth/access_token', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+              client_id: clientId,
+              client_secret: clientSecret,
+              code,
+              redirect_uri: redirectUri
+            })
+          });
+
+          const tokenData = await tokenRes.json();
+          if (tokenData.error || !tokenData.access_token) {
+            return resJson({ success: false, message: 'GitHub token验证失败！' }, 401);
+          }
+
+          const emailsRes = await fetch('https://api.github.com/user/emails', {
+            headers: {
+              'Authorization': `Bearer ${tokenData.access_token}`,
+              'Accept': 'application/vnd.github+json',
+              'User-Agent': 'PHANTOM-VPN'
+            }
+          });
+
+          if (!emailsRes.ok) {
+            return resJson({ success: false, message: '无法获取 GitHub 账号邮箱！' }, 401);
+          }
+
+          const emails = await emailsRes.json();
+          const primaryEmail = emails.find(e => e.primary && e.verified)?.email
+            || emails.find(e => e.verified)?.email;
+
+          if (!primaryEmail) {
+            return resJson({ success: false, message: '无法获取已验证的 GitHub 邮箱！' }, 401);
+          }
+
+          const email = primaryEmail;
+
+          const user = await DB
+            .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders FROM user WHERE username = ?')
+            .bind(email)
+            .first();
+
+          if (user) {
+            const now = new Date(new Date().getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+            const loginInfoEntry = { type: 'login', time: now, ip: request.headers.get('CF-Connecting-IP') || 'unknown', device: request.headers.get('User-Agent') || 'unknown', acceptLanguage: request.headers.get('Accept-Language') || 'unknown', country: request.headers.get('CF-IPCountry') || 'unknown' };
+
+            const loginInfo = await DB.prepare('SELECT login_info FROM user WHERE username = ?').bind(email).first();
+            let updatedLoginInfo = JSON.stringify([loginInfoEntry]);
+            if (loginInfo?.login_info) {
+              try {
+                const existingInfo = JSON.parse(loginInfo.login_info);
+                existingInfo.unshift(loginInfoEntry);
+                updatedLoginInfo = JSON.stringify(existingInfo.slice(0, 10));
+              } catch (e) {}
+            }
+            await DB.prepare('UPDATE user SET login_info = ? WHERE username = ?').bind(updatedLoginInfo, email).run();
+
+            const pricePlan = user.price_plan ? JSON.parse(user.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
+
+            return resJson({ success: true, message: '登录成功！', userInfo: { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders }, pricePlan });
+          } else {
+            return resJson({ success: true, needRegister: true, email, message: '该 GitHub 账号未注册，请完成注册！' });
+          }
+        } catch (err) {
+          return resJson({ success: false, message: 'GitHub登录验证失败：' + err.message }, 500);
         }
       }
 

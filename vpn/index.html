@@ -1377,6 +1377,10 @@
                     <i class="fab fa-google"></i>
                     <span data-i18n="google_login">谷歌登录</span>
                 </button>
+                <button id="github-login-btn" class="btn-cyber w-full py-3 px-4 text-sm">
+                    <i class="fab fa-github"></i>
+                    <span data-i18n="github_login">GitHub登录</span>
+                </button>
                 <button id="web3-wallet-btn" class="btn-cyber w-full py-3 px-4 text-sm" data-i18n="web3_wallet_login">Web3钱包登录</button>
             </div>
         </div>
@@ -2450,6 +2454,7 @@
             turnstileLabel: $('turnstile-label'),
             turnstileTimer: $('turnstile-timer'),
             googleLoginBtn: $('google-login-btn'),
+            githubLoginBtn: $('github-login-btn'),
             web3WalletBtn: $('web3-wallet-btn')
         };
 
@@ -2481,6 +2486,8 @@
             
             let isTurnstileVerified = false;
             let isGoogleLogin = false;
+            let isGithubLogin = false;
+            let oauthEmail = '';
             
             const initTurnstile = () => {
                 isTurnstileVerified = false;
@@ -2568,7 +2575,7 @@
                 els.switch.textContent = dict ? dict[c.switch] : c.switch;
                 els.msg.classList.add('hidden');
                 els.inviteCodeContainer.classList.toggle('hidden', isLogin);
-                els.verifyCodeContainer.classList.toggle('hidden', isLogin || isGoogleLogin);
+                els.verifyCodeContainer.classList.toggle('hidden', isLogin || isGoogleLogin || isGithubLogin);
                 els.securityAnswerContainer.classList.toggle('hidden', isLogin);
                 els.forgotPwdBtn.classList.toggle('hidden', !isLogin);
                 // 登录模式隐藏邮箱后缀选择器，注册模式显示
@@ -2578,6 +2585,13 @@
                         if (isGoogleLogin) {
                             els.emailDomain.value = 'gmail.com';
                             els.emailDomain.disabled = true;
+                        } else if (isGithubLogin && oauthEmail) {
+                            const [, domain] = oauthEmail.split('@');
+                            const optionExists = [...els.emailDomain.options].some(o => o.value === domain);
+                            if (optionExists) {
+                                els.emailDomain.value = domain;
+                                els.emailDomain.disabled = true;
+                            }
                         } else {
                             els.emailDomain.disabled = false;
                         }
@@ -2612,8 +2626,12 @@
             };
             const closeModal = () => {
                 isLogin = true;
+                isGoogleLogin = false;
+                isGithubLogin = false;
+                oauthEmail = '';
                 els.modal.classList.add('hidden');
                 els.form.reset();
+                if (els.emailDomain) els.emailDomain.disabled = false;
                 els.msg.classList.add('hidden');
                 els.inviteCodeContainer.classList.add('hidden');
                 els.verifyCodeContainer.classList.add('hidden');
@@ -3104,7 +3122,71 @@
             //     }
             // };
             
+            const applyOAuthRegisterEmail = (email, provider) => {
+                oauthEmail = email;
+                if (provider === 'google') {
+                    isGoogleLogin = true;
+                    isGithubLogin = false;
+                } else {
+                    isGithubLogin = true;
+                    isGoogleLogin = false;
+                }
+                els.immmorWalletLanding.classList.add('hidden');
+                openModal();
+                setTimeout(() => {
+                    toggleMode();
+                    if (provider === 'google') {
+                        els.user.value = email.replace(/@gmail\.com$/, '');
+                    } else {
+                        const [prefix, domain] = email.split('@');
+                        const optionExists = [...els.emailDomain.options].some(o => o.value === domain);
+                        if (optionExists) {
+                            els.user.value = prefix;
+                            els.emailDomain.value = domain;
+                            els.emailDomain.disabled = true;
+                            els.emailDomainWrapper.classList.remove('hidden');
+                        } else {
+                            els.user.value = email;
+                            els.emailDomainWrapper.classList.add('hidden');
+                        }
+                    }
+                }, 300);
+            };
+
+            const completeOAuthLogin = (data) => {
+                const userInfoWithPrice = { ...data.userInfo, pricePlan: data.pricePlan };
+                localStorage.setItem('userInfo', JSON.stringify(userInfoWithPrice));
+                localStorage.setItem('loginTime', new Date().getTime());
+                updateNav(userInfoWithPrice);
+                window.FootballModule?.loadMatches();
+                fetch(`${API}/api/get-user?name=${encodeURIComponent(data.userInfo.username)}`)
+                    .then(res => res.json())
+                    .then(userData => {
+                        if (userData.code === 200 && userData.data.invite_code) {
+                            const savedInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
+                            savedInfo.invite_code = userData.data.invite_code;
+                            localStorage.setItem('userInfo', JSON.stringify(savedInfo));
+                            updateNav(savedInfo);
+                        }
+                    }).catch(() => {});
+                els.immmorWalletLanding.classList.add('hidden');
+            };
+
             const checkAuth = () => {
+                // 处理 GitHub OAuth redirect 回来的 code
+                const urlParams = new URLSearchParams(window.location.search);
+                const code = urlParams.get('code');
+                const state = urlParams.get('state');
+                if (code && state && state.startsWith('github_login_')) {
+                    const savedState = localStorage.getItem('githubLoginState');
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                    if (state === savedState) {
+                        localStorage.removeItem('githubLoginState');
+                        handleGithubCode(code);
+                        return;
+                    }
+                }
+
                 // 处理手机端 Google OAuth redirect 回来的 access_token
                 const hash = window.location.hash;
                 if (hash && hash.includes('access_token')) {
@@ -3158,33 +3240,35 @@
                     const data = await res.json();
                     if (data.success) {
                         if (data.userInfo) {
-                            const userInfoWithPrice = { ...data.userInfo, pricePlan: data.pricePlan };
-                            localStorage.setItem('userInfo', JSON.stringify(userInfoWithPrice));
-                            localStorage.setItem('loginTime', new Date().getTime());
-                            updateNav(userInfoWithPrice);
-                            window.FootballModule?.loadMatches();
-                            fetch(`${API}/api/get-user?name=${encodeURIComponent(data.userInfo.username)}`)
-                                .then(res => res.json())
-                                .then(userData => {
-                                    if (userData.code === 200 && userData.data.invite_code) {
-                                        const savedInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
-                                        savedInfo.invite_code = userData.data.invite_code;
-                                        localStorage.setItem('userInfo', JSON.stringify(savedInfo));
-                                        updateNav(savedInfo);
-                                    }
-                                }).catch(() => {});
-                            els.immmorWalletLanding.classList.add('hidden');
+                            completeOAuthLogin(data);
                         } else if (data.needRegister) {
-                            isGoogleLogin = true;
-                            els.immmorWalletLanding.classList.add('hidden');
-                            openModal();
-                            setTimeout(() => {
-                                toggleMode();
-                                els.user.value = data.email.replace(/@gmail\.com$/, '');
-                            }, 300);
+                            applyOAuthRegisterEmail(data.email, 'google');
                         }
                     } else {
                         showMsg(data.message || translations[currentLang]?.google_login_failed, true);
+                    }
+                } catch {
+                    showMsg(translations[currentLang]?.network_error, true);
+                }
+            };
+
+            const handleGithubCode = async (code) => {
+                try {
+                    const redirectUri = window.location.origin + window.location.pathname;
+                    const res = await fetch(`${API}/api/github-login`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ code, redirectUri })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        if (data.userInfo) {
+                            completeOAuthLogin(data);
+                        } else if (data.needRegister) {
+                            applyOAuthRegisterEmail(data.email, 'github');
+                        }
+                    } else {
+                        showMsg(data.message || translations[currentLang]?.github_login_failed, true);
                     }
                 } catch {
                     showMsg(translations[currentLang]?.network_error, true);
@@ -3197,6 +3281,7 @@
                 if (isLogin) {
                     return prefix;
                 }
+                if (prefix.includes('@')) return prefix;
                 const domain = els.emailDomain?.value || 'gmail.com';
                 return `${prefix}@${domain}`;
             };
@@ -3253,7 +3338,7 @@
                         return showMsg(dict?.answer_invalid_chars || '密保答案只能包含中文、英文和数字', true);
                     }
                     
-                    if (!isGoogleLogin) {
+                    if (!isGoogleLogin && !isGithubLogin) {
                         // 验证邮箱验证码：调用后端接口真正校验
                         const verifyCode = els.verifyCode.value.trim();
                         if (!verifyCode || verifyCode.length !== 6) {
@@ -3301,6 +3386,7 @@
                     if (priceParam) registerData.priceParam = priceParam;
                     if (ntParam) registerData.nt = ntParam;
                     if (isGoogleLogin) registerData.fromGoogle = true;
+                    if (isGithubLogin) registerData.fromGithub = true;
                     
                     // 如果是 Web3 钱包引导的注册，附加钱包地址
                     const web3Addr = sessionStorage.getItem('web3Address');
@@ -3336,6 +3422,8 @@
                             setTimeout(closeModal, 1000);
                         } else {
                             isGoogleLogin = false;
+                            isGithubLogin = false;
+                            oauthEmail = '';
                             localStorage.setItem('lastRegisterTime', Date.now().toString());
                             // 注册成功后切换到登录模式，并填入完整邮箱
                             const fullEmail = getFullEmail();
@@ -3571,32 +3659,10 @@
                                         });
                                         const data = await res.json();
                                         if (data.success) {
-                                            const dict = translations[currentLang];
                                             if (data.userInfo) {
-                                                const userInfoWithPrice = { ...data.userInfo, pricePlan: data.pricePlan };
-                                                localStorage.setItem('userInfo', JSON.stringify(userInfoWithPrice));
-                                                localStorage.setItem('loginTime', new Date().getTime());
-                                                updateNav(userInfoWithPrice);
-                                                window.FootballModule?.loadMatches();
-                                                fetch(`${API}/api/get-user?name=${encodeURIComponent(data.userInfo.username)}`)
-                                                    .then(res => res.json())
-                                                    .then(userData => {
-                                                        if (userData.code === 200 && userData.data.invite_code) {
-                                                            const savedInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
-                                                            savedInfo.invite_code = userData.data.invite_code;
-                                                            localStorage.setItem('userInfo', JSON.stringify(savedInfo));
-                                                            updateNav(savedInfo);
-                                                        }
-                                                    }).catch(() => {});
-                                                els.immmorWalletLanding.classList.add('hidden');
+                                                completeOAuthLogin(data);
                                             } else if (data.needRegister) {
-                                                isGoogleLogin = true;
-                                                els.immmorWalletLanding.classList.add('hidden');
-                                                openModal();
-                                                setTimeout(() => {
-                                                    toggleMode();
-                                                    els.user.value = data.email.replace(/@gmail\.com$/, '');
-                                                }, 300);
+                                                applyOAuthRegisterEmail(data.email, 'google');
                                             }
                                         } else {
                                             showMsg(data.message || translations[currentLang]?.google_login_failed, true);
@@ -3609,6 +3675,29 @@
                         }).requestAccessToken();
                     }
                 };
+
+                els.githubLoginBtn.addEventListener('click', async () => {
+                    try {
+                        const res = await fetch(`${API}/api/github-client-id`);
+                        const data = await res.json();
+                        if (!data.success || !data.clientId) {
+                            showMsg(data.message || translations[currentLang]?.github_login_failed, true);
+                            return;
+                        }
+                        const redirectUri = window.location.origin + window.location.pathname;
+                        const state = 'github_login_' + Date.now();
+                        localStorage.setItem('githubLoginState', state);
+                        const authUrl = 'https://github.com/login/oauth/authorize?' + new URLSearchParams({
+                            client_id: data.clientId,
+                            redirect_uri: redirectUri,
+                            scope: 'user:email',
+                            state
+                        });
+                        window.location.href = authUrl;
+                    } catch {
+                        showMsg(translations[currentLang]?.network_error, true);
+                    }
+                });
                 
                 els.immmorWalletLanding.addEventListener('click', (e) => {
                     if (e.target === els.immmorWalletLanding) {
