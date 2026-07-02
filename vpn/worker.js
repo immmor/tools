@@ -2440,17 +2440,29 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
       // ========== 游戏中心：获取游戏历史记录 ==========
       if (path === '/api/game/history' && request.method === 'POST') {
         try {
-          const { username, gameType } = await request.json();
+          const { username, gameType, all } = await request.json();
           if (!username) return resJson({ success: false, message: '请先登录' }, 401);
 
           const user = await DB.prepare('SELECT rowid FROM user WHERE username = ?').bind(username).first();
           if (!user) return resJson({ success: false, message: '用户不存在' }, 404);
 
-          let query = 'SELECT * FROM game_bet WHERE username = ? ORDER BY id DESC LIMIT 50';
-          let params = [username];
-          if (gameType) {
-            query = 'SELECT * FROM game_bet WHERE username = ? AND game_type = ? ORDER BY id DESC LIMIT 50';
-            params = [username, gameType];
+          let query = 'SELECT * FROM game_bet';
+          let params = [];
+          if (all) {
+            if (gameType) {
+              query = 'SELECT * FROM game_bet WHERE game_type = ? ORDER BY id DESC LIMIT 100';
+              params = [gameType];
+            } else {
+              query = 'SELECT * FROM game_bet ORDER BY id DESC LIMIT 100';
+            }
+          } else {
+            if (gameType) {
+              query = 'SELECT * FROM game_bet WHERE username = ? AND game_type = ? ORDER BY id DESC LIMIT 50';
+              params = [username, gameType];
+            } else {
+              query = 'SELECT * FROM game_bet WHERE username = ? ORDER BY id DESC LIMIT 50';
+              params = [username];
+            }
           }
 
           const result = await DB.prepare(query).bind(...params).all();
