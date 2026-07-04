@@ -989,6 +989,36 @@
                             <button type="button" class="btn" onclick="sendMessage()" style="width: auto;">发送消息</button>
                         </div>
                     </div>
+
+                    <div class="data-table" style="margin-top: 1.5rem;">
+                        <div class="table-header">
+                            <h3>查看消息</h3>
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <select id="viewMessageTarget" style="padding: 0.5rem; border: 1px solid #e2e8f0; border-radius: 4px;">
+                                    <option value="">请选择查看范围</option>
+                                    <option value="all">全部消息</option>
+                                    <option value="single">指定用户</option>
+                                </select>
+                                <input type="text" id="viewMessageUsername" placeholder="输入用户名" style="padding: 0.5rem; border: 1px solid #e2e8f0; border-radius: 4px; display: none;">
+                                <button class="add-btn" onclick="loadMessages()" style="background-color: #667eea;">查询</button>
+                            </div>
+                        </div>
+                        <table id="messagesTable">
+                            <thead>
+                                <tr>
+                                    <th onclick="sortMessages('id')" style="cursor:pointer;">ID <span class="sort-indicator" data-col="id"></span></th>
+                                    <th onclick="sortMessages('username')" style="cursor:pointer;">用户 <span class="sort-indicator" data-col="username"></span></th>
+                                    <th onclick="sortMessages('content')" style="cursor:pointer;">内容 <span class="sort-indicator" data-col="content"></span></th>
+                                    <th onclick="sortMessages('is_read')" style="cursor:pointer;">状态 <span class="sort-indicator" data-col="is_read"></span></th>
+                                    <th onclick="sortMessages('created_at')" style="cursor:pointer;">时间 <span class="sort-indicator" data-col="created_at"></span></th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="messagesTableBody">
+                                <tr><td colspan="6" style="text-align:center;color:#999;">请选择查看范围并点击查询</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
 
                 <!-- 世界杯竞猜管理页面 -->
@@ -2500,6 +2530,123 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
             } finally {
                 loadingBtn.innerText = originalText;
                 loadingBtn.disabled = false;
+            }
+        }
+
+        // 切换查看消息目标
+        document.getElementById('viewMessageTarget').addEventListener('change', function() {
+            const usernameInput = document.getElementById('viewMessageUsername');
+            if (this.value === 'single') {
+                usernameInput.style.display = 'block';
+            } else {
+                usernameInput.style.display = 'none';
+            }
+        });
+
+        let messagesData = [];
+        let messagesSortCol = '';
+        let messagesSortDir = 'asc';
+
+        async function loadMessages() {
+            const target = document.getElementById('viewMessageTarget').value;
+            const username = document.getElementById('viewMessageUsername').value.trim();
+            const tbody = document.getElementById('messagesTableBody');
+
+            if (!target) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;">请选择查看范围</td></tr>';
+                messagesData = [];
+                return;
+            }
+
+            if (target === 'single' && !username) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;">请输入用户名</td></tr>';
+                messagesData = [];
+                return;
+            }
+
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">加载中...</td></tr>';
+
+            try {
+                let url = `/api/messages?username=${encodeURIComponent(currentUserInfo?.username || '')}&all=true`;
+                if (target === 'single' && username) {
+                    url += `&targetUser=${encodeURIComponent(username)}`;
+                }
+                const res = await newApiRequest(url, 'GET');
+                if (res.code === 200 && res.data?.messages && res.data.messages.length) {
+                    messagesData = res.data.messages;
+                    renderMessages();
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;">暂无消息记录</td></tr>';
+                    messagesData = [];
+                }
+            } catch (e) {
+                console.error('加载消息失败:', e);
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#e53e3e;">加载失败</td></tr>';
+            }
+        }
+
+        function sortMessages(col) {
+            if (messagesSortCol === col) {
+                messagesSortDir = messagesSortDir === 'asc' ? 'desc' : 'asc';
+            } else {
+                messagesSortCol = col;
+                messagesSortDir = 'asc';
+            }
+            document.querySelectorAll('#messagesTable .sort-indicator').forEach(el => el.className = 'sort-indicator');
+            const indicator = document.querySelector(`#messagesTable .sort-indicator[data-col="${col}"]`);
+            if (indicator) indicator.classList.add(messagesSortDir);
+            renderMessages();
+        }
+
+        function renderMessages() {
+            const tbody = document.getElementById('messagesTableBody');
+            if (!messagesData.length) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;">暂无消息记录</td></tr>';
+                return;
+            }
+            const sorted = [...messagesData].sort((a, b) => {
+                let valA = a[messagesSortCol] || '';
+                let valB = b[messagesSortCol] || '';
+                if (['id', 'is_read'].includes(messagesSortCol)) {
+                    valA = parseFloat(valA) || 0;
+                    valB = parseFloat(valB) || 0;
+                    return messagesSortDir === 'asc' ? valA - valB : valB - valA;
+                }
+                if (messagesSortCol === 'created_at') {
+                    valA = new Date(valA).getTime();
+                    valB = new Date(valB).getTime();
+                    return messagesSortDir === 'asc' ? valA - valB : valB - valA;
+                }
+                return messagesSortDir === 'asc' ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
+            });
+            tbody.innerHTML = sorted.map(m => `
+                <tr>
+                    <td>${m.id}</td>
+                    <td>${m.username}</td>
+                    <td style="max-width: 400px; word-break: break-all;">${m.content}</td>
+                    <td>${m.is_read === 1 || m.is_read === '1' ? '<span style="color:#48bb78;">已读</span>' : '<span style="color:#ed8936;">未读</span>'}</td>
+                    <td>${m.created_at || ''}</td>
+                    <td>
+                        <button class="action-btn delete-btn" onclick="deleteMessage(${m.id})">删除</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function deleteMessage(messageId) {
+            if (!confirm('确定删除这条消息？')) return;
+            try {
+                const res = await newApiRequest('/api/messages', 'DELETE', { messageId });
+                if (res.code === 200) {
+                    messagesData = messagesData.filter(m => m.id !== messageId);
+                    renderMessages();
+                    alert('删除成功');
+                } else {
+                    alert(res.msg || '删除失败');
+                }
+            } catch (e) {
+                console.error('删除消息失败:', e);
+                alert('删除失败：' + e.message);
             }
         }
 

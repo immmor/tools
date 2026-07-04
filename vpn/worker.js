@@ -1928,34 +1928,81 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
       if (path === '/api/messages' && request.method === 'GET') {
         try {
           const username = url.searchParams.get('username');
+          const all = url.searchParams.get('all');
           
           if (!username) {
             return resJson({ code: 400, msg: '请传入username参数' }, 400);
           }
           
-          // 获取用户消息列表
-          const messages = await DB
-            .prepare('SELECT * FROM messages WHERE username = ? ORDER BY created_at DESC LIMIT 50')
-            .bind(username)
-            .all();
+          let messages;
+          let unreadCount = 0;
           
-          // 获取未读消息数量
-          const unreadCount = await DB
-            .prepare('SELECT COUNT(*) as count FROM messages WHERE username = ? AND is_read = 0')
-            .bind(username)
-            .first();
+          if (all === 'true') {
+            const targetUser = url.searchParams.get('targetUser');
+            if (targetUser) {
+              messages = await DB
+                .prepare('SELECT * FROM messages WHERE username = ? ORDER BY created_at DESC LIMIT 100')
+                .bind(targetUser)
+                .all();
+              const unread = await DB
+                .prepare('SELECT COUNT(*) as count FROM messages WHERE username = ? AND is_read = 0')
+                .bind(targetUser)
+                .first();
+              unreadCount = unread?.count || 0;
+            } else {
+              messages = await DB
+                .prepare('SELECT * FROM messages ORDER BY created_at DESC LIMIT 100')
+                .all();
+            }
+          } else {
+            messages = await DB
+              .prepare('SELECT * FROM messages WHERE username = ? ORDER BY created_at DESC LIMIT 50')
+              .bind(username)
+              .all();
+            
+            const unread = await DB
+              .prepare('SELECT COUNT(*) as count FROM messages WHERE username = ? AND is_read = 0')
+              .bind(username)
+              .first();
+            unreadCount = unread?.count || 0;
+          }
           
           return resJson({
             code: 200,
             msg: '查询成功',
             data: {
               messages: messages.results || [],
-              unreadCount: unreadCount?.count || 0
+              unreadCount: unreadCount
             }
           });
         } catch (err) {
           console.error('获取消息错误:', err);
           return resJson({ code: 500, msg: '查询失败', error: err.message }, 500);
+        }
+      }
+
+      if (path === '/api/messages' && request.method === 'DELETE') {
+        try {
+          const params = await request.json();
+          const { messageId } = params;
+          
+          if (!messageId) {
+            return resJson({ code: 400, msg: '缺少必要参数' }, 400);
+          }
+          
+          const result = await DB
+            .prepare('DELETE FROM messages WHERE id = ?')
+            .bind(messageId)
+            .run();
+          
+          if (result.success) {
+            return resJson({ code: 200, msg: '删除成功' });
+          } else {
+            return resJson({ code: 500, msg: '删除失败' }, 500);
+          }
+        } catch (err) {
+          console.error('删除消息错误:', err);
+          return resJson({ code: 500, msg: '删除失败', error: err.message }, 500);
         }
       }
 
