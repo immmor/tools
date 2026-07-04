@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>零钱</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: #fff;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            color: #111;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* ---------------- 手机顶部状态栏 ---------------- */
+        .status-bar {
+            height: 44px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 24px 0 32px;
+            user-select: none;
+        }
+
+        .status-time-wrapper {
+            position: relative;
+            cursor: pointer;
+        }
+
+        .status-time {
+            font-size: 15px;
+            font-weight: 600;
+            color: #000;
+            letter-spacing: -0.2px;
+        }
+
+        .time-picker {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+            -webkit-appearance: none;
+        }
+
+        .status-icons {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .icon-signal {
+            display: flex;
+            align-items: flex-end;
+            gap: 2px;
+            height: 12px;
+            width: 18px;
+        }
+        .icon-signal span {
+            display: inline-block;
+            width: 3px;
+            background-color: #000;
+            border-radius: 0.5px;
+        }
+        .icon-signal span:nth-child(1) { height: 30%; }
+        .icon-signal span:nth-child(2) { height: 55%; }
+        .icon-signal span:nth-child(3) { height: 80%; }
+        .icon-signal span:nth-child(4) { height: 100%; }
+
+        .icon-net {
+            font-size: 16px;
+            font-weight: 700;
+            color: #000;
+            transform: scale(0.9);
+            margin-right: 2px;
+        }
+
+        .icon-battery {
+            width: 25px;
+            height: 12.5px;
+            border: 1px solid #000;
+            border-radius: 4px;
+            padding: 1px;
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        .battery-level {
+            width: 85%;
+            height: 100%;
+            background-color: #000;
+            border-radius: 2px;
+        }
+        .icon-battery::after {
+            content: "";
+            position: absolute;
+            right: -3px;
+            top: 3.5px;
+            width: 2px;
+            height: 4.5px;
+            background-color: #000;
+            border-radius: 0 1px 1px 0;
+        }
+
+        /* ---------------- 微信导航栏 ---------------- */
+        .nav-box {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 24px;
+            height: 48px;
+            user-select: none;
+        }
+
+        .back-icon {
+            width: 12px;
+            height: 12px;
+            border-left: 2px solid #111;
+            border-bottom: 2px solid #111;
+            transform: rotate(45deg);
+        }
+
+        .nav-right {
+            font-size: 16px;
+            color: #111;
+            font-weight: 400;
+        }
+
+        /* ---------------- 主体内容 ---------------- */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 32px; /* 间距上提 */
+        }
+
+        .wx-icon {
+            width: 74px;
+            height: 74px;
+            background-color: #ffbe1a;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .wx-icon::after {
+            content: "￥";
+            color: #fff;
+            font-size: 44px;
+            font-weight: 500;
+        }
+
+        .balance-title {
+            font-size: 16px;
+            color: #191919;
+            margin-bottom: 10px; /* 紧凑字间距 */
+            font-weight: 500;
+        }
+
+        .balance-wrapper {
+            display: flex;
+            align-items: baseline;
+            justify-content: center;
+            margin-bottom: 32px; /* 缩小金额到横条的距离 */
+            font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+        }
+
+        .currency-symbol {
+            font-size: 30px;
+            font-weight: 600;
+            margin-right: 6px;
+        }
+
+        .balance-amount {
+            font-size: 52px;
+            font-weight: 600;
+            border: none;
+            outline: none;
+            background: transparent;
+            text-align: center;
+            cursor: pointer;
+            letter-spacing: -0.5px;
+        }
+
+        /* ---------------- 零钱通提示横条 ---------------- */
+        .lqt-bar {
+            width: 88%; /* 与按钮同宽 */
+            border-top: 1px solid #f5f5f5;
+            border-bottom: 1px solid #f5f5f5;
+            padding: 14px 2px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 48px; /* 调整横条到下方按钮的过渡距离 */
+            cursor: pointer;
+        }
+
+        .lqt-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .lqt-icon-box {
+            width: 40px;
+            height: 40px;
+            background-color: #f7f7f7;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .lqt-diamond {
+            width: 24px;
+            height: 24px;
+            object-fit: contain;
+        }
+
+        .lqt-text {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .lqt-title {
+            font-size: 15px;
+            color: #191919;
+            font-weight: 400;
+        }
+
+        .lqt-sub {
+            font-size: 13px;
+            color: #8c8c8c;
+        }
+
+        .arrow-right {
+            width: 8px;
+            height: 8px;
+            border-top: 1.5px solid #b2b2b2;
+            border-right: 1.5px solid #b2b2b2;
+            transform: rotate(45deg);
+            margin-right: 4px;
+        }
+
+        /* ---------------- 按钮组 ---------------- */
+        .btn-group {
+            width: 50%; /* 拓宽按钮，对应微信原版比例 */
+            padding: 0;
+        }
+
+        .btn {
+            width: 100%;
+            height: 48px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 500;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 16px;
+            border: none;
+            cursor: pointer;
+        }
+
+        .btn-primary {
+            background-color: #07c160;
+            color: #ffffff;
+        }
+
+        .btn-primary:active {
+            background-color: #06ad56;
+        }
+
+        .btn-secondary {
+            background-color: #f2f2f2;
+            color: #191919;
+        }
+
+        .btn-secondary:active {
+            background-color: #e5e5e5;
+        }
+
+        /* ---------------- 底部版权栏 ---------------- */
+        .footer-box {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-bottom: 8px;
+            user-select: none;
+        }
+
+        .footer-link {
+            color: #576b95;
+            font-size: 14px;
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+
+        .footer-provider {
+            color: #b2b2b2;
+            font-size: 11px;
+            margin-bottom: 24px;
+        }
+
+        .home-indicator {
+            width: 134px;
+            height: 5px;
+            background-color: #000;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="status-bar">
+        <div class="status-time-wrapper">
+            <div class="status-time" id="currentTime">19:42</div>
+            <input type="time" class="time-picker" id="timePicker" onchange="manualUpdateTime(this.value)">
+        </div>
+        
+        <div class="status-icons">
+            <div class="icon-signal">
+                <span></span><span></span><span></span><span></span>
+            </div>
+            <div class="icon-net">5G</div>
+            <div class="icon-battery">
+                <div class="battery-level"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="nav-box">
+        <div class="back-icon"></div>
+        <div class="nav-right">零钱明细</div>
+    </div>
+
+    <div class="main-content">
+        <div class="wx-icon"></div>
+        <div class="balance-title">我的零钱</div>
+        
+        <div class="balance-wrapper">
+            <span class="currency-symbol">¥</span>
+            <div class="balance-amount" contenteditable="true" inputmode="decimal" onblur="formatMoney(this)">722.75</div>
+        </div>
+
+        <div class="lqt-bar">
+            <div class="lqt-left">
+                <div class="lqt-icon-box">
+                    <img src="diamond.png" class="lqt-diamond" alt="零钱通">
+                </div>
+                <div class="lqt-text">
+                    <span class="lqt-title">转入零钱通，能赚又能花</span>
+                    <span class="lqt-sub">零钱通 七日年化 1.01%</span>
+                </div>
+            </div>
+            <div class="arrow-right"></div>
+        </div>
+
+        <div class="btn-group">
+            <button class="btn btn-primary">充值</button>
+            <button class="btn btn-secondary">提现</button>
+        </div>
+    </div>
+
+    <div class="footer-box">
+        <div class="footer-link">常见问题</div>
+        <div class="footer-provider">本服务由财付通提供</div>
+        <div class="home-indicator"></div>
+    </div>
+
+    <script>
+        let timer = null;
+
+        function updateTime() {
+            const now = new Date();
+            let hours = now.getHours();
+            let minutes = now.getMinutes();
+            hours = hours < 10 ? '0' + hours : hours;
+            minutes = minutes < 10 ? '0' + minutes : minutes;
+            
+            const timeStr = hours + ':' + minutes;
+            document.getElementById('currentTime').innerText = timeStr;
+            document.getElementById('timePicker').value = timeStr;
+        }
+
+        function manualUpdateTime(val) {
+            if (!val) return;
+            clearInterval(timer); 
+            document.getElementById('currentTime').innerText = val;
+        }
+
+        updateTime();
+        timer = setInterval(updateTime, 60000);
+
+        function formatMoney(element) {
+            let text = element.innerText.replace(/,/g, '');
+            let num = parseFloat(text);
+            
+            if (isNaN(num)) {
+                element.innerText = "0.00";
+                return;
+            }
+            
+            let formatted = num.toLocaleString('en-US', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+            
+            element.innerText = formatted;
+        }
+
+        document.querySelector('.balance-amount').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                this.blur();
+            }
+        });
+    </script>
+</body>
+</html>
