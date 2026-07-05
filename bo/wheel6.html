@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>✨ 幻彩魅惑大转盘 ✨</title>
+    <style>
+        :root {
+            --primary-pink: #ff75b5;
+            --purple-glow: #8f43ee;
+            --neon-cyan: #00f3ff;
+            --dark-bg: #120422;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background: radial-gradient(circle at center, #2a0845 0%, var(--dark-bg) 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            color: #fff;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+            text-shadow: 0 0 10px var(--primary-pink), 0 0 20px var(--purple-glow);
+            animation: pulse 2s infinite alternate;
+            letter-spacing: 2px;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); text-shadow: 0 0 10px var(--primary-pink); }
+            100% { transform: scale(1.05); text-shadow: 0 0 25px var(--neon-cyan), 0 0 10px var(--purple-glow); }
+        }
+
+        /* 转盘外饰容器 */
+        .wheel-container {
+            position: relative;
+            width: 450px;
+            height: 450px;
+            background: padding-box, linear-gradient(135deg, var(--primary-pink), var(--neon-cyan));
+            border: 8px solid transparent;
+            border-radius: 50%;
+            box-shadow: 0 0 35px var(--purple-glow), inset 0 0 20px rgba(0,0,0,0.6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* 跑马灯小圆点 */
+        .led-light {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            background-color: #fff;
+            border-radius: 50%;
+            box-shadow: 0 0 8px #fff;
+        }
+
+        /* 实际旋转的转盘画布 */
+        #wheelCanvas {
+            border-radius: 50%;
+            transition: transform 5s cubic-bezier(0.15, 0.85, 0.35, 1);
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+        }
+
+        /* 炫酷指针与抽奖按钮组合 */
+        .pointer-btn {
+            position: absolute;
+            width: 90px;
+            height: 90px;
+            background: radial-gradient(circle, #fff 20%, var(--primary-pink) 60%, var(--purple-glow) 100%);
+            border-radius: 50%;
+            z-index: 10;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.2rem;
+            color: #fff;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            box-shadow: 0 0 20px var(--primary-pink), inset 0 0 10px rgba(255,255,255,0.8);
+            user-select: none;
+            transition: transform 0.1s ease;
+        }
+
+        /* 指针箭头 */
+        .pointer-btn::before {
+            content: '';
+            position: absolute;
+            top: -40px;
+            left: 25px;
+            width: 0;
+            height: 0;
+            border-left: 20px solid transparent;
+            border-right: 20px solid transparent;
+            border-bottom: 45px solid var(--primary-pink);
+            filter: drop-shadow(0 -5px 5px var(--primary-pink));
+        }
+
+        .pointer-btn:hover {
+            transform: scale(1.08);
+            box-shadow: 0 0 30px var(--neon-cyan);
+        }
+
+        .pointer-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* 中奖弹窗特效 */
+        .popup {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            background: rgba(20, 5, 35, 0.95);
+            border: 3px solid var(--neon-cyan);
+            box-shadow: 0 0 50px var(--primary-pink);
+            padding: 30px 50px;
+            border-radius: 20px;
+            text-align: center;
+            z-index: 100;
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .popup.active {
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        .popup h2 {
+            color: var(--primary-pink);
+            margin-top: 0;
+            font-size: 2rem;
+        }
+
+        .popup p {
+            font-size: 1.5rem;
+            margin: 15px 0 25px 0;
+            color: #fff;
+        }
+
+        .popup button {
+            background: linear-gradient(45deg, var(--primary-pink), var(--purple-glow));
+            border: none;
+            padding: 10px 30px;
+            color: white;
+            font-size: 1rem;
+            border-radius: 25px;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            transition: 0.2s;
+        }
+
+        .popup button:hover {
+            box-shadow: 0 0 15px var(--neon-cyan);
+            transform: translateY(-2px);
+        }
+
+        /* 遮罩层 */
+        .overlay {
+            position: fixed;
+            top:0; left:0; right:0; bottom:0;
+            background: rgba(0,0,0,0.7);
+            opacity: 0;
+            pointer-events: none;
+            transition: 0.3s;
+            z-index: 99;
+        }
+        .overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        /* 底部提示 */
+        .tips {
+            margin-top: 25px;
+            color: #a594bd;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>✨ 啵啵魔幻大转盘 ✨</h1>
+
+    <div class="wheel-container" id="wheelBox">
+        <canvas id="wheelCanvas" width="420" height="420"></canvas>
+        <div class="pointer-btn" id="spinBtn">抽奖</div>
+    </div>
+
+    <div class="tips">🔮 每次转动都会消耗一丝神秘魔力哦~</div>
+
+    <div class="overlay" id="overlay"></div>
+    <div class="popup" id="popup">
+        <h2>🎉 欧气爆棚！ 🎉</h2>
+        <p id="prizeStr">恭喜获得神秘大奖</p>
+        <button onclick="closePopup()">太棒啦</button>
+    </div>
+
+    <script>
+        // 奖品配置（可爱魅惑风）
+        const prizes = [
+            { text: '草莓软糖 ✨', color: '#ff75b5' },
+            { text: '恶魔之吻 💋', color: '#3a1c5c' },
+            { text: '傲娇猫耳 🐾', color: '#8f43ee' },
+            { text: '谢谢参与 💔', color: '#25113e' },
+            { text: '微醺甜酒 🍹', color: '#ff5376' },
+            { text: '神秘恋爱券 💌', color: '#00f3ff' },
+            { text: '极乐特调 🔮', color: '#52228c' },
+            { text: '贴贴抱抱 🤗', color: '#ffb6b9' }
+        ];
+
+        const canvas = document.getElementById('wheelCanvas');
+        const ctx = canvas.getContext('2d');
+        const spinBtn = document.getElementById('spinBtn');
+        const wheelBox = document.getElementById('wheelBox');
+        
+        const prizeCount = prizes.length;
+        const arc = Math.PI * 2 / prizeCount;
+        let currentAngle = 0;
+        let isSpinning = false;
+
+        // --- 音效生成器 (使用 Web Audio API，无需外部音频文件) ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playTickSound() {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+            
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.05);
+        }
+
+        function playWinSound() {
+            const now = audioCtx.currentTime;
+            // 简单和弦
+            [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(freq, now + i * 0.08);
+                gain.gain.setValueAtTime(0.15, now + i * 0.08);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.08 + 0.4);
+                osc.start(now + i * 0.08);
+                osc.stop(now + i * 0.08 + 0.4);
+            });
+        }
+
+        // --- 初始化绘制转盘 ---
+        function drawWheel() {
+            const radius = canvas.width / 2;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            for (let i = 0; i < prizeCount; i++) {
+                const angle = i * arc;
+                ctx.fillStyle = prizes[i].color;
+                
+                // 画扇区
+                ctx.beginPath();
+                ctx.moveTo(radius, radius);
+                ctx.arc(radius, radius, radius - 10, angle, angle + arc);
+                ctx.closePath();
+                ctx.fill();
+
+                // 加点魅惑边框线
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // 画文字
+                ctx.save();
+                ctx.fillStyle = '#fff';
+                // 炫酷文字阴影
+                ctx.shadowColor = 'rgba(0,0,0,0.5)';
+                ctx.shadowBlur = 4;
+                ctx.font = 'bold 16px sans-serif';
+                ctx.translate(radius, radius);
+                ctx.rotate(angle + arc / 2);
+                ctx.textAlign = 'right';
+                ctx.fillText(prizes[i].text, radius - 35, 6);
+                ctx.restore();
+            }
+        }
+
+        // --- 生成炫酷外圈跑马灯小灯泡 ---
+        function createLEDs() {
+            const ledCount = 24;
+            const radius = 216; // 稍微大于画布半径
+            const centerX = 225;
+            const centerY = 225;
+
+            for (let i = 0; i < ledCount; i++) {
+                const angle = (i * Math.PI * 2) / ledCount;
+                const led = document.createElement('div');
+                led.className = 'led-light';
+                // 计算坐标
+                const x = centerX + radius * Math.cos(angle) - 6;
+                const y = centerY + radius * Math.sin(angle) - 6;
+                led.style.left = `${x}px`;
+                led.style.top = `${y}px`;
+                
+                // 交替颜色闪烁动画
+                if (i % 2 === 0) {
+                    led.style.animation = 'pulse 0.5s infinite alternate';
+                    led.style.backgroundColor = 'var(--neon-cyan)';
+                    led.style.boxShadow = '0 0 8px var(--neon-cyan)';
+                } else {
+                    led.style.animation = 'pulse 0.5s infinite alternate-reverse';
+                    led.style.backgroundColor = 'var(--primary-pink)';
+                    led.style.boxShadow = '0 0 8px var(--primary-pink)';
+                }
+                
+                wheelBox.appendChild(led);
+            }
+        }
+
+        // --- 核心旋转逻辑 ---
+        spinBtn.addEventListener('click', () => {
+            if (isSpinning) return;
+            
+            // 激活音频上下文（解决浏览器隐私限制）
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+
+            isSpinning = true;
+            
+            // 随机生成一个中奖索引
+            const prizeIndex = Math.floor(Math.random() * prizeCount);
+            
+            // 计算旋转角度：基础圈数(5-8圈) + 目标奖品对应的角度偏移
+            // 修正：让指针指向正上方 (减去 Math.PI/2)
+            const targetAngle = (prizeCount - prizeIndex) * arc - (arc / 2) - (Math.PI / 2);
+            const extraTarget = Math.PI * 2 * (5 + Math.floor(Math.random() * 3)); // 加上几整圈
+            const finalRotation = targetAngle + extraTarget;
+
+            // 应用旋转动画
+            canvas.style.transform = `rotate(${finalRotation}rad)`;
+
+            // --- 模拟指针“哒哒哒”的音效反馈 ---
+            let lastTickAngle = 0;
+            const tickInterval = setInterval(() => {
+                // 获取当前正在旋转的实时角度样式（近似算出来）
+                // 这里用一个简单的定时器在转动期间模拟播放滴答声
+                playTickSound();
+            }, 120);
+
+            // 动画结束后触发
+            setTimeout(() => {
+                clearInterval(tickInterval);
+                playWinSound();
+                showPopup(prizes[prizeIndex].text);
+                isSpinning = false;
+                
+                // 保持当前的旋转角度形态
+                currentAngle = finalRotation % (Math.PI * 2);
+            }, 5000); // 对应 CSS 里的 5s 过渡
+        });
+
+        // --- 弹窗互动 ---
+        function showPopup(prizeText) {
+            document.getElementById('prizeStr').innerHTML = `🌸 【${prizeText}】 🌸`;
+            document.getElementById('popup').classList.add('active');
+            document.getElementById('overlay').classList.add('active');
+        }
+
+        function closePopup() {
+            document.getElementById('popup').classList.remove('active');
+            document.getElementById('overlay').classList.remove('active');
+            // 重置转盘角度方便下次继续，或者直接保留
+            canvas.style.transition = 'none';
+            canvas.style.transform = `rotate(0rad)`;
+            setTimeout(() => {
+                canvas.style.transition = 'transform 5s cubic-bezier(0.15, 0.85, 0.35, 1)';
+            }, 50);
+        }
+
+        // 初始化
+        drawWheel();
+        createLEDs();
+    </script>
+</body>
+</html>

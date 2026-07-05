@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>魅惑萌动 💗 幸运大转盘</title>
+    <style>
+        :root {
+            --primary-pink: #ff65a3;
+            --dark-purple: #2d142c;
+            --neon-cyan: #00f3ff;
+            --gold: #ffe600;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background: radial-gradient(circle, #511845, #2d142c);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+            color: #fff;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+            color: #fff;
+            text-shadow: 0 0 10px var(--primary-pink), 0 0 20px #ff007f, 0 0 40px #ff007f;
+            animation: pulse 1.5s infinite alternate;
+            letter-spacing: 2px;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); text-shadow: 0 0 10px var(--primary-pink), 0 0 20px #ff007f; }
+            100% { transform: scale(1.05); text-shadow: 0 0 15px var(--primary-pink), 0 0 30px #ff007f, 0 0 50px var(--neon-cyan); }
+        }
+
+        /* 转盘外围容器，霓虹跑马灯效果 */
+        .wheel-container {
+            position: relative;
+            width: 420px;
+            height: 420px;
+            border-radius: 50%;
+            background: #1a0818;
+            padding: 15px;
+            box-shadow: 0 0 30px var(--primary-pink), inset 0 0 20px rgba(255, 101, 163, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* 跑马灯小灯泡 */
+        .light {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: #fff;
+            border-radius: 50%;
+            box-shadow: 0 0 8px #fff;
+        }
+
+        /* 实际旋转的转盘 */
+        .wheel {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            overflow: hidden;
+            position: relative;
+            border: 5px solid #fff;
+            box-shadow: 0 0 15px var(--neon-cyan);
+            transition: transform 5s cubic-bezier(0.1, 0.8, 0.1, 1);
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        /* 指针（核心：可爱猫耳/心形或魅惑箭头设计） */
+        .pointer {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 90px;
+            height: 90px;
+            background: radial-gradient(circle, #fff 20%, var(--primary-pink) 80%);
+            border-radius: 50%;
+            z-index: 10;
+            cursor: pointer;
+            box-shadow: 0 0 20px var(--gold), 0 0 10px rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: #fff;
+            font-size: 1.2rem;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+            user-select: none;
+            transition: transform 0.1s;
+        }
+
+        .pointer:hover {
+            transform: translate(-50%, -50%) scale(1.08);
+            box-shadow: 0 0 30px var(--gold), 0 0 15px var(--primary-pink);
+        }
+
+        /* 指针的三角箭头 */
+        .pointer::after {
+            content: '';
+            position: absolute;
+            top: -40px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-width: 0 20px 45px 20px;
+            border-style: solid;
+            border-color: transparent transparent var(--primary-pink) transparent;
+            filter: drop-shadow(0 -2px 5px var(--primary-pink));
+        }
+
+        /* 指针中心的心形装饰 */
+        .pointer-heart {
+            font-size: 1.5rem;
+            animation: heartbeat 0.6s infinite alternate;
+        }
+
+        @keyframes heartbeat {
+            to { transform: scale(1.2); }
+        }
+
+        /* 结果弹窗特效 */
+        .popup {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            background: rgba(45, 20, 44, 0.95);
+            border: 3px solid var(--primary-pink);
+            box-shadow: 0 0 40px var(--primary-pink);
+            padding: 30px 50px;
+            border-radius: 20px;
+            text-align: center;
+            z-index: 100;
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .popup.active {
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        .popup h2 {
+            color: var(--gold);
+            margin-top: 0;
+            font-size: 2rem;
+            text-shadow: 0 0 10px rgba(255, 230, 0, 0.5);
+        }
+
+        .popup p {
+            font-size: 1.3rem;
+            margin: 20px 0;
+        }
+
+        .popup btn {
+            background: linear-gradient(45deg, var(--primary-pink), #ff007f);
+            color: white;
+            border: none;
+            padding: 10px 25px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+            box-shadow: 0 0 10px var(--primary-pink);
+        }
+
+        /* 烟花粒子画布 */
+        #confetti {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: 99;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>💗 命运の魔力转盘 💗</h1>
+
+    <div class="wheel-container" id="wheelContainer">
+        <div class="wheel" id="wheel">
+            <canvas id="wheelCanvas"></canvas>
+        </div>
+        <div class="pointer" id="pointerBtn">
+            <div class="pointer-heart">💖</div>
+        </div>
+    </div>
+
+    <div class="popup" id="resultPopup">
+        <h2>✨ 命中注定 ✨</h2>
+        <p id="resultText">恭喜你获得...</p>
+        <button onclick="closePopup()" style="background: linear-gradient(45deg, var(--primary-pink), #ff007f); color: white; border: none; padding: 10px 25px; border-radius: 20px; cursor: pointer; font-weight: bold; box-shadow: 0 0 10px var(--primary-pink);">收下好运</button>
+    </div>
+
+    <canvas id="confetti"></canvas>
+
+    <script>
+        // --- 游戏配置项 ---
+        const prizes = [
+            { text: "么么哒一个 💋", color: "#ff75a0" },
+            { text: "神秘贴贴 🐱", color: "#4a1c40" },
+            { text: "再来一次 💫", color: "#ffb3d1" },
+            { text: "主人的夸奖 👑", color: "#361134" },
+            { text: "一杯奶茶 🧋", color: "#ff75a0" },
+            { text: "贴心按摩 💆‍♀️", color: "#4a1c40" },
+            { text: "免死金牌 🎫", color: "#ffb3d1" },
+            { text: "清空购物车 🛒", color: "#361134" }
+        ];
+
+        // --- 音效生成器 (使用 Web Audio API，无需外部音频文件) ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        function playTickSound() {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.05);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.05);
+        }
+
+        function playWinSound() {
+            const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6 欢快和弦
+            notes.forEach((freq, index) => {
+                setTimeout(() => {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                    gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.4);
+                }, index * 100);
+            });
+        }
+
+        // --- 初始化转盘 Canvas ---
+        const canvas = document.getElementById("wheelCanvas");
+        const ctx = canvas.getContext("2d");
+        const size = 390;
+        canvas.width = size;
+        canvas.height = size;
+
+        const numSegments = prizes.length;
+        const arc = Math.PI * 2 / numSegments;
+        const radius = size / 2;
+
+        function drawWheel() {
+            ctx.clearRect(0, 0, size, size);
+            for (let i = 0; i < numSegments; i++) {
+                const angle = i * arc;
+                ctx.fillStyle = prizes[i].color;
+                
+                // 画扇形
+                ctx.beginPath();
+                ctx.moveTo(radius, radius);
+                ctx.arc(radius, radius, radius, angle, angle + arc);
+                ctx.lineTo(radius, radius);
+                ctx.fill();
+
+                // 描边（带点迷幻感的细线）
+                ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // 写文字
+                ctx.save();
+                ctx.fillStyle = "#ffffff";
+                // 可爱风霓虹文字阴影
+                ctx.shadowColor = varColorToHex(prizes[i].color);
+                ctx.shadowBlur = 4;
+                ctx.font = "bold 15px 'Segoe UI', sans-serif";
+                ctx.translate(radius, radius);
+                ctx.rotate(angle + arc / 2);
+                ctx.textAlign = "right";
+                ctx.fillText(prizes[i].text, radius - 25, 6);
+                ctx.restore();
+            }
+        }
+
+        // 辅助将深色背景文字赋予对应对比色的阴影
+        function varColorToHex(color) {
+            return color === "#4a1c40" || color === "#361134" ? "#ff65a3" : "#00f3ff";
+        }
+
+        // --- 动态跑马灯特效 ---
+        const container = document.getElementById("wheelContainer");
+        const totalLights = 24;
+        for (let i = 0; i < totalLights; i++) {
+            const light = document.createElement("div");
+            light.classList.add("light");
+            const angle = (i / totalLights) * Math.PI * 2;
+            const r = 202; // 刚好在边缘
+            const x = 210 + r * Math.cos(angle) - 5;
+            const y = 210 + r * Math.sin(angle) - 5;
+            light.style.left = `${x}px`;
+            light.style.top = `${y}px`;
+            container.appendChild(light);
+        }
+
+        // 闪烁跑马灯
+        setInterval(() => {
+            const lights = document.querySelectorAll('.light');
+            lights.forEach((light, index) => {
+                if ((Date.now() / 200 + index) % 2 < 1) {
+                    light.style.backgroundColor = '#ff65a3';
+                    light.style.boxShadow = '0 0 12px #ff65a3';
+                } else {
+                    light.style.backgroundColor = '#00f3ff';
+                    light.style.boxShadow = '0 0 12px #00f3ff';
+                }
+            });
+        }, 200);
+
+
+        // --- 核心旋转逻辑 ---
+        const wheel = document.getElementById("wheel");
+        const pointerBtn = document.getElementById("pointerBtn");
+        let isSpinning = false;
+        let currentRotation = 0;
+
+        pointerBtn.addEventListener("click", () => {
+            if (isSpinning) return;
+            // 激活/解锁声卡（解决现代浏览器对未交互音频的限制）
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+
+            isSpinning = true;
+            
+            // 随机旋转圈数 (5-10圈) + 随机角度
+            const randomDegrees = Math.floor(Math.random() * 360);
+            const totalDegrees = 3600 + randomDegrees; 
+            currentRotation += totalDegrees;
+
+            wheel.style.transform = `rotate(${currentRotation}deg)`;
+
+            // 模拟“哒哒哒”的音效。由于过渡曲线是 cubic-bezier，我们用 JS 简单模拟一下减速触发
+            let duration = 5000;
+            let start = performance.now();
+            let lastSegmentIndex = -1;
+
+            function traceTicks(now) {
+                let elapsed = now - start;
+                if (elapsed < duration) {
+                    // 计算出当前大致的旋转角度
+                    let progress = elapsed / duration;
+                    // 模拟 cubic-bezier(0.1, 0.8, 0.1, 1) 的减速运动趋势
+                    let easeOut = 1 - Math.pow(1 - progress, 4); 
+                    let currentAngle = (currentRotation - totalDegrees + easeOut * totalDegrees) % 360;
+                    
+                    // 计算指针目前落在哪个扇区 (指针在正上方，即 -90度 或 270度位置)
+                    let correctedAngle = (360 - currentAngle + 270) % 360;
+                    let currentSegment = Math.floor(correctedAngle / (360 / numSegments)) % numSegments;
+
+                    if (currentSegment !== lastSegmentIndex) {
+                        playTickSound();
+                        lastSegmentIndex = currentSegment;
+                    }
+                    requestAnimationFrame(traceTicks);
+                }
+            }
+            requestAnimationFrame(traceTicks);
+
+            // 动画结束触发
+            setTimeout(() => {
+                isSpinning = false;
+                
+                // 计算最终停留位置
+                const finalAngle = currentRotation % 360;
+                // 转盘顺时针转，相当于指针逆时针移动。指针在 12点钟方向 (-90度位置)
+                const targetAngle = (360 - finalAngle + 270) % 360;
+                const winningIndex = Math.floor(targetAngle / (360 / numSegments)) % numSegments;
+                
+                showResult(prizes[winningIndex].text);
+            }, duration);
+        });
+
+        // --- 弹出层与烟花效果 ---
+        const popup = document.getElementById("resultPopup");
+        const resultText = document.getElementById("resultText");
+        const confettiCanvas = document.getElementById("confetti");
+        const confCtx = confettiCanvas.getContext("2d");
+        let confettiArray = [];
+
+        function showResult(text) {
+            playWinSound();
+            resultText.innerText = `✨ 【${text}】 ✨`;
+            popup.classList.add("active");
+            initConfetti();
+        }
+
+        function closePopup() {
+            popup.classList.remove("active");
+            confettiArray = [];
+        }
+
+        // 可爱少女心风格的满屏撒花
+        function initConfetti() {
+            confettiCanvas.width = window.innerWidth;
+            confettiCanvas.height = window.innerHeight;
+            for (let i = 0; i < 80; i++) {
+                confettiArray.push({
+                    x: window.innerWidth / 2,
+                    y: window.innerHeight / 2 - 50,
+                    size: Math.random() * 8 + 4,
+                    color: ['#ff65a3', '#00f3ff', '#ffe600', '#ffb3d1'][Math.floor(Math.random() * 4)],
+                    speedX: (Math.random() - 0.5) * 12,
+                    speedY: (Math.random() - 0.7) * 15,
+                    gravity: 0.3,
+                    rotation: Math.random() * 360,
+                    rotationSpeed: (Math.random() - 0.5) * 10
+                });
+            }
+            animateConfetti();
+        }
+
+        function animateConfetti() {
+            if (confettiArray.length === 0) return;
+            confCtx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+            
+            confettiArray.forEach((p, index) => {
+                p.x += p.speedX;
+                p.y += p.speedY;
+                p.speedY += p.gravity;
+                p.rotation += p.rotationSpeed;
+
+                confCtx.save();
+                confCtx.translate(p.x, p.y);
+                confCtx.rotate(p.rotation * Math.PI / 180);
+                confCtx.fillStyle = p.color;
+                // 绘制心形或方块，这里用圆和方块混杂
+                confCtx.fillRect(-p.size/2, -p.size/2, p.size, p.size);
+                confCtx.restore();
+
+                // 移除屏幕外的粒子
+                if (p.y > confettiCanvas.height) confettiArray.splice(index, 1);
+            });
+            requestAnimationFrame(animateConfetti);
+        }
+
+        // 初始化绘制
+        drawWheel();
+    </script>
+</body>
+</html>
