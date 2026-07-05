@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>流光英语 - 侘寂流体艺术多端版</title>
+    <style>
+        :root {
+            --bg-base: #f3f5f4;
+            --text-zh: #78857e;
+            --text-correct: #1a3224;
+            --text-wrong: #d67a7a;
+            --line-color: rgba(26, 50, 36, 0.15);
+            --font-serif: "Playfair Display", "Cormorant Garamond", "Noto Serif CJK SC", serif;
+            --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-serif);
+            background-color: var(--bg-base);
+            color: var(--text-correct);
+            min-height: 100vh;
+            /* 防止移动端橡皮筋回弹效果 */
+            position: relative;
+            overflow: hidden; 
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* 艺术画廊流体画布 */
+        #fluid-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        /* 核心响应式艺术舞台 */
+        .art-stage {
+            width: 90%;
+            max-width: 1100px;
+            height: auto;
+            display: grid;
+            grid-template-columns: 220px 1fr; /* 桌面端非对称排版 */
+            gap: 60px;
+            position: relative;
+            z-index: 5;
+            align-items: start;
+            padding: 2rem 0;
+            transition: all 0.4s ease;
+        }
+
+        /* 左侧面板（桌面端为列，移动端会转化为行） */
+        .left-panel {
+            font-family: var(--font-sans);
+            display: flex;
+            flex-direction: column;
+            gap: 40px;
+            border-right: 1px solid rgba(26, 50, 36, 0.08);
+            padding-right: 40px;
+            margin-top: 10px;
+        }
+
+        .brand-title {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.3em;
+            color: var(--text-correct);
+            font-weight: 600;
+            opacity: 0.8;
+        }
+
+        .footer-tips {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .footer-tips span {
+            color: var(--text-zh);
+            font-size: 0.8rem;
+            letter-spacing: 0.08em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            width: fit-content;
+            white-space: nowrap;
+        }
+        
+        .footer-tips span:hover {
+            color: var(--text-correct);
+            transform: translateX(4px);
+        }
+
+        /* 右侧打字主区域 */
+        .right-content {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            text-align: left;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        /* 翻译诗行：使用 clamp 实现完美字号伸缩 */
+        .translation {
+            font-size: clamp(1.1rem, 2.5vw, 1.45rem);
+            color: var(--text-zh);
+            font-weight: 300;
+            letter-spacing: 0.08em;
+            line-height: 1.8;
+            margin-bottom: clamp(2.5rem, 5vw, 4.5rem);
+            max-width: 700px;
+            animation: fadeIn 0.8s ease;
+        }
+
+        /* 英文打字流 */
+        .word-area {
+            display: flex;
+            flex-wrap: wrap;
+            row-gap: clamp(16px, 4vw, 28px);
+            column-gap: 0px;
+            width: 100%;
+            min-height: 120px;
+        }
+
+        .word-block {
+            display: flex;
+            margin-right: clamp(12px, 2.5vw, 22px);
+        }
+
+        /* 字母独立样式 */
+        .char {
+            font-size: clamp(2rem, 5.5vw, 3.2rem);
+            font-weight: 400;
+            color: transparent; 
+            position: relative;
+            display: inline-block;
+            text-align: center;
+            min-width: clamp(13px, 3.5vw, 20px);
+            height: clamp(3.2rem, 8vw, 5rem);
+            line-height: clamp(3rem, 7.8vw, 4.8rem);
+            transition: color 0.4s cubic-bezier(0.1, 0.8, 0.25, 1);
+        }
+
+        /* 侘寂月牙承托线 */
+        .char.letter::after {
+            content: '';
+            position: absolute;
+            bottom: 2px;
+            left: 5%;
+            width: 90%;
+            height: 2px;
+            background: var(--line-color);
+            border-radius: 50%;
+            opacity: 0.6;
+            transition: all 0.3s ease;
+        }
+
+        .char.symbol {
+            color: rgba(120, 133, 126, 0.25);
+        }
+
+        /* 提示状态 */
+        .word-area.reveal .char {
+            color: rgba(26, 50, 36, 0.12);
+        }
+
+        /* 输入正确：月牙隐去，字体折纸般绽现 */
+        .char.correct {
+            color: var(--text-correct) !important;
+            animation: flowerBloom 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+        .char.correct::after {
+            opacity: 0 !important;
+            transform: scaleX(0);
+        }
+
+        /* 输入错误：琴弦抖动 */
+        .char.wrong::after {
+            background: var(--text-wrong) !important;
+            opacity: 1 !important;
+            height: 3px;
+        }
+        .char.wrong {
+            animation: stringVibrate 0.2s linear;
+        }
+
+        /* 当前光标 */
+        .char.current::after {
+            background: var(--text-correct);
+            opacity: 1;
+            bottom: 4px;
+            height: 3px;
+            animation: arcBreath 1s ease-in-out infinite alternate;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes flowerBloom {
+            0% { opacity: 0; transform: scale(0.75) rotate(-3deg); filter: blur(1px); }
+            100% { opacity: 1; transform: scale(1) rotate(0deg); filter: blur(0); }
+        }
+
+        @keyframes stringVibrate {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-3px); }
+            75% { transform: translateX(3px); }
+        }
+
+        @keyframes arcBreath {
+            0% { transform: scaleX(0.7); opacity: 0.4; }
+            100% { transform: scaleX(1.1); opacity: 1; }
+        }
+
+        #hidden-input {
+            position: absolute;
+            opacity: 0;
+            z-index: -1;
+            left: -9999px; /* 防止在iOS上引起页面意外滚动 */
+        }
+
+        /* ================= 针对中/小屏幕尺寸（平板及手机端）的极简大胆解构 ================= */
+        @media (max-width: 768px) {
+            body {
+                align-items: flex-start; /* 让内容靠上，为移动端键盘弹起留出空间 */
+            }
+
+            .art-stage {
+                grid-template-columns: 1fr; /* 打破两列布局，变为垂直流 */
+                gap: 30px;
+                width: 88%;
+                padding-top: 3.5rem;
+            }
+
+            .left-panel {
+                border-right: none;
+                border-bottom: 1px solid rgba(26, 50, 36, 0.06);
+                padding-right: 0;
+                padding-bottom: 20px;
+                margin-top: 0;
+                flex-direction: row;
+                justify-content: space-between;
+                align-items: center;
+                width: 100%;
+            }
+
+            .footer-tips {
+                flex-direction: row; /* 控制按键水平排开 */
+                gap: 15px;
+            }
+
+            .footer-tips span {
+                font-size: 0.75rem;
+                background: rgba(26, 50, 36, 0.04);
+                padding: 6px 12px;
+                border-radius: 12px; /* 移动端增加微小的卡片感方便手指点击 */
+            }
+
+            .footer-tips span:hover {
+                transform: none; /* 移动端取消悬停位移 */
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="fluid-canvas"></canvas>
+
+    <div class="art-stage" onclick="focusInput()">
+        <div class="left-panel">
+            <div class="brand-title">Flow</div>
+            <div class="footer-tips">
+                <span id="btn-audio">听音 (Shift+R)</span>
+                <span id="btn-hint">提示 (Shift+S)</span>
+                <span id="btn-next">跳过 (Enter)</span>
+            </div>
+        </div>
+
+        <div class="right-content">
+            <div class="translation" id="translation">正在引溪流汇入诗行...</div>
+            <div class="word-area" id="word-area"></div>
+        </div>
+    </div>
+
+    <input type="text" id="hidden-input" autocomplete="off" autocapitalize="off" spellcheck="false">
+
+    <script>
+        let sentences = []; 
+        let currentIndex = 0;
+        let currentLetterIndex = 0;
+        let currentSentence = "";
+        let revealTimeout = null;
+        let charMapping = []; 
+        
+        const translationEl = document.getElementById('translation');
+        const wordAreaEl = document.getElementById('word-area');
+        const hiddenInput = document.getElementById('hidden-input');
+        const canvas = document.getElementById('fluid-canvas');
+        const ctx = canvas.getContext('2d');
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        async function loadSentences() {
+            try {
+                const response = await fetch('sentences.json');
+                if (!response.ok) throw new Error('ERR');
+                sentences = await response.json();
+                if (sentences.length > 0) initSentence();
+            } catch (error) {
+                translationEl.textContent = "未检测到本地句子库 sentences.json，请确保已启动本地Live Server服务器。";
+            }
+        }
+
+        function speakSentence() {
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(currentSentence);
+            utterance.lang = 'en-US'; 
+            utterance.rate = 0.85; 
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function peekSentence() {
+            if (revealTimeout) clearTimeout(revealTimeout);
+            wordAreaEl.classList.add('reveal');
+            revealTimeout = setTimeout(() => {
+                wordAreaEl.classList.remove('reveal');
+            }, 2000);
+        }
+
+        function nextSentence() {
+            currentIndex = (currentIndex + 1) % sentences.length;
+            initSentence();
+        }
+
+        // --- 优雅的空气木质水滴声 (Web Audio API) ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playKeySound(isCorrect) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            if (isCorrect) {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(380, audioCtx.currentTime); 
+                osc.frequency.exponentialRampToValueAtTime(260, audioCtx.currentTime + 0.03);
+                gain.gain.setValueAtTime(0.06, audioCtx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + 0.03);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.03);
+            } else {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(130, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + 0.08);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.08);
+            }
+        }
+
+        function playSuccessSound() {
+            const notes = [440, 554.37, 659.25, 880]; 
+            notes.forEach((freq, index) => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime + index * 0.06);
+                gain.gain.setValueAtTime(0.04, audioCtx.currentTime + index * 0.06);
+                gain.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + index * 0.06 + 0.35);
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.start(audioCtx.currentTime + index * 0.06); osc.stop(audioCtx.currentTime + index * 0.06 + 0.35);
+            });
+        }
+
+        // --- 流体背景动力学 ---
+        let count = 0;
+        function drawFluidLines() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = 'rgba(26, 50, 36, 0.025)'; 
+            ctx.lineWidth = window.innerWidth < 768 ? 1 : 1.5;
+
+            for (let j = 0; j < 3; j++) {
+                ctx.beginPath();
+                for (let i = 0; i < canvas.width; i += 15) {
+                    const offset = j * 50;
+                    const y = canvas.height * (0.45 + j * 0.08) + 
+                              Math.sin(i * 0.002 + count + offset) * 50 * Math.cos(i * 0.001 + count * 0.5);
+                    if (i === 0) ctx.moveTo(i, y);
+                    else ctx.lineTo(i, y);
+                }
+                ctx.stroke();
+            }
+            count += 0.003;
+            requestAnimationFrame(drawFluidLines);
+        }
+        drawFluidLines();
+
+        // --- 核心打字驱动 ---
+        function initSentence() {
+            wordAreaEl.classList.remove('reveal');
+            if (revealTimeout) clearTimeout(revealTimeout);
+
+            const item = sentences[currentIndex];
+            translationEl.textContent = item.zh;
+            currentSentence = item.en;
+            currentLetterIndex = 0;
+            hiddenInput.value = "";
+
+            const words = currentSentence.split(' ');
+            let globalIndex = 0;
+            let htmlBuffer = "";
+            charMapping = [];
+
+            words.forEach((wordStr, wordIdx) => {
+                htmlBuffer += `<div class="word-block">`;
+                wordStr.split('').forEach((char) => {
+                    const isLetter = /[a-zA-Z0-9]/.test(char);
+                    const typeClass = isLetter ? 'letter' : 'symbol';
+                    const currentClass = (globalIndex === 0) ? ' current' : '';
+                    
+                    htmlBuffer += `<span class="char ${typeClass}${currentClass}" data-index="${globalIndex}">${char}</span>`;
+                    charMapping.push({ char: char, isLetter: isLetter });
+                    globalIndex++;
+                });
+
+                if (wordIdx < words.length - 1) {
+                    htmlBuffer += `<span class="char symbol" data-index="${globalIndex}">&nbsp;</span>`;
+                    charMapping.push({ char: ' ', isLetter: false });
+                    globalIndex++;
+                }
+                htmlBuffer += `</div>`;
+            });
+
+            wordAreaEl.innerHTML = htmlBuffer;
+            speakSentence();
+        }
+
+        function focusInput() { hiddenInput.focus(); }
+
+        hiddenInput.addEventListener('input', () => {
+            const spans = wordAreaEl.querySelectorAll('.char');
+            const inputValue = hiddenInput.value;
+            if (currentLetterIndex >= charMapping.length || sentences.length === 0) return;
+
+            const targetChar = charMapping[currentLetterIndex].char;
+            const typedChar = inputValue[inputValue.length - 1];
+            if (!typedChar) return;
+
+            if (typedChar.toLowerCase() === targetChar.toLowerCase() || (targetChar === ' ' && typedChar === ' ')) {
+                spans[currentLetterIndex].className = spans[currentLetterIndex].className.replace('current', '') + ' correct';
+                playKeySound(true);
+                currentLetterIndex++;
+                
+                while (currentLetterIndex < charMapping.length && !charMapping[currentLetterIndex].isLetter && charMapping[currentLetterIndex].char !== ' ') {
+                    spans[currentLetterIndex].className = spans[currentLetterIndex].className.replace('current', '') + ' correct';
+                    currentLetterIndex++;
+                }
+            } else {
+                const oldClass = spans[currentLetterIndex].className;
+                spans[currentLetterIndex].className += ' wrong';
+                playKeySound(false);
+                setTimeout(() => {
+                    if(spans[currentLetterIndex] && currentLetterIndex < charMapping.length) {
+                         spans[currentLetterIndex].className = oldClass;
+                    }
+                }, 200);
+            }
+
+            hiddenInput.value = "";
+
+            if (currentLetterIndex < charMapping.length) {
+                if(!spans[currentLetterIndex].className.includes('current')) {
+                    spans[currentLetterIndex].className += ' current';
+                }
+            } else {
+                playSuccessSound();
+                currentIndex = (currentIndex + 1) % sentences.length;
+                setTimeout(initSentence, 800);
+            }
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (sentences.length === 0) return;
+            if (e.shiftKey && (e.key === 'R' || e.key === 'r')) {
+                e.preventDefault(); speakSentence();
+            } else if (e.shiftKey && (e.key === 'S' || e.key === 's')) {
+                e.preventDefault(); peekSentence();
+            } else if (e.key === 'Enter') {
+                e.preventDefault(); nextSentence();
+            }
+            focusInput();
+        });
+
+        document.getElementById('btn-audio').addEventListener('click', (e) => { e.stopPropagation(); speakSentence(); focusInput(); });
+        document.getElementById('btn-hint').addEventListener('click', (e) => { e.stopPropagation(); peekSentence(); focusInput(); });
+        document.getElementById('btn-next').addEventListener('click', (e) => { e.stopPropagation(); nextSentence(); focusInput(); });
+
+        window.onload = () => {
+            loadSentences(); 
+            focusInput();
+            document.body.addEventListener('click', focusInput);
+            // 额外针对移动端触摸的全局聚焦支持
+            document.body.addEventListener('touchstart', focusInput);
+        };
+    </script>
+</body>
+</html>

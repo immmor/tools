@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>流光英语 - 野兽派波普版</title>
+    <style>
+        :root {
+            --bg-acid: #ccff00;        /* 荧光强酸绿 */
+            --brutal-black: #000000;   /* 绝对油漆黑 */
+            --pop-purple: #8a2be2;     /* 浓烈波普紫 */
+            --pop-wrong: #ff0055;      /* 强力闪烁红 */
+            --font-brutal: "Impact", "Arial Black", -apple-system, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: var(--font-brutal);
+            background-color: var(--bg-acid);
+            color: var(--brutal-black);
+            min-height: 100vh;
+            position: relative;
+            overflow: hidden; 
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* 重力几何碎块画布 */
+        #brutal-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        /* 野兽派卡片舞台 */
+        .pop-stage {
+            width: 88%;
+            max-width: 950px;
+            background: #ffffff;
+            /* 典型的野兽派硬核黑阴影（无渐变模糊） */
+            border: 4px solid var(--brutal-black);
+            box-shadow: 12px 12px 0px var(--brutal-black);
+            padding: clamp(2rem, 5vw, 4rem) clamp(1.5rem, 5vw, 4rem);
+            position: relative;
+            z-index: 5;
+            display: flex;
+            flex-direction: column;
+            transform: rotate(-1deg); /* 故意制造打破常规的微小倾斜 */
+            transition: all 0.1s ease;
+        }
+
+        /* 控制菜单：像素拼贴风 */
+        .pop-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 3.5rem;
+            border-bottom: 4px solid var(--brutal-black);
+            padding-bottom: 15px;
+        }
+
+        .brand-logo {
+            font-size: clamp(1.2rem, 3vw, 1.8rem);
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: -0.05em;
+            background: var(--brutal-black);
+            color: var(--bg-acid);
+            padding: 4px 12px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 12px;
+        }
+
+        .controls span {
+            cursor: pointer;
+            font-size: 0.8rem;
+            font-weight: 900;
+            text-transform: uppercase;
+            background: #ffffff;
+            border: 2px solid var(--brutal-black);
+            padding: 6px 12px;
+            box-shadow: 3px 3px 0px var(--brutal-black);
+            transition: all 0.1s ease;
+        }
+        .controls span:hover {
+            transform: translate(2px, 2px);
+            box-shadow: 1px 1px 0px var(--brutal-black);
+            background: var(--pop-purple);
+            color: #ffffff;
+        }
+
+        /* 中文诗行：粗暴、直接、高对比 */
+        .translation {
+            font-size: clamp(1.2rem, 3vw, 1.7rem);
+            color: var(--brutal-black);
+            font-weight: 900;
+            line-height: 1.5;
+            margin-bottom: 4rem;
+            text-align: left;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+
+        /* 英文打字流 */
+        .word-area {
+            display: flex;
+            flex-wrap: wrap;
+            row-gap: clamp(20px, 5vw, 32px);
+            column-gap: 0px;
+            width: 100%;
+            min-height: 140px;
+        }
+
+        .word-block {
+            display: flex;
+            margin-right: clamp(16px, 3vw, 26px);
+        }
+
+        /* 字母结构：未输入前全隐形 */
+        .char {
+            font-size: clamp(2.4rem, 6.5vw, 4rem);
+            font-weight: 900;
+            color: transparent; 
+            position: relative;
+            display: inline-block;
+            text-align: center;
+            min-width: clamp(16px, 4vw, 26px);
+            height: clamp(3.8rem, 10vw, 5.8rem);
+            line-height: clamp(3.8rem, 10vw, 5.8rem);
+        }
+
+        .char.symbol {
+            color: rgba(0, 0, 0, 0.15);
+        }
+
+        /* 快速提示状态：呈现亮绿色阴影字 */
+        .word-area.reveal .char {
+            color: rgba(0, 0, 0, 0.06);
+            -webkit-text-stroke: 1px rgba(0, 0, 0, 0.2);
+        }
+
+        /* 正确状态：油漆砸落效果，无多余动画过渡，硬核直接 */
+        .char.correct {
+            color: #ffffff !important;
+            background: var(--brutal-black);
+            animation: popStamp 0.12s steps(2, end) forwards;
+        }
+
+        /* 错误状态：硬核高频震动 */
+        .pop-stage.brutal-shaking {
+            animation: brutalShock 0.15s linear;
+            background: var(--pop-wrong);
+        }
+
+        /* 核心光标：绝对高对比度的紫色高光矩形块 */
+        .char.current::after {
+            content: '';
+            position: absolute;
+            top: 10%;
+            left: 0;
+            width: 100%;
+            height: 80%;
+            background: var(--pop-purple);
+            z-index: -1;
+            animation: hardFlash 0.4s steps(2, start) infinite;
+        }
+
+        @keyframes popStamp {
+            0% { transform: scale(1.4); }
+            100% { transform: scale(1); }
+        }
+
+        @keyframes brutalShock {
+            0%, 100% { transform: rotate(-1deg) translate(0, 0); }
+            25% { transform: rotate(1deg) translate(-8px, 4px); }
+            75% { transform: rotate(-2deg) translate(8px, -4px); }
+        }
+
+        @keyframes hardFlash {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.1; }
+        }
+
+        #hidden-input {
+            position: absolute;
+            opacity: 0;
+            z-index: -1;
+            left: -9999px;
+        }
+
+        /* ================= 针对手机平板的自适应重构 ================= */
+        @media (max-width: 768px) {
+            .pop-stage {
+                width: 92%;
+                box-shadow: 6px 6px 0px var(--brutal-black);
+                padding: 2rem 1.2rem;
+                transform: none; /* 移动端取消旋转防止边缘溢出 */
+            }
+            .pop-header {
+                margin-bottom: 2.5rem;
+            }
+            .translation {
+                margin-bottom: 3rem;
+            }
+            .controls span {
+                font-size: 0.75rem;
+                padding: 4px 8px;
+                box-shadow: 2px 2px 0px var(--brutal-black);
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="brutal-canvas"></canvas>
+
+    <div class="pop-stage" id="main-stage" onclick="focusInput()">
+        <div class="pop-header">
+            <div class="brand-logo">ACID.TYPE</div>
+            <div class="controls">
+                <span id="btn-audio">Sound</span>
+                <span id="btn-hint">Hint</span>
+                <span id="btn-next">Skip</span>
+            </div>
+        </div>
+
+        <div class="translation" id="translation">正在向系统内泵入高压色彩...</div>
+        <div class="word-area" id="word-area"></div>
+    </div>
+
+    <input type="text" id="hidden-input" autocomplete="off" autocapitalize="off" spellcheck="false">
+
+    <script>
+        let sentences = []; 
+        let currentIndex = 0;
+        let currentLetterIndex = 0;
+        let currentSentence = "";
+        let revealTimeout = null;
+        let charMapping = []; 
+        
+        const translationEl = document.getElementById('translation');
+        const wordAreaEl = document.getElementById('word-area');
+        const hiddenInput = document.getElementById('hidden-input');
+        const stageEl = document.getElementById('main-stage');
+        const canvas = document.getElementById('brutal-canvas');
+        const ctx = canvas.getContext('2d');
+
+        // 重力几何碎块物理数据
+        let blocks = [];
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        async function loadSentences() {
+            try {
+                const response = await fetch('sentences.json');
+                if (!response.ok) throw new Error('ERR');
+                sentences = await response.json();
+                if (sentences.length > 0) initSentence();
+            } catch (error) {
+                translationEl.textContent = "未检测到本地词库 sentences.json，请启动 Live Server 运行。";
+            }
+        }
+
+        function speakSentence() {
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(currentSentence);
+            utterance.lang = 'en-US'; 
+            utterance.rate = 1.0; // 绝对果断利落的语速
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function peekSentence() {
+            if (revealTimeout) clearTimeout(revealTimeout);
+            wordAreaEl.classList.add('reveal');
+            revealTimeout = setTimeout(() => {
+                wordAreaEl.classList.remove('reveal');
+            }, 1500);
+        }
+
+        function nextSentence() {
+            currentIndex = (currentIndex + 1) % sentences.length;
+            initSentence();
+        }
+
+        // --- 街机电子感硬核脉冲微音 (Web Audio API) ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playKeySound(isCorrect) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            if (isCorrect) {
+                // 绝对清脆高昂的 8-bit 电子音
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(800, audioCtx.currentTime); 
+                gain.gain.setValueAtTime(0.04, audioCtx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + 0.03);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.03);
+            } else {
+                // 粗暴的重低音噪波
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(70, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.08, audioCtx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+            }
+        }
+
+        function playSuccessSound() {
+            // 经典复古电玩胜利上行三连音
+            const notes = [440, 554.37, 659.25, 880]; 
+            notes.forEach((freq, index) => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime + index * 0.04);
+                gain.gain.setValueAtTime(0.03, audioCtx.currentTime + index * 0.04);
+                gain.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + index * 0.04 + 0.15);
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.start(audioCtx.currentTime + index * 0.04); osc.stop(audioCtx.currentTime + index * 0.04 + 0.15);
+            });
+        }
+
+        // --- 爆炸性重力几何碎块仿真 ---
+        function triggerExplosion(element) {
+            if (!element) return;
+            const rect = element.getBoundingClientRect();
+            const colors = ['#8a2be2', '#000000', '#ffffff', '#ff0055'];
+            
+            // 每次击键，从字母处向外喷射 4 个多边形碎块
+            for(let i=0; i<4; i++) {
+                blocks.push({
+                    x: rect.left + rect.width / 2,
+                    y: rect.top + rect.height / 2,
+                    w: Math.random() * 15 + 10,
+                    h: Math.random() * 15 + 10,
+                    vx: (Math.random() - 0.5) * 16,
+                    vy: (Math.random() - 0.7) * 14 - 4, // 向上喷射
+                    angle: Math.random() * Math.PI,
+                    va: (Math.random() - 0.5) * 0.3,
+                    color: colors[Math.floor(Math.random() * colors.length)]
+                });
+            }
+        }
+
+        function animateBrutalCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            for (let i = blocks.length - 1; i >= 0; i--) {
+                const b = blocks[i];
+                b.vy += 0.5; // 模拟硬核重力加速度
+                b.x += b.vx;
+                b.y += b.vy;
+                b.angle += b.va;
+
+                // 超出屏幕边界则销毁
+                if (b.y > canvas.height + 50 || b.x < -50 || b.x > canvas.width + 50) {
+                    blocks.splice(i, 1);
+                    continue;
+                }
+
+                ctx.save();
+                ctx.translate(b.x, b.y);
+                ctx.rotate(b.angle);
+                ctx.fillStyle = b.color;
+                ctx.strokeStyle = '#000000';
+                ctx.lineWidth = 2;
+                // 绘制带硬核黑边的无渐变矩形碎块
+                ctx.fillRect(-b.w/2, -b.h/2, b.w, b.h);
+                ctx.strokeRect(-b.w/2, -b.h/2, b.w, b.h);
+                ctx.restore();
+            }
+
+            requestAnimationFrame(animateBrutalCanvas);
+        }
+        animateBrutalCanvas();
+
+        // --- 核心打字流驱动 ---
+        function initSentence() {
+            wordAreaEl.classList.remove('reveal');
+            if (revealTimeout) clearTimeout(revealTimeout);
+
+            const item = sentences[currentIndex];
+            translationEl.textContent = item.zh;
+            currentSentence = item.en;
+            currentLetterIndex = 0;
+            hiddenInput.value = "";
+
+            const words = currentSentence.split(' ');
+            let globalIndex = 0;
+            let htmlBuffer = "";
+            charMapping = [];
+
+            words.forEach((wordStr, wordIdx) => {
+                htmlBuffer += `<div class="word-block">`;
+                wordStr.split('').forEach((char) => {
+                    const isLetter = /[a-zA-Z0-9]/.test(char);
+                    const typeClass = isLetter ? 'letter' : 'symbol';
+                    const currentClass = (globalIndex === 0) ? ' current' : '';
+                    
+                    htmlBuffer += `<span class="char ${typeClass}${currentClass}" data-index="${globalIndex}">${char}</span>`;
+                    charMapping.push({ char: char, isLetter: isLetter });
+                    globalIndex++;
+                });
+
+                if (wordIdx < words.length - 1) {
+                    htmlBuffer += `<span class="char symbol" data-index="${globalIndex}">&nbsp;</span>`;
+                    charMapping.push({ char: ' ', isLetter: false });
+                    globalIndex++;
+                }
+                htmlBuffer += `</div>`;
+            });
+
+            wordAreaEl.innerHTML = htmlBuffer;
+            speakSentence();
+        }
+
+        function focusInput() { hiddenInput.focus(); }
+
+        hiddenInput.addEventListener('input', () => {
+            const spans = wordAreaEl.querySelectorAll('.char');
+            const inputValue = hiddenInput.value;
+            if (currentLetterIndex >= charMapping.length || sentences.length === 0) return;
+
+            const targetChar = charMapping[currentLetterIndex].char;
+            const typedChar = inputValue[inputValue.length - 1];
+            if (!typedChar) return;
+
+            if (typedChar.toLowerCase() === targetChar.toLowerCase() || (targetChar === ' ' && typedChar === ' ')) {
+                const curEl = spans[currentLetterIndex];
+                curEl.className = curEl.className.replace('current', '') + ' correct';
+                
+                triggerExplosion(curEl); // 激活碎片喷射效果
+                playKeySound(true);
+                currentLetterIndex++;
+                
+                while (currentLetterIndex < charMapping.length && !charMapping[currentLetterIndex].isLetter && charMapping[currentLetterIndex].char !== ' ') {
+                    spans[currentLetterIndex].className = spans[currentLetterIndex].className.replace('current', '') + ' correct';
+                    currentLetterIndex++;
+                }
+            } else {
+                // 错误：背景与容器发生强烈卡顿式平移震撼
+                stageEl.classList.add('brutal-shaking');
+                playKeySound(false);
+                
+                setTimeout(() => {
+                    stageEl.classList.remove('brutal-shaking');
+                }, 150);
+            }
+
+            hiddenInput.value = "";
+
+            if (currentLetterIndex < charMapping.length) {
+                if(!spans[currentLetterIndex].className.includes('current')) {
+                    spans[currentLetterIndex].className += ' current';
+                }
+            } else {
+                playSuccessSound();
+                currentIndex = (currentIndex + 1) % sentences.length;
+                setTimeout(initSentence, 600);
+            }
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (sentences.length === 0) return;
+            if (e.shiftKey && (e.key === 'R' || e.key === 'r')) {
+                e.preventDefault(); speakSentence();
+            } else if (e.shiftKey && (e.key === 'S' || e.key === 's')) {
+                e.preventDefault(); peekSentence();
+            } else if (e.key === 'Enter') {
+                e.preventDefault(); nextSentence();
+            }
+            focusInput();
+        });
+
+        document.getElementById('btn-audio').addEventListener('click', (e) => { e.stopPropagation(); speakSentence(); focusInput(); });
+        document.getElementById('btn-hint').addEventListener('click', (e) => { e.stopPropagation(); peekSentence(); focusInput(); });
+        document.getElementById('btn-next').addEventListener('click', (e) => { e.stopPropagation(); nextSentence(); focusInput(); });
+
+        window.onload = () => {
+            loadSentences(); 
+            focusInput();
+            document.body.addEventListener('click', focusInput);
+            document.body.addEventListener('touchstart', focusInput);
+        };
+    </script>
+</body>
+</html>

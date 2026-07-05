@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>流光英语 - 高能像素软糖版</title>
+    <style>
+        :root {
+            --bg-candy: #ff66b2;       /* 高光芭比粉 */
+            --melt-purple: #9933ff;    /* 泡泡糖紫 */
+            --bubble-blue: #00ffff;    /* 荧光湖蓝 */
+            --berry-red: #ff0055;      /* 草莓红 */
+            --toy-black: #222222;      /* 玩具大黑边 */
+            --font-kawaii: "Arial Black", "Impact", -apple-system, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: var(--font-kawaii);
+            background: linear-gradient(135deg, var(--bg-candy) 0%, var(--melt-purple) 100%);
+            color: var(--toy-black);
+            min-height: 100vh;
+            position: relative;
+            overflow: hidden; 
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Q弹软糖粒子画布 */
+        #jelly-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        /* 绝对正向、硬核高能玩具舞台 */
+        .candy-stage {
+            width: 90%;
+            max-width: 950px;
+            background: #ffffff;
+            border: 5px solid var(--toy-black);
+            box-shadow: 14px 14px 0px var(--toy-black);
+            border-radius: 24px;
+            padding: clamp(2rem, 5vw, 4rem) clamp(1.5rem, 5vw, 4rem);
+            position: relative;
+            z-index: 5;
+            display: flex;
+            flex-direction: column;
+            transition: all 0.1s ease;
+        }
+
+        /* 顶栏控制 */
+        .stage-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2.5rem;
+            border-bottom: 5px dashed var(--toy-black);
+            padding-bottom: 15px;
+        }
+
+        .brand-logo {
+            font-size: clamp(1.1rem, 3vw, 1.6rem);
+            font-weight: 900;
+            text-transform: uppercase;
+            background: var(--bubble-blue);
+            color: var(--toy-black);
+            padding: 4px 16px;
+            border: 3px solid var(--toy-black);
+            box-shadow: 4px 4px 0px var(--toy-black);
+            border-radius: 12px;
+        }
+
+        /* 双极两段驱动指示器 */
+        .stage-indicator {
+            display: flex;
+            gap: 10px;
+        }
+        .step-pill {
+            font-size: 0.75rem;
+            font-weight: 900;
+            padding: 6px 14px;
+            border: 3px solid var(--toy-black);
+            background: #ffffff;
+            color: var(--toy-black);
+            border-radius: 20px;
+            text-transform: uppercase;
+        }
+        .step-pill.active {
+            background: var(--bg-candy);
+            color: #ffffff;
+            box-shadow: 3px 3px 0px var(--toy-black);
+            animation: jellyBounce 0.4s infinite alternate;
+        }
+
+        /* 中文含义区 */
+        .translation {
+            font-size: clamp(1.1rem, 2.8vw, 1.5rem);
+            color: var(--toy-black);
+            font-weight: bold;
+            line-height: 1.6;
+            margin-bottom: 3rem;
+            text-align: left;
+            border-left: 8px solid var(--bg-candy);
+            padding-left: 15px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+
+        /* 打字核心矩阵 */
+        .word-area {
+            display: flex;
+            flex-wrap: wrap;
+            row-gap: clamp(20px, 5vw, 32px);
+            column-gap: 0px;
+            width: 100%;
+            min-height: 140px;
+        }
+
+        .word-block {
+            display: flex;
+            margin-right: clamp(16px, 3vw, 26px);
+        }
+
+        /* 字母独立样式：完全隐形 */
+        .char {
+            font-size: clamp(2.4rem, 6.5vw, 4rem);
+            font-weight: 900;
+            color: transparent; 
+            position: relative;
+            display: inline-block;
+            text-align: center;
+            min-width: clamp(16px, 4vw, 26px);
+            height: clamp(3.8rem, 10vw, 5.8rem);
+            line-height: clamp(3.8rem, 10vw, 5.8rem);
+        }
+
+        .char.symbol {
+            color: rgba(255, 102, 178, 0.3);
+        }
+
+        /* 强制透视强提示 */
+        .word-area.reveal .char {
+            color: rgba(255, 102, 178, 0.1);
+            -webkit-text-stroke: 2px var(--bg-candy);
+        }
+
+        /* 正确：Q弹油印砸落 */
+        .char.correct {
+            color: var(--berry-red) !important;
+            text-shadow: 4px 4px 0px var(--bubble-blue);
+            -webkit-text-stroke: 2px var(--toy-black);
+            animation: stampBounce 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        /* 错误：掌机卡带漏电闪烁 */
+        .candy-stage.toy-glitch {
+            animation: kawaiiShock 0.15s linear;
+            background: var(--bubble-blue);
+            border-color: var(--berry-red);
+        }
+
+        /* 核心光标：高光Q弹气泡块 */
+        .char.current::after {
+            content: '';
+            position: absolute;
+            top: 10%;
+            left: -2px;
+            width: calc(100% + 4px);
+            height: 80%;
+            background: var(--bubble-blue);
+            border: 3px solid var(--toy-black);
+            border-radius: 8px;
+            z-index: -1;
+            animation: bubblePulse 0.3s infinite alternate;
+        }
+
+        @keyframes stampBounce {
+            0% { transform: scale(1.6); }
+            100% { transform: scale(1); }
+        }
+
+        @keyframes bubblePulse {
+            0% { transform: scaleY(0.9) scaleX(0.95); background: var(--bubble-blue); }
+            100% { transform: scaleY(1.05) scaleX(1.02); background: var(--bg-candy); }
+        }
+
+        @keyframes jellyBounce {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(-4px); }
+        }
+
+        @keyframes kawaiiShock {
+            0%, 100% { transform: translate(0, 0); }
+            20% { transform: translate(-8px, 4px) skewX(4deg); }
+            40% { transform: translate(8px, -4px) skewX(-4deg); }
+            60% { transform: translate(-4px, -2px); }
+            80% { transform: translate(4px, 2px); }
+        }
+
+        #hidden-input {
+            position: absolute;
+            opacity: 0;
+            z-index: -1;
+            left: -9999px;
+        }
+
+        @media (max-width: 768px) {
+            .candy-stage {
+                width: 94%;
+                box-shadow: 8px 8px 0px var(--toy-black);
+                padding: 2rem 1.2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Q弹颗粒画布 -->
+    <canvas id="jelly-canvas"></canvas>
+
+    <div class="candy-stage" id="main-stage" onclick="focusInput()">
+        <!-- 核心双级驱动导航 -->
+        <div class="stage-header">
+            <div class="brand-logo">POPMELT.✨</div>
+            <div class="stage-indicator">
+                <div class="step-pill" id="pill-words">1. 软糖难词突击</div>
+                <div class="step-pill" id="pill-sentence">2. 终极全句通关</div>
+            </div>
+        </div>
+
+        <!-- 含义提示 -->
+        <div class="translation" id="translation">LOADING CANDY CORE...</div>
+        <!-- 文字打印板 -->
+        <div class="word-area" id="word-area"></div>
+    </div>
+
+    <input type="text" id="hidden-input" autocomplete="off" autocapitalize="off" spellcheck="false">
+
+    <script>
+        let rawSentences = [];
+        let sentenceIndex = 0;
+        
+        let learningStage = 0; // 0: 难词突击, 1: 全句通关
+        let stageTasks = [];   
+        let taskIndex = 0;     
+        
+        let currentLetterIndex = 0;
+        let currentTargetString = "";
+        let revealTimeout = null;
+        let charMapping = [];
+
+        const translationEl = document.getElementById('translation');
+        const wordAreaEl = document.getElementById('word-area');
+        const hiddenInput = document.getElementById('hidden-input');
+        const stageEl = document.getElementById('main-stage');
+        const canvas = document.getElementById('jelly-canvas');
+        const ctx = canvas.getContext('2d');
+        let jellies = [];
+
+        function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        async function loadSentences() {
+            try {
+                const response = await fetch('sentences.json');
+                if (!response.ok) throw new Error('ERR');
+                rawSentences = await response.json();
+                if (rawSentences.length > 0) {
+                    sentenceIndex = 0;
+                    startSentenceEngine();
+                }
+            } catch (error) {
+                translationEl.textContent = "未检测到本地词库 sentences.json，请使用 Live Server 启动。";
+            }
+        }
+
+        function startSentenceEngine() {
+            learningStage = 0;
+            taskIndex = 0;
+            const currentItem = rawSentences[sentenceIndex];
+            
+            let hardWords = currentItem.hard_words || [];
+            if (hardWords.length === 0) {
+                hardWords = currentItem.en.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"").split(' ').filter(w => w.length >= 6);
+            }
+            hardWords = [...new Set(hardWords)];
+
+            stageTasks = [
+                hardWords.map(w => ({ text: w, zh: `【 🍬 软糖难词消灭 🏁 】➔ 消除锁定: ${w}` })),
+                [{ text: currentItem.en, zh: `【 🏆 全句大通关 🎉 】➔ ${currentItem.zh}` }]
+            ];
+
+            if (stageTasks[0].length === 0) learningStage = 1; 
+
+            executeTask();
+        }
+
+        function executeTask() {
+            document.querySelectorAll('.step-pill').forEach(p => p.classList.remove('active'));
+            if(learningStage === 0) document.getElementById('pill-words').classList.add('active');
+            if(learningStage === 1) document.getElementById('pill-sentence').classList.add('active');
+
+            const currentTask = stageTasks[learningStage][taskIndex];
+            translationEl.textContent = currentTask.zh;
+            currentTargetString = currentTask.text;
+            currentLetterIndex = 0;
+            hiddenInput.value = "";
+
+            const words = currentTargetString.split(' ');
+            let globalIndex = 0;
+            let htmlBuffer = "";
+            charMapping = [];
+
+            words.forEach((wordStr, wordIdx) => {
+                htmlBuffer += `<div class="word-block">`;
+                wordStr.split('').forEach((char) => {
+                    const isLetter = /[a-zA-Z0-9]/.test(char);
+                    const typeClass = isLetter ? 'letter' : 'symbol';
+                    const currentClass = (globalIndex === 0) ? ' current' : '';
+                    
+                    htmlBuffer += `<span class="char ${typeClass}${currentClass}" data-index="${globalIndex}">${char}</span>`;
+                    charMapping.push({ char: char, isLetter: isLetter });
+                    globalIndex++;
+                });
+
+                if (wordIdx < words.length - 1) {
+                    htmlBuffer += `<span class="char symbol" data-index="${globalIndex}">&nbsp;</span>`;
+                    charMapping.push({ char: ' ', isLetter: false });
+                    globalIndex++;
+                }
+                htmlBuffer += `</div>`;
+            });
+
+            wordAreaEl.innerHTML = htmlBuffer;
+            if (learningStage === 1 && taskIndex === 0) speakSentence(); 
+        }
+
+        function nextTaskStage() {
+            taskIndex++;
+            if (taskIndex < stageTasks[learningStage].length) {
+                executeTask();
+            } else {
+                learningStage++;
+                taskIndex = 0;
+                if (learningStage < 2) { 
+                    executeTask();
+                } else {
+                    sentenceIndex = (sentenceIndex + 1) % rawSentences.length;
+                    startSentenceEngine();
+                }
+            }
+        }
+
+        function speakSentence() {
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(rawSentences[sentenceIndex].en);
+            utterance.lang = 'en-US'; 
+            utterance.rate = 1.0; 
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function peekSentence() {
+            if (revealTimeout) clearTimeout(revealTimeout);
+            wordAreaEl.classList.add('reveal');
+            revealTimeout = setTimeout(() => { wordAreaEl.classList.remove('reveal'); }, 1500);
+        }
+
+        // --- Web Audio 8-Bit 复古可爱波普音效 ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playKeySound(isCorrect) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+
+            if (isCorrect) {
+                // 水球爆破般的滑音
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(600, audioCtx.currentTime); 
+                osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.06);
+                gain.gain.setValueAtTime(0.04, audioCtx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + 0.06);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.06);
+            } else {
+                // 怀旧掌机死机低音
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(120, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.06, audioCtx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.15);
+            }
+        }
+
+        function playSuccessSound() {
+            // 经典的红白机满分胜利上行音
+            const notes = [523.25, 659.25, 783.99, 1046.5, 1318.5]; 
+            notes.forEach((freq, index) => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime + index * 0.04);
+                gain.gain.setValueAtTime(0.03, audioCtx.currentTime + index * 0.04);
+                gain.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + index * 0.04 + 0.1);
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.start(audioCtx.currentTime + index * 0.04); osc.stop(audioCtx.currentTime + index * 0.04 + 0.1);
+            });
+        }
+
+        // --- Q弹爱心与星星物理粒子引擎 ---
+        function triggerJelly(element) {
+            if (!element) return;
+            const rect = element.getBoundingClientRect();
+            const colors = ['#ff0055', '#00ffff', '#9933ff', '#ff66b2', '#ffcc00'];
+            
+            for(let i=0; i<6; i++) {
+                jellies.push({
+                    x: rect.left + rect.width / 2,
+                    y: rect.top + rect.height / 2,
+                    size: Math.random() * 10 + 8,
+                    vx: (Math.random() - 0.5) * 14,
+                    vy: (Math.random() - 0.7) * 12 - 4, 
+                    bounceCount: 0,
+                    type: Math.random() > 0.5 ? 'star' : 'heart',
+                    color: colors[Math.floor(Math.random() * colors.length)]
+                });
+            }
+        }
+
+        function animateCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            for (let i = jellies.length - 1; i >= 0; i--) {
+                const j = jellies[i];
+                j.vy += 0.4; // 重力
+                j.x += j.vx; j.y += j.vy;
+
+                // 地面弹跳物理反射 (让糖果在底部弹两下)
+                if (j.y > canvas.height - 20) {
+                    j.y = canvas.height - 20;
+                    j.vy = -j.vy * 0.5; // 损耗弹跳
+                    j.bounceCount++;
+                }
+
+                // 超过弹跳次数或溢出边界销毁
+                if (j.bounceCount > 2 || j.x < -20 || j.x > canvas.width + 20) {
+                    jellies.splice(i, 1);
+                    continue;
+                }
+
+                ctx.save();
+                ctx.fillStyle = j.color;
+                ctx.strokeStyle = '#222222';
+                ctx.lineWidth = 2;
+                
+                ctx.beginPath();
+                if (j.type === 'heart') {
+                    // 粗暴的可爱心形绘制
+                    ctx.arc(j.x - j.size/4, j.y, j.size/4, Math.PI, 0, false);
+                    ctx.arc(j.x + j.size/4, j.y, j.size/4, Math.PI, 0, false);
+                    ctx.lineTo(j.x, j.y + j.size/2);
+                } else {
+                    // 粗暴的五角星绘制
+                    for (let n = 0; n < 5; n++) {
+                        ctx.lineTo(j.x + Math.cos((18 + n * 72) * Math.PI / 180) * j.size/2, j.y - Math.sin((18 + n * 72) * Math.PI / 180) * j.size/2);
+                        ctx.lineTo(j.x + Math.cos((54 + n * 72) * Math.PI / 180) * j.size/4, j.y - Math.sin((54 + n * 72) * Math.PI / 180) * j.size/4);
+                    }
+                }
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+            }
+            requestAnimationFrame(animateCanvas);
+        }
+        animateCanvas();
+
+        function focusInput() { hiddenInput.focus(); }
+
+        hiddenInput.addEventListener('input', () => {
+            const spans = wordAreaEl.querySelectorAll('.char');
+            const inputValue = hiddenInput.value;
+            if (currentLetterIndex >= charMapping.length || stageTasks.length === 0) return;
+
+            const targetChar = charMapping[currentLetterIndex].char;
+            const typedChar = inputValue[inputValue.length - 1];
+            if (!typedChar) return;
+
+            if (typedChar.toLowerCase() === targetChar.toLowerCase() || (targetChar === ' ' && typedChar === ' ')) {
+                const curEl = spans[currentLetterIndex];
+                curEl.className = curEl.className.replace('current', '') + ' correct';
+                triggerJelly(curEl);
+                playKeySound(true);
+                currentLetterIndex++;
+                
+                while (currentLetterIndex < charMapping.length && !charMapping[currentLetterIndex].isLetter && charMapping[currentLetterIndex].char !== ' ') {
+                    spans[currentLetterIndex].className = spans[currentLetterIndex].className.replace('current', '') + ' correct';
+                    currentLetterIndex++;
+                }
+            } else {
+                stageEl.classList.add('toy-glitch');
+                playKeySound(false);
+                setTimeout(() => { stageEl.classList.remove('toy-glitch'); }, 200);
+            }
+
+            hiddenInput.value = "";
+
+            if (currentLetterIndex < charMapping.length) {
+                if(!spans[currentLetterIndex].className.includes('current')) {
+                    spans[currentLetterIndex].className += ' current';
+                }
+            } else {
+                playSuccessSound();
+                setTimeout(nextTaskStage, 400); 
+            }
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (rawSentences.length === 0) return;
+            if (e.shiftKey && (e.key === 'R' || e.key === 'r')) { e.preventDefault(); speakSentence(); }
+            if (e.shiftKey && (e.key === 'S' || e.key === 's')) { e.preventDefault(); peekSentence(); }
+            focusInput();
+        });
+
+        window.onload = () => {
+            loadSentences(); 
+            focusInput();
+            document.body.addEventListener('click', focusInput);
+            document.body.addEventListener('touchstart', focusInput);
+        };
+    </script>
+</body>
+</html>

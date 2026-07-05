@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>流光英语 - 数字包豪斯版</title>
+    <style>
+        :root {
+            --bg-base: #f4f1eb;       /* 建筑羊皮纸白 */
+            --text-zh: #6e6b64;       /* 工业水泥灰 */
+            --text-correct: #121212;  /* 黑曜石 */
+            --bauhaus-red: #e63946;   /* 先锋包豪斯红 */
+            --font-display: "Helvetica Neue", Arial, "Noto Serif CJK SC", sans-serif;
+            --font-monospace: "Courier New", Courier, monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-display);
+            background-color: var(--bg-base);
+            color: var(--text-correct);
+            min-height: 100vh;
+            position: relative;
+            overflow: hidden; 
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* 几何声波线条画布 */
+        #bauhaus-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        /* 包豪斯构图舞台 */
+        .stage {
+            width: 85%;
+            max-width: 1050px;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            z-index: 5;
+            padding: 2rem 0;
+        }
+
+        /* 顶部横向工业标头与控制线 */
+        .header-panel {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid var(--text-correct);
+            padding-bottom: 15px;
+            margin-bottom: 4rem;
+        }
+
+        .brand-logo {
+            font-size: 1.1rem;
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+        }
+
+        .nav-controls {
+            display: flex;
+            gap: 24px;
+        }
+
+        .nav-controls span {
+            font-size: 0.8rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: var(--text-zh);
+            cursor: pointer;
+            transition: color 0.2s ease;
+        }
+        .nav-controls span:hover {
+            color: var(--bauhaus-red);
+        }
+
+        /* 中文诗行：加粗、左侧带有标志性红方块 */
+        .translation {
+            font-size: clamp(1.2rem, 3vw, 1.6rem);
+            color: var(--text-correct);
+            font-weight: 700;
+            line-height: 1.6;
+            margin-bottom: 5rem;
+            max-width: 800px;
+            position: relative;
+            padding-left: 25px;
+        }
+        .translation::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0.3em;
+            width: 10px;
+            height: 10px;
+            background-color: var(--bauhaus-red);
+        }
+
+        /* 英文输入区：打破常规布局 */
+        .word-area {
+            display: flex;
+            flex-wrap: wrap;
+            row-gap: clamp(20px, 5vw, 35px);
+            column-gap: 0px;
+            width: 100%;
+            min-height: 150px;
+            font-family: var(--font-monospace); /* 使用等宽字体增强机械几何感 */
+        }
+
+        .word-block {
+            display: flex;
+            margin-right: clamp(16px, 3vw, 28px);
+        }
+
+        /* 字母结构：未输入前完全隐形，毫无痕迹 */
+        .char {
+            font-size: clamp(2.2rem, 6vw, 3.6rem);
+            font-weight: 700;
+            color: transparent; 
+            position: relative;
+            display: inline-block;
+            text-align: center;
+            min-width: clamp(15px, 3.8vw, 24px);
+            height: clamp(3.5rem, 9vw, 5.5rem);
+            line-height: clamp(3.5rem, 9vw, 5.5rem);
+        }
+
+        .char.symbol {
+            color: rgba(18, 18, 18, 0.15);
+        }
+
+        /* 强行提示状态 */
+        .word-area.reveal .char {
+            color: rgba(18, 18, 18, 0.08);
+        }
+
+        /* 正确敲击：黑墨拓印效果 */
+        .char.correct {
+            color: var(--text-correct) !important;
+            animation: stampPrint 0.2s cubic-bezier(0.19, 1, 0.22, 1) forwards;
+        }
+
+        /* 错误敲击：字母极短暂变红闪烁 */
+        .char.wrong {
+            animation: flashRed 0.25s ease;
+        }
+
+        /* 大胆的核心光标：下方红方块实体 */
+        .char.current::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 6px;
+            background: var(--bauhaus-red);
+            animation: blockBlink 0.8s steps(2, start) infinite;
+        }
+
+        @keyframes stampPrint {
+            0% { transform: scale(1.3); filter: blur(2px); opacity: 0; }
+            100% { transform: scale(1); filter: blur(0); opacity: 1; }
+        }
+
+        @keyframes flashRed {
+            0%, 100% { background: transparent; }
+            50% { background: rgba(230, 57, 70, 0.2); color: var(--bauhaus-red); }
+        }
+
+        @keyframes blockBlink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        #hidden-input {
+            position: absolute;
+            opacity: 0;
+            z-index: -1;
+            left: -9999px;
+        }
+
+        /* ================= 响应式视口重解 ================= */
+        @media (max-width: 768px) {
+            .stage {
+                width: 90%;
+            }
+            .header-panel {
+                margin-bottom: 2.5rem;
+            }
+            .translation {
+                margin-bottom: 3.5rem;
+            }
+            .nav-controls {
+                gap: 12px;
+            }
+            .nav-controls span {
+                font-size: 0.7rem;
+                border: 1px solid var(--text-correct);
+                padding: 4px 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 几何声波网格板 -->
+    <canvas id="bauhaus-canvas"></canvas>
+
+    <div class="stage" onclick="focusInput()">
+        <!-- 工业标头 -->
+        <div class="header-panel">
+            <div class="brand-logo">Bauhaus.01</div>
+            <div class="nav-controls">
+                <span id="btn-audio">Audio</span>
+                <span id="btn-hint">Hint</span>
+                <span id="btn-next">Next</span>
+            </div>
+        </div>
+
+        <!-- 核心排版区 -->
+        <div class="translation" id="translation">正在引矩阵排版载入...</div>
+        <div class="word-area" id="word-area"></div>
+    </div>
+
+    <input type="text" id="hidden-input" autocomplete="off" autocapitalize="off" spellcheck="false">
+
+    <script>
+        let sentences = []; 
+        let currentIndex = 0;
+        let currentLetterIndex = 0;
+        let currentSentence = "";
+        let revealTimeout = null;
+        let charMapping = []; 
+        
+        const translationEl = document.getElementById('translation');
+        const wordAreaEl = document.getElementById('word-area');
+        const hiddenInput = document.getElementById('hidden-input');
+        const canvas = document.getElementById('bauhaus-canvas');
+        const ctx = canvas.getContext('2d');
+
+        // 背景声波形变量
+        let waveIntensity = 0;
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        async function loadSentences() {
+            try {
+                const response = await fetch('sentences.json');
+                if (!response.ok) throw new Error('ERR');
+                sentences = await response.json();
+                if (sentences.length > 0) initSentence();
+            } catch (error) {
+                translationEl.textContent = "未检测到本地句子库 sentences.json，请检查配置。";
+            }
+        }
+
+        function speakSentence() {
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(currentSentence);
+            utterance.lang = 'en-US'; 
+            utterance.rate = 0.9; 
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function peekSentence() {
+            if (revealTimeout) clearTimeout(revealTimeout);
+            wordAreaEl.classList.add('reveal');
+            revealTimeout = setTimeout(() => {
+                wordAreaEl.classList.remove('reveal');
+            }, 1800);
+        }
+
+        function nextSentence() {
+            currentIndex = (currentIndex + 1) % sentences.length;
+            initSentence();
+        }
+
+        // --- 干净利落的现代机械打击声 (Web Audio API) ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playKeySound(isCorrect) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            if (isCorrect) {
+                // 打字机般清脆的短促波
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(580, audioCtx.currentTime); 
+                gain.gain.setValueAtTime(0.04, audioCtx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + 0.02);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.02);
+                waveIntensity = 25; // 触发背景线条剧烈振动
+            } else {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(110, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.06, audioCtx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + 0.06);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.06);
+            }
+        }
+
+        function playSuccessSound() {
+            // 包豪斯式的正弦双音阶
+            const notes = [523.25, 659.25]; 
+            notes.forEach((freq, index) => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime + index * 0.08);
+                gain.gain.setValueAtTime(0.03, audioCtx.currentTime + index * 0.08);
+                gain.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + index * 0.08 + 0.2);
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.start(audioCtx.currentTime + index * 0.08); osc.stop(audioCtx.currentTime + index * 0.08 + 0.2);
+            });
+        }
+
+        // --- 机械几何波形渲染 ---
+        let count = 0;
+        function drawBauhausLines() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = 'rgba(18, 18, 18, 0.025)'; 
+            ctx.lineWidth = 1;
+
+            // 缓动释放击键激起的波纹强度
+            waveIntensity *= 0.92;
+
+            for (let j = 0; j < 4; j++) {
+                ctx.beginPath();
+                const baseHeight = canvas.height * (0.3 + j * 0.15);
+                for (let i = 0; i < canvas.width; i += 30) {
+                    // 数学线条在常态下极度平直，击键时会泛起有节奏的几何波动
+                    const y = baseHeight + Math.sin(i * 0.005 + count + j) * (3 + waveIntensity);
+                    if (i === 0) ctx.moveTo(i, y);
+                    else ctx.lineTo(i, y);
+                }
+                ctx.stroke();
+            }
+            count += 0.02;
+            requestAnimationFrame(drawBauhausLines);
+        }
+        drawBauhausLines();
+
+        // --- 驱动逻辑 ---
+        function initSentence() {
+            wordAreaEl.classList.remove('reveal');
+            if (revealTimeout) clearTimeout(revealTimeout);
+
+            const item = sentences[currentIndex];
+            translationEl.textContent = item.zh;
+            currentSentence = item.en;
+            currentLetterIndex = 0;
+            hiddenInput.value = "";
+
+            const words = currentSentence.split(' ');
+            let globalIndex = 0;
+            let htmlBuffer = "";
+            charMapping = [];
+
+            words.forEach((wordStr, wordIdx) => {
+                htmlBuffer += `<div class="word-block">`;
+                wordStr.split('').forEach((char) => {
+                    const isLetter = /[a-zA-Z0-9]/.test(char);
+                    const typeClass = isLetter ? 'letter' : 'symbol';
+                    const currentClass = (globalIndex === 0) ? ' current' : '';
+                    
+                    htmlBuffer += `<span class="char ${typeClass}${currentClass}" data-index="${globalIndex}">${char}</span>`;
+                    charMapping.push({ char: char, isLetter: isLetter });
+                    globalIndex++;
+                });
+
+                if (wordIdx < words.length - 1) {
+                    htmlBuffer += `<span class="char symbol" data-index="${globalIndex}">&nbsp;</span>`;
+                    charMapping.push({ char: ' ', isLetter: false });
+                    globalIndex++;
+                }
+                htmlBuffer += `</div>`;
+            });
+
+            wordAreaEl.innerHTML = htmlBuffer;
+            speakSentence();
+        }
+
+        function focusInput() { hiddenInput.focus(); }
+
+        hiddenInput.addEventListener('input', () => {
+            const spans = wordAreaEl.querySelectorAll('.char');
+            const inputValue = hiddenInput.value;
+            if (currentLetterIndex >= charMapping.length || sentences.length === 0) return;
+
+            const targetChar = charMapping[currentLetterIndex].char;
+            const typedChar = inputValue[inputValue.length - 1];
+            if (!typedChar) return;
+
+            if (typedChar.toLowerCase() === targetChar.toLowerCase() || (targetChar === ' ' && typedChar === ' ')) {
+                spans[currentLetterIndex].className = spans[currentLetterIndex].className.replace('current', '') + ' correct';
+                playKeySound(true);
+                currentLetterIndex++;
+                
+                while (currentLetterIndex < charMapping.length && !charMapping[currentLetterIndex].isLetter && charMapping[currentLetterIndex].char !== ' ') {
+                    spans[currentLetterIndex].className = spans[currentLetterIndex].className.replace('current', '') + ' correct';
+                    currentLetterIndex++;
+                }
+            } else {
+                const oldClass = spans[currentLetterIndex].className;
+                spans[currentLetterIndex].className += ' wrong';
+                playKeySound(false);
+                setTimeout(() => {
+                    if(spans[currentLetterIndex] && currentLetterIndex < charMapping.length) {
+                         spans[currentLetterIndex].className = oldClass;
+                    }
+                }, 240);
+            }
+
+            hiddenInput.value = "";
+
+            if (currentLetterIndex < charMapping.length) {
+                if(!spans[currentLetterIndex].className.includes('current')) {
+                    spans[currentLetterIndex].className += ' current';
+                }
+            } else {
+                playSuccessSound();
+                currentIndex = (currentIndex + 1) % sentences.length;
+                setTimeout(initSentence, 700);
+            }
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (sentences.length === 0) return;
+            if (e.shiftKey && (e.key === 'R' || e.key === 'r')) {
+                e.preventDefault(); speakSentence();
+            } else if (e.shiftKey && (e.key === 'S' || e.key === 's')) {
+                e.preventDefault(); peekSentence();
+            } else if (e.key === 'Enter') {
+                e.preventDefault(); nextSentence();
+            }
+            focusInput();
+        });
+
+        document.getElementById('btn-audio').addEventListener('click', (e) => { e.stopPropagation(); speakSentence(); focusInput(); });
+        document.getElementById('btn-hint').addEventListener('click', (e) => { e.stopPropagation(); peekSentence(); focusInput(); });
+        document.getElementById('btn-next').addEventListener('click', (e) => { e.stopPropagation(); nextSentence(); focusInput(); });
+
+        window.onload = () => {
+            loadSentences(); 
+            focusInput();
+            document.body.addEventListener('click', focusInput);
+            document.body.addEventListener('touchstart', focusInput);
+        };
+    </script>
+</body>
+</html>

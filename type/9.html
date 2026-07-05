@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>流光英语 - 废土重工业哥特版</title>
+    <style>
+        :root {
+            --bg-asphalt: #0b0c10;     /* 深沥青黑 */
+            --steel-rust: #f5a623;     /* 辐射铁锈黄 */
+            --blood-red: #8b0000;      /* 干涸血斑红 */
+            --laser-red: #ff0033;      /* 熔岩警报红 */
+            --pure-white: #ffffff;     /* 烙印白 */
+            --font-heavy: "Impact", "Arial Black", sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: var(--font-heavy);
+            background-color: var(--bg-asphalt);
+            color: var(--pure-white);
+            min-height: 100vh;
+            position: relative;
+            overflow: hidden; 
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* 熔岩钢渣粒子画布 */
+        #slag-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        /* 绝对对齐、重工业钢板舞台 */
+        .wasteland-stage {
+            width: 90%;
+            max-width: 950px;
+            background: #1f2833;
+            border: 4px solid var(--steel-rust);
+            box-shadow: 14px 14px 0px var(--blood-red);
+            padding: clamp(2rem, 5vw, 4rem) clamp(1.5rem, 5vw, 4rem);
+            position: relative;
+            z-index: 5;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 顶栏控制 */
+        .stage-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2.5rem;
+            border-bottom: 4px solid var(--steel-rust);
+            padding-bottom: 15px;
+        }
+
+        .brand-logo {
+            font-size: clamp(1.1rem, 3vw, 1.6rem);
+            font-weight: 900;
+            text-transform: uppercase;
+            background: var(--steel-rust);
+            color: var(--bg-asphalt);
+            padding: 4px 14px;
+            letter-spacing: 1px;
+        }
+
+        /* 双极两段驱动指示器 (干掉短语重组) */
+        .stage-indicator {
+            display: flex;
+            gap: 10px;
+        }
+        .step-pill {
+            font-size: 0.75rem;
+            font-weight: 900;
+            padding: 4px 12px;
+            border: 2px solid var(--pure-white);
+            background: transparent;
+            color: var(--pure-white);
+            text-transform: uppercase;
+        }
+        .step-pill.active {
+            background: var(--laser-red);
+            color: var(--pure-white);
+            border-color: var(--laser-red);
+            box-shadow: 3px 3px 0px var(--steel-rust);
+        }
+
+        /* 中文含义区 */
+        .translation {
+            font-size: clamp(1.1rem, 2.8vw, 1.5rem);
+            color: rgba(255, 255, 255, 0.7);
+            font-weight: bold;
+            line-height: 1.6;
+            margin-bottom: 3rem;
+            text-align: left;
+            border-left: 6px solid var(--steel-rust);
+            padding-left: 15px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+
+        /* 打字核心矩阵 */
+        .word-area {
+            display: flex;
+            flex-wrap: wrap;
+            row-gap: clamp(20px, 5vw, 32px);
+            column-gap: 0px;
+            width: 100%;
+            min-height: 140px;
+        }
+
+        .word-block {
+            display: flex;
+            margin-right: clamp(16px, 3vw, 26px);
+        }
+
+        /* 字母独立样式：完全隐形 */
+        .char {
+            font-size: clamp(2.4rem, 6.5vw, 4rem);
+            font-weight: 900;
+            color: transparent; 
+            position: relative;
+            display: inline-block;
+            text-align: center;
+            min-width: clamp(16px, 4vw, 26px);
+            height: clamp(3.8rem, 10vw, 5.8rem);
+            line-height: clamp(3.8rem, 10vw, 5.8rem);
+        }
+
+        .char.symbol {
+            color: rgba(245, 166, 35, 0.25);
+        }
+
+        /* 强制透视强提示 */
+        .word-area.reveal .char {
+            color: rgba(255, 255, 255, 0.04);
+            -webkit-text-stroke: 1px rgba(245, 166, 35, 0.3);
+        }
+
+        /* 正确：液压砸落钢印 */
+        .char.correct {
+            color: var(--pure-white) !important;
+            background: #0b0c10;
+            border: 2px solid var(--steel-rust);
+            animation: hydraulicStamp 0.1s cubic-bezier(0.19, 1, 0.22, 1) forwards;
+        }
+
+        /* 错误：核载过载强震 */
+        .wasteland-stage.overload-error {
+            animation: industrialShock 0.15s linear;
+            background: var(--blood-red);
+            border-color: var(--laser-red);
+        }
+
+        /* 核心光标：重型熔岩钢印闪烁块 */
+        .char.current::after {
+            content: '';
+            position: absolute;
+            top: 10%;
+            left: 0;
+            width: 100%;
+            height: 80%;
+            background: var(--laser-red);
+            z-index: -1;
+            animation: ironFlicker 0.2s infinite;
+        }
+
+        @keyframes hydraulicStamp {
+            0% { transform: scale(1.7); filter: brightness(2); }
+            100% { transform: scale(1); filter: brightness(1); }
+        }
+
+        @keyframes ironFlicker {
+            0%, 100% { opacity: 1; transform: skewX(-3deg); }
+            50% { opacity: 0.3; transform: skewX(3deg); }
+        }
+
+        @keyframes industrialShock {
+            0%, 100% { transform: translate(0, 0); }
+            20% { transform: translate(-10px, 6px); }
+            40% { transform: translate(10px, -6px); }
+            60% { transform: translate(-6px, -4px); }
+            80% { transform: translate(6px, 4px); }
+        }
+
+        #hidden-input {
+            position: absolute;
+            opacity: 0;
+            z-index: -1;
+            left: -9999px;
+        }
+
+        @media (max-width: 768px) {
+            .wasteland-stage {
+                width: 94%;
+                box-shadow: 7px 7px 0px var(--blood-red);
+                padding: 2rem 1.2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 熔岩钢渣画布 -->
+    <canvas id="slag-canvas"></canvas>
+
+    <div class="wasteland-stage" id="main-stage" onclick="focusInput()">
+        <!-- 核心双级驱动导航 -->
+        <div class="stage-header">
+            <div class="brand-logo">WASTE.HEAVY</div>
+            <div class="stage-indicator">
+                <div class="step-pill" id="pill-words">1. 核心难词定点清除</div>
+                <div class="step-pill" id="pill-sentence">2. 终极全句轰炸</div>
+            </div>
+        </div>
+
+        <!-- 含义提示 -->
+        <div class="translation" id="translation">LOADING WASTELAND CORE...</div>
+        <!-- 文字打印板 -->
+        <div class="word-area" id="word-area"></div>
+    </div>
+
+    <input type="text" id="hidden-input" autocomplete="off" autocapitalize="off" spellcheck="false">
+
+    <script>
+        let rawSentences = [];
+        let sentenceIndex = 0;
+        
+        let learningStage = 0; // 0: 难词突击, 1: 全句轰炸 (干掉短语阶段)
+        let stageTasks = [];   
+        let taskIndex = 0;     
+        
+        let currentLetterIndex = 0;
+        let currentTargetString = "";
+        let revealTimeout = null;
+        let charMapping = [];
+
+        const translationEl = document.getElementById('translation');
+        const wordAreaEl = document.getElementById('word-area');
+        const hiddenInput = document.getElementById('hidden-input');
+        const stageEl = document.getElementById('main-stage');
+        const canvas = document.getElementById('slag-canvas');
+        const ctx = canvas.getContext('2d');
+        let slags = [];
+
+        function resizeCanvas() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        async function loadSentences() {
+            try {
+                const response = await fetch('sentences.json');
+                if (!response.ok) throw new Error('ERR');
+                rawSentences = await response.json();
+                if (rawSentences.length > 0) {
+                    sentenceIndex = 0;
+                    startSentenceEngine();
+                }
+            } catch (error) {
+                translationEl.textContent = "未检测到本地词库 sentences.json，请使用 Live Server 启动。";
+            }
+        }
+
+        // --- 双级式任务解构核心引擎 ---
+        function startSentenceEngine() {
+            learningStage = 0;
+            taskIndex = 0;
+            const currentItem = rawSentences[sentenceIndex];
+            
+            // 1. 抓取核心难词 (如果库中未指定，自动挑选长度 >= 6 的单词)
+            let hardWords = currentItem.hard_words || [];
+            if (hardWords.length === 0) {
+                hardWords = currentItem.en.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"").split(' ').filter(w => w.length >= 6);
+            }
+            hardWords = [...new Set(hardWords)];
+
+            // 2. 构建纯粹的双级链路任务包 (直接略过短语切片)
+            stageTasks = [
+                hardWords.map(w => ({ text: w, zh: `[ PHASE 1 - 难词突击 ] ➔ 烙印清除: ${w}` })),
+                [{ text: currentItem.en, zh: `[ PHASE 2 - 全句通关 ] ➔ ${currentItem.zh}` }]
+            ];
+
+            // 若本句无长难词，直接降维全句轰炸
+            if (stageTasks[0].length === 0) learningStage = 1; 
+
+            executeTask();
+        }
+
+        function executeTask() {
+            document.querySelectorAll('.step-pill').forEach(p => p.classList.remove('active'));
+            if(learningStage === 0) document.getElementById('pill-words').classList.add('active');
+            if(learningStage === 1) document.getElementById('pill-sentence').classList.add('active');
+
+            const currentTask = stageTasks[learningStage][taskIndex];
+            translationEl.textContent = currentTask.zh;
+            currentTargetString = currentTask.text;
+            currentLetterIndex = 0;
+            hiddenInput.value = "";
+
+            const words = currentTargetString.split(' ');
+            let globalIndex = 0;
+            let htmlBuffer = "";
+            charMapping = [];
+
+            words.forEach((wordStr, wordIdx) => {
+                htmlBuffer += `<div class="word-block">`;
+                wordStr.split('').forEach((char) => {
+                    const isLetter = /[a-zA-Z0-9]/.test(char);
+                    const typeClass = isLetter ? 'letter' : 'symbol';
+                    const currentClass = (globalIndex === 0) ? ' current' : '';
+                    
+                    htmlBuffer += `<span class="char ${typeClass}${currentClass}" data-index="${globalIndex}">${char}</span>`;
+                    charMapping.push({ char: char, isLetter: isLetter });
+                    globalIndex++;
+                });
+
+                if (wordIdx < words.length - 1) {
+                    htmlBuffer += `<span class="char symbol" data-index="${globalIndex}">&nbsp;</span>`;
+                    charMapping.push({ char: ' ', isLetter: false });
+                    globalIndex++;
+                }
+                htmlBuffer += `</div>`;
+            });
+
+            wordAreaEl.innerHTML = htmlBuffer;
+            if (learningStage === 1 && taskIndex === 0) speakSentence(); 
+        }
+
+        function nextTaskStage() {
+            taskIndex++;
+            if (taskIndex < stageTasks[learningStage].length) {
+                executeTask();
+            } else {
+                learningStage++;
+                taskIndex = 0;
+                if (learningStage < 2) { // 只有两个阶段
+                    executeTask();
+                } else {
+                    sentenceIndex = (sentenceIndex + 1) % rawSentences.length;
+                    startSentenceEngine();
+                }
+            }
+        }
+
+        function speakSentence() {
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(rawSentences[sentenceIndex].en);
+            utterance.lang = 'en-US'; 
+            utterance.rate = 0.95; 
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function peekSentence() {
+            if (revealTimeout) clearTimeout(revealTimeout);
+            wordAreaEl.classList.add('reveal');
+            revealTimeout = setTimeout(() => { wordAreaEl.classList.remove('reveal'); }, 1500);
+        }
+
+        // --- Web Audio 工业断路器震音 ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playKeySound(isCorrect) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+
+            if (isCorrect) {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(450, audioCtx.currentTime); 
+                osc.frequency.linearRampToValueAtTime(100, audioCtx.currentTime + 0.05);
+                gain.gain.setValueAtTime(0.06, audioCtx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + 0.05);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.05);
+            } else {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(50, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.2);
+            }
+        }
+
+        function playSuccessSound() {
+            const notes = [220, 330, 440, 660]; 
+            notes.forEach((freq, index) => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime + index * 0.04);
+                gain.gain.setValueAtTime(0.04, audioCtx.currentTime + index * 0.04);
+                gain.gain.linearRampToValueAtTime(0.001, audioCtx.currentTime + index * 0.04 + 0.1);
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.start(audioCtx.currentTime + index * 0.04); osc.stop(audioCtx.currentTime + index * 0.04 + 0.1);
+            });
+        }
+
+        // --- 钢渣熔岩四射动能算法 ---
+        function triggerSlag(element) {
+            if (!element) return;
+            const rect = element.getBoundingClientRect();
+            const colors = ['#f5a623', '#8b0000', '#ff0033', '#333333'];
+            for(let i=0; i<6; i++) {
+                slags.push({
+                    x: rect.left + rect.width / 2,
+                    y: rect.top + rect.height / 2,
+                    size: Math.random() * 6 + 3,
+                    vx: (Math.random() - 0.5) * 16,
+                    vy: (Math.random() - 0.7) * 14 - 3, // 向上喷射
+                    life: 1.0,
+                    decay: Math.random() * 0.05 + 0.03,
+                    color: colors[Math.floor(Math.random() * colors.length)]
+                });
+            }
+        }
+
+        function animateCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 常态环境工业余烬下沉
+            if(Math.random() > 0.92) {
+                ctx.fillStyle = 'rgba(139, 0, 0, 0.2)';
+                ctx.fillRect(Math.random() * canvas.width, 0, Math.random() * 4 + 2, Math.random() * 4 + 2);
+            }
+
+            for (let i = slags.length - 1; i >= 0; i--) {
+                const s = slags[i];
+                s.vy += 0.4; // 抛物线重力
+                s.x += s.vx; s.y += s.vy;
+                s.life -= s.decay;
+                if (s.life <= 0) { slags.splice(i, 1); continue; }
+                
+                ctx.fillStyle = s.color;
+                ctx.fillRect(s.x, s.y, s.size * s.life, s.size * s.life);
+            }
+            requestAnimationFrame(animateCanvas);
+        }
+        animateCanvas();
+
+        function focusInput() { hiddenInput.focus(); }
+
+        hiddenInput.addEventListener('input', () => {
+            const spans = wordAreaEl.querySelectorAll('.char');
+            const inputValue = hiddenInput.value;
+            if (currentLetterIndex >= charMapping.length || stageTasks.length === 0) return;
+
+            const targetChar = charMapping[currentLetterIndex].char;
+            const typedChar = inputValue[inputValue.length - 1];
+            if (!typedChar) return;
+
+            if (typedChar.toLowerCase() === targetChar.toLowerCase() || (targetChar === ' ' && typedChar === ' ')) {
+                const curEl = spans[currentLetterIndex];
+                curEl.className = curEl.className.replace('current', '') + ' correct';
+                triggerSlag(curEl);
+                playKeySound(true);
+                currentLetterIndex++;
+                
+                while (currentLetterIndex < charMapping.length && !charMapping[currentLetterIndex].isLetter && charMapping[currentLetterIndex].char !== ' ') {
+                    spans[currentLetterIndex].className = spans[currentLetterIndex].className.replace('current', '') + ' correct';
+                    currentLetterIndex++;
+                }
+            } else {
+                stageEl.classList.add('overload-error');
+                playKeySound(false);
+                setTimeout(() => { stageEl.classList.remove('overload-error'); }, 200);
+            }
+
+            hiddenInput.value = "";
+
+            if (currentLetterIndex < charMapping.length) {
+                if(!spans[currentLetterIndex].className.includes('current')) {
+                    spans[currentLetterIndex].className += ' current';
+                }
+            } else {
+                playSuccessSound();
+                setTimeout(nextTaskStage, 400); 
+            }
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (rawSentences.length === 0) return;
+            if (e.shiftKey && (e.key === 'R' || e.key === 'r')) { e.preventDefault(); speakSentence(); }
+            if (e.shiftKey && (e.key === 'S' || e.key === 's')) { e.preventDefault(); peekSentence(); }
+            focusInput();
+        });
+
+        window.onload = () => {
+            loadSentences(); 
+            focusInput();
+            document.body.addEventListener('click', focusInput);
+            document.body.addEventListener('touchstart', focusInput);
+        };
+    </script>
+</body>
+</html>
