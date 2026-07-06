@@ -120,7 +120,7 @@
 
         .char.correct {
             color: var(--text-correct) !important;
-            animation: inkBloom 0.4s cubic-bezier(0.15, 0.85, 0.3, 1) forwards;
+            animation: inkBloom 0.5s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
         }
         .char.correct::after {
             opacity: 0 !important;
@@ -151,8 +151,10 @@
             box-shadow: 0 0 8px rgba(201, 107, 107, 0.6) !important;
         }
 
+        /* 核心重构：更纯正的水墨向四周晕染开的效果 */
         @keyframes inkBloom {
-            0% { opacity: 0; transform: scale(0.8) translateY(5px); filter: blur(3px); }
+            0% { opacity: 0; transform: scale(0.75) translateY(4px); filter: blur(6px); }
+            40% { opacity: 0.8; filter: blur(2px); }
             100% { opacity: 1; transform: scale(1) translateY(0); filter: blur(0); }
         }
         @keyframes gentleShake {
@@ -590,28 +592,92 @@
 
         let environmentParticles = []; let dynamicParticles = [];
 
+        /* 水墨重构：全局环境微粒——像飘散在宣纸上的淡淡墨屑 */
         class EnvParticle {
             constructor() { this.reset(true); }
             reset(init = false) {
-                this.x = init ? Math.random() * canvas.width : -10; this.y = Math.random() * canvas.height;
-                this.size = Math.random() * 2 + 0.5; this.speedX = Math.random() * 0.4 + 0.2; 
-                this.speedY = (Math.random() - 0.5) * 0.1; this.alpha = Math.random() * 0.4 + 0.1;
+                this.x = init ? Math.random() * canvas.width : -20; 
+                this.y = Math.random() * canvas.height;
+                // 使粒子呈现不规则的长扁椭圆水墨感
+                this.scaleX = Math.random() * 2 + 1;
+                this.scaleY = Math.random() * 1 + 0.5;
+                this.radius = Math.random() * 3 + 1; 
+                this.speedX = Math.random() * 0.3 + 0.1; 
+                this.speedY = (Math.random() - 0.5) * 0.08; 
+                this.alpha = Math.random() * 0.25 + 0.05;
             }
-            update() { this.x += this.speedX; this.y += this.speedY; if (this.x > canvas.width) this.reset(); }
-            draw() { ctx.save(); ctx.globalAlpha = this.alpha; ctx.fillStyle = '#8da396'; ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+            update() { 
+                this.x += this.speedX; 
+                this.y += this.speedY; 
+                if (this.x > canvas.width + 20) this.reset(); 
+            }
+            draw() { 
+                ctx.save(); 
+                ctx.globalAlpha = this.alpha; 
+                ctx.fillStyle = '#7a8c81'; 
+                ctx.translate(this.x, this.y);
+                ctx.scale(this.scaleX, this.scaleY); // 制造纸张纤维或墨迹拉伸感
+                ctx.beginPath(); 
+                ctx.arc(0, 0, this.radius, 0, Math.PI * 2); 
+                ctx.fill(); 
+                ctx.restore(); 
+            }
         }
 
+        /* 水墨重构：敲击产生的水墨炸裂与下坠效果 */
         class InkParticle {
             constructor(x, y, isWrong = false, char = '') {
-                this.x = x; this.y = y; this.isWrong = isWrong; this.char = char;
-                this.vx = isWrong ? (Math.random() - 0.5) * 2 : (Math.random() - 0.5) * 3; this.vy = isWrong ? Math.random() * 3 + 2 : (Math.random() - 0.5) * 3;
-                this.radius = Math.random() * 3 + 2; this.alpha = 0.6;
+                this.x = x; 
+                this.y = y; 
+                this.isWrong = isWrong; 
+                this.char = char;
+                
+                // 正确时墨汁四溅，错误时红墨坠落
+                if (isWrong) {
+                    this.vx = (Math.random() - 0.5) * 3; 
+                    this.vy = Math.random() * 4 + 2; 
+                    this.radius = Math.random() * 2 + 2;
+                    this.alpha = 0.8;
+                } else {
+                    let angle = Math.random() * Math.PI * 2;
+                    let speed = Math.random() * 4 + 1;
+                    this.vx = Math.cos(angle) * speed; 
+                    this.vy = Math.sin(angle) * speed;
+                    this.radius = Math.random() * 4 + 1.5; // 大小不一的水墨点
+                    this.alpha = 0.5;
+                }
+                this.gravity = 0.08; // 模拟重力，让墨汁有下落的动态
+                this.friction = 0.96; // 阻尼感
             }
-            update() { this.x += this.vx; this.y += this.vy; this.alpha -= this.isWrong ? 0.015 : 0.02; }
+            update() { 
+                this.vx *= this.friction;
+                this.vy *= this.friction;
+                this.vy += this.gravity; // 注入灵魂：水墨微粒带有向下流淌/坠落的趋势
+                this.x += this.vx; 
+                this.y += this.vy; 
+                this.alpha -= this.isWrong ? 0.02 : 0.015; 
+            }
             draw() {
-                ctx.save(); ctx.globalAlpha = this.alpha;
-                if(this.isWrong) { ctx.fillStyle = '#c96b6b'; ctx.font = "24px var(--font-serif)"; ctx.fillText(this.char, this.x, this.y); }
-                else { ctx.fillStyle = '#13331d'; ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2); ctx.fill(); }
+                ctx.save(); 
+                ctx.globalAlpha = Math.max(0, this.alpha);
+                if(this.isWrong) { 
+                    ctx.fillStyle = '#c96b6b'; 
+                    ctx.font = "bold 20px var(--font-serif)"; 
+                    ctx.fillText(this.char, this.x, this.y); 
+                } else { 
+                    // 核心细节：绘制带有边缘晕染扩散感的浓墨点
+                    ctx.fillStyle = '#13331d'; 
+                    ctx.beginPath(); 
+                    // 越往外速度越慢的地方，形状可能因为风阻微微变形
+                    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2); 
+                    ctx.fill(); 
+                    
+                    // 叠加一层微小的半透明外圈，模拟淡淡的“墨晕”
+                    ctx.globalAlpha = this.alpha * 0.4;
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.radius * 1.8, 0, Math.PI * 2);
+                    ctx.fill();
+                }
                 ctx.restore();
             }
         }
@@ -619,7 +685,9 @@
         function createParticles(el, isWrong = false, char = '') {
             if(!el) return; const rect = el.getBoundingClientRect();
             const centerX = rect.left + rect.width / 2; const centerY = rect.top + rect.height / 2;
-            const count = isWrong ? 1 : 8;
+            
+            // 增加水墨炸裂数量，强化视觉冲击
+            const count = isWrong ? 2 : 12;
             for(let i=0; i<count; i++) dynamicParticles.push(new InkParticle(centerX, centerY, isWrong, char));
         }
 
