@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>余额</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background: linear-gradient(to bottom, #1677ff 0%, #73aaff 25%, #f5f5f9 45%, #f5f5f9 100%);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            color: #333;
+            overflow-x: hidden;
+        }
+
+        /* ---------------- 顶部状态栏 ---------------- */
+        .status-bar {
+            height: 44px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 16px 0 24px;
+            user-select: none;
+            color: #ffffff;
+        }
+
+        .status-time-wrapper {
+            position: relative;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .status-time {
+            font-size: 15px;
+            font-weight: 600;
+            letter-spacing: -0.2px;
+        }
+
+        .location-arrow {
+            width: 11px;
+            height: 11px;
+            fill: #ffffff;
+            transform: rotate(135deg); /* 修正方向，指向左上角 */
+        }
+
+        .time-picker {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+            -webkit-appearance: none;
+        }
+
+        .status-icons {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .icon-signal {
+            display: flex;
+            align-items: flex-end;
+            gap: 1.5px;
+            height: 10px;
+        }
+        .icon-signal span {
+            display: inline-block;
+            width: 2.5px;
+            background-color: #ffffff;
+            border-radius: 0.5px;
+        }
+        .icon-signal span:nth-child(1) { height: 30%; }
+        .icon-signal span:nth-child(2) { height: 50%; }
+        .icon-signal span:nth-child(3) { height: 75%; }
+        .icon-signal span:nth-child(4) { height: 100%; }
+
+        .icon-net {
+            font-size: 16px;
+            font-weight: 700;
+            transform: scale(0.9);
+        }
+
+        .icon-battery {
+            width: 22px;
+            height: 11px;
+            border: 1px solid #ffffff;
+            border-radius: 3px;
+            padding: 1px;
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        .battery-level {
+            width: 70%;
+            height: 100%;
+            background-color: #ffffff;
+            border-radius: 1.5px;
+        }
+        .icon-battery::after {
+            content: "";
+            position: absolute;
+            right: -3px;
+            top: 3px;
+            width: 1.5px;
+            height: 3.5px;
+            background-color: #ffffff;
+            border-radius: 0 1px 1px 0;
+        }
+
+        /* ---------------- 导航栏 ---------------- */
+        .nav-box {
+            display: flex;
+            align-items: center;
+            padding: 10px 24px;
+            height: 48px;
+            user-select: none;
+        }
+
+        .back-icon {
+            width: 12px;
+            height: 12px;
+            border-left: 2px solid #ffffff;
+            border-bottom: 2px solid #ffffff;
+            transform: rotate(45deg);
+        }
+
+        .nav-title {
+            font-size: 18px;
+            font-weight: 500;
+            color: #ffffff;
+            margin-left: 12px;
+        }
+
+        .nav-right {
+            margin-left: auto;
+            font-size: 22px;
+            color: #ffffff;
+            font-weight: 700;
+            letter-spacing: 2px;
+        }
+
+        /* ---------------- 页面容器 ---------------- */
+        .container {
+            padding: 12px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        /* ---- 1. 余额大卡片 ---- */
+        .card-balance {
+            background: #ffffff;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.04);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-bottom: 24px;
+        }
+
+        .security-banner {
+            width: 100%;
+            background-color: #ebf4ff;
+            height: 32px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 4px;
+            font-size: 12px;
+            color: #1677ff;
+        }
+        .security-banner svg {
+            width: 12px;
+            height: 12px;
+            fill: #1677ff;
+        }
+
+        .balance-title-row {
+            margin-top: 24px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 14px;
+            color: #666666;
+        }
+        .eye-icon {
+            width: 16px;
+            height: 16px;
+            fill: #666666;
+        }
+
+        .balance-amount {
+            font-size: 46px;
+            font-weight: 700;
+            color: #1a1a1a;
+            margin-top: 12px;
+            margin-bottom: 32px;
+            font-family: "DIN Alternate", -apple-system, sans-serif;
+            outline: none;
+            border: none;
+            background: transparent;
+            text-align: center;
+        }
+
+        .main-btns {
+            width: 100%;
+            padding: 0 20px;
+            display: flex;
+            gap: 12px;
+        }
+        .btn-action {
+            flex: 1;
+            height: 52px;
+            border-radius: 26px;
+            font-size: 17px;
+            font-weight: 500;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+        }
+        .btn-withdraw {
+            background-color: #ffffff;
+            color: #333333;
+            border: 1px solid #dadada;
+        }
+        .btn-deposit {
+            background-color: #1677ff;
+            color: #ffffff;
+            border: none;
+        }
+
+        /* ---- 2. 金融功能小图标（已适配PNG图片） ---- */
+        .card-tools {
+            background: #ffffff;
+            border-radius: 16px;
+            padding: 16px 8px 14px 8px;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            position: relative;
+        }
+        .tool-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            flex: 1;
+            cursor: pointer;
+        }
+        .tool-icon-wrapper {
+            width: 28px;
+            height: 28px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .tool-icon-wrapper img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        .tool-name {
+            font-size: 12px;
+            color: #333333;
+        }
+        /* 底部装饰小灰条 */
+        .card-tools::after {
+            content: "";
+            position: absolute;
+            bottom: 4px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 16px;
+            height: 3px;
+            background-color: #e5e5e5;
+            border-radius: 1.5px;
+        }
+
+        /* ---- 3. 余额变动明细 ---- */
+        .card-history {
+            background: #ffffff;
+            border-radius: 16px;
+            padding: 18px 16px 4px 16px;
+        }
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .history-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: #1a1a1a;
+        }
+        .history-more {
+            font-size: 13px;
+            color: #999999;
+            display: flex;
+            align-items: center;
+            gap: 2px;
+        }
+        .arrow-right {
+            width: 6px;
+            height: 6px;
+            border-top: 1.5px solid #aaaaaa;
+            border-right: 1.5px solid #aaaaaa;
+            transform: rotate(45deg);
+        }
+
+        /* 列表项 */
+        .history-item {
+            display: flex;
+            align-items: center;
+            padding: 16px 0;
+            border-bottom: 1px solid #f2f2f5;
+        }
+        .history-item:last-child {
+            border-bottom: none;
+        }
+        .item-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-right: 12px;
+        }
+        .avatar-orange { background-color: #ff9f1a; }
+        .avatar-blue { background-color: #2f93ff; }
+        .item-avatar svg {
+            width: 20px;
+            height: 20px;
+            fill: #ffffff;
+        }
+        
+        .item-info {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .info-biz {
+            font-size: 15px;
+            color: #1a1a1a;
+            font-weight: 400;
+            outline: none;
+        }
+        .info-time {
+            font-size: 12px;
+            color: #aaaaaa;
+            outline: none;
+        }
+
+        .item-money {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 4px;
+        }
+        .money-val {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1a1a1a;
+            font-family: "DIN Alternate", sans-serif;
+            outline: none;
+        }
+        .money-val.plus {
+            color: #ff6b35;
+        }
+        .money-remain {
+            font-size: 12px;
+            color: #aaaaaa;
+            outline: none;
+        }
+
+        /* ---- 4. 底部页脚 ---- */
+        .footer-box {
+            margin-top: auto;
+            padding: 24px 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            user-select: none;
+        }
+        .footer-customer {
+            color: #1c6ec9;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .footer-provider {
+            color: #cccccc;
+            font-size: 11px;
+            text-align: center;
+            line-height: 1.4;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="status-bar">
+        <div class="status-time-wrapper">
+            <div class="status-time" id="currentTime">8:17</div>
+            <input type="time" class="time-picker" id="timePicker" onchange="manualUpdateTime(this.value)">
+        </div>
+        
+        <div class="status-icons">
+            <div class="icon-signal">
+                <span></span><span></span><span></span><span></span>
+            </div>
+            <div class="icon-net">5G</div>
+            <div class="icon-battery">
+                <div class="battery-level"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="nav-box">
+        <div class="back-icon"></div>
+        <div class="nav-title">余额</div>
+        <div class="nav-right">···</div>
+    </div>
+
+    <div class="container">
+        
+        <div class="card-balance">
+            <div class="security-banner">
+                <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 15l-4-4 1.41-1.41L10 13.17l7.59-7.59L19 7l-9 9z"/></svg>
+                <span>资金安全有保障 &gt;</span>
+            </div>
+            <div class="balance-title-row">
+                <span>可用余额(元)</span>
+                <svg class="eye-icon" viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+            </div>
+            <div class="balance-amount" contenteditable="true" inputmode="decimal" onblur="formatMoney(this)">0.00</div>
+            
+            <div class="main-btns">
+                <div class="btn-action btn-withdraw">提现</div>
+                <div class="btn-action btn-deposit">充值</div>
+            </div>
+        </div>
+
+        <div class="card-tools">
+            <div class="tool-item">
+                <div class="tool-icon-wrapper">
+                    <img src="zhuanzhang.png" alt="转账">
+                </div>
+                <div class="tool-name">转账</div>
+            </div>
+            <div class="tool-item">
+                <div class="tool-icon-wrapper">
+                    <img src="yinhangka.png" alt="银行卡">
+                </div>
+                <div class="tool-name">银行卡</div>
+            </div>
+            <div class="tool-item">
+                <div class="tool-icon-wrapper">
+                    <img src="qinqingka.png" alt="亲情卡">
+                </div>
+                <div class="tool-name">亲情卡</div>
+            </div>
+            <div class="tool-item">
+                <div class="tool-icon-wrapper">
+                    <img src="xiaohebao.png" alt="小荷包">
+                </div>
+                <div class="tool-name">小荷包</div>
+            </div>
+            <div class="tool-item">
+                <div class="tool-icon-wrapper">
+                    <img src="mianfeiedu.png" alt="免费额度">
+                </div>
+                <div class="tool-name">免费额度</div>
+            </div>
+        </div>
+
+        <div class="card-history">
+            <div class="history-header">
+                <span class="history-title">余额变动明细</span>
+                <div class="history-more">
+                    <span>全部</span>
+                    <div class="arrow-right"></div>
+                </div>
+            </div>
+
+            <div class="history-item">
+                <div class="item-avatar avatar-orange">
+                    <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 14h-2v-2h2zm0-4h-2V7h2z"/></svg>
+                </div>
+                <div class="item-info">
+                    <span class="info-biz" contenteditable="true">转账</span>
+                    <span class="info-time" contenteditable="true">2026-07-07 00:08:11</span>
+                </div>
+                <div class="item-money">
+                    <span class="money-val" contenteditable="true">-10.00</span>
+                    <span class="money-remain" contenteditable="true">余额 0.00元</span>
+                </div>
+            </div>
+
+            <div class="history-item">
+                <div class="item-avatar avatar-blue">
+                    <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                </div>
+                <div class="item-info">
+                    <span class="info-biz" contenteditable="true">收钱码收款-来自**东</span>
+                    <span class="info-time" contenteditable="true">2026-07-06 23:42:23</span>
+                </div>
+                <div class="item-money">
+                    <span class="money-val plus" contenteditable="true">+10.00</span>
+                    <span class="money-remain" contenteditable="true">余额 10.00元</span>
+                </div>
+            </div>
+
+            <div class="history-item">
+                <div class="item-avatar avatar-orange">
+                    <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 14h-2v-2h2zm0-4h-2V7h2z"/></svg>
+                </div>
+                <div class="item-info">
+                    <span class="info-biz" contenteditable="true">转账</span>
+                    <span class="info-time" contenteditable="true">2026-07-06 00:08:18</span>
+                </div>
+                <div class="item-money">
+                    <span class="money-val" contenteditable="true">-20.00</span>
+                    <span class="money-remain" contenteditable="true">余额 0.00元</span>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <div class="footer-box">
+        <div class="footer-customer">我的客服</div>
+        <div class="footer-provider">余额升级服务由支付宝和网商银行提供</div>
+    </div>
+
+    <script>
+        let timer = null;
+
+        function updateTime() {
+            const now = new Date();
+            let hours = now.getHours();
+            let minutes = now.getMinutes();
+            hours = hours < 10 ? '0' + hours : hours;
+            minutes = minutes < 10 ? '0' + minutes : minutes;
+            
+            const timeStr = hours + ':' + minutes;
+            document.getElementById('currentTime').innerText = timeStr;
+            document.getElementById('timePicker').value = timeStr;
+        }
+
+        function manualUpdateTime(val) {
+            if (!val) return;
+            clearInterval(timer); 
+            document.getElementById('currentTime').innerText = val;
+        }
+
+        updateTime();
+        timer = setInterval(updateTime, 60000);
+
+        function formatMoney(element) {
+            let text = element.innerText.replace(/,/g, '');
+            let num = parseFloat(text);
+            
+            if (isNaN(num)) {
+                element.innerText = "0.00";
+                return;
+            }
+            
+            let formatted = num.toLocaleString('en-US', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+            
+            element.innerText = formatted;
+        }
+
+        document.querySelectorAll('[contenteditable="true"]').forEach(el => {
+            el.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    this.blur();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
