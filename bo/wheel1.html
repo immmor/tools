@@ -244,9 +244,94 @@
         const prizeDeg = document.getElementById('prizeDeg');
 
         const prizeCount = prizes.length;
-        const arc = Math.PI * 2 / prizeCount; // 每个扇区的弧度
+        const arc = Math.PI * 2 / prizeCount;
         let isRotating = false;
-        let currentRotation = 0; // 当前旋转角度
+        let currentRotation = 0;
+
+        // 音效系统
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioContext();
+
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            if (type === 'click') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(400, audioCtx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.1);
+            } else if (type === 'spin') {
+                const now = audioCtx.currentTime;
+                const duration = 4;
+                let interval = 0.15;
+                let pitch = 200;
+
+                for (let t = 0; t < duration; t += interval) {
+                    const clickOsc = audioCtx.createOscillator();
+                    const clickGain = audioCtx.createGain();
+                    
+                    clickOsc.type = 'triangle';
+                    clickOsc.frequency.setValueAtTime(pitch, now + t);
+                    clickOsc.frequency.exponentialRampToValueAtTime(pitch * 0.5, now + t + 0.05);
+                    
+                    clickGain.gain.setValueAtTime(0.15, now + t);
+                    clickGain.gain.exponentialRampToValueAtTime(0.001, now + t + 0.08);
+                    
+                    clickOsc.connect(clickGain);
+                    clickGain.connect(audioCtx.destination);
+                    
+                    clickOsc.start(now + t);
+                    clickOsc.stop(now + t + 0.08);
+
+                    const tickOsc = audioCtx.createOscillator();
+                    const tickGain = audioCtx.createGain();
+                    
+                    tickOsc.type = 'sine';
+                    tickOsc.frequency.setValueAtTime(pitch * 2, now + t);
+                    
+                    tickGain.gain.setValueAtTime(0.05, now + t);
+                    tickGain.gain.exponentialRampToValueAtTime(0.001, now + t + 0.03);
+                    
+                    tickOsc.connect(tickGain);
+                    tickGain.connect(audioCtx.destination);
+                    
+                    tickOsc.start(now + t);
+                    tickOsc.stop(now + t + 0.03);
+
+                    interval *= 1.04;
+                    pitch *= 0.98;
+                }
+            } else if (type === 'win') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(523.25, audioCtx.currentTime);
+                osc.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.1);
+                osc.frequency.setValueAtTime(783.99, audioCtx.currentTime + 0.2);
+                osc.frequency.setValueAtTime(1046.50, audioCtx.currentTime + 0.3);
+                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.8);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.8);
+            } else if (type === 'lose') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(300, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.4);
+                gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.4);
+            }
+        }
 
         // 1. 绘制大转盘
         function drawWheel() {
@@ -297,33 +382,25 @@
             if (isRotating) return;
             isRotating = true;
 
-            // 随机决定中奖索引 (0 到 prizeCount - 1)
+            playSound('click');
+            playSound('spin');
+
             const prizeIndex = Math.floor(Math.random() * prizeCount);
             
-            // 计算转盘需要停下的角度 
-            // 注意：因为指针在正上方（12点钟，即 -90度 或 270度位置），需要做弧度/角度转换
-            // 一个圈是360度。每个扇区占 360 / prizeCount 度
             const sectorDegrees = 360 / prizeCount;
             
-            // 目标角度：让中奖扇区对准正上方
-            // 转盘是顺时针转的，为了让第 index 个奖品到 270度 顶端：
-            // 基础目标角度 = 270 - (index * sectorDegrees) - (sectorDegrees / 2) [落到扇区中间]
             const targetSectorAngle = 270 - (prizeIndex * sectorDegrees) - (sectorDegrees / 2);
             
-            // 额外旋转 5 到 8 圈以达到炫酷的视觉冲刺效果
             const extraRotations = (5 + Math.floor(Math.random() * 4)) * 360;
             
-            // 总共旋转的角度
             const totalDegrees = extraRotations + targetSectorAngle;
             
-            // 执行动画
             wheel.style.transform = `rotate(${totalDegrees}deg)`;
 
-            // 监听动画结束
             setTimeout(() => {
                 isRotating = false;
                 showPrize(prizes[prizeIndex].text);
-            }, 4000); // 对应 CSS 里的 transition 4s
+            }, 4000);
         });
 
         // 3. 弹窗交互
@@ -331,8 +408,10 @@
             prizeDeg.innerText = `✨ 【${text}】 ✨`;
             if(text.includes('谢谢惠顾')){
                 document.getElementById('popTitle').innerText = "呜呜不哭~ 🥺";
+                playSound('lose');
             } else {
                 document.getElementById('popTitle').innerText = "恭喜主人~ 🎉";
+                playSound('win');
             }
             mask.style.display = 'block';
             popup.classList.add('show');

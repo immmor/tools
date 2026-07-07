@@ -306,7 +306,7 @@
             }
 
             const dict = window.translations?.[window.currentLang] || {};
-            if (!confirm('本次游戏需要花费 ¥10，是否继续？')) return;
+            if (!confirm(dict.alert_bet10 ||'本次游戏需要花费 ¥10，是否继续？')) return;
 
             // 先调用后端，获取实际结果
             try {
@@ -397,7 +397,8 @@
                 return;
             }
 
-            if (!confirm('本次游戏需要花费 ¥20，是否继续？')) return;
+            const dict = window.translations?.[window.currentLang] || {};
+            if (!confirm(dict.alert_bet20 ||'本次游戏需要花费 ¥20，是否继续？')) return;
 
             // 先调用后端获取结果
             try {
@@ -632,7 +633,8 @@
                 return;
             }
 
-            if (!confirm('购买刮刮卡需要花费 ¥15，是否继续？')) return;
+            const dict = window.translations?.[window.currentLang] || {};
+            if (!confirm(dict.alert_bet15 ||'本次游戏需要花费 ¥15，是否继续？')) return;
 
             // 先调用后端购买刮刮卡
             try {
