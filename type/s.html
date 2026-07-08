@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>英语短句跟读练习</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f7fb;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 500px;
+            text-align: center;
+        }
+        h1 {
+            color: #4a90e2;
+            margin-bottom: 24px;
+        }
+        .sentence-box {
+            font-size: 20px;
+            font-weight: 600;
+            color: #2c3e50;
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #ebf3fc;
+            border-radius: 8px;
+            min-height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .btn {
+            background-color: #4a90e2;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin: 10px;
+            outline: none;
+        }
+        .btn:hover {
+            background-color: #357abd;
+        }
+        .btn:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        .btn-record {
+            background-color: #e74c3c;
+        }
+        .btn-record:hover {
+            background-color: #c0392b;
+        }
+        .btn-record.recording {
+            animation: pulse 1.5s infinite;
+            background-color: #962d22;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        .result-box {
+            margin-top: 25px;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 16px;
+            display: none;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .fail {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .transcript {
+            font-style: italic;
+            margin-top: 8px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>英语短句练习</h1>
+    
+    <div id="sentence" class="sentence-box">加载中...</div>
+    
+    <div>
+        <button id="btn-next" class="btn">换一句</button>
+        <button id="btn-listen" class="btn">听读音</button>
+        <button id="btn-record" class="btn btn-record">按住或点击录音</button>
+    </div>
+
+    <div id="result" class="result-box">
+        <div id="result-status"></div>
+        <div id="result-transcript" class="transcript"></div>
+    </div>
+</div>
+
+<script>
+    // 预设的练习短句库
+    const sentences = [
+        "An apple a day keeps the doctor away.",
+        "Practice makes perfect.",
+        "How are you doing today?",
+        "Where is the nearest subway station?",
+        "Long time no see.",
+        "Believe in yourself.",
+        "Have a nice day.",
+        "Thank you very much for your help."
+    ];
+
+    let currentSentence = "";
+    const sentenceEl = document.getElementById('sentence');
+    const btnNext = document.getElementById('btn-next');
+    const btnListen = document.getElementById('btn-listen');
+    const btnRecord = document.getElementById('btn-record');
+    const resultBox = document.getElementById('result');
+    const resultStatus = document.getElementById('result-status');
+    const resultTranscript = document.getElementById('result-transcript');
+
+    // 初始化语音识别 (Web Speech API)
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition;
+    
+    if (SpeechRecognition) {
+        recognition = new SpeechRecognition();
+        recognition.lang = 'en-US'; // 设置识别语言为英语
+        recognition.interimResults = false; // 是否在识别过程中返回临时结果
+        recognition.maxAlternatives = 1; // 备选结果数量
+    } else {
+        alert("抱歉，您的浏览器不支持语音识别功能。请使用最新版的 Google Chrome 或 Microsoft Edge 浏览器。");
+        btnRecord.disabled = true;
+    }
+
+    // 随机获取一句短句
+    function nextSentence() {
+        const index = Math.floor(Math.random() * sentences.length);
+        currentSentence = sentences[index];
+        sentenceEl.textContent = currentSentence;
+        resultBox.style.display = 'none';
+    }
+
+    // 播放原生文本语音 (TTS)
+    function listenSentence() {
+        if ('speechSynthesis' in window) {
+            const utterance = new SpeechSynthesisUtterance(currentSentence);
+            utterance.lang = 'en-US';
+            window.speechSynthesis.speak(utterance);
+        } else {
+            alert("您的浏览器不支持语音播放。");
+        }
+    }
+
+    // 标准化文本（去除标点、转为小写），方便精准比对
+    function cleanText(text) {
+        return text.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g, "").replace(/\s+/g, " ").trim();
+    }
+
+    // 开始录音/识别
+    let isRecording = false;
+
+    btnRecord.addEventListener('click', () => {
+        if (!recognition) return;
+
+        if (!isRecording) {
+            recognition.start();
+        } else {
+            recognition.stop();
+        }
+    });
+
+    if (recognition) {
+        recognition.onstart = () => {
+            isRecording = true;
+            btnRecord.textContent = "正在录音，请读出短句...";
+            btnRecord.classList.add('recording');
+        };
+
+        recognition.onend = () => {
+            isRecording = false;
+            btnRecord.textContent = "按住或点击录音";
+            btnRecord.classList.add('recording');
+            btnRecord.classList.remove('recording');
+        };
+
+        recognition.onresult = (event) => {
+            const userSpeech = event.results[0][0].transcript;
+            
+            // 比对文本
+            const cleanTarget = cleanText(currentSentence);
+            const cleanUser = cleanText(userSpeech);
+
+            resultBox.style.display = 'block';
+            resultTranscript.textContent = `你读的是: "${userSpeech}"`;
+
+            if (cleanTarget === cleanUser) {
+                resultStatus.textContent = "🎉 太棒了！发音完全正确！";
+                resultBox.className = "result-box success";
+            } else {
+                resultStatus.textContent = "❌ 没听清，再试一次吧！";
+                resultBox.className = "result-box fail";
+            }
+        };
+
+        recognition.onerror = (event) => {
+            console.error(event.error);
+            resultBox.style.display = 'block';
+            resultBox.className = "result-box fail";
+            resultTranscript.textContent = "";
+            
+            if(event.error === 'no-speech') {
+                resultStatus.textContent = "❌ 未检测到声音，请大声一点。";
+            } else if(event.error === 'not-allowed') {
+                resultStatus.textContent = "❌ 麦克风权限被拒绝，请允许浏览器使用麦克风。";
+            } else {
+                resultStatus.textContent = "❌ 录音出错: " + event.error;
+            }
+        };
+    }
+
+    // 事件绑定
+    btnNext.addEventListener('click', nextSentence);
+    btnListen.addEventListener('click', listenSentence);
+
+    // 页面加载时初始化第一句
+    nextSentence();
+</script>
+
+</body>
+</html>
