@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AlphaInvest Pro | 极致体验投资系统</title>
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
     <style>
         :root {
             --bg-color: #f4f6f9;
@@ -121,7 +122,6 @@
         .btn:hover { background: var(--hover-color); }
         .btn svg { width: 16px; height: 16px; fill: currentColor; }
 
-        /* 特殊处理无文字的主题切换按钮，使其更圆润、等宽高 */
         #theme-toggle {
             padding: 8px;
             border-radius: 50%;
@@ -154,31 +154,24 @@
         .index-box { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; text-align: center; }
 
         .inner-tabs { display: flex; gap: 15px; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; }
-        .inner-tab-item { font-size: 0.85rem; color: var(--text-muted); cursor: pointer; }
-        .inner-tab-item.active { color: var(--accent-color); font-weight: 600; }
+        .inner-tab-item { font-size: 0.85rem; color: var(--text-muted); cursor: pointer; padding-bottom: 4px; border-bottom: 2px solid transparent; }
+        .inner-tab-item.active { color: var(--accent-color); font-weight: 600; border-bottom-color: var(--accent-color); }
 
-        /* 走势图 */
-        .chart-container { height: 200px; display: flex; align-items: flex-end; justify-content: space-between; padding-top: 20px; }
-        .k-line { width: 6%; background: var(--up-color); border-radius: 2px; height: 50%; }
-        .k-line.down { background: var(--down-color); }
+        .chart-container { height: 260px; width: 100%; padding-top: 10px; overflow: hidden; position: relative; }
 
         .up { color: var(--up-color); fill: var(--up-color); }
         .down { color: var(--down-color); fill: var(--down-color); }
 
-        /* 涨跌分布条 */
         .distribution-bar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; margin: 12px 0 6px 0; }
 
-        /* 交易表单 */
         .trade-group { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
         .trade-input-wrapper { margin-bottom: 12px; }
         .trade-input { width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-color); color: var(--text-main); outline: none; margin-top: 4px;}
 
-        /* 列表与伪装网格 */
         .list-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border-color); font-size: 0.9rem; }
         .list-row:last-child { border-bottom: none; }
         .badge { padding: 4px 8px; border-radius: 4px; color: white; font-weight: 600; font-size: 0.8rem; min-width: 70px; text-align: center; }
 
-        /* 手机端底栏 */
         .mobile-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background-color: var(--nav-bg); border-top: 1px solid var(--border-color); height: 60px; justify-content: space-around; align-items: center; z-index: 1000; padding-bottom: env(safe-area-inset-bottom); }
         .mobile-nav-item { background: none; border: none; color: var(--text-muted); display: flex; flex-direction: column; align-items: center; font-size: 0.7rem; gap: 4px; cursor: pointer; }
         .mobile-nav-item svg { width: 20px; height: 20px; fill: currentColor; }
@@ -254,17 +247,12 @@
                         </button>
                     </div>
                     <div class="inner-tabs">
-                        <div class="inner-tab-item active">分时</div><div class="inner-tab-item">五日</div><div class="inner-tab-item">日K</div><div class="inner-tab-item">周K</div>
+                        <div class="inner-tab-item active" onclick="changeChartPeriod(this, 'timeline')">分时</div>
+                        <div class="inner-tab-item" onclick="changeChartPeriod(this, 'fiveday')">五日</div>
+                        <div class="inner-tab-item" onclick="changeChartPeriod(this, 'daily')">日K</div>
+                        <div class="inner-tab-item" onclick="changeChartPeriod(this, 'weekly')">周K</div>
                     </div>
-                    <div class="chart-container">
-                        <div class="k-line" style="height: 25%"></div>
-                        <div class="k-line" style="height: 40%"></div>
-                        <div class="k-line down" style="height: 30%"></div>
-                        <div class="k-line" style="height: 65%"></div>
-                        <div class="k-line" style="height: 55%"></div>
-                        <div class="k-line" style="height: 85%"></div>
-                        <div class="k-line" style="height: 95%"></div>
-                    </div>
+                    <div id="tv-chart" class="chart-container"></div>
                 </div>
 
                 <div class="card">
@@ -442,7 +430,185 @@
     </div>
 
     <script>
-        // 1. 全局 Tab 页面跳转控制
+        // --- 深度配置：TradingView 极致生产级专业金融图表引擎 ---
+        let tvChart = null;
+        let mainSeries = null;
+        let currentPeriod = 'timeline';
+
+        // 动态计算契合 UI 框架的日夜两套高端色域
+        function getTVThemeStyles() {
+            const isDarkMode = document.documentElement.getAttribute('data-theme') === 'dark';
+            return {
+                bg: isDarkMode ? '#141923' : '#ffffff',
+                text: isDarkMode ? '#94a3b8' : '#64748b',       // 更清晰轻量的轴文字
+                grid: isDarkMode ? 'rgba(34,43,58,0.5)' : 'rgba(228,231,235,0.6)', // 极淡虚线网格
+                up: isDarkMode ? '#f25c5c' : '#eb5757',
+                down: isDarkMode ? '#2ecc71' : '#27ae60',
+                accent: '#2f80ed'
+            };
+        }
+
+        // 初始化图表部件
+        function initTradingViewChart() {
+            const container = document.getElementById('tv-chart');
+            if (!container) return;
+
+            container.innerHTML = ''; // 干净卸载
+            const styles = getTVThemeStyles();
+
+            // 建立专业交易级视口底座
+            tvChart = LightweightCharts.createChart(container, {
+                width: container.clientWidth,
+                height: 250,
+                layout: {
+                    background: { color: styles.bg },
+                    textColor: styles.text,
+                    fontSize: 10,
+                    fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif'
+                },
+                grid: {
+                    vertLines: { color: styles.grid, style: LightweightCharts.LineStyle.Dotted },
+                    horzLines: { color: styles.grid, style: LightweightCharts.LineStyle.Dotted }
+                },
+                crosshair: {
+                    mode: LightweightCharts.CrosshairMode.Normal, // 十字光标追踪模式
+                    vertLine: {
+                        color: styles.text,
+                        width: 1,
+                        style: LightweightCharts.LineStyle.Dash,
+                        labelBackgroundColor: '#2f80ed', // X轴浮动时间浮标背景
+                    },
+                    horzLine: {
+                        color: styles.text,
+                        width: 1,
+                        style: LightweightCharts.LineStyle.Dash,
+                        labelBackgroundColor: '#2f80ed', // Y轴浮动价格浮标背景
+                    }
+                },
+                rightPriceScale: {
+                    borderVisible: false,
+                    scaleMargins: { top: 0.12, bottom: 0.12 }, // 留白控制，防止图表顶格
+                },
+                timeScale: {
+                    borderVisible: false,
+                    timeVisible: true,
+                    secondsVisible: false
+                },
+                handleScale: { mouseWheel: true, pinch: true }, // 开启极度丝滑缩放
+                handleScroll: { mousePressedMove: true, touchMouseButton: true } // 允许拖拽
+            });
+
+            renderTVData();
+        }
+
+        // 高端数据图层精细化渲染
+        function renderTVData() {
+            if (!tvChart) return;
+            const styles = getTVThemeStyles();
+
+            // 1. 分时图：极细前置线 + 金融级微透明渐变面积
+            if (currentPeriod === 'timeline') {
+                mainSeries = tvChart.addSeries(LightweightCharts.AreaSeries, {
+                    lineColor: styles.accent,
+                    topColor: 'rgba(47, 128, 237, 0.18)', // 降低透明度让图表高级不脏
+                    bottomColor: 'rgba(47, 128, 237, 0.00)',
+                    lineWidth: 1.5,
+                    priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
+                    priceLineVisible: true, // 开启最新价横向基准虚线
+                    priceLineColor: styles.accent
+                });
+                mainSeries.setData([
+                    { time: 1719797400, value: 1815 },
+                    { time: 1719798300, value: 1820 },
+                    { time: 1719799200, value: 1812 },
+                    { time: 1719801000, value: 1828 },
+                    { time: 1719802800, value: 1835 },
+                    { time: 1719804600, value: 1832 },
+                    { time: 1719810900, value: 1840 },
+                    { time: 1719812700, value: 1838 },
+                    { time: 1719814500, value: 1846 },
+                    { time: 1719816300, value: 1848 },
+                    { time: 1719817200, value: 1850 }
+                ]);
+            } 
+            // 2. 五日图：专业级双色基准平衡波段线
+            else if (currentPeriod === 'fiveday') {
+                mainSeries = tvChart.addSeries(LightweightCharts.BaselineSeries, {
+                    baseValue: { type: 'price', price: 1810 },
+                    topLineColor: '#9b51e0',
+                    topFillColor1: 'rgba(155, 81, 224, 0.15)',
+                    topFillColor2: 'rgba(155, 81, 224, 0.0)',
+                    bottomLineColor: '#788293',
+                    bottomFillColor1: 'rgba(120, 130, 147, 0.0)',
+                    bottomFillColor2: 'rgba(120, 130, 147, 0.12)',
+                    lineWidth: 1.5,
+                    priceFormat: { type: 'price', precision: 2, minMove: 0.01 }
+                });
+                mainSeries.setData([
+                    { time: '2026-07-06', value: 1795 },
+                    { time: '2026-07-07', value: 1820 },
+                    { time: '2026-07-08', value: 1815 },
+                    { time: '2026-07-09', value: 1835 },
+                    { time: '2026-07-10', value: 1850 }
+                ]);
+            } 
+            // 3. 日K与周K：纯净实体空心无边框K线
+            else {
+                mainSeries = tvChart.addSeries(LightweightCharts.CandlestickSeries, {
+                    upColor: styles.up,
+                    downColor: styles.down,
+                    borderVisible: false, // 移除杂乱边框线，向大厂专业级暗黑盘面看齐
+                    wickUpColor: styles.up,
+                    wickDownColor: styles.down,
+                    priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
+                    priceLineColor: styles.up
+                });
+
+                if (currentPeriod === 'daily') {
+                    mainSeries.setData([
+                        { time: '2026-07-01', open: 1780, high: 1805, low: 1775, close: 1800 },
+                        { time: '2026-07-02', open: 1802, high: 1810, low: 1785, close: 1790 },
+                        { time: '2026-07-03', open: 1792, high: 1820, low: 1790, close: 1815 },
+                        { time: '2026-07-06', open: 1815, high: 1830, low: 1805, close: 1825 },
+                        { time: '2026-07-07', open: 1825, high: 1828, low: 1808, close: 1812 },
+                        { time: '2026-07-08', open: 1812, high: 1840, low: 1810, close: 1835 },
+                        { time: '2026-07-09', open: 1832, high: 1845, low: 1815, close: 1842 },
+                        { time: '2026-07-10', open: 1842, high: 1855, low: 1835, close: 1850 }
+                    ]);
+                } else {
+                    mainSeries.setData([
+                        { time: '2026-06-05', open: 1710, high: 1760, low: 1700, close: 1745 },
+                        { time: '2026-06-12', open: 1742, high: 1750, low: 1715, close: 1730 },
+                        { time: '2026-06-19', open: 1735, high: 1790, low: 1730, close: 1780 },
+                        { time: '2026-06-26', open: 1782, high: 1800, low: 1755, close: 1765 },
+                        { time: '2026-07-03', open: 1770, high: 1820, low: 1765, close: 1810 },
+                        { time: '2026-07-10', open: 1812, high: 1860, low: 1805, close: 1850 }
+                    ]);
+                }
+            }
+            tvChart.timeScale().fitContent();
+        }
+
+        // 内部横向周期选项卡
+        function changeChartPeriod(element, period) {
+            document.querySelectorAll('.inner-tabs .inner-tab-item').forEach(item => item.classList.remove('active'));
+            element.classList.add('active');
+            currentPeriod = period;
+            initTradingViewChart();
+        }
+
+        // 初始化加载与响应式流体布局尺寸自适应
+        window.addEventListener('DOMContentLoaded', () => {
+            initTradingViewChart();
+            window.addEventListener('resize', () => {
+                if(tvChart) {
+                    const container = document.getElementById('tv-chart');
+                    tvChart.resize(container.clientWidth, 250);
+                }
+            });
+        });
+
+        // 顶层主框架大 Tab 导航逻辑面板
         function switchTab(tabId) {
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
             document.getElementById(`tab-${tabId}`).classList.add('active');
@@ -453,9 +619,13 @@
             const targetIndex = ['market', 'trade', 'watchlist', 'portfolio'].indexOf(tabId);
             document.querySelectorAll('.desktop-tabs .tab-btn')[targetIndex].classList.add('active');
             document.querySelectorAll('.mobile-nav .mobile-nav-item')[targetIndex].classList.add('active');
+
+            if (tabId === 'market') {
+                setTimeout(() => { initTradingViewChart(); }, 50);
+            }
         }
 
-        // 2. 纯粹、不带文字的高阶主题切换控制 (更细腻的日光/夜色SVG路径重绘)
+        // 一键式多层级皮肤明暗实时渲染无缝切换
         let isDark = false;
         function toggleTheme() {
             const root = document.documentElement;
@@ -464,16 +634,16 @@
 
             if (isDark) {
                 root.setAttribute('data-theme', 'dark');
-                // 丝滑重绘为高阶黑夜模式月弦曲线
                 themeIcon.innerHTML = `<path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-3.03 0-5.5-2.47-5.5-5.5 0-1.82.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z" fill="currentColor"/>`;
             } else {
                 root.removeAttribute('data-theme');
-                // 恢复为带向外辐射线条的高精密太阳路径
                 themeIcon.innerHTML = `<path d="M12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4zm0-11V3M12 21v-2M5 12H3M21 12h-2M7.05 7.05L5.64 5.64M18.36 18.36l-1.41-1.41M7.05 16.95l-1.41 1.41M18.36 5.64l-1.41 1.41" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>`;
             }
+
+            initTradingViewChart();
         }
 
-        // 3. 资产盲化隐私处理
+        // 资产资产盲化安全控制
         let isPrivate = false;
         function togglePrivacy() {
             const assetVal = document.getElementById('asset-value');
