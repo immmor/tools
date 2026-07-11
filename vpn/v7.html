@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AeroLink VPN - 极简轻巧的安全连接</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* 浅色清新微发光动画 */
+        @keyframes mint-glow {
+            0%, 100% { transform: scale(1); box-shadow: 0 10px 30px rgba(52, 211, 153, 0.15), inset 0 0 20px rgba(255,255,255,0.6); }
+            50% { transform: scale(1.03); box-shadow: 0 15px 40px rgba(52, 211, 153, 0.35), inset 0 0 20px rgba(255,255,255,0.8); }
+        }
+        @keyframes pause-glow {
+            0%, 100% { transform: scale(1); box-shadow: 0 10px 25px rgba(148, 163, 184, 0.1); }
+            50% { transform: scale(1.03); box-shadow: 0 15px 35px rgba(148, 163, 184, 0.25); }
+        }
+        @keyframes float-slow {
+            0%, 100% { transform: translate(0, 0) rotate(0deg); }
+            50% { transform: translate(5%, 8%) rotate(10deg); }
+        }
+        .connected .connect-btn { animation: mint-glow 4s infinite ease-in-out; }
+        .disconnected .connect-btn { animation: pause-glow 4s infinite ease-in-out; }
+        .float-bg { animation: float-slow 15s infinite ease-in-out; }
+        
+        /* 隐藏滚动条 */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* 视图切换动画 */
+        .view-section { display: none; }
+        .view-section.active { display: flex; animation: smoothShow 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+        
+        .page-content { display: none; }
+        .page-content.active { display: flex; animation: smoothShow 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+        
+        @keyframes smoothShow {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-tr from-[#edf4f8] via-[#f4f7f6] to-[#f9fbf9] text-slate-700 font-sans min-h-screen overflow-hidden relative selection:bg-emerald-200 selection:text-emerald-800">
+
+    <div class="absolute top-[-10%] right-[-10%] w-[60vw] h-[60vw] bg-emerald-200/40 rounded-full blur-[100px] float-bg"></div>
+    <div class="absolute bottom-[-10%] left-[-5%] w-[55vw] h-[55vw] bg-sky-200/50 rounded-full blur-[120px] float-bg" style="animation-delay: -5s; animation-direction: reverse;"></div>
+
+    <section id="view-auth" class="view-section active fixed inset-0 z-50 items-center justify-center p-4">
+        <div class="w-full max-w-md bg-white/50 backdrop-blur-xl border border-white/60 rounded-3xl p-8 shadow-[0_20px_50px_rgba(148,163,184,0.15)] flex flex-col relative overflow-hidden">
+            
+            <div class="flex flex-col items-center text-center mb-8">
+                <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-400 to-teal-400 flex items-center justify-center shadow-md shadow-emerald-200/50 mb-3">
+                    <i class="fa-solid fa-feather-pointed text-white text-xl"></i>
+                </div>
+                <h2 class="text-2xl font-bold text-slate-800 tracking-wide">AeroLink</h2>
+                <p class="text-xs text-slate-400 mt-1">开启通往轻盈、纯净网络的大门</p>
+            </div>
+
+            <div id="auth-login-box" class="space-y-4">
+                <div class="space-y-1">
+                    <label class="text-xs font-medium text-slate-500 pl-1">电子邮箱</label>
+                    <div class="bg-white/60 border border-slate-200/50 rounded-xl px-4 py-3 flex items-center gap-3 transition-all focus-within:border-emerald-400 focus-within:bg-white shadow-inner shadow-slate-50/50">
+                        <i class="fa-regular fa-envelope text-slate-400 text-sm"></i>
+                        <input type="email" value="hello@aerolink.com" placeholder="example@domain.com" class="bg-transparent border-none outline-none text-sm w-full text-slate-700 placeholder:text-slate-300">
+                    </div>
+                </div>
+                <div class="space-y-1">
+                    <div class="flex justify-between items-center pl-1">
+                        <label class="text-xs font-medium text-slate-500">密码</label>
+                        <a href="#" class="text-xs text-slate-400 hover:text-emerald-500 transition-colors">忘记密码？</a>
+                    </div>
+                    <div class="bg-white/60 border border-slate-200/50 rounded-xl px-4 py-3 flex items-center gap-3 transition-all focus-within:border-emerald-400 focus-within:bg-white shadow-inner shadow-slate-50/50">
+                        <i class="fa-solid fa-lock text-slate-400 text-sm"></i>
+                        <input type="password" value="••••••••" placeholder="请输入密码" class="bg-transparent border-none outline-none text-sm w-full text-slate-700 placeholder:text-slate-300">
+                    </div>
+                </div>
+
+                <button onclick="handleLogin()" class="w-full bg-gradient-to-r from-emerald-400 to-teal-400 hover:from-emerald-500 hover:to-teal-500 text-white font-medium text-sm py-3.5 rounded-xl transition-all shadow-md shadow-emerald-200 hover:shadow-lg active:scale-[0.98] mt-6">
+                    安全登录
+                </button>
+
+                <p class="text-center text-xs text-slate-400 mt-6">
+                    还没有账号？<button onclick="toggleAuthMode(false)" class="text-emerald-500 font-semibold hover:underline">立即注册</button>
+                </p>
+            </div>
+
+            <div id="auth-register-box" class="space-y-4 hidden">
+                <div class="space-y-1">
+                    <label class="text-xs font-medium text-slate-500 pl-1">创建账户邮箱</label>
+                    <div class="bg-white/60 border border-slate-200/50 rounded-xl px-4 py-3 flex items-center gap-3 transition-all focus-within:border-emerald-400 focus-within:bg-white shadow-inner shadow-slate-50/50">
+                        <i class="fa-regular fa-envelope text-slate-400 text-sm"></i>
+                        <input type="email" placeholder="输入您的常用邮箱" class="bg-transparent border-none outline-none text-sm w-full text-slate-700 placeholder:text-slate-300">
+                    </div>
+                </div>
+                <div class="space-y-1">
+                    <label class="text-xs font-medium text-slate-500 pl-1">设置复杂密码</label>
+                    <div class="bg-white/60 border border-slate-200/50 rounded-xl px-4 py-3 flex items-center gap-3 transition-all focus-within:border-emerald-400 focus-within:bg-white shadow-inner shadow-slate-50/50">
+                        <i class="fa-solid fa-lock text-slate-400 text-sm"></i>
+                        <input type="password" placeholder="至少 8 位数密码" class="bg-transparent border-none outline-none text-sm w-full text-slate-700 placeholder:text-slate-300">
+                    </div>
+                </div>
+                <div class="flex items-start gap-2 pt-1 pl-1">
+                    <input type="checkbox" id="terms" checked class="mt-0.5 rounded border-slate-300 text-emerald-500 focus:ring-emerald-400">
+                    <label for="terms" class="text-[11px] text-slate-400 leading-tight">我已阅读并完全同意 <a href="#" class="text-slate-500 underline">服务协议</a> 和 <a href="#" class="text-slate-500 underline">隐私政策</a></label>
+                </div>
+
+                <button onclick="handleLogin()" class="w-full bg-gradient-to-r from-emerald-400 to-teal-400 hover:from-emerald-500 hover:to-teal-500 text-white font-medium text-sm py-3.5 rounded-xl transition-all shadow-md shadow-emerald-200 hover:shadow-lg active:scale-[0.98] mt-4">
+                    同意并注册
+                </button>
+
+                <p class="text-center text-xs text-slate-400 mt-6">
+                    已有账号？<button onclick="toggleAuthMode(true)" class="text-emerald-500 font-semibold hover:underline">返回登录</button>
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <section id="view-app" class="view-section flex-col md:flex-row h-screen w-screen p-0 md:p-6 relative box-border">
+        
+        <aside class="hidden md:flex flex-col w-64 bg-white/40 backdrop-blur-md border border-white/60 rounded-3xl p-6 mr-6 justify-between shadow-[0_15px_35px_rgba(148,163,184,0.08)]">
+            <div>
+                <div class="flex items-center gap-3 px-2 py-3 mb-8">
+                    <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-400 to-teal-400 flex items-center justify-center shadow-md shadow-emerald-200/50">
+                        <i class="fa-solid fa-feather-pointed text-white text-base"></i>
+                    </div>
+                    <div>
+                        <h1 class="font-bold text-base text-slate-800 tracking-wide">AeroLink</h1>
+                        <span class="text-[10px] text-slate-400 font-medium tracking-wider uppercase">Premium</span>
+                    </div>
+                </div>
+                
+                <nav class="space-y-1.5" id="desktop-nav">
+                    <button data-target="page-connect" class="nav-btn w-full flex items-center gap-3.5 px-4 py-3 rounded-xl bg-white text-emerald-500 font-semibold shadow-sm shadow-slate-100 transition-all text-left">
+                        <i class="fa-solid fa-leaf w-4 text-center"></i> 智能连接
+                    </button>
+                    <button data-target="page-nodes" class="nav-btn w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-slate-500 hover:bg-white/40 hover:text-slate-800 transition-all text-left">
+                        <i class="fa-solid fa-globe w-4 text-center"></i> 节点选择
+                    </button>
+                    <button data-target="page-stats" class="nav-btn w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-slate-500 hover:bg-white/40 hover:text-slate-800 transition-all text-left">
+                        <i class="fa-solid fa-chart-line w-4 text-center"></i> 流量账单
+                    </button>
+                    <button data-target="page-settings" class="nav-btn w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-slate-500 hover:bg-white/40 hover:text-slate-800 transition-all text-left">
+                        <i class="fa-solid fa-gear w-4 text-center"></i> 偏好设置
+                    </button>
+                </nav>
+            </div>
+            
+            <div class="bg-white/50 border border-white p-3.5 rounded-2xl flex items-center gap-3">
+                <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80" alt="Avatar" class="w-9 h-9 rounded-full object-cover border border-white">
+                <div class="flex-1 min-w-0">
+                    <p class="text-xs font-semibold text-slate-700 truncate">Premium_User</p>
+                    <p class="text-[10px] text-slate-400 truncate">2027-12-31 过期</p>
+                </div>
+                <button onclick="handleLogout()" class="text-slate-400 hover:text-rose-400 transition-colors px-1"><i class="fa-solid fa-right-from-bracket text-sm"></i></button>
+            </div>
+        </aside>
+
+        <main id="main-panel" class="flex-1 bg-white/30 md:bg-white/40 backdrop-blur-md border-0 md:border border-white/60 md:rounded-3xl p-5 md:p-7 flex flex-col justify-between overflow-y-auto no-scrollbar pb-24 md:pb-7 shadow-[0_15px_35px_rgba(148,163,184,0.05)] connected">
+            
+            <div class="flex justify-between items-center mb-6">
+                <div class="flex items-center gap-2 md:hidden">
+                    <div class="w-7 h-7 rounded-lg bg-emerald-400 flex items-center justify-center">
+                        <i class="fa-solid fa-feather-pointed text-white text-xs"></i>
+                    </div>
+                    <span class="font-bold text-sm tracking-wide text-slate-800">AeroLink</span>
+                </div>
+                
+                <div class="flex items-center gap-2.5 bg-white/70 px-3.5 py-1.5 rounded-full border border-white shadow-sm text-xs ml-auto md:ml-0">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400" id="status-dot"></span>
+                    <span class="text-slate-500 font-medium" id="status-text">网络已安全防护</span>
+                    <span class="text-emerald-500 font-mono font-bold" id="current-node-tag">东京 #02</span>
+                </div>
+
+                <div class="hidden sm:flex items-center gap-1.5 ml-3 text-[11px] font-mono text-slate-400 bg-white/40 px-2.5 py-1.5 rounded-xl border border-white/40">
+                    <i class="fa-solid fa-wave-square text-emerald-400"></i>
+                    <span>24 ms</span>
+                </div>
+            </div>
+
+            <div id="page-connect" class="page-content active flex-col justify-between flex-1">
+                <div class="flex flex-col items-center justify-center my-auto py-6">
+                    <div class="relative flex items-center justify-center">
+                        <div class="absolute w-56 h-56 sm:w-64 sm:h-64 rounded-full border border-emerald-300/30 bg-emerald-100/10 animate-ping" style="animation-duration: 4s;" id="ripple-bg"></div>
+                        <button id="connect-btn" class="connect-btn relative w-44 h-44 sm:w-52 sm:h-52 rounded-full bg-gradient-to-b from-white to-slate-50 border-4 border-white shadow-[0_15px_35px_rgba(52,211,153,0.15)] flex flex-col items-center justify-center cursor-pointer transition-all duration-500 hover:scale-102 active:scale-98 group z-10">
+                            <div class="absolute inset-0 rounded-full bg-gradient-to-b from-transparent to-slate-100/50 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                            <i class="fa-solid fa-power-off text-4xl sm:text-5xl text-emerald-400 mb-3 transition-colors duration-500" id="btn-icon"></i>
+                            <span class="text-[10px] font-mono tracking-[0.2em] text-emerald-400 font-bold transition-colors duration-500" id="btn-text">SAFE CONNECTED</span>
+                        </button>
+                    </div>
+                    
+                    <div class="mt-8 text-center bg-white/30 border border-white/50 px-5 py-1.5 rounded-2xl shadow-inner shadow-slate-50">
+                        <p class="text-[10px] uppercase tracking-widest text-slate-400 font-medium font-mono">已保护时长</p>
+                        <p class="text-2xl font-light font-mono text-slate-700 tracking-wide mt-0.5" id="timer">00:41:12</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
+                    <div class="lg:col-span-2 bg-white/60 border border-white rounded-2xl p-4 flex justify-around items-center shadow-sm">
+                        <div class="flex items-center gap-3.5">
+                            <div class="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-400 shadow-sm"><i class="fa-solid fa-arrow-down text-sm"></i></div>
+                            <div>
+                                <p class="text-[11px] text-slate-400">实时下载</p>
+                                <p class="text-lg font-mono font-bold text-slate-700" id="down-speed">28.4 <span class="text-xs font-normal text-slate-400">Mb/s</span></p>
+                            </div>
+                        </div>
+                        <div class="w-px h-8 bg-slate-200/60"></div>
+                        <div class="flex items-center gap-3.5">
+                            <div class="w-9 h-9 rounded-xl bg-sky-50 flex items-center justify-center text-sky-400 shadow-sm"><i class="fa-solid fa-arrow-up text-sm"></i></div>
+                            <div>
+                                <p class="text-[11px] text-slate-400">实时上传</p>
+                                <p class="text-lg font-mono font-bold text-slate-700" id="up-speed">6.1 <span class="text-xs font-normal text-slate-400">Mb/s</span></p>
+                            </div>
+                        </div>
+                    </div>
+                    <div onclick="switchPage('page-nodes')" class="bg-white/60 border border-white rounded-2xl p-4 flex items-center justify-between shadow-sm cursor-pointer hover:bg-white transition-all group">
+                        <div class="flex items-center gap-3">
+                            <div class="w-9 h-9 rounded-xl bg-slate-50 flex items-center justify-center text-lg shadow-sm">🇯🇵</div>
+                            <div>
+                                <p class="text-[11px] text-slate-400">当前最佳延迟</p>
+                                <p class="text-sm font-semibold text-slate-700 group-hover:text-emerald-500 transition-colors">东京 Premium #02</p>
+                            </div>
+                        </div>
+                        <i class="fa-solid fa-angle-right text-slate-300 group-hover:text-slate-500 transition-colors mr-1"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div id="page-nodes" class="page-content flex-col flex-1">
+                <div class="flex justify-between items-center mb-3.5">
+                    <h2 class="text-sm font-bold text-slate-800 tracking-wide">全球轻量级节点</h2>
+                    <span class="text-[11px] text-slate-400 font-mono">线路全线通畅</span>
+                </div>
+                <div class="bg-white/70 border border-white rounded-xl px-3.5 py-2 flex items-center gap-2 mb-4 shadow-sm">
+                    <i class="fa-solid fa-magnifying-glass text-slate-400 text-xs"></i>
+                    <input type="text" placeholder="寻找想要的国家、专属流媒体地区..." class="bg-transparent border-none outline-none text-xs w-full text-slate-700 placeholder:text-slate-300">
+                </div>
+                <div class="flex-1 overflow-y-auto space-y-2 max-h-[58vh] pr-1 no-scrollbar">
+                    <div class="p-3 bg-emerald-50/60 border border-emerald-200/50 rounded-xl flex items-center justify-between cursor-pointer shadow-sm">
+                        <div class="flex items-center gap-3">
+                            <span class="text-lg">🇯🇵</span>
+                            <div>
+                                <div class="flex items-center gap-1.5"><span class="font-semibold text-xs text-slate-700">东京 Premium #02</span><span class="bg-emerald-400 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">使用中</span></div>
+                                <span class="text-[10px] text-slate-400 font-mono">专线抗封锁 | 负载 19%</span>
+                            </div>
+                        </div>
+                        <span class="text-emerald-400 font-mono text-xs font-bold"><i class="fa-solid fa-chart-bar mr-1"></i>24ms</span>
+                    </div>
+                    <div class="p-3 bg-white/50 border border-white/70 hover:border-emerald-200 rounded-xl flex items-center justify-between cursor-pointer shadow-sm transition-all">
+                        <div class="flex items-center gap-3">
+                            <span class="text-lg">🇭🇰</span>
+                            <div>
+                                <span class="font-semibold text-xs text-slate-700 block">香港 高速专线 #01</span>
+                                <span class="text-[10px] text-slate-400 font-mono">极低缓冲延时 | 负载 32%</span>
+                            </div>
+                        </div>
+                        <span class="text-emerald-400 font-mono text-xs font-bold"><i class="fa-solid fa-chart-bar mr-1"></i>28ms</span>
+                    </div>
+                    <div class="p-3 bg-white/50 border border-white/70 hover:border-emerald-200 rounded-xl flex items-center justify-between cursor-pointer shadow-sm transition-all">
+                        <div class="flex items-center gap-3">
+                            <span class="text-lg">🇺🇸</span>
+                            <div>
+                                <span class="font-semibold text-xs text-slate-700 block">美西 硅谷极速 #04</span>
+                                <span class="text-[10px] text-slate-400 font-mono">跨国大带宽通道 | 负载 45%</span>
+                            </div>
+                        </div>
+                        <span class="text-amber-400 font-mono text-xs font-bold"><i class="fa-solid fa-chart-bar mr-1"></i>112ms</span>
+                    </div>
+                    <div class="p-3 bg-white/50 border border-white/70 hover:border-emerald-200 rounded-xl flex items-center justify-between cursor-pointer shadow-sm transition-all">
+                        <div class="flex items-center gap-3">
+                            <span class="text-lg">🇸🇬</span>
+                            <div>
+                                <span class="font-semibold text-xs text-slate-700 block">新加坡 专属游戏 #01</span>
+                                <span class="text-[10px] text-slate-400 font-mono">低丢包高级优化 | 负载 12%</span>
+                            </div>
+                        </div>
+                        <span class="text-emerald-400 font-mono text-xs font-bold"><i class="fa-solid fa-chart-bar mr-1"></i>35ms</span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="page-stats" class="page-content flex-col flex-1">
+                <h2 class="text-sm font-bold text-slate-800 tracking-wide mb-3.5">当前账期数据用量</h2>
+                <div class="grid grid-cols-2 gap-3 mb-4">
+                    <div class="p-3.5 bg-white/60 border border-white rounded-2xl shadow-sm">
+                        <p class="text-[11px] text-slate-400">本月已耗用流量</p>
+                        <p class="text-xl font-mono font-bold text-slate-700 mt-0.5">84.2 <span class="text-xs font-normal text-slate-400">GB</span></p>
+                    </div>
+                    <div class="p-3.5 bg-white/60 border border-white rounded-2xl shadow-sm">
+                        <p class="text-[11px] text-slate-400">高速剩余限额</p>
+                        <p class="text-xl font-mono font-bold text-emerald-400 mt-0.5">915.8 <span class="text-xs font-normal text-slate-400">GB</span></p>
+                    </div>
+                </div>
+                <div class="bg-white/60 border border-white rounded-2xl p-4 flex-1 flex flex-col justify-between min-h-[220px] shadow-sm">
+                    <p class="text-[11px] font-semibold text-slate-400">本周健康用量曲线</p>
+                    <div class="flex justify-between items-end h-32 pt-4 px-2">
+                        <div class="flex flex-col items-center gap-1.5 w-7"><div class="w-full bg-slate-200/50 h-10 rounded-full"></div><span class="text-[9px] text-slate-400 font-mono">一</span></div>
+                        <div class="flex flex-col items-center gap-1.5 w-7"><div class="w-full bg-slate-200/50 h-16 rounded-full"></div><span class="text-[9px] text-slate-400 font-mono">二</span></div>
+                        <div class="flex flex-col items-center gap-1.5 w-7"><div class="w-full bg-slate-200/50 h-24 rounded-full"></div><span class="text-[9px] text-slate-400 font-mono">三</span></div>
+                        <div class="flex flex-col items-center gap-1.5 w-7"><div class="w-full bg-emerald-300/70 h-28 rounded-full shadow-sm shadow-emerald-200"></div><span class="text-[9px] text-emerald-500 font-semibold font-mono">四</span></div>
+                        <div class="flex flex-col items-center gap-1.5 w-7"><div class="w-full bg-slate-200/50 h-20 rounded-full"></div><span class="text-[9px] text-slate-400 font-mono">五</span></div>
+                        <div class="flex flex-col items-center gap-1.5 w-7"><div class="w-full bg-sky-300/70 h-32 rounded-full shadow-sm shadow-sky-100"></div><span class="text-[9px] text-sky-500 font-semibold font-mono">六</span></div>
+                        <div class="flex flex-col items-center gap-1.5 w-7"><div class="w-full bg-slate-200/50 h-14 rounded-full"></div><span class="text-[9px] text-slate-400 font-mono">日</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="page-settings" class="page-content flex-col flex-1">
+                <h2 class="text-sm font-bold text-slate-800 tracking-wide mb-3.5">个性化参数定义</h2>
+                <div class="space-y-2.5 overflow-y-auto max-h-[58vh] pr-1 no-scrollbar">
+                    
+                    <div class="p-4 bg-white/60 border border-white rounded-2xl flex items-center justify-between shadow-sm">
+                        <div>
+                            <p class="text-xs font-semibold text-slate-700">纯净绕行 (智能路由)</p>
+                            <p class="text-[10px] text-slate-400 mt-0.5">不代理大陆本土应用与网站，保障微信等秒回</p>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" checked class="sr-only peer">
+                            <div class="w-10 h-5 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-400"></div>
+                        </label>
+                    </div>
+
+                    <div class="p-4 bg-white/60 border border-white rounded-2xl flex items-center justify-between shadow-sm">
+                        <div>
+                            <p class="text-xs font-semibold text-slate-700">下一代传输内核</p>
+                            <p class="text-[10px] text-slate-400 mt-0.5">针对极端恶劣网络弱网进行包头修复优化</p>
+                        </div>
+                        <select class="bg-white border border-slate-200 rounded-xl px-2.5 py-1 text-[11px] font-mono outline-none text-emerald-500 font-semibold">
+                            <option>Aero-Tunnel v2</option>
+                            <option>Hysteria 2</option>
+                            <option>Shadowsocks</option>
+                        </select>
+                    </div>
+
+                    <div class="p-4 bg-white/60 border border-white rounded-2xl flex items-center justify-between shadow-sm">
+                        <div>
+                            <p class="text-xs font-semibold text-slate-700">自愈断网卫士 (Kill Switch)</p>
+                            <p class="text-[10px] text-slate-400 mt-0.5">通道遭遇物理掐断时自动拦截流量防止裸奔</p>
+                        </div>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" class="sr-only peer">
+                            <div class="w-10 h-5 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-400"></div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+
+        <div class="md:hidden fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t border-slate-100 flex justify-around items-center py-2.5 z-50 px-4" id="mobile-nav">
+            <button data-target="page-connect" class="nav-btn flex flex-col items-center gap-1 text-emerald-400">
+                <i class="fa-solid fa-leaf text-lg"></i>
+                <span class="text-[9px] font-medium">连接</span>
+            </button>
+            <button data-target="page-nodes" class="nav-btn flex flex-col items-center gap-1 text-slate-400 hover:text-slate-600">
+                <i class="fa-solid fa-globe text-lg"></i>
+                <span class="text-[9px]">节点</span>
+            </button>
+            <button data-target="page-stats" class="nav-btn flex flex-col items-center gap-1 text-slate-400 hover:text-slate-600">
+                <i class="fa-solid fa-chart-line text-lg"></i>
+                <span class="text-[9px]">统计</span>
+            </button>
+            <button data-target="page-settings" class="nav-btn flex flex-col items-center gap-1 text-slate-400 hover:text-slate-600">
+                <i class="fa-solid fa-gear text-lg"></i>
+                <span class="text-[9px]">设置</span>
+            </button>
+        </div>
+
+    </section>
+
+    <script>
+        // --- 1. 登录与注册模块状态切换 ---
+        function toggleAuthMode(isLogin) {
+            const loginBox = document.getElementById('auth-login-box');
+            const registerBox = document.getElementById('auth-register-box');
+            if (isLogin) {
+                loginBox.classList.remove('hidden');
+                registerBox.classList.add('hidden');
+            } else {
+                loginBox.classList.add('hidden');
+                registerBox.classList.remove('hidden');
+            }
+        }
+
+        // 模拟登录动作（跳转主界面）
+        function handleLogin() {
+            document.getElementById('view-auth').classList.remove('active');
+            document.getElementById('view-app').classList.add('active');
+            // 初始化开始跑速度和计时
+            startAppSimulation();
+        }
+
+        // 模拟登出动作（返回登录）
+        function handleLogout() {
+            document.getElementById('view-app').classList.remove('active');
+            document.getElementById('view-auth').classList.add('active');
+            stopAppSimulation();
+        }
+
+        // --- 2. 主页面标签页无缝切换 (单页架构) ---
+        function switchPage(pageId) {
+            document.querySelectorAll('.page-content').forEach(p => p.classList.remove('active'));
+            const targetPage = document.getElementById(pageId);
+            if(targetPage) targetPage.classList.add('active');
+
+            // 联动高亮电脑端侧栏和手机端底栏的按钮
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                const matched = btn.getAttribute('data-target') === pageId;
+                if (btn.parentElement.id === 'desktop-nav') {
+                    // 大屏侧栏激活样式
+                    btn.className = matched 
+                        ? "nav-btn w-full flex items-center gap-3.5 px-4 py-3 rounded-xl bg-white text-emerald-500 font-semibold shadow-sm shadow-slate-100 transition-all text-left"
+                        : "nav-btn w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-slate-500 hover:bg-white/40 hover:text-slate-800 transition-all text-left";
+                } else {
+                    // 移动端底栏激活样式
+                    btn.className = matched
+                        ? "nav-btn flex flex-col items-center gap-1 text-emerald-400"
+                        : "nav-btn flex flex-col items-center gap-1 text-slate-400 hover:text-slate-600";
+                }
+            });
+        }
+
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+            btn.addEventListener('click', () => switchPage(btn.getAttribute('data-target')));
+        });
+
+        // --- 3. VPN 开启/断开微交互模拟 ---
+        const connectBtn = document.getElementById('connect-btn');
+        const mainPanel = document.getElementById('main-panel');
+        const btnIcon = document.getElementById('btn-icon');
+        const btnText = document.getElementById('btn-text');
+        const statusText = document.getElementById('status-text');
+        const statusDot = document.getElementById('status-dot');
+        const rippleBg = document.getElementById('ripple-bg');
+        const currentNodeTag = document.getElementById('current-node-tag');
+        const downSpeed = document.getElementById('down-speed');
+        const upSpeed = document.getElementById('up-speed');
+        const timer = document.getElementById('timer');
+
+        let isConnected = true;
+        let speedInterval, timerInterval;
+        let seconds = 2472; // 初始化时间为 00:41:12
+
+        function updateTimer() {
+            seconds++;
+            let h = Math.floor(seconds / 3600).toString().padStart(2, '0');
+            let m = Math.floor((seconds % 3600) / 60).toString().padStart(2, '0');
+            let s = (seconds % 60).toString().padStart(2, '0');
+            if(timer) timer.innerText = `${h}:${m}:${s}`;
+        }
+
+        function randomizeSpeed() {
+            if(!downSpeed || !upSpeed) return;
+            if (isConnected) {
+                downSpeed.innerHTML = `${(Math.random() * 12 + 20).toFixed(1)} <span class="text-xs font-normal text-slate-400">Mb/s</span>`;
+                upSpeed.innerHTML = `${(Math.random() * 3 + 4).toFixed(1)} <span class="text-xs font-normal text-slate-400">Mb/s</span>`;
+            } else {
+                downSpeed.innerHTML = `0.0 <span class="text-xs font-normal text-slate-400">Mb/s</span>`;
+                upSpeed.innerHTML = `0.0 <span class="text-xs font-normal text-slate-400">Mb/s</span>`;
+            }
+        }
+
+        function startAppSimulation() {
+            stopAppSimulation();
+            timerInterval = setInterval(updateTimer, 1000);
+            speedInterval = setInterval(randomizeSpeed, 2000);
+        }
+
+        function stopAppSimulation() {
+            clearInterval(timerInterval);
+            clearInterval(speedInterval);
+        }
+
+        // 默认执行模拟
+        startAppSimulation();
+
+        connectBtn.addEventListener('click', () => {
+            isConnected = !isConnected;
+            if (isConnected) {
+                mainPanel.className = mainPanel.className.replace('disconnected', 'connected');
+                btnIcon.className = "fa-solid fa-power-off text-4xl sm:text-5xl text-emerald-400 mb-3 transition-colors duration-500";
+                btnText.innerText = "SAFE CONNECTED";
+                btnText.className = "text-[10px] font-mono tracking-[0.2em] text-emerald-400 font-bold";
+                statusText.innerText = "网络已安全防护";
+                statusDot.className = "w-2 h-2 rounded-full bg-emerald-400";
+                currentNodeTag.innerText = "东京 #02";
+                currentNodeTag.className = "text-emerald-500 font-mono font-bold";
+                rippleBg.className = "absolute w-56 h-56 sm:w-64 sm:h-64 rounded-full border border-emerald-300/30 bg-emerald-100/10 animate-ping";
+                
+                startAppSimulation();
+            } else {
+                mainPanel.className = mainPanel.className.replace('connected', 'disconnected');
+                btnIcon.className = "fa-solid fa-power-off text-4xl sm:text-5xl text-slate-400 mb-3 transition-colors duration-500";
+                btnText.innerText = "PAUSED / UNSECURED";
+                btnText.className = "text-[10px] font-mono tracking-[0.2em] text-slate-400 font-bold";
+                statusText.innerText = "防护暂停 存在隐私风险";
+                statusDot.className = "w-2 h-2 rounded-full bg-slate-400";
+                currentNodeTag.innerText = "未连接";
+                currentNodeTag.className = "text-slate-400 font-mono font-bold";
+                rippleBg.className = "absolute w-56 h-56 sm:w-64 sm:h-64 rounded-full border border-slate-300/20 bg-slate-100/5 animate-none";
+                
+                clearInterval(timerInterval);
+                if(timer) timer.innerText = "00:00:00";
+                seconds = 0;
+                randomizeSpeed();
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1135,6 +1135,63 @@
             cursor: not-allowed;
         }
 
+        /* 客服对话框样式 */
+        #support-modal {
+            z-index: 9998;
+        }
+        
+        #support-messages::-webkit-scrollbar {
+            width: 4px;
+        }
+        
+        #support-messages::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        
+        #support-messages::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+        }
+        
+        .support-suggestion {
+            background: rgba(0, 243, 255, 0.1);
+            border: 1px solid rgba(0, 243, 255, 0.3);
+            color: var(--neon-blue);
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .support-suggestion:hover {
+            background: rgba(0, 243, 255, 0.2);
+            border-color: var(--neon-blue);
+            transform: translateY(-1px);
+        }
+        
+        .support-user-message {
+            justify-content: flex-end;
+        }
+        
+        .support-user-message .support-bubble {
+            background: var(--neon-blue);
+            color: #000;
+            border-radius: 12px;
+            border-top-right-radius: 0;
+        }
+        
+        .support-bot-message {
+            justify-content: flex-start;
+        }
+        
+        .support-bot-message .support-bubble {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            border-radius: 12px;
+            border-top-left-radius: 0;
+        }
+        
         /* 游戏结果弹窗样式 */
         .game-result-modal {
             position: fixed;
@@ -1549,6 +1606,56 @@
                 <button type="submit" class="w-full bg-[var(--neon-blue)] hover:bg-blue-600 text-black font-bold py-3 px-4 transition-colors" data-i18n="complaint_submit">提交投诉</button>
             </form>
             <div id="complaint-message" class="mt-4 text-center text-xs hidden"></div>
+        </div>
+    </div>
+
+    <!-- 客服对话框弹窗 -->
+    <div id="support-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] hidden flex items-center justify-center p-4">
+        <div class="cyber-card flex flex-col w-full max-w-md h-[85vh]">
+            <div class="flex justify-between items-center p-4 border-b border-zinc-800 shrink-0">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-[var(--neon-blue)] flex items-center justify-center text-black font-bold">
+                        <i data-lucide="headphones" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-black text-white" data-i18n="support_title">在线客服</h2>
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-[var(--neon-green)] animate-pulse"></span>
+                            <span class="text-xs text-[var(--neon-green)]" data-i18n="support_online">在线</span>
+                        </div>
+                    </div>
+                </div>
+                <button id="support-close" class="text-zinc-500 hover:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+
+            <div id="support-messages" class="flex-1 overflow-y-auto p-4 space-y-4">
+                <div class="flex gap-3">
+                    <div class="w-8 h-8 rounded-full bg-[var(--neon-blue)] flex items-center justify-center text-black text-xs font-bold shrink-0">
+                        <i data-lucide="headphones" class="w-4 h-4"></i>
+                    </div>
+                    <div class="max-w-[80%]">
+                        <div class="bg-zinc-800 rounded-lg rounded-tl-none px-4 py-3 text-sm text-white" data-i18n="support_welcome">
+                            您好！欢迎来到 PHANTOM VPN 客服中心。我是您的智能客服助手，有什么可以帮助您的吗？
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="p-4 border-t border-zinc-800 shrink-0">
+                <div id="support-suggestions" class="mb-3 flex flex-wrap gap-2">
+                </div>
+                <div class="flex gap-2">
+                    <input type="text" id="support-input" class="flex-1 bg-zinc-900 border border-zinc-700 px-4 py-3 text-white text-sm focus:border-[var(--neon-blue)] focus:outline-none" data-i18n-placeholder="support_input_placeholder" placeholder="输入您的问题...">
+                    <button id="support-send" class="bg-[var(--neon-blue)] text-black p-4 font-bold hover:opacity-90 transition-opacity">
+                        <i data-lucide="send" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -2935,8 +3042,7 @@
                 e.preventDefault();
                 notificationDropdown.classList.add('hidden');
                 if (userInfo) {
-                    resetForm();
-                    document.getElementById('complaint-modal')?.classList.remove('hidden');
+                    SupportModule.open();
                 } else {
                     openModal();
                 }
@@ -3919,6 +4025,231 @@
         });
 
         // 成为代理商按钮点击（复用投诉弹窗）
+        // ==================== 客服对话框模块 ====================
+        const SupportModule = (() => {
+            let questions = [];
+            const modal = document.getElementById('support-modal');
+            const closeBtn = document.getElementById('support-close');
+            const messagesContainer = document.getElementById('support-messages');
+            const input = document.getElementById('support-input');
+            const sendBtn = document.getElementById('support-send');
+            const suggestionsContainer = document.getElementById('support-suggestions');
+
+            const loadQuestions = async () => {
+                try {
+                    const lang = window.currentLang || 'zh-CN';
+                    const response = await fetch(`lang/questions-${lang}.json`);
+                    questions = await response.json();
+                    renderSuggestions();
+                } catch (error) {
+                    console.error('加载常见问题失败:', error);
+                }
+            };
+
+            const renderSuggestions = () => {
+                suggestionsContainer.innerHTML = '';
+                const topQuestions = questions.slice(0, 5);
+                topQuestions.forEach(q => {
+                    const tag = document.createElement('span');
+                    tag.className = 'support-suggestion';
+                    tag.textContent = q.question.replace('？', '').replace('?', '');
+                    tag.onclick = () => handleSuggestionClick(q);
+                    suggestionsContainer.appendChild(tag);
+                });
+            };
+
+            const removeTypingIndicator = () => {
+                const indicator = document.getElementById('support-typing-indicator');
+                if (indicator) {
+                    indicator.remove();
+                }
+            };
+
+            const showTypingIndicator = () => {
+                removeTypingIndicator();
+                const div = document.createElement('div');
+                div.id = 'support-typing-indicator';
+                div.className = 'flex gap-3 support-bot-message';
+                div.innerHTML = `
+                    <div class="w-8 h-8 rounded-full bg-[var(--neon-blue)] flex items-center justify-center text-black text-xs font-bold shrink-0">
+                        <i data-lucide="headphones" class="w-4 h-4"></i>
+                    </div>
+                    <div class="max-w-[80%]">
+                        <div class="support-bubble px-4 py-3 text-sm flex gap-1">
+                            <span class="w-2 h-2 bg-zinc-500 rounded-full animate-bounce" style="animation-delay: 0ms"></span>
+                            <span class="w-2 h-2 bg-zinc-500 rounded-full animate-bounce" style="animation-delay: 150ms"></span>
+                            <span class="w-2 h-2 bg-zinc-500 rounded-full animate-bounce" style="animation-delay: 300ms"></span>
+                        </div>
+                    </div>
+                `;
+                messagesContainer.appendChild(div);
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                lucide.createIcons();
+            };
+
+            const typeWriter = (element, text, speed = 30) => {
+                let i = 0;
+                element.textContent = '';
+                return new Promise((resolve) => {
+                    const timer = setInterval(() => {
+                        if (i < text.length) {
+                            element.textContent += text.charAt(i);
+                            i++;
+                            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                        } else {
+                            clearInterval(timer);
+                            resolve();
+                        }
+                    }, speed);
+                });
+            };
+
+            const addBotMessage = async (text) => {
+                removeTypingIndicator();
+                const div = document.createElement('div');
+                div.className = 'flex gap-3 support-bot-message';
+                div.innerHTML = `
+                    <div class="w-8 h-8 rounded-full bg-[var(--neon-blue)] flex items-center justify-center text-black text-xs font-bold shrink-0">
+                        <i data-lucide="headphones" class="w-4 h-4"></i>
+                    </div>
+                    <div class="max-w-[80%]">
+                        <div class="support-bubble px-4 py-3 text-sm"></div>
+                    </div>
+                `;
+                messagesContainer.appendChild(div);
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                lucide.createIcons();
+                
+                const bubble = div.querySelector('.support-bubble');
+                await typeWriter(bubble, text, 30);
+            };
+
+            const addMessage = (type, text) => {
+                const div = document.createElement('div');
+                div.className = `flex gap-3 ${type === 'user' ? 'support-user-message' : 'support-bot-message'}`;
+                
+                if (type === 'user') {
+                    div.innerHTML = `
+                        <div class="max-w-[80%]">
+                            <div class="support-bubble px-4 py-3 text-sm">${text}</div>
+                        </div>
+                    `;
+                } else {
+                    div.innerHTML = `
+                        <div class="w-8 h-8 rounded-full bg-[var(--neon-blue)] flex items-center justify-center text-black text-xs font-bold shrink-0">
+                            <i data-lucide="headphones" class="w-4 h-4"></i>
+                        </div>
+                        <div class="max-w-[80%]">
+                            <div class="support-bubble px-4 py-3 text-sm">${text}</div>
+                        </div>
+                    `;
+                }
+                
+                messagesContainer.appendChild(div);
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                lucide.createIcons();
+            };
+
+            const handleSuggestionClick = async (questionData) => {
+                addMessage('user', questionData.question);
+                const minDelay = 800;
+                const maxDelay = 1500;
+                const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
+                await new Promise(resolve => setTimeout(resolve, delay));
+                showTypingIndicator();
+                const typingDuration = 500 + Math.floor(Math.random() * 800);
+                await new Promise(resolve => setTimeout(resolve, typingDuration));
+                await addBotMessage(questionData.answer);
+            };
+
+            const fuzzySearch = (query) => {
+                if (!query.trim()) return [];
+                const queryLower = query.toLowerCase();
+                return questions.map(q => {
+                    const questionLower = q.question.toLowerCase();
+                    let score = 0;
+                    
+                    if (questionLower.includes(queryLower)) {
+                        score += 10;
+                        const index = questionLower.indexOf(queryLower);
+                        if (index === 0) score += 5;
+                    }
+                    
+                    queryLower.split('').forEach(char => {
+                        if (questionLower.includes(char)) score += 1;
+                    });
+                    
+                    return { ...q, score };
+                })
+                .filter(q => q.score > 0)
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 3);
+            };
+
+            const handleSend = async () => {
+                const text = input.value.trim();
+                if (!text) return;
+                
+                addMessage('user', text);
+                input.value = '';
+                
+                const results = fuzzySearch(text);
+                
+                const minDelay = 800;
+                const maxDelay = 2000;
+                const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
+                await new Promise(resolve => setTimeout(resolve, delay));
+                
+                if (results.length > 0) {
+                    showTypingIndicator();
+                    const typingDuration = 500 + Math.floor(Math.random() * 1000);
+                    await new Promise(resolve => setTimeout(resolve, typingDuration));
+                    await addBotMessage(results[0].answer);
+                    
+                    if (results.length > 1) {
+                        await new Promise(resolve => setTimeout(resolve, 800));
+                        showTypingIndicator();
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                        const moreInfoLabel = translations[currentLang]?.support_more_info || '您可能还想了解：\n';
+                        let moreInfo = moreInfoLabel;
+                        results.slice(1).forEach(r => {
+                            moreInfo += `• ${r.question}\n`;
+                        });
+                        await addBotMessage(moreInfo);
+                    }
+                } else {
+                    showTypingIndicator();
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    const noAnswer = translations[currentLang]?.support_no_answer || '抱歉，我暂时无法回答这个问题。请详细描述您的问题，我们会尽快为您解决。';
+                    await addBotMessage(noAnswer);
+                }
+            };
+
+            const openModal = () => {
+                modal.classList.remove('hidden');
+                input.focus();
+                lucide.createIcons();
+                if (questions.length === 0) {
+                    loadQuestions();
+                }
+            };
+
+            const closeModal = () => {
+                modal.classList.add('hidden');
+            };
+
+            closeBtn?.addEventListener('click', closeModal);
+            modal?.addEventListener('click', (e) => {
+                if (e.target === modal) closeModal();
+            });
+            sendBtn?.addEventListener('click', handleSend);
+            input?.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') handleSend();
+            });
+
+            return { open: openModal, close: closeModal };
+        })();
+
         document.querySelectorAll('#agent-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.preventDefault();
