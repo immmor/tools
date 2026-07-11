@@ -1355,8 +1355,34 @@ export default {
           const expireDate = user.v_expire_date ? new Date(user.v_expire_date) : null;
           
           if (!expireDate || expireDate < now) {
-            // VIP 已过期，返回空链接文件
-            return new Response('', {
+            const expiredConfig = `mixed-port: 7890
+allow-lan: false
+bind-address: "*"
+mode: rule
+log-level: info
+dns:
+  enable: true
+  nameserver:
+    - 1.1.1.1
+    - 8.8.8.8
+proxies:
+  - name: "VIP-Expired-Server"
+    type: vmess
+    server: expired.phantom.immmor.com
+    port: 443
+    uuid: ${crypto.randomUUID()}
+    alterId: 0
+    cipher: auto
+    tls: true
+    servername: expired.phantom.immmor.com
+proxy-groups:
+  - name: "PROXY"
+    type: select
+    proxies:
+      - "VIP-Expired-Server"
+rules:
+  - MATCH,PROXY`;
+            return new Response(expiredConfig, {
               headers: {
                 'Content-Type': 'text/yaml; charset=utf-8',
                 'Access-Control-Allow-Origin': '*',
@@ -1421,8 +1447,22 @@ export default {
           const expireDate = user.v_expire_date ? new Date(user.v_expire_date) : null;
           
           if (!expireDate || expireDate < now) {
-            // VIP 已过期，返回空链接文件
-            return new Response('', {
+            const v2rayConfig = JSON.stringify({
+              v: '2',
+              ps: 'VIP-Expired-Server',
+              add: 'expired.phantom.immmor.com',
+              port: '443',
+              id: crypto.randomUUID(),
+              aid: '0',
+              net: 'ws',
+              type: 'none',
+              host: '',
+              path: '',
+              tls: 'tls',
+              sni: 'expired.phantom.immmor.com'
+            });
+            const expiredConfig = 'vmess://' + btoa(v2rayConfig);
+            return new Response(expiredConfig, {
               headers: {
                 'Content-Type': 'text/plain; charset=utf-8',
                 'Access-Control-Allow-Origin': '*',
