@@ -1135,63 +1135,6 @@
             cursor: not-allowed;
         }
 
-        /* 客服对话框样式 */
-        #support-modal {
-            z-index: 9998;
-        }
-        
-        #support-messages::-webkit-scrollbar {
-            width: 4px;
-        }
-        
-        #support-messages::-webkit-scrollbar-track {
-            background: rgba(255, 255, 255, 0.05);
-        }
-        
-        #support-messages::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 2px;
-        }
-        
-        .support-suggestion {
-            background: rgba(0, 243, 255, 0.1);
-            border: 1px solid rgba(0, 243, 255, 0.3);
-            color: var(--neon-blue);
-            padding: 4px 10px;
-            border-radius: 12px;
-            font-size: 12px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        
-        .support-suggestion:hover {
-            background: rgba(0, 243, 255, 0.2);
-            border-color: var(--neon-blue);
-            transform: translateY(-1px);
-        }
-        
-        .support-user-message {
-            justify-content: flex-end;
-        }
-        
-        .support-user-message .support-bubble {
-            background: var(--neon-blue);
-            color: #000;
-            border-radius: 12px;
-            border-top-right-radius: 0;
-        }
-        
-        .support-bot-message {
-            justify-content: flex-start;
-        }
-        
-        .support-bot-message .support-bubble {
-            background: rgba(255, 255, 255, 0.1);
-            color: #fff;
-            border-radius: 12px;
-            border-top-left-radius: 0;
-        }
-        
         /* 游戏结果弹窗样式 */
         .game-result-modal {
             position: fixed;
@@ -1276,6 +1219,7 @@
         }
     </style>
     <link rel="stylesheet" href="src/initLoading.css">
+    <link rel="stylesheet" href="src/qa.css">
 </head>
 <body>
     <!-- 加载动画 -->
@@ -3042,7 +2986,7 @@
                 e.preventDefault();
                 notificationDropdown.classList.add('hidden');
                 if (userInfo) {
-                    SupportModule.open();
+                    window.SupportModule?.open();
                 } else {
                     openModal();
                 }
@@ -4025,243 +3969,6 @@
         });
 
         // 成为代理商按钮点击（复用投诉弹窗）
-        // ==================== 客服对话框模块 ====================
-        const SupportModule = (() => {
-            let questions = [];
-            const modal = document.getElementById('support-modal');
-            const closeBtn = document.getElementById('support-close');
-            const messagesContainer = document.getElementById('support-messages');
-            const input = document.getElementById('support-input');
-            const sendBtn = document.getElementById('support-send');
-            const suggestionsContainer = document.getElementById('support-suggestions');
-
-            const loadQuestions = async () => {
-                try {
-                    const lang = window.currentLang || 'zh-CN';
-                    const response = await fetch(`lang/questions-${lang}.json`);
-                    questions = await response.json();
-                    renderSuggestions();
-                } catch (error) {
-                    console.error('加载常见问题失败:', error);
-                }
-            };
-
-            const renderSuggestions = () => {
-                suggestionsContainer.innerHTML = '';
-                const topQuestions = questions.slice(0, 5);
-                topQuestions.forEach(q => {
-                    const tag = document.createElement('span');
-                    tag.className = 'support-suggestion';
-                    tag.textContent = q.question.replace('？', '').replace('?', '');
-                    tag.onclick = () => handleSuggestionClick(q);
-                    suggestionsContainer.appendChild(tag);
-                });
-            };
-
-            const removeTypingIndicator = () => {
-                const indicator = document.getElementById('support-typing-indicator');
-                if (indicator) {
-                    indicator.remove();
-                }
-            };
-
-            const showTypingIndicator = () => {
-                removeTypingIndicator();
-                const div = document.createElement('div');
-                div.id = 'support-typing-indicator';
-                div.className = 'flex gap-3 support-bot-message';
-                div.innerHTML = `
-                    <div class="w-8 h-8 rounded-full bg-[var(--neon-blue)] flex items-center justify-center text-black text-xs font-bold shrink-0">
-                        <i data-lucide="headphones" class="w-4 h-4"></i>
-                    </div>
-                    <div class="max-w-[80%]">
-                        <div class="support-bubble px-4 py-3 text-sm flex gap-1">
-                            <span class="w-2 h-2 bg-zinc-500 rounded-full animate-bounce" style="animation-delay: 0ms"></span>
-                            <span class="w-2 h-2 bg-zinc-500 rounded-full animate-bounce" style="animation-delay: 150ms"></span>
-                            <span class="w-2 h-2 bg-zinc-500 rounded-full animate-bounce" style="animation-delay: 300ms"></span>
-                        </div>
-                    </div>
-                `;
-                messagesContainer.appendChild(div);
-                messagesContainer.scrollTop = messagesContainer.scrollHeight;
-                lucide.createIcons();
-            };
-
-            const typeWriter = (element, text, speed = 30) => {
-                let i = 0;
-                element.textContent = '';
-                return new Promise((resolve) => {
-                    const timer = setInterval(() => {
-                        if (i < text.length) {
-                            element.textContent += text.charAt(i);
-                            i++;
-                            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-                        } else {
-                            clearInterval(timer);
-                            resolve();
-                        }
-                    }, speed);
-                });
-            };
-
-            const addBotMessage = async (text) => {
-                removeTypingIndicator();
-                const div = document.createElement('div');
-                div.className = 'flex gap-3 support-bot-message';
-                div.innerHTML = `
-                    <div class="w-8 h-8 rounded-full bg-[var(--neon-blue)] flex items-center justify-center text-black text-xs font-bold shrink-0">
-                        <i data-lucide="headphones" class="w-4 h-4"></i>
-                    </div>
-                    <div class="max-w-[80%]">
-                        <div class="support-bubble px-4 py-3 text-sm"></div>
-                    </div>
-                `;
-                messagesContainer.appendChild(div);
-                messagesContainer.scrollTop = messagesContainer.scrollHeight;
-                lucide.createIcons();
-                
-                const bubble = div.querySelector('.support-bubble');
-                await typeWriter(bubble, text, 30);
-            };
-
-            const addMessage = (type, text) => {
-                const div = document.createElement('div');
-                div.className = `flex gap-3 ${type === 'user' ? 'support-user-message' : 'support-bot-message'}`;
-                
-                if (type === 'user') {
-                    div.innerHTML = `
-                        <div class="max-w-[80%]">
-                            <div class="support-bubble px-4 py-3 text-sm">${text}</div>
-                        </div>
-                    `;
-                } else {
-                    div.innerHTML = `
-                        <div class="w-8 h-8 rounded-full bg-[var(--neon-blue)] flex items-center justify-center text-black text-xs font-bold shrink-0">
-                            <i data-lucide="headphones" class="w-4 h-4"></i>
-                        </div>
-                        <div class="max-w-[80%]">
-                            <div class="support-bubble px-4 py-3 text-sm">${text}</div>
-                        </div>
-                    `;
-                }
-                
-                messagesContainer.appendChild(div);
-                messagesContainer.scrollTop = messagesContainer.scrollHeight;
-                lucide.createIcons();
-            };
-
-            const handleSuggestionClick = async (questionData) => {
-                addMessage('user', questionData.question);
-                const minDelay = 800;
-                const maxDelay = 1500;
-                const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
-                await new Promise(resolve => setTimeout(resolve, delay));
-                showTypingIndicator();
-                const typingDuration = 500 + Math.floor(Math.random() * 800);
-                await new Promise(resolve => setTimeout(resolve, typingDuration));
-                await addBotMessage(questionData.answer);
-            };
-
-            const fuzzySearch = (query) => {
-                if (!query.trim()) return [];
-                const queryLower = query.toLowerCase();
-                return questions.map(q => {
-                    const questionLower = q.question.toLowerCase();
-                    let score = 0;
-                    
-                    if (questionLower.includes(queryLower)) {
-                        score += 10;
-                        const index = questionLower.indexOf(queryLower);
-                        if (index === 0) score += 5;
-                    }
-                    
-                    queryLower.split('').forEach(char => {
-                        if (questionLower.includes(char)) score += 1;
-                    });
-                    
-                    return { ...q, score };
-                })
-                .filter(q => q.score > 0)
-                .sort((a, b) => b.score - a.score)
-                .slice(0, 3);
-            };
-
-            const handleSend = async () => {
-                const text = input.value.trim();
-                if (!text) return;
-                
-                addMessage('user', text);
-                input.value = '';
-                
-                const results = fuzzySearch(text);
-                
-                const minDelay = 800;
-                const maxDelay = 2000;
-                const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
-                await new Promise(resolve => setTimeout(resolve, delay));
-                
-                if (results.length > 0) {
-                    showTypingIndicator();
-                    const typingDuration = 500 + Math.floor(Math.random() * 1000);
-                    await new Promise(resolve => setTimeout(resolve, typingDuration));
-                    await addBotMessage(results[0].answer);
-                    
-                    if (results.length > 1) {
-                        await new Promise(resolve => setTimeout(resolve, 800));
-                        showTypingIndicator();
-                        await new Promise(resolve => setTimeout(resolve, 500));
-                        const moreInfoLabel = translations[currentLang]?.support_more_info || '您可能还想了解：\n';
-                        let moreInfo = moreInfoLabel;
-                        results.slice(1).forEach(r => {
-                            moreInfo += `• ${r.question}\n`;
-                        });
-                        await addBotMessage(moreInfo);
-                    }
-                } else {
-                    showTypingIndicator();
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    const noAnswer = translations[currentLang]?.support_no_answer || '抱歉，我暂时无法回答这个问题。请详细描述您的问题，我们会尽快为您解决。';
-                    await addBotMessage(noAnswer);
-                }
-            };
-
-            const openModal = () => {
-                modal.classList.remove('hidden');
-                lucide.createIcons();
-                if (questions.length === 0) {
-                    loadQuestions();
-                }
-            };
-
-            const closeModal = () => {
-                modal.classList.add('hidden');
-            };
-
-            const updateLanguage = () => {
-                questions = [];
-                messagesContainer.innerHTML = '';
-                loadQuestions();
-                const welcomeMsg = translations[currentLang]?.support_welcome || '您好！欢迎来到 PHANTOM VPN 客服中心。我是您的智能客服助手，有什么可以帮助您的吗？';
-                addMessage('bot', welcomeMsg);
-            };
-
-            closeBtn?.addEventListener('click', closeModal);
-            modal?.addEventListener('click', (e) => {
-                if (e.target === modal) closeModal();
-            });
-            sendBtn?.addEventListener('click', handleSend);
-            input?.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') handleSend();
-            });
-
-            document.addEventListener('languageChanged', () => {
-                if (!modal.classList.contains('hidden')) {
-                    updateLanguage();
-                }
-            });
-
-            return { open: openModal, close: closeModal };
-        })();
 
         document.querySelectorAll('#agent-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
@@ -4772,5 +4479,6 @@
             })();
         })();
     </script> -->
+    <script src="src/qa.js"></script>
 </body>
 </html>
