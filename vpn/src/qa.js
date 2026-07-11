@@ -191,7 +191,36 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         };
 
-        const addBotMessage = async (text) => {
+        const getActionHandler = (actionType) => {
+            switch (actionType) {
+                case 'openRecharge':
+                    return () => {
+                        const userInfo = window.userInfo || JSON.parse(localStorage.getItem('userInfo') || '{}');
+                        const username = userInfo.username || '';
+                        window.open(`https://immmor.com/pay?username=${encodeURIComponent(username)}`, '_blank');
+                    };
+                case 'openLogin':
+                    return () => {
+                        const toggle = document.getElementById('auth-toggle');
+                        if (toggle) toggle.click();
+                        SupportModule.close();
+                    };
+                case 'openDownload':
+                    return () => {
+                        window.location.href = 'download.html';
+                    };
+                case 'openVip':
+                    return () => {
+                        const vipModal = document.getElementById('vip-modal');
+                        if (vipModal) vipModal.classList.remove('hidden');
+                        SupportModule.close();
+                    };
+                default:
+                    return null;
+            }
+        };
+
+        const addBotMessage = async (text, action) => {
             removeTypingIndicator();
             const div = document.createElement('div');
             div.className = 'flex gap-3 support-bot-message';
@@ -209,6 +238,16 @@ document.addEventListener('DOMContentLoaded', () => {
             
             const bubble = div.querySelector('.support-bubble');
             await typeWriter(bubble, text, 30);
+
+            if (action && action.label) {
+                const btn = document.createElement('button');
+                btn.className = 'support-action-btn mt-3';
+                btn.textContent = action.label;
+                const handler = getActionHandler(action.type);
+                if (handler) btn.onclick = handler;
+                bubble.appendChild(btn);
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
         };
 
         const addMessage = (type, text) => {
@@ -246,7 +285,7 @@ document.addEventListener('DOMContentLoaded', () => {
             showTypingIndicator();
             const typingDuration = 500 + Math.floor(Math.random() * 800);
             await new Promise(resolve => setTimeout(resolve, typingDuration));
-            await addBotMessage(questionData.answer);
+            await addBotMessage(questionData.answer, questionData.action);
         };
 
         const fuzzySearch = (query) => {
@@ -291,7 +330,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 showTypingIndicator();
                 const typingDuration = 500 + Math.floor(Math.random() * 1000);
                 await new Promise(resolve => setTimeout(resolve, typingDuration));
-                await addBotMessage(results[0].answer);
+                await addBotMessage(results[0].answer, results[0].action);
                 
                 if (results.length > 1) {
                     await new Promise(resolve => setTimeout(resolve, 800));
