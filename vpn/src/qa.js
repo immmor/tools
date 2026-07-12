@@ -277,6 +277,43 @@ document.addEventListener('DOMContentLoaded', () => {
             if (window.lucide) lucide.createIcons();
         };
 
+        const addRelatedQuestions = async (questions) => {
+            removeTypingIndicator();
+            const div = document.createElement('div');
+            div.className = 'flex gap-3 support-bot-message';
+            div.innerHTML = `
+                <div class="w-8 h-8 rounded-full bg-[var(--neon-blue)] flex items-center justify-center text-black text-xs font-bold shrink-0">
+                    <i data-lucide="headphones" class="w-4 h-4"></i>
+                </div>
+                <div class="max-w-[80%]">
+                    <div class="support-bubble px-4 py-3 text-sm"></div>
+                </div>
+            `;
+            messagesContainer.appendChild(div);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            if (window.lucide) lucide.createIcons();
+
+            const bubble = div.querySelector('.support-bubble');
+            const moreInfoLabel = (window.translations && window.translations[window.currentLang]?.support_more_info) || '您可能还想了解：';
+            
+            const labelSpan = document.createElement('span');
+            labelSpan.textContent = moreInfoLabel;
+            bubble.appendChild(labelSpan);
+
+            const suggestionsWrap = document.createElement('div');
+            suggestionsWrap.className = 'support-related-wrap';
+            questions.forEach(q => {
+                const tag = document.createElement('span');
+                tag.className = 'support-suggestion';
+                tag.textContent = q.question.replace('？', '').replace('?', '');
+                tag.onclick = () => handleSuggestionClick(q);
+                suggestionsWrap.appendChild(tag);
+            });
+            bubble.appendChild(suggestionsWrap);
+            
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        };
+
         const handleSuggestionClick = async (questionData) => {
             addMessage('user', questionData.question);
             const minDelay = 800;
@@ -337,12 +374,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     await new Promise(resolve => setTimeout(resolve, 800));
                     showTypingIndicator();
                     await new Promise(resolve => setTimeout(resolve, 500));
-                    const moreInfoLabel = (window.translations && window.translations[window.currentLang]?.support_more_info) || '您可能还想了解：\n';
-                    let moreInfo = moreInfoLabel;
-                    results.slice(1).forEach(r => {
-                        moreInfo += `• ${r.question}\n`;
-                    });
-                    await addBotMessage(moreInfo);
+                    await addRelatedQuestions(results.slice(1));
                 }
             } else {
                 showTypingIndicator();
