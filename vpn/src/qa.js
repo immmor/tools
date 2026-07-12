@@ -211,8 +211,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     };
                 case 'openVip':
                     return () => {
-                        const vipModal = document.getElementById('vip-modal');
-                        if (vipModal) vipModal.classList.remove('hidden');
+                        if (typeof showVipNodes === 'function') {
+                            showVipNodes();
+                        }
                         SupportModule.close();
                     };
                 default:
