@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MediaPipe 车牌检测</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8/wasm/vision_bundle.js" crossorigin="anonymous"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 { color: #333; }
+        .container {
+            position: relative;
+            margin-top: 20px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            border-radius: 8px;
+            overflow: hidden;
+            background: #fff;
+        }
+        video {
+            display: block;
+            width: 640px;
+            height: 480px;
+            object-fit: cover;
+        }
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 640px;
+            height: 480px;
+            pointer-events: none;
+        }
+        #status {
+            margin-top: 15px;
+            font-weight: bold;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>MediaPipe 车牌实时检测</h1>
+    <div id="status">正在加载模型，请稍候...</div>
+
+    <div class="container">
+        <video id="webcam" autoplay playsinline></video>
+        <canvas id="output_canvas"></canvas>
+    </div>
+
+    <script type="module">
+        // 从全局对象中解构出需要的模块
+        const { FilesetResolver, ObjectDetector } = vision;
+
+        const video = document.getElementById("webcam");
+        const canvasElement = document.getElementById("output_canvas");
+        const canvasCtx = canvasElement.getContext("2d");
+        const statusDiv = document.getElementById("status");
+        
+        let objectDetector;
+        let runningMode = "VIDEO";
+        let lastVideoTime = -1;
+
+        // 1. 初始化 MediaPipe Object Detector
+        async function initializeDetector() {
+            try {
+                const visionFileset = await FilesetResolver.forVisionTasks(
+                    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8/wasm"
+                );
+                
+                objectDetector = await ObjectDetector.createFromOptions(visionFileset, {
+                    baseOptions: {
+                        // 替换为你自己的车牌检测 tflite 模型路径
+                        modelAssetPath: "license_plate_detector.tflite", 
+                        delegate: "GPU"
+                    },
+                    scoreThreshold: 0.5, // 信任度阈值
+                    runningMode: runningMode
+                });
+                
+                statusDiv.innerText = "模型加载成功！正在启动摄像头...";
+                startCamera();
+            } catch (error) {
+                statusDiv.innerText = "模型加载失败，请检查模型文件路径或网络。";
+                console.error(error);
+            }
+        }
+
+        // 2. 启动摄像头
+        function startCamera() {
+            const constraints = { video: { width: 640, height: 480 } };
+            navigator.mediaDevices.getUserMedia(constraints)
+                .then((stream) => {
+                    video.srcObject = stream;
+                    video.addEventListener("loadeddata", () => {
+                        canvasElement.width = video.videoWidth;
+                        canvasElement.height = video.videoHeight;
+                        statusDiv.innerText = "检测中...";
+                        predictWebcam();
+                    });
+                })
+                .catch((err) => {
+                    statusDiv.innerText = "无法打开摄像头: " + err;
+                });
+        }
+
+        // 3. 实时帧预测与绘制
+        async function predictWebcam() {
+            if (!objectDetector) return;
+
+            let startTimeMs = performance.now();
+            
+            // 如果视频帧有更新，执行检测
+            if (video.currentTime !== lastVideoTime) {
+                lastVideoTime = video.currentTime;
+                const detections = await objectDetector.detectForVideo(video, startTimeMs);
+                
+                // 清空画布
+                canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+                
+                // 绘制检测到的车牌边界框
+                drawDetections(detections);
+            }
+
+            // 循环调用
+            window.requestAnimationFrame(predictWebcam);
+        }
+
+        // 4. 绘制结果
+        function drawDetections(result) {
+            if (!result.detections) return;
+
+            for (let detection of result.detections) {
+                const box = detection.boundingBox;
+                const score = (detection.categories[0].score * 100).toFixed(1);
+                const label = detection.categories[0].categoryName || "车牌";
+
+                // 绘制矩形框
+                canvasCtx.strokeStyle = "#00FF00";
+                canvasCtx.lineWidth = 3;
+                canvasCtx.strokeRect(box.originX, box.originY, box.width, box.height);
+
+                // 绘制标签背景
+                canvasCtx.fillStyle = "#00FF00";
+                canvasCtx.font = "16px Arial";
+                const textWidth = canvasCtx.measureText(`${label} ${score}%`).width;
+                canvasCtx.fillRect(box.originX, box.originY - 25, textWidth + 10, 25);
+
+                // 绘制文字
+                canvasCtx.fillStyle = "#000000";
+                canvasCtx.fillText(`${label} ${score}%`, box.originX + 5, box.originY - 7);
+            }
+        }
+
+        // 启动入口
+        initializeDetector();
+    </script>
+</body>
+</html>

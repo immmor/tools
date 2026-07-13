@@ -80,7 +80,7 @@ export default {
       return new Response(null, {
         headers: {
           'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type',
           'Access-Control-Max-Age': '86400'
         }
@@ -872,7 +872,7 @@ export default {
         if (!name) return resJson({ code: 400, msg: '请传入name参数，例：?name=kkk' }, 400);
         
         const result = await DB
-          .prepare('SELECT rowid as id, username, balance, v_expire_date, v_token, v_link_clash, v_link_v2ray, invite_code, vorders FROM user WHERE username = ?')
+          .prepare('SELECT rowid as id, username, balance, v_expire_date, v_token, v_link_clash, v_link_v2ray, invite_code, source, vorders FROM user WHERE username = ?')
           .bind(name)
           .first();
         
@@ -892,7 +892,7 @@ export default {
       };
 
       // ========== 开通VIP接口 ==========
-      if (path === '/api/open-vip' && request.method === 'POST') {
+      if (path === '/api/open-vip' && request.method === 'PUT') {
         try {
           const params = await request.json();
           const { username, duration = 30, price = 10.00 } = params;
@@ -1043,6 +1043,21 @@ export default {
         }
       }
 
+      // ========== 更新用户来源接口 ==========
+      if (path === '/api/update-source' && request.method === 'PUT') {
+        try {
+          const { username, source } = await request.json();
+          if (!username || !source) return resJson({ code: 400, msg: '缺少参数' }, 400);
+          const user = await DB.prepare('SELECT source FROM user WHERE username = ?').bind(username).first();
+          if (!user) return resJson({ code: 404, msg: '用户不存在' }, 404);
+          if (user.source) return resJson({ code: 400, msg: '来源已设置' }, 400);
+          await DB.prepare('UPDATE user SET source = ? WHERE username = ?').bind(source, username).run();
+          return resJson({ code: 200, msg: '提交成功' });
+        } catch (err) {
+          return resJson({ code: 500, msg: '提交失败', error: err.message }, 500);
+        }
+      }
+
       // ========== 查询用户VIP状态接口 ==========
       if (path === '/api/vip-status' && request.method === 'GET') {
         try {
@@ -1089,7 +1104,7 @@ export default {
       }
 
       // ========== 自动续费开关接口 ==========
-      if (path === '/api/toggle-auto-renew' && request.method === 'POST') {
+      if (path === '/api/toggle-auto-renew' && request.method === 'PUT') {
         try {
           const { username, enabled } = await request.json();
           if (!username) return resJson({ code: 400, msg: '缺少username参数' }, 400);
@@ -1814,7 +1829,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
       }
 
       // ========== 重置VIP Token接口 ==========
-      if (path === '/api/reset-vtoken' && request.method === 'POST') {
+      if (path === '/api/reset-vtoken' && request.method === 'PUT') {
         try {
           const params = await request.json();
           const { username } = params;
@@ -2226,6 +2241,55 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           const { key } = await request.json();
           if (!key) return resJson({ code: 400, msg: '缺少key参数' }, 400);
           await DB.prepare('DELETE FROM link WHERE key = ?').bind(key).run();
+          return resJson({ code: 200, msg: '删除成功' });
+        } catch (err) {
+          return resJson({ code: 500, msg: '删除失败', error: err.message }, 500);
+        }
+      }
+
+      // ========== node 表接口 ==========
+      if (path === '/api/node' && request.method === 'GET') {
+        try {
+          const nodes = await DB.prepare('SELECT * FROM node ORDER BY id DESC').all();
+          return resJson({ code: 200, data: nodes.results || [] });
+        } catch (err) {
+          return resJson({ code: 500, msg: '查询失败', error: err.message }, 500);
+        }
+      }
+
+      if (path === '/api/node' && request.method === 'POST') {
+        try {
+          const { email, password, type, clash_link, v2ray_link, expire_date } = await request.json();
+          if (!email || !password || !type || !clash_link || !v2ray_link) {
+            return resJson({ code: 400, msg: '缺少必要参数' }, 400);
+          }
+          const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+          await DB.prepare('INSERT INTO node (email, password, type, clash_link, v2ray_link, expire_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+            .bind(email, password, type, clash_link, v2ray_link, expire_date || '', now, now).run();
+          return resJson({ code: 200, msg: '添加成功' });
+        } catch (err) {
+          return resJson({ code: 500, msg: '添加失败', error: err.message }, 500);
+        }
+      }
+
+      if (path === '/api/node' && request.method === 'PUT') {
+        try {
+          const { id, email, password, type, clash_link, v2ray_link, expire_date } = await request.json();
+          if (!id) return resJson({ code: 400, msg: '缺少id参数' }, 400);
+          const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+          await DB.prepare('UPDATE node SET email = ?, password = ?, type = ?, clash_link = ?, v2ray_link = ?, expire_date = ?, updated_at = ? WHERE id = ?')
+            .bind(email, password, type, clash_link, v2ray_link, expire_date || '', now, id).run();
+          return resJson({ code: 200, msg: '更新成功' });
+        } catch (err) {
+          return resJson({ code: 500, msg: '更新失败', error: err.message }, 500);
+        }
+      }
+
+      if (path === '/api/node' && request.method === 'DELETE') {
+        try {
+          const { id } = await request.json();
+          if (!id) return resJson({ code: 400, msg: '缺少id参数' }, 400);
+          await DB.prepare('DELETE FROM node WHERE id = ?').bind(id).run();
           return resJson({ code: 200, msg: '删除成功' });
         } catch (err) {
           return resJson({ code: 500, msg: '删除失败', error: err.message }, 500);
