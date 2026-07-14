@@ -1580,7 +1580,7 @@ dns:
     - 8.8.8.8
     - 1.1.1.1
 proxies:
-  - name: "FREE_EXPIRED"
+  - name: "FREE_EXPIRED_SIGNIN_REQUIRED"
     type: vmess
     server: expired.freenode.local
     port: 8080
@@ -1593,7 +1593,7 @@ proxy-groups:
   - name: "🚀 免费节点已到期"
     type: select
     proxies:
-      - FREE_EXPIRED
+      - FREE_EXPIRED_SIGNIN_REQUIRED
 rules:
   - MATCH,🚀 免费节点已到期
 `;
