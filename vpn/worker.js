@@ -2088,7 +2088,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           const username = url.searchParams.get('username');
           const all = url.searchParams.get('all');
           
-          if (!username) {
+          if (!username && all !== 'true') {
             return resJson({ code: 400, msg: '请传入username参数' }, 400);
           }
           
@@ -2161,6 +2161,63 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
         } catch (err) {
           console.error('删除消息错误:', err);
           return resJson({ code: 500, msg: '删除失败', error: err.message }, 500);
+        }
+      }
+
+      // ========== 客服在线状态接口 ==========
+      if (path === '/api/support/status' && request.method === 'GET') {
+        try {
+          const status = await DB.prepare('SELECT * FROM support_status WHERE id = 1').first();
+          return resJson({
+            code: 200,
+            msg: '查询成功',
+            data: {
+              online: status?.online === 1 || false,
+              last_active: status?.last_active || null
+            }
+          });
+        } catch (err) {
+          console.error('查询客服状态错误:', err);
+          return resJson({ code: 200, msg: '查询成功', data: { online: false } });
+        }
+      }
+
+      if (path === '/api/support/status' && request.method === 'PUT') {
+        try {
+          const params = await request.json();
+          const { online } = params;
+          const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+          await DB.prepare('UPDATE support_status SET online = ?, last_active = ? WHERE id = 1')
+            .bind(online ? 1 : 0, now)
+            .run();
+          return resJson({ code: 200, msg: '状态更新成功' });
+        } catch (err) {
+          console.error('更新客服状态错误:', err);
+          return resJson({ code: 500, msg: '更新失败', error: err.message }, 500);
+        }
+      }
+
+      // ========== 客服留言接口 ==========
+      if (path === '/api/support/message' && request.method === 'POST') {
+        try {
+          const params = await request.json();
+          const { username, content, history } = params;
+          
+          if (!username || !content) {
+            return resJson({ code: 400, msg: '参数不完整' }, 400);
+          }
+          
+          const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+          const fullContent = history ? `[历史对话]\n${history}\n\n[用户消息]\n${content}` : content;
+          
+          await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
+            .bind('immmor', `[用户留言] ${username}: ${fullContent}`, now)
+            .run();
+          
+          return resJson({ code: 200, msg: '留言成功，我们会尽快回复您！' });
+        } catch (err) {
+          console.error('留言错误:', err);
+          return resJson({ code: 500, msg: '留言失败', error: err.message }, 500);
         }
       }
 

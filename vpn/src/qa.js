@@ -2,6 +2,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const SupportModule = (() => {
         let questions = [];
         let loadedLang = null;
+        let chatHistory = [];
+        let isChatMode = false;
+        let ws = null;
         const modal = document.getElementById('support-modal');
         const closeBtn = document.getElementById('support-close');
         const messagesContainer = document.getElementById('support-messages');
@@ -315,7 +318,9 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         const handleSuggestionClick = async (questionData) => {
+            if (isChatMode) return;
             addMessage('user', questionData.question);
+            chatHistory.push({ type: 'user', text: questionData.question });
             const minDelay = 800;
             const maxDelay = 1500;
             const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
@@ -324,6 +329,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const typingDuration = 500 + Math.floor(Math.random() * 800);
             await new Promise(resolve => setTimeout(resolve, typingDuration));
             await addBotMessage(questionData.answer, questionData.action);
+            chatHistory.push({ type: 'bot', text: questionData.answer });
         };
 
         const fuzzySearch = (query) => {
@@ -350,13 +356,112 @@ document.addEventListener('DOMContentLoaded', () => {
             .slice(0, 3);
         };
 
+        const checkHumanService = (text) => {
+            const keywords = ['人工', '客服', 'human', 'service', '真人'];
+            return keywords.some(k => text.toLowerCase().includes(k));
+        };
+
+        const confirmHumanService = async () => {
+            const confirmText = (window.translations && window.translations[window.currentLang]?.support_confirm_human) || '确定要转接人工客服吗？如果当前没有客服在线，您的问题将转为留言。';
+            const confirmBtnText = (window.translations && window.translations[window.currentLang]?.support_confirm) || '确定';
+            const cancelBtnText = (window.translations && window.translations[window.currentLang]?.support_cancel) || '取消';
+            
+            removeTypingIndicator();
+            const div = document.createElement('div');
+            div.className = 'flex gap-3 support-bot-message';
+            div.innerHTML = `
+                <div class="w-8 h-8 rounded-full bg-[var(--neon-blue)] flex items-center justify-center text-black text-xs font-bold shrink-0">
+                    <i data-lucide="headphones" class="w-4 h-4"></i>
+                </div>
+                <div class="max-w-[80%]">
+                    <div class="support-bubble px-4 py-3 text-sm">${confirmText}</div>
+                    <div class="flex gap-2 mt-3">
+                        <button class="support-action-btn bg-[var(--neon-green)]" id="support-human-confirm">${confirmBtnText}</button>
+                        <button class="support-action-btn bg-zinc-600" id="support-human-cancel">${cancelBtnText}</button>
+                    </div>
+                </div>
+            `;
+            messagesContainer.appendChild(div);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            if (window.lucide) lucide.createIcons();
+
+            return new Promise((resolve) => {
+                document.getElementById('support-human-confirm').onclick = () => {
+                    resolve(true);
+                };
+                document.getElementById('support-human-cancel').onclick = () => {
+                    resolve(false);
+                };
+            });
+        };
+
+        const getSupportStatus = async () => {
+            try {
+                const res = await fetch('https://api.funbua.uk/api/support/status');
+                const data = await res.json();
+                return data.data?.online || false;
+            } catch {
+                return false;
+            }
+        };
+
+        const sendMessageToSupport = async (content) => {
+            const userInfo = window.userInfo || JSON.parse(localStorage.getItem('userInfo') || '{}');
+            const history = chatHistory.map(h => `${h.type === 'user' ? '[用户]' : '[客服]'} ${h.text}`).join('\n');
+            
+            try {
+                const res = await fetch('https://api.funbua.uk/api/support/message', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: userInfo.username || '',
+                        content,
+                        history
+                    })
+                });
+                const data = await res.json();
+                return data.code === 200;
+            } catch {
+                return false;
+            }
+        };
+
+        const enterChatMode = () => {
+            isChatMode = true;
+            suggestionsContainer.style.display = 'none';
+            const modeText = (window.translations && window.translations[window.currentLang]?.support_chat_mode) || '已进入人工客服模式';
+            addMessage('bot', modeText);
+        };
+
         const handleSend = async () => {
             const text = input.value.trim();
             if (!text) return;
             
             addMessage('user', text);
+            chatHistory.push({ type: 'user', text });
             input.value = '';
-            
+
+            if (isChatMode) {
+                return;
+            }
+
+            if (checkHumanService(text)) {
+                const confirmed = await confirmHumanService();
+                if (!confirmed) {
+                    return;
+                }
+
+                const isOnline = await getSupportStatus();
+                if (isOnline) {
+                    enterChatMode();
+                } else {
+                    const offlineText = (window.translations && window.translations[window.currentLang]?.support_offline) || '当前没有客服在线，您的问题已转为留言，我们会尽快回复您！';
+                    addMessage('bot', offlineText);
+                    await sendMessageToSupport(text);
+                }
+                return;
+            }
+
             const results = fuzzySearch(text);
             
             const minDelay = 800;
@@ -369,6 +474,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const typingDuration = 500 + Math.floor(Math.random() * 1000);
                 await new Promise(resolve => setTimeout(resolve, typingDuration));
                 await addBotMessage(results[0].answer, results[0].action);
+                chatHistory.push({ type: 'bot', text: results[0].answer });
                 
                 if (results.length > 1) {
                     await new Promise(resolve => setTimeout(resolve, 800));
@@ -381,12 +487,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 await new Promise(resolve => setTimeout(resolve, 1000));
                 const noAnswer = (window.translations && window.translations[window.currentLang]?.support_no_answer) || '抱歉，我暂时无法回答这个问题。请详细描述您的问题，我们会尽快为您解决。';
                 await addBotMessage(noAnswer);
+                chatHistory.push({ type: 'bot', text: noAnswer });
             }
         };
 
         const openModal = () => {
             modal.classList.remove('hidden');
             if (window.lucide) lucide.createIcons();
+            chatHistory = [];
+            isChatMode = false;
             const currentLang = window.currentLang || 'zh-CN';
             if (questions.length === 0 || loadedLang !== currentLang) {
                 loadQuestions();
@@ -395,11 +504,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const closeModal = () => {
             modal.classList.add('hidden');
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
         };
 
         const updateLanguage = () => {
             questions = [];
             messagesContainer.innerHTML = '';
+            chatHistory = [];
+            isChatMode = false;
             loadQuestions();
             const welcomeMsg = (window.translations && window.translations[window.currentLang]?.support_welcome) || '您好！欢迎来到 PHANTOM VPN 客服中心。我是您的智能客服助手，有什么可以帮助您的吗？';
             addMessage('bot', welcomeMsg);
