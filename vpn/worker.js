@@ -872,7 +872,7 @@ export default {
         if (!name) return resJson({ code: 400, msg: '请传入name参数，例：?name=kkk' }, 400);
         
         const result = await DB
-          .prepare('SELECT rowid as id, username, balance, v_expire_date, v_token, v_link_clash, v_link_v2ray, invite_code, source, vorders FROM user WHERE username = ?')
+          .prepare('SELECT rowid as id, username, balance, v_expire_date, v_token, v_link_clash, v_link_v2ray, invite_code, source, vorders, free_expire_date, last_checkin FROM user WHERE username = ?')
           .bind(name)
           .first();
         
@@ -1518,6 +1518,34 @@ rules:
         }
       }
 
+      // ========== 签到接口 ==========
+      if (path === '/api/checkin' && request.method === 'POST') {
+        try {
+          const { username } = await request.json();
+          if (!username) return resJson({ code: 400, msg: '缺少username参数' }, 400);
+
+          const user = await DB.prepare('SELECT last_checkin, free_expire_date FROM user WHERE username = ?').bind(username).first();
+          if (!user) return resJson({ code: 404, msg: '用户不存在' }, 404);
+
+          const today = new Date().toISOString().slice(0, 10);
+          if (user.last_checkin === today) {
+            return resJson({ code: 200, msg: '今日已签到', free_expire_date: user.free_expire_date });
+          }
+
+          const expireDate = user.free_expire_date 
+            ? new Date(user.free_expire_date) 
+            : new Date();
+          expireDate.setDate(expireDate.getDate() + 1);
+
+          await DB.prepare('UPDATE user SET last_checkin = ?, free_expire_date = ? WHERE username = ?')
+            .bind(today, expireDate.toISOString().slice(0, 10), username).run();
+
+          return resJson({ code: 200, msg: '签到成功，免费节点延长1天', free_expire_date: expireDate.toISOString().slice(0, 10) });
+        } catch (err) {
+          return resJson({ code: 500, msg: '签到失败', error: err.message }, 500);
+        }
+      }
+
       // ========== 免费节点接口 ==========
       if (path === '/free/clash' && request.method === 'GET') {
         try {
@@ -1534,10 +1562,48 @@ rules:
             // 如果解码失败，使用原始值
           }
           
-          // 验证用户是否存在
-          const user = await DB.prepare('SELECT fetch_link FROM user WHERE username = ?').bind(username).first();
+          // 验证用户是否存在并检查免费节点有效期
+          const user = await DB.prepare('SELECT fetch_link, free_expire_date FROM user WHERE username = ?').bind(username).first();
           if (!user) {
             return resJson({ code: 404, msg: '用户不存在' }, 404);
+          }
+          
+          // 检查免费节点是否过期
+          const today = new Date().toISOString().slice(0, 10);
+          if (!user.free_expire_date || user.free_expire_date < today) {
+            const mockConfig = `mixed-port: 7890
+allow-lan: true
+mode: rule
+log-level: info
+dns:
+  servers:
+    - 8.8.8.8
+    - 1.1.1.1
+proxies:
+  - name: "FREE_EXPIRED"
+    type: vmess
+    server: expired.freenode.local
+    port: 8080
+    uuid: 00000000-0000-0000-0000-000000000000
+    alterId: 0
+    cipher: auto
+    tls: false
+    skip-cert-verify: true
+proxy-groups:
+  - name: "🚀 免费节点已到期"
+    type: select
+    proxies:
+      - FREE_EXPIRED
+rules:
+  - MATCH,🚀 免费节点已到期
+`;
+            return new Response(mockConfig, {
+              headers: {
+                'Content-Type': 'text/yaml; charset=utf-8',
+                'Access-Control-Allow-Origin': '*',
+                'Content-Disposition': 'attachment; filename="phantom-free.yaml"'
+              }
+            });
           }
           
           // 根据当前日期生成链接（获取昨天的配置文件）
@@ -1593,10 +1659,35 @@ rules:
             // 如果解码失败，使用原始值
           }
           
-          // 验证用户是否存在
-          const user = await DB.prepare('SELECT fetch_link FROM user WHERE username = ?').bind(username).first();
+          // 验证用户是否存在并检查免费节点有效期
+          const user = await DB.prepare('SELECT fetch_link, free_expire_date FROM user WHERE username = ?').bind(username).first();
           if (!user) {
             return resJson({ code: 404, msg: '用户不存在' }, 404);
+          }
+          
+          // 检查免费节点是否过期
+          const today = new Date().toISOString().slice(0, 10);
+          if (!user.free_expire_date || user.free_expire_date < today) {
+            const mockConfig = `{
+  "v": "2",
+  "ps": "🚀 免费节点已到期",
+  "add": "expired.freenode.local",
+  "port": "8080",
+  "id": "00000000-0000-0000-0000-000000000000",
+  "aid": "0",
+  "net": "tcp",
+  "type": "none",
+  "host": "",
+  "path": "",
+  "tls": ""
+}`;
+            return new Response(mockConfig, {
+              headers: {
+                'Content-Type': 'text/plain; charset=utf-8',
+                'Access-Control-Allow-Origin': '*',
+                'Content-Disposition': 'attachment; filename="phantom-free.txt"'
+              }
+            });
           }
           
           // 根据当前日期生成链接（获取昨天的配置文件）
