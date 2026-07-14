@@ -337,10 +337,6 @@
             min-width: 1000px;
         }
 
-        #trafficTable {
-            min-width: 800px;
-        }
-
         #footballTable {
             min-width: 1200px;
         }
@@ -638,7 +634,6 @@
                 <a href="#dashboard" class="menu-item active" onclick="showPage('dashboard')">仪表盘</a>
                 <a href="#users" class="menu-item" onclick="showPage('users')">用户管理</a>
                 <a href="#orders" class="menu-item" onclick="showPage('orders')">订单管理</a>
-                <a href="#traffic" class="menu-item" onclick="showPage('traffic')">流量管理</a>
                 <a href="#nodes" class="menu-item" onclick="showPage('nodes')">节点管理</a>
                 <a href="#settings" class="menu-item" onclick="showPage('settings')">系统设置</a>
                 <a href="#messages" class="menu-item" onclick="showPage('messages')">消息管理</a>
@@ -743,8 +738,11 @@
                                     <th onclick="sortUsers('survey')" style="cursor:pointer; min-width: 100px;">问卷 <span class="sort-indicator" data-col="survey"></span></th>
                                     <th onclick="sortUsers('security_answer')" style="cursor:pointer; min-width: 120px;">密保答案 <span class="sort-indicator" data-col="security_answer"></span></th>
                                     <th onclick="sortUsers('source')" style="cursor:pointer; min-width: 100px;">来源 <span class="sort-indicator" data-col="source"></span></th>
+                                    <th onclick="sortUsers('free_expire_date')" style="cursor:pointer; min-width: 130px;">免费节点到期 <span class="sort-indicator" data-col="free_expire_date"></span></th>
+                                    <th onclick="sortUsers('last_checkin')" style="cursor:pointer; min-width: 130px;">最后签到 <span class="sort-indicator" data-col="last_checkin"></span></th>
                                     <th onclick="sortUsers('auto_rewn')" style="cursor:pointer; min-width: 100px;">自动续费 <span class="sort-indicator" data-col="auto_rewn"></span></th>
                                     <th onclick="sortUsers('vorders')" style="cursor:pointer; min-width: 150px;">购买记录 <span class="sort-indicator" data-col="vorders"></span></th>
+                                    <th onclick="sortUsers('remark')" style="cursor:pointer; min-width: 120px;">备注 <span class="sort-indicator" data-col="remark"></span></th>
                                     <th style="min-width: 100px;">操作</th>
                                 </tr>
                             </thead>
@@ -787,36 +785,6 @@
                     </div>
                 </div>
 
-                <!-- 流量管理页面 -->
-                <div id="trafficPage" class="page-section" style="display: none;">
-                    <div class="data-table">
-                        <div class="table-header">
-                            <h3>流量使用情况</h3>
-                            <div style="display: flex; gap: 10px;">
-                                <input type="text" id="trafficSearchInput" placeholder="输入用户名查询流量" style="padding: 0.5rem; border: 1px solid #e2e8f0; border-radius: 4px;">
-                                <button class="add-btn" onclick="queryUserTraffic(document.getElementById('trafficSearchInput').value)" style="background-color: #667eea;">查询流量</button>
-                                <button class="add-btn" onclick="checkAllClashLinks()" style="background-color:#e53e3e;">检测Clash链接</button>
-                            </div>
-                        </div>
-                        <table id="trafficTable">
-                            <thead>
-                                <tr>
-                                    <th>用户名</th>
-                                    <th>VIP状态</th>
-                                    <th>月流量限制</th>
-                                    <th>已用流量</th>
-                                    <th>剩余流量</th>
-                                    <th>重置日期</th>
-                                    <th>操作</th>
-                                </tr>
-                            </thead>
-                            <tbody id="trafficTableBody">
-                                <!-- 流量数据将通过JavaScript动态生成 -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
                 <!-- 节点订阅页面 -->
                 <div id="nodesPage" class="page-section" style="display: none;">
                     <div class="data-table">
@@ -825,6 +793,7 @@
                             <div style="display: flex; gap: 10px;">
                                 <input type="text" id="nodeSearchInput" placeholder="输入用户名生成订阅链接" style="padding: 0.5rem; border: 1px solid #e2e8f0; border-radius: 4px;">
                                 <button class="add-btn" onclick="generateNodeLink(document.getElementById('nodeSearchInput').value)" style="background-color: #667eea;">生成链接</button>
+                                <button class="add-btn" onclick="checkAllClashLinks()" style="background-color:#e53e3e;">检测Clash链接</button>
                             </div>
                         </div>
                         <div style="padding: 1.5rem;">
@@ -836,6 +805,24 @@
                                 <div style="display: flex; gap: 10px;">
                                     <button class="add-btn" onclick="copyToClipboard('nodeLinkDisplay')">复制链接</button>
                                     <button class="add-btn" onclick="openNodeLink()" style="background-color: #48bb78;">打开链接</button>
+                                </div>
+                            </div>
+                            <div id="clashLinkResult" style="display: none; margin-top: 1rem;">
+                                <h4 style="color: #4a5568; margin-bottom: 1rem;">Clash链接检测结果：</h4>
+                                <div style="background-color: #f7fafc; padding: 1rem; border-radius: 8px; overflow-x: auto;">
+                                    <table id="clashLinksTable" style="width: 100%; min-width: 1200px;">
+                                        <thead>
+                                            <tr>
+                                                <th>用户名</th>
+                                                <th>VIP到期时间</th>
+                                                <th>Clash链接</th>
+                                                <th>V2Ray链接</th>
+                                                <th>检测信息</th>
+                                                <th>操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="clashLinksTableBody"></tbody>
+                                    </table>
                                 </div>
                             </div>
                         </div>
@@ -873,20 +860,19 @@
                     <div class="data-table" style="margin-top: 1rem;">
                         <div class="table-header">
                             <h3>节点链接管理</h3>
-                            <div style="display: flex; gap: 10px;">
-                                <input type="text" id="newLinkKey" placeholder="链接名称" style="padding: 0.5rem; border: 1px solid #e2e8f0; border-radius: 4px;">
-                                <input type="text" id="newLinkValue" placeholder="链接地址" style="padding: 0.5rem; border: 1px solid #e2e8f0; border-radius: 4px; width: 300px;">
-                                <button class="add-btn" onclick="addLink()" style="background-color: #48bb78;">添加链接</button>
-                            </div>
+                            <button class="add-btn" onclick="openNodeModal()" style="background-color: #48bb78;">添加节点</button>
                         </div>
                         <table>
                             <thead>
                                 <tr>
                                     <th>ID</th>
-                                    <th>名称</th>
-                                    <th>链接</th>
-                                    <th>更新时间</th>
-                                    <th>操作</th>
+                                    <th>邮箱</th>
+                                    <th>密码</th>
+                                    <th>类型</th>
+                                    <th style="min-width: 250px;">Clash链接</th>
+                                    <th style="min-width: 250px;">V2Ray链接</th>
+                                    <th>到期时间</th>
+                                    <th style="min-width: 160px;">操作</th>
                                 </tr>
                             </thead>
                             <tbody id="linksTableBody"></tbody>
@@ -1205,11 +1191,23 @@
                         <input type="text" id="userSecurityAnswer" name="userSecurityAnswer">
                     </div>
                     <div class="form-group">
+                        <label for="userFreeExpireDate">免费节点到期</label>
+                        <input type="date" id="userFreeExpireDate" name="userFreeExpireDate">
+                    </div>
+                    <div class="form-group">
+                        <label for="userLastCheckin">最后签到</label>
+                        <input type="date" id="userLastCheckin" name="userLastCheckin">
+                    </div>
+                    <div class="form-group">
                         <label for="userAutoRewn">自动续费</label>
                         <select id="userAutoRewn" name="userAutoRewn" style="width: 100%; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 4px;">
                             <option value="0">否</option>
                             <option value="1">是</option>
                         </select>
+                    </div>
+                    <div class="form-group" style="grid-column: span 2;">
+                        <label for="userRemark">备注</label>
+                        <textarea id="userRemark" name="userRemark" rows="4" style="width: 100%; resize: vertical; font-family: monospace;"></textarea>
                     </div>
                 </div>
                 <button type="submit" class="btn" style="margin-top: 15px; flex-shrink: 0;">保存</button>
@@ -1217,6 +1215,47 @@
         </div>
     </div>
 
+    </div>
+
+    <!-- 节点编辑模态框 -->
+    <div id="nodeModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="nodeModalTitle">添加节点</h3>
+                <button class="close-btn" onclick="closeNodeModal()">&times;</button>
+            </div>
+            <form id="nodeForm" onsubmit="saveNode(event)">
+                <input type="hidden" id="nodeEditId">
+                <div class="form-group">
+                    <label>邮箱</label>
+                    <input type="text" id="nodeEmail" required>
+                </div>
+                <div class="form-group">
+                    <label>密码</label>
+                    <input type="text" id="nodePassword" required>
+                </div>
+                <div class="form-group">
+                    <label>类型</label>
+                    <select id="nodeType" required>
+                        <option value="month">month</option>
+                        <option value="year">year</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Clash链接</label>
+                    <input type="text" id="nodeClashLink" required>
+                </div>
+                <div class="form-group">
+                    <label>V2Ray链接</label>
+                    <input type="text" id="nodeV2rayLink" required>
+                </div>
+                <div class="form-group">
+                    <label>到期时间</label>
+                    <input type="date" id="nodeExpireDate">
+                </div>
+                <button type="submit" class="btn" style="margin-top: 15px;">保存</button>
+            </form>
+        </div>
     </div>
 
     <!-- 比赛编辑模态框 -->
@@ -1535,7 +1574,6 @@
                 'dashboard': '仪表盘',
                 'users': '用户管理',
                 'orders': '订单管理',
-                'traffic': '流量管理',
                 'nodes': '节点管理',
                 'settings': '系统设置',
                 'messages': '消息管理',
@@ -1550,8 +1588,6 @@
                 await loadUsers();
             } else if (pageName === 'orders') {
                 await loadOrders();
-            } else if (pageName === 'traffic') {
-                await loadTraffic();
             } else if (pageName === 'settings') {
                 // 系统设置页面
             } else if (pageName === 'nodes') {
@@ -1625,12 +1661,6 @@
             showPage('orders');
         }
         
-        // 加载流量数据
-        async function loadTraffic() {
-            const tbody = document.getElementById('trafficTableBody');
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">点击"查询流量"按钮查询用户流量</td></tr>';
-        }
-
         // 用户数据存储
         let usersData = [];
         let ordersData = [];
@@ -1642,7 +1672,7 @@
         // 加载用户列表
         async function loadUsers() {
             const tbody = document.getElementById('usersTableBody');
-            tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;">加载中...</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;">加载中...</td></tr>';
             
             const result = await apiRequest('/api/users?page=1&limit=9999', 'GET');
             
@@ -1650,7 +1680,7 @@
                 usersData = result.data.users || [];
                 renderUsers();
             } else {
-                tbody.innerHTML = `<tr><td colspan="12" style="text-align:center;color:red;">加载失败: ${result.msg || '未知错误'}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;color:red;">加载失败: ${result.msg || '未知错误'}</td></tr>`;
             }
         }
         
@@ -1732,7 +1762,7 @@
             const tbody = document.getElementById('usersTableBody');
             tbody.innerHTML = '';
             if (usersData.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="22" style="text-align:center;">暂无用户数据</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="23" style="text-align:center;">暂无用户数据</td></tr>';
                 return;
             }
             applyUserSort(usersData).forEach(user => {
@@ -1761,10 +1791,13 @@
                     <td>${user.survey || '-'}</td>
                     <td>${user.security_answer || '-'}</td>
                     <td>${user.source || '-'}</td>
+                    <td>${user.free_expire_date || '-'}</td>
+                    <td>${user.last_checkin || '-'}</td>
                     <td>${user.auto_rewn === 1 || user.auto_rewn === '1' || user.auto_rewn === true ? '是' : '否'}</td>
                     <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${user.vorders || '[]'}">
                         ${user.vorders || '[]'}
                     </td>
+                    <td>${user.remark || '-'}</td>
                     <td style="min-width: 200px;">
                         <button class="action-btn edit-btn" onclick="editUser('${user.username}')">修改</button>
                         <button class="action-btn" onclick="checkUserClashLink('${user.username}')">检测</button>
@@ -1923,7 +1956,10 @@
             document.getElementById('userVorders').value = user.vorders || '';
             document.getElementById('userFetchLink').value = user.fetch_link || '';
             document.getElementById('userSecurityAnswer').value = user.security_answer || '';
+            document.getElementById('userFreeExpireDate').value = user.free_expire_date || '';
+            document.getElementById('userLastCheckin').value = user.last_checkin || '';
             document.getElementById('userAutoRewn').value = (user.auto_rewn === 1 || user.auto_rewn === '1' || user.auto_rewn === true) ? '1' : '0';
+            document.getElementById('userRemark').value = user.remark || '';
             
             document.getElementById('userModal').style.display = 'flex';
         }
@@ -1944,7 +1980,10 @@
             const vorders = document.getElementById('userVorders').value;
             const fetch_link = document.getElementById('userFetchLink').value;
             const security_answer = document.getElementById('userSecurityAnswer').value;
+            const free_expire_date = document.getElementById('userFreeExpireDate').value;
+            const last_checkin = document.getElementById('userLastCheckin').value;
             const auto_rewn = document.getElementById('userAutoRewn').value;
+            const remark = document.getElementById('userRemark').value;
             
             try {
                 const result = await newApiRequest('/api/user/edit', 'POST', {
@@ -1963,7 +2002,10 @@
                     vorders: vorders || '',
                     fetch_link: fetch_link || '',
                     security_answer: security_answer || '',
-                    auto_rewn: auto_rewn
+                    free_expire_date: free_expire_date || null,
+                    last_checkin: last_checkin || null,
+                    auto_rewn: auto_rewn,
+                    remark: remark || ''
                 });
                 
                 if (result.code === 200) {
@@ -2008,7 +2050,7 @@
             const tbody = document.getElementById('usersTableBody');
             tbody.innerHTML = '';
             if (data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="19" style="text-align:center;">未找到匹配的用户</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="20" style="text-align:center;">未找到匹配的用户</td></tr>';
                 return;
             }
             applyUserSort(data).forEach(user => {
@@ -2037,10 +2079,13 @@
                     <td>${user.survey || '-'}</td>
                     <td>${user.security_answer || '-'}</td>
                     <td>${user.source || '-'}</td>
+                    <td>${user.free_expire_date || '-'}</td>
+                    <td>${user.last_checkin || '-'}</td>
                     <td>${user.auto_rewn === 1 || user.auto_rewn === '1' || user.auto_rewn === true ? '是' : '否'}</td>
                     <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${user.vorders || '[]'}">
                         ${user.vorders || '[]'}
                     </td>
+                    <td>${user.remark || '-'}</td>
                     <td style="min-width: 200px;">
                         <button class="action-btn edit-btn" onclick="editUser('${user.username}')">修改</button>
                         <button class="action-btn" onclick="checkUserClashLink('${user.username}')">检测</button>
@@ -2186,66 +2231,263 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
             }
         }
         
-        // 查询用户流量
-        async function queryUserTraffic(username) {
-            if (!username) {
-                alert('请输入用户名');
-                return;
-            }
-            
-            const tbody = document.getElementById('trafficTableBody');
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">加载中...</td></tr>';
-            
-            const result = await apiRequest(`/api/quota?username=${encodeURIComponent(username)}`, 'GET');
-            
-            if (result.code === 200) {
-                const data = result.data;
-                tbody.innerHTML = '';
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td>${data.username || username}</td>
-                    <td>${data.is_vip ? '<span style="color:#48bb78;">VIP</span>' : '普通用户'}</td>
-                    <td>${data.monthly_quota || 307200} MB</td>
-                    <td>${data.used_quota || 0} MB</td>
-                    <td>${data.remaining_quota || 0} MB</td>
-                    <td>${data.quota_reset_date || '-'}</td>
-                    <td>
-                        <button class="action-btn edit-btn" onclick="resetUserTraffic('${data.username || username}')">重置</button>
-                    </td>
-                `;
-                tbody.appendChild(row);
-            } else {
-                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:red;">${result.msg || '查询失败'}</td></tr>`;
-            }
-        }
-        
         async function checkAllClashLinks() {
-            const tbody = document.getElementById('trafficTableBody');
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">检测中...</td></tr>';
+            const resultDiv = document.getElementById('clashLinkResult');
+            const tbody = document.getElementById('clashLinksTableBody');
             
-            const result = await newApiRequest('/api/clash-links', 'GET');
+            document.getElementById('nodeLinkResult').style.display = 'none';
+            resultDiv.style.display = 'block';
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">检测中...</td></tr>';
             
-            if (result.code !== 200 || !result.data?.length) {
-                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;">无Clash链接可检测</td></tr>`;
+            const [clashResult, usersResult] = await Promise.all([
+                newApiRequest('/api/clash-links', 'GET'),
+                apiRequest('/api/users?page=1&limit=9999', 'GET')
+            ]);
+            
+            if (clashResult.code !== 200 || !clashResult.data?.length) {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;">无Clash链接可检测</td></tr>`;
                 return;
             }
 
+            const usersMap = {};
+            if (usersResult.code === 200 && usersResult.data?.users) {
+                usersResult.data.users.forEach(user => {
+                    usersMap[user.username] = user;
+                });
+            }
+
             let html = '';
-            for (const u of result.data) {
+            for (const u of clashResult.data) {
+                const userInfo = usersMap[u.username];
+                const vipExpireDate = userInfo?.v_expire_date ? new Date(userInfo.v_expire_date).toLocaleDateString() : '-';
+                const v2rayLink = userInfo?.v_link_v2ray || '-';
+                
                 let infoText = '-';
+                let linkExpireDate = null;
+                let totalTrafficGB = 0;
                 if (u.subscription_userinfo) {
                     const m = u.subscription_userinfo.match(/upload=(\d+); download=(\d+); total=(\d+); expire=(\d+)/);
                     if (m) {
-                        const toGB = n => (n / 1024 / 1024 / 1024).toFixed(2) + ' GB';
+                        const toGB = n => (n / 1024 / 1024 / 1024).toFixed(2);
                         const toDate = t => new Date(t * 1000).toLocaleDateString();
-                        infoText = `↑${toGB(m[1])} ↓${toGB(m[2])} 总${toGB(m[3])} 到期${toDate(m[4])}`;
+                        const uploadGB = parseFloat(toGB(m[1]));
+                        const downloadGB = parseFloat(toGB(m[2]));
+                        totalTrafficGB = uploadGB + downloadGB;
+                        linkExpireDate = parseInt(m[4]) * 1000;
+                        infoText = `↑${uploadGB.toFixed(2)} GB ↓${downloadGB.toFixed(2)} GB 总${toGB(m[3])} GB 到期${toDate(m[4])}`;
+                        if (totalTrafficGB >= 300) {
+                            infoText += `<span style="color:#e53e3e;"> ⚠️流量超限</span>`;
+                        }
                     }
                 } else {
                     infoText = `<span style="color:#e53e3e;">${u.error || '请求失败'}</span>`;
                 }
-                html += `<tr><td>${u.username}</td><td colspan="5">${infoText}</td><td>${u.link?.substring(0, 30)}...</td></tr>`;
+                
+                const isLinkExpiring = linkExpireDate && userInfo?.v_expire_date;
+                const vipExpireMs = new Date(userInfo.v_expire_date).getTime();
+                const isTrafficOverLimit = totalTrafficGB >= 300;
+                const isVipExpired = userInfo?.v_expire_date && new Date().getTime() > vipExpireMs;
+                const needsRecommendation = (isLinkExpiring && vipExpireMs > linkExpireDate) || isTrafficOverLimit;
+                
+                let bgColor = '';
+                if (isVipExpired) {
+                    bgColor = 'background-color: #fed7d7;';
+                } else if (needsRecommendation) {
+                    bgColor = 'background-color: #fff3cd;';
+                }
+                
+                html += `<tr ${bgColor ? `style="${bgColor}"` : ''}>
+                    <td>${u.username}</td>
+                    <td>${vipExpireDate}</td>
+                    <td style="max-width: 400px; word-break: break-all; font-size: 0.85rem;">${u.link || '-'}</td>
+                    <td style="max-width: 400px; word-break: break-all; font-size: 0.85rem;">${v2rayLink}</td>
+                    <td>${infoText}</td>
+                    <td style="min-width: 180px;">
+                        <button class="action-btn edit-btn" onclick="clearUserLinks('${u.username}')" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">清空链接</button>
+                        <button class="action-btn" onclick="recommendLink('${u.username}', ${needsRecommendation})" style="font-size: 0.75rem; padding: 0.25rem 0.5rem; ${needsRecommendation ? 'background-color:#48bb78;color:white;' : ''}">${needsRecommendation ? '🔄推荐替换' : '推荐替换'}</button>
+                    </td>
+                </tr>`;
             }
             tbody.innerHTML = html;
+        }
+
+        async function clearUserLinks(username) {
+            if (!confirm(`确定要清空用户 ${username} 的Clash和V2Ray链接吗？`)) {
+                return;
+            }
+            
+            const result = await newApiRequest('/api/user/edit', 'POST', {
+                username: username,
+                v_link_clash: '',
+                v_link_v2ray: ''
+            });
+            
+            if (result.code === 200) {
+                alert('链接已清空');
+                checkAllClashLinks();
+            } else {
+                alert(result.msg || '清空失败');
+            }
+        }
+
+        async function recommendLink(username, needsRecommendation) {
+            const result = await newApiRequest('/api/node', 'GET');
+            if (result.code !== 200 || !result.data?.length) {
+                alert('⚠️ 暂无可用的节点配置，请添加新的节点！');
+                return;
+            }
+            
+            const linkCountMap = {};
+            const usersResult = await apiRequest('/api/users?page=1&limit=9999', 'GET');
+            if (usersResult.code === 200 && usersResult.data?.users) {
+                usersResult.data.users.forEach(user => {
+                    if (user.v_link_clash) {
+                        linkCountMap[user.v_link_clash] = (linkCountMap[user.v_link_clash] || 0) + 1;
+                    }
+                    if (user.v_link_v2ray) {
+                        linkCountMap[user.v_link_v2ray] = (linkCountMap[user.v_link_v2ray] || 0) + 1;
+                    }
+                });
+            }
+            
+            const availableLinks = [];
+            result.data.forEach(node => {
+                const clashCount = linkCountMap[node.clash_link] || 0;
+                const v2rayCount = linkCountMap[node.v2ray_link] || 0;
+                if (clashCount < 4 || v2rayCount < 4) {
+                    availableLinks.push({
+                        id: node.id,
+                        email: node.email,
+                        clash_link: node.clash_link,
+                        v2ray_link: node.v2ray_link,
+                        type: node.type,
+                        expire_date: node.expire_date
+                    });
+                }
+            });
+            
+            if (!availableLinks.length) {
+                alert('⚠️ 没有可用的节点（所有节点使用人数均≥4人），请添加新的节点！');
+                return;
+            }
+            
+            showRecommendModal(username, availableLinks, needsRecommendation);
+        }
+
+        function showRecommendModal(username, links, needsRecommendation) {
+            let modal = document.getElementById('recommendModal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'recommendModal';
+                modal.className = 'modal';
+                modal.innerHTML = `
+                    <div class="modal-content" style="max-width: 700px;">
+                        <div class="modal-header">
+                            <h3 id="recommendModalTitle">智能推荐替换链接</h3>
+                            <button class="close-btn" onclick="closeRecommendModal()">&times;</button>
+                        </div>
+                        <div style="padding: 1rem;">
+                            <div id="recommendMessage" style="margin-bottom: 1rem; padding: 0.75rem; background-color: #fff3cd; border-radius: 4px; font-size: 0.9rem;"></div>
+                            <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+                                <div style="flex: 1;">
+                                    <div style="font-weight: 600; margin-bottom: 0.5rem; color: #4a5568;">Clash 链接</div>
+                                    <div id="recommendClashList" style="max-height: 250px; overflow-y: auto;"></div>
+                                </div>
+                                <div style="flex: 1;">
+                                    <div style="font-weight: 600; margin-bottom: 0.5rem; color: #4a5568;">V2Ray 链接</div>
+                                    <div id="recommendV2rayList" style="max-height: 250px; overflow-y: auto;"></div>
+                                </div>
+                            </div>
+                            <div style="text-align: right;">
+                                <button class="add-btn" onclick="applyRecommendLink()" style="padding: 0.5rem 1.5rem;">确认替换</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+            }
+            
+            const messageEl = document.getElementById('recommendMessage');
+            const clashEl = document.getElementById('recommendClashList');
+            const v2rayEl = document.getElementById('recommendV2rayList');
+            
+            window._recommendUsername = username;
+            
+            if (needsRecommendation) {
+                messageEl.innerHTML = `<strong>⚠️ 警告：</strong>用户 ${username} 的VIP还没到期，但当前链接即将到期，请选择新链接进行替换。`;
+            } else {
+                messageEl.innerHTML = `<strong>💡 推荐：</strong>为用户 ${username} 分别选择 Clash 和 V2Ray 链接（使用人数小于4人）。`;
+            }
+            
+            const renderLinkList = (type, container) => {
+                let html = '';
+                links.forEach((node, index) => {
+                    const radioId = `${type}_${index}`;
+                    const linkValue = type === 'clash' ? node.clash_link : node.v2ray_link;
+                    const expireText = node.expire_date ? `到期: ${node.expire_date}` : '未设置';
+                    html += `
+                        <label for="${radioId}" style="display: block; padding: 0.5rem; border: 1px solid #e2e8f0; border-radius: 4px; margin-bottom: 0.5rem; cursor: pointer;">
+                            <div style="display: flex; align-items: flex-start; gap: 0.5rem;">
+                                <input type="radio" name="${type}_link" id="${radioId}" value="${linkValue.replace(/"/g, '&quot;')}" data-id="${node.id}" style="margin-top: 0.25rem;">
+                                <div style="flex: 1; min-width: 0;">
+                                    <div style="font-weight: 500; color: #4a5568; font-size: 0.9rem;">${node.email}</div>
+                                    <div style="font-size: 0.8rem; word-break: break-all; color: #667eea;">${linkValue}</div>
+                                    <div style="font-size: 0.75rem; color: #718096; margin-top: 0.25rem;">${expireText}</div>
+                                </div>
+                            </div>
+                        </label>
+                    `;
+                });
+                container.innerHTML = html;
+            };
+            
+            renderLinkList('clash', clashEl);
+            renderLinkList('v2ray', v2rayEl);
+            
+            modal.style.display = 'flex';
+        }
+
+        function closeRecommendModal() {
+            const modal = document.getElementById('recommendModal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        async function applyRecommendLink() {
+            const username = window._recommendUsername;
+            const clashChecked = document.querySelector('input[name="clash_link"]:checked');
+            const v2rayChecked = document.querySelector('input[name="v2ray_link"]:checked');
+            
+            if (!clashChecked) {
+                alert('请选择 Clash 链接');
+                return;
+            }
+            if (!v2rayChecked) {
+                alert('请选择 V2Ray 链接');
+                return;
+            }
+            
+            const clashValue = clashChecked.value;
+            const clashKey = clashChecked.dataset.key;
+            const v2rayValue = v2rayChecked.value;
+            const v2rayKey = v2rayChecked.dataset.key;
+            
+            if (!confirm(`确定要将用户 ${username} 的链接替换为：\nClash: ${clashKey}\nV2Ray: ${v2rayKey} 吗？`)) {
+                return;
+            }
+            
+            const result = await newApiRequest('/api/user/edit', 'POST', {
+                username: username,
+                v_link_clash: clashValue,
+                v_link_v2ray: v2rayValue
+            });
+            
+            if (result.code === 200) {
+                alert('链接替换成功');
+                closeRecommendModal();
+                checkAllClashLinks();
+            } else {
+                alert(result.msg || '替换失败');
+            }
         }
 
         async function checkUserClashLink(username) {
@@ -2262,26 +2504,6 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
             alert(`${username} 检测失败: ${result.msg || '链接无效或请求失败'}`);
         }
 
-        // 重置用户流量
-        async function resetUserTraffic(username) {
-            if (!username) {
-                alert('请输入用户名');
-                return;
-            }
-            
-            if (!confirm(`确定要重置用户 ${username} 的流量吗？`)) {
-                return;
-            }
-            
-            const result = await apiRequest('/api/quota/reset', 'POST', { username });
-            
-            if (result.code === 200) {
-                alert(`流量已重置！当前剩余流量: ${result.data.remaining_quota || 0} MB`);
-            } else {
-                alert(result.msg || '重置失败');
-            }
-        }
-        
         // 生成节点订阅链接
         async function generateNodeLink(username) {
             if (!username) {
@@ -2413,40 +2635,104 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
             } catch (err) { alert('保存失败'); }
         }
 
+        async function replaceDefaultLink(clashLink, v2rayLink, type) {
+            if (!clashLink || !v2rayLink) {
+                alert('该节点链接不完整，无法替换配置');
+                return;
+            }
+            const label = type === 'month' ? '月度' : '年度';
+            if (!confirm(`确定要用此节点的链接替换默认${label}订阅链接配置吗？`)) {
+                return;
+            }
+            if (type === 'month') {
+                document.getElementById('linkClashMonthly').value = clashLink;
+                document.getElementById('linkV2rayMonthly').value = v2rayLink;
+            } else {
+                document.getElementById('linkClashYearly').value = clashLink;
+                document.getElementById('linkV2rayYearly').value = v2rayLink;
+            }
+            await saveLinkConfig();
+        }
+
         async function loadLinks() {
-            const result = await newApiRequest('/api/links', 'GET');
+            const result = await newApiRequest('/api/node', 'GET');
             const tbody = document.getElementById('linksTableBody');
             if (result.code === 200 && result.data.length > 0) {
-                tbody.innerHTML = result.data.map(link => `
+                tbody.innerHTML = result.data.map(node => `
                     <tr>
-                        <td>${link.id}</td>
-                        <td>${link.key}</td>
-                        <td>${link.value}</td>
-                        <td>${link.updated_at || link.created_at}</td>
-                        <td><button class="action-btn delete-btn" onclick="deleteLink('${link.key}')">删除</button></td>
+                        <td>${node.id}</td>
+                        <td>${node.email}</td>
+                        <td>${node.password}</td>
+                        <td>${node.type}</td>
+                        <td style="max-width: 300px; word-break: break-all; font-size: 0.85rem;">${node.clash_link || '-'}</td>
+                        <td style="max-width: 300px; word-break: break-all; font-size: 0.85rem;">${node.v2ray_link || '-'}</td>
+                        <td>${node.expire_date || '-'}</td>
+                        <td style="display: flex; flex-wrap: wrap; gap: 4px; align-items: center; padding: 0.5rem 0;">
+                            <button class="action-btn edit-btn" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;" onclick="editNode(${node.id})">编辑</button>
+                            <button class="action-btn delete-btn" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;" onclick="deleteNode(${node.id})">删除</button>
+                            <button class="action-btn" style="background-color:#ed8936;color:white;font-size:0.75rem;padding:0.25rem 0.5rem;" onclick="replaceDefaultLink('${node.clash_link || ''}', '${node.v2ray_link || ''}', 'month')">替换月链接</button>
+                            <button class="action-btn" style="background-color:#ed8936;color:white;font-size:0.75rem;padding:0.25rem 0.5rem;" onclick="replaceDefaultLink('${node.clash_link || ''}', '${node.v2ray_link || ''}', 'year')">替换年链接</button>
+                        </td>
                     </tr>
                 `).join('');
             } else {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">暂无链接数据</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">暂无节点数据</td></tr>';
             }
         }
 
-        async function addLink() {
-            const key = document.getElementById('newLinkKey').value.trim();
-            const value = document.getElementById('newLinkValue').value.trim();
-            if (!key || !value) { alert('请填写链接名称和地址'); return; }
-            const result = await newApiRequest('/api/links', 'POST', { key, value });
-            if (result.code === 200) {
-                document.getElementById('newLinkKey').value = '';
-                document.getElementById('newLinkValue').value = '';
-                loadLinks();
-                alert('添加成功');
-            } else { alert(result.msg || '添加失败'); }
+        function openNodeModal(id) {
+            document.getElementById('nodeModalTitle').textContent = id ? '编辑节点' : '添加节点';
+            document.getElementById('nodeEditId').value = id || '';
+            document.getElementById('nodeForm').reset();
+            document.getElementById('nodeModal').style.display = 'flex';
         }
 
-        async function deleteLink(key) {
-            if (!confirm('确定删除该链接？')) return;
-            const result = await newApiRequest('/api/links', 'DELETE', { key });
+        function closeNodeModal() {
+            document.getElementById('nodeModal').style.display = 'none';
+        }
+
+        async function editNode(id) {
+            const result = await newApiRequest('/api/node', 'GET');
+            if (result.code !== 200) { alert('获取失败'); return; }
+            const node = result.data.find(n => n.id === id);
+            if (!node) { alert('节点不存在'); return; }
+            document.getElementById('nodeModalTitle').textContent = '编辑节点';
+            document.getElementById('nodeEditId').value = node.id;
+            document.getElementById('nodeEmail').value = node.email;
+            document.getElementById('nodePassword').value = node.password;
+            document.getElementById('nodeType').value = node.type;
+            document.getElementById('nodeClashLink').value = node.clash_link;
+            document.getElementById('nodeV2rayLink').value = node.v2ray_link;
+            document.getElementById('nodeExpireDate').value = node.expire_date ? node.expire_date.split(' ')[0] : '';
+            document.getElementById('nodeModal').style.display = 'flex';
+        }
+
+        async function saveNode(e) {
+            e.preventDefault();
+            const id = document.getElementById('nodeEditId').value;
+            const data = {
+                email: document.getElementById('nodeEmail').value.trim(),
+                password: document.getElementById('nodePassword').value.trim(),
+                type: document.getElementById('nodeType').value,
+                clash_link: document.getElementById('nodeClashLink').value.trim(),
+                v2ray_link: document.getElementById('nodeV2rayLink').value.trim(),
+                expire_date: document.getElementById('nodeExpireDate').value
+            };
+            const method = id ? 'PUT' : 'POST';
+            if (id) data.id = parseInt(id);
+            const result = await newApiRequest('/api/node', method, data);
+            if (result.code === 200) {
+                alert(method === 'POST' ? '添加成功' : '更新成功');
+                closeNodeModal();
+                loadLinks();
+            } else {
+                alert(result.msg || '操作失败');
+            }
+        }
+
+        async function deleteNode(id) {
+            if (!confirm('确定删除该节点？')) return;
+            const result = await newApiRequest('/api/node', 'DELETE', { id });
             if (result.code === 200) { loadLinks(); alert('删除成功'); }
             else { alert(result.msg || '删除失败'); }
         }
@@ -3046,8 +3332,10 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
         window.onclick = function(event) {
             const userModal = document.getElementById('userModal');
             const matchModal = document.getElementById('matchModal');
+            const recommendModal = document.getElementById('recommendModal');
             if (event.target === userModal) closeUserModal();
             if (event.target === matchModal) closeMatchModal();
+            if (event.target === recommendModal) closeRecommendModal();
         }
 
         // 初始化页面

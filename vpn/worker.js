@@ -1187,7 +1187,7 @@ export default {
       if (path === '/api/user/edit' && request.method === 'POST') {
         try {
           const params = await request.json();
-          const { username, password, balance, v_expire_date, learn_vip_expire_date, v_token, invite_code, v_link_clash, v_link_v2ray, not_trusted, login_info, price_plan, vorders, fetch_link, security_answer, auto_rewn, remark } = params;
+          const { username, password, balance, v_expire_date, learn_vip_expire_date, v_token, invite_code, v_link_clash, v_link_v2ray, not_trusted, login_info, price_plan, vorders, fetch_link, security_answer, auto_rewn, remark, free_expire_date, last_checkin } = params;
           
           if (!username) {
             return resJson({ code: 400, msg: '缺少username参数' }, 400);
@@ -1260,6 +1260,14 @@ export default {
           if (security_answer !== undefined) {
             updates.push('security_answer = ?');
             values.push(security_answer);
+          }
+          if (free_expire_date !== undefined) {
+            updates.push('free_expire_date = ?');
+            values.push(free_expire_date);
+          }
+          if (last_checkin !== undefined) {
+            updates.push('last_checkin = ?');
+            values.push(last_checkin);
           }
           if (auto_rewn !== undefined) {
             updates.push('auto_rewn = ?');
