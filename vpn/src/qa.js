@@ -2,9 +2,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const SupportModule = (() => {
         let questions = [];
         let loadedLang = null;
-        let chatHistory = [];
-        let isChatMode = false;
-        let ws = null;
+        let idleTimer = null;
+        let isLeaveMessageMode = false;
         const modal = document.getElementById('support-modal');
         const closeBtn = document.getElementById('support-close');
         const messagesContainer = document.getElementById('support-messages');
@@ -137,9 +136,18 @@ document.addEventListener('DOMContentLoaded', () => {
                         tag.onclick = () => handleSuggestionClick(q);
                         frag.appendChild(tag);
                     });
+                    const leaveMsgTag = document.createElement('span');
+                        leaveMsgTag.className = 'support-suggestion';
+                        leaveMsgTag.textContent = (window.translations && window.translations[window.currentLang]?.support_leave_btn) || '留言';
+                        leaveMsgTag.onclick = async () => {
+                            isLeaveMessageMode = true;
+                            const msg = (window.translations && window.translations[window.currentLang]?.support_idle_msg) || '您可以留下您的问题，我们会尽快回复您。';
+                            await addBotMessageStream(msg);
+                            input.placeholder = (window.translations && window.translations[window.currentLang]?.support_leave_placeholder) || '请输入您的留言...';
+                        };
+                    frag.appendChild(leaveMsgTag);
                     return frag;
                 };
-                // 复制一份用于无缝循环滚动
                 track.appendChild(buildItems());
                 track.appendChild(buildItems());
                 row.appendChild(track);
@@ -166,9 +174,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
                 <div class="max-w-[80%]">
                     <div class="support-bubble px-4 py-3 text-sm flex gap-1">
-                        <span class="w-2 h-2 bg-zinc-500 rounded-full animate-bounce" style="animation-delay: 0ms"></span>
-                        <span class="w-2 h-2 bg-zinc-500 rounded-full animate-bounce" style="animation-delay: 150ms"></span>
-                        <span class="w-2 h-2 bg-zinc-500 rounded-full animate-bounce" style="animation-delay: 300ms"></span>
+                        <span class="w-2 h-2 bg-zinc-500 rounded-full animate-bounce" style="animation-delay: ${Math.random() * 200}ms"></span>
+                        <span class="w-2 h-2 bg-zinc-500 rounded-full animate-bounce" style="animation-delay: ${150 + Math.random() * 200}ms"></span>
+                        <span class="w-2 h-2 bg-zinc-500 rounded-full animate-bounce" style="animation-delay: ${300 + Math.random() * 200}ms"></span>
                     </div>
                 </div>
             `;
@@ -192,6 +200,40 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }, speed);
             });
+        };
+
+        const addBotMessageStream = async (text, action) => {
+            if (Math.random() > 0.3) {
+                showTypingIndicator();
+                await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 800));
+            }
+            removeTypingIndicator();
+            const div = document.createElement('div');
+            div.className = 'flex gap-3 support-bot-message';
+            div.innerHTML = `
+                <div class="w-8 h-8 rounded-full bg-[var(--neon-blue)] flex items-center justify-center text-black text-xs font-bold shrink-0">
+                    <i data-lucide="headphones" class="w-4 h-4"></i>
+                </div>
+                <div class="max-w-[80%]">
+                    <div class="support-bubble px-4 py-3 text-sm"></div>
+                </div>
+            `;
+            messagesContainer.appendChild(div);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            if (window.lucide) lucide.createIcons();
+            
+            const bubble = div.querySelector('.support-bubble');
+            await typeWriter(bubble, text, 30 + Math.random() * 20);
+
+            if (action && action.label) {
+                const btn = document.createElement('button');
+                btn.className = 'support-action-btn mt-3';
+                btn.textContent = action.label;
+                const handler = getActionHandler(action.type);
+                if (handler) btn.onclick = handler;
+                bubble.appendChild(btn);
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
         };
 
         const getActionHandler = (actionType) => {
@@ -219,38 +261,15 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                         SupportModule.close();
                     };
+                case 'openComplaint':
+                    return async () => {
+                        isLeaveMessageMode = true;
+                        const msg = (window.translations && window.translations[window.currentLang]?.support_idle_msg) || '您可以留下您的问题，我们会尽快回复您。';
+                        await addBotMessageStream(msg);
+                        input.placeholder = (window.translations && window.translations[window.currentLang]?.support_leave_placeholder) || '请输入您的留言...';
+                    };
                 default:
                     return null;
-            }
-        };
-
-        const addBotMessage = async (text, action) => {
-            removeTypingIndicator();
-            const div = document.createElement('div');
-            div.className = 'flex gap-3 support-bot-message';
-            div.innerHTML = `
-                <div class="w-8 h-8 rounded-full bg-[var(--neon-blue)] flex items-center justify-center text-black text-xs font-bold shrink-0">
-                    <i data-lucide="headphones" class="w-4 h-4"></i>
-                </div>
-                <div class="max-w-[80%]">
-                    <div class="support-bubble px-4 py-3 text-sm"></div>
-                </div>
-            `;
-            messagesContainer.appendChild(div);
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-            if (window.lucide) lucide.createIcons();
-            
-            const bubble = div.querySelector('.support-bubble');
-            await typeWriter(bubble, text, 30);
-
-            if (action && action.label) {
-                const btn = document.createElement('button');
-                btn.className = 'support-action-btn mt-3';
-                btn.textContent = action.label;
-                const handler = getActionHandler(action.type);
-                if (handler) btn.onclick = handler;
-                bubble.appendChild(btn);
-                messagesContainer.scrollTop = messagesContainer.scrollHeight;
             }
         };
 
@@ -281,7 +300,19 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         const addRelatedQuestions = async (questions) => {
-            removeTypingIndicator();
+            const moreInfoLabel = (window.translations && window.translations[window.currentLang]?.support_more_info) || '您可能还想了解：';
+            await addBotMessageStream(moreInfoLabel);
+            
+            const suggestionsWrap = document.createElement('div');
+            suggestionsWrap.className = 'support-related-wrap';
+            questions.forEach(q => {
+                const tag = document.createElement('span');
+                tag.className = 'support-suggestion';
+                tag.textContent = q.question.replace('？', '').replace('?', '');
+                tag.onclick = () => handleSuggestionClick(q);
+                suggestionsWrap.appendChild(tag);
+            });
+            
             const div = document.createElement('div');
             div.className = 'flex gap-3 support-bot-message';
             div.innerHTML = `
@@ -292,44 +323,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="support-bubble px-4 py-3 text-sm"></div>
                 </div>
             `;
+            div.querySelector('.support-bubble').appendChild(suggestionsWrap);
             messagesContainer.appendChild(div);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
             if (window.lucide) lucide.createIcons();
-
-            const bubble = div.querySelector('.support-bubble');
-            const moreInfoLabel = (window.translations && window.translations[window.currentLang]?.support_more_info) || '您可能还想了解：';
-            
-            const labelSpan = document.createElement('span');
-            labelSpan.textContent = moreInfoLabel;
-            bubble.appendChild(labelSpan);
-
-            const suggestionsWrap = document.createElement('div');
-            suggestionsWrap.className = 'support-related-wrap';
-            questions.forEach(q => {
-                const tag = document.createElement('span');
-                tag.className = 'support-suggestion';
-                tag.textContent = q.question.replace('？', '').replace('?', '');
-                tag.onclick = () => handleSuggestionClick(q);
-                suggestionsWrap.appendChild(tag);
-            });
-            bubble.appendChild(suggestionsWrap);
-            
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
         };
 
         const handleSuggestionClick = async (questionData) => {
-            if (isChatMode) return;
             addMessage('user', questionData.question);
-            chatHistory.push({ type: 'user', text: questionData.question });
-            const minDelay = 800;
-            const maxDelay = 1500;
-            const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
-            await new Promise(resolve => setTimeout(resolve, delay));
-            showTypingIndicator();
-            const typingDuration = 500 + Math.floor(Math.random() * 800);
-            await new Promise(resolve => setTimeout(resolve, typingDuration));
-            await addBotMessage(questionData.answer, questionData.action);
-            chatHistory.push({ type: 'bot', text: questionData.answer });
+            await addBotMessageStream(questionData.answer, questionData.action);
         };
 
         const fuzzySearch = (query) => {
@@ -356,168 +358,96 @@ document.addEventListener('DOMContentLoaded', () => {
             .slice(0, 3);
         };
 
-        const checkHumanService = (text) => {
-            const keywords = ['人工', '客服', 'human', 'service', '真人'];
-            return keywords.some(k => text.toLowerCase().includes(k));
-        };
-
-        const confirmHumanService = async () => {
-            const confirmText = (window.translations && window.translations[window.currentLang]?.support_confirm_human) || '确定要转接人工客服吗？如果当前没有客服在线，您的问题将转为留言。';
-            const confirmBtnText = (window.translations && window.translations[window.currentLang]?.support_confirm) || '确定';
-            const cancelBtnText = (window.translations && window.translations[window.currentLang]?.support_cancel) || '取消';
-            
-            removeTypingIndicator();
-            const div = document.createElement('div');
-            div.className = 'flex gap-3 support-bot-message';
-            div.innerHTML = `
-                <div class="w-8 h-8 rounded-full bg-[var(--neon-blue)] flex items-center justify-center text-black text-xs font-bold shrink-0">
-                    <i data-lucide="headphones" class="w-4 h-4"></i>
-                </div>
-                <div class="max-w-[80%]">
-                    <div class="support-bubble px-4 py-3 text-sm">${confirmText}</div>
-                    <div class="flex gap-2 mt-3">
-                        <button class="support-action-btn bg-[var(--neon-green)]" id="support-human-confirm">${confirmBtnText}</button>
-                        <button class="support-action-btn bg-zinc-600" id="support-human-cancel">${cancelBtnText}</button>
-                    </div>
-                </div>
-            `;
-            messagesContainer.appendChild(div);
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-            if (window.lucide) lucide.createIcons();
-
-            return new Promise((resolve) => {
-                document.getElementById('support-human-confirm').onclick = () => {
-                    resolve(true);
-                };
-                document.getElementById('support-human-cancel').onclick = () => {
-                    resolve(false);
-                };
-            });
-        };
-
-        const getSupportStatus = async () => {
-            try {
-                const res = await fetch('https://api.funbua.uk/api/support/status');
-                const data = await res.json();
-                return data.data?.online || false;
-            } catch {
-                return false;
-            }
-        };
-
-        const sendMessageToSupport = async (content) => {
-            const userInfo = window.userInfo || JSON.parse(localStorage.getItem('userInfo') || '{}');
-            const history = chatHistory.map(h => `${h.type === 'user' ? '[用户]' : '[客服]'} ${h.text}`).join('\n');
-            
-            try {
-                const res = await fetch('https://api.funbua.uk/api/support/message', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        username: userInfo.username || '',
-                        content,
-                        history
-                    })
-                });
-                const data = await res.json();
-                return data.code === 200;
-            } catch {
-                return false;
-            }
-        };
-
-        const enterChatMode = () => {
-            isChatMode = true;
-            suggestionsContainer.style.display = 'none';
-            const modeText = (window.translations && window.translations[window.currentLang]?.support_chat_mode) || '已进入人工客服模式';
-            addMessage('bot', modeText);
-        };
-
         const handleSend = async () => {
             const text = input.value.trim();
             if (!text) return;
             
             addMessage('user', text);
-            chatHistory.push({ type: 'user', text });
             input.value = '';
-
-            if (isChatMode) {
+            
+            if (isLeaveMessageMode) {
+                const userInfo = window.userInfo || JSON.parse(localStorage.getItem('userInfo') || '{}');
+                const username = userInfo.username || '匿名用户';
+                const msg = `[投诉] 用户: ${username}\n内容: ${text}`;
+                const API = 'https://api.funbua.uk';
+                try {
+                    await Promise.all([
+                        fetch(`${API}/api/send-message`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ content: msg, target: 'single', username: 'admin' })
+                        }),
+                        fetch(`${API}/api/send-message`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ content: msg, target: 'single', username: 'immmor' })
+                        })
+                    ]);
+                    const successMsg = (window.translations && window.translations[window.currentLang]?.support_leave_success) || '您的留言已提交，我们会尽快回复您！';
+                    await addBotMessageStream(successMsg);
+                } catch (e) {
+                    const failMsg = (window.translations && window.translations[window.currentLang]?.support_leave_fail) || '留言提交失败，请稍后重试。';
+                    await addBotMessageStream(failMsg);
+                }
+                isLeaveMessageMode = false;
+                input.placeholder = '';
                 return;
             }
-
-            if (checkHumanService(text)) {
-                const confirmed = await confirmHumanService();
-                if (!confirmed) {
-                    return;
-                }
-
-                const isOnline = await getSupportStatus();
-                if (isOnline) {
-                    enterChatMode();
-                } else {
-                    const offlineText = (window.translations && window.translations[window.currentLang]?.support_offline) || '当前没有客服在线，您的问题已转为留言，我们会尽快回复您！';
-                    addMessage('bot', offlineText);
-                    await sendMessageToSupport(text);
-                }
+            
+            const humanKeywords = ['留言', '人工', '客服', '真人', '客服人员', '人工服务', '转人工', '联系客服', '客服帮忙'];
+            const hasHumanKeyword = humanKeywords.some(k => text.includes(k));
+            
+            if (hasHumanKeyword) {
+                const msg = (window.translations && window.translations[window.currentLang]?.support_idle_msg) || '您可以留下您的问题，我们会尽快回复您。';
+                await addBotMessageStream(msg);
+                isLeaveMessageMode = true;
+                input.placeholder = (window.translations && window.translations[window.currentLang]?.support_leave_placeholder) || '请输入您的留言...';
                 return;
             }
-
+            
             const results = fuzzySearch(text);
             
-            const minDelay = 800;
-            const maxDelay = 2000;
-            const delay = Math.floor(Math.random() * (maxDelay - minDelay + 1)) + minDelay;
-            await new Promise(resolve => setTimeout(resolve, delay));
-            
             if (results.length > 0) {
-                showTypingIndicator();
-                const typingDuration = 500 + Math.floor(Math.random() * 1000);
-                await new Promise(resolve => setTimeout(resolve, typingDuration));
-                await addBotMessage(results[0].answer, results[0].action);
-                chatHistory.push({ type: 'bot', text: results[0].answer });
+                await addBotMessageStream(results[0].answer, results[0].action);
                 
                 if (results.length > 1) {
-                    await new Promise(resolve => setTimeout(resolve, 800));
-                    showTypingIndicator();
-                    await new Promise(resolve => setTimeout(resolve, 500));
                     await addRelatedQuestions(results.slice(1));
                 }
             } else {
-                showTypingIndicator();
-                await new Promise(resolve => setTimeout(resolve, 1000));
                 const noAnswer = (window.translations && window.translations[window.currentLang]?.support_no_answer) || '抱歉，我暂时无法回答这个问题。请详细描述您的问题，我们会尽快为您解决。';
-                await addBotMessage(noAnswer);
-                chatHistory.push({ type: 'bot', text: noAnswer });
+                await addBotMessageStream(noAnswer);
             }
         };
 
         const openModal = () => {
             modal.classList.remove('hidden');
             if (window.lucide) lucide.createIcons();
-            chatHistory = [];
-            isChatMode = false;
             const currentLang = window.currentLang || 'zh-CN';
             if (questions.length === 0 || loadedLang !== currentLang) {
                 loadQuestions();
             }
+            if (idleTimer) clearTimeout(idleTimer);
+            idleTimer = setTimeout(async () => {
+                const msg = (window.translations && window.translations[window.currentLang]?.support_idle_msg) || '您可以留下您的问题，我们会尽快回复您。';
+                await addBotMessageStream(msg);
+                isLeaveMessageMode = true;
+                input.placeholder = (window.translations && window.translations[window.currentLang]?.support_leave_placeholder) || '请输入您的留言...';
+            }, 120000);
         };
 
         const closeModal = () => {
             modal.classList.add('hidden');
-            if (ws) {
-                ws.close();
-                ws = null;
-            }
+            if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+            isLeaveMessageMode = false;
+            input.placeholder = '';
         };
 
-        const updateLanguage = () => {
+        const updateLanguage = async () => {
             questions = [];
             messagesContainer.innerHTML = '';
-            chatHistory = [];
-            isChatMode = false;
             loadQuestions();
             const welcomeMsg = (window.translations && window.translations[window.currentLang]?.support_welcome) || '您好！欢迎来到 PHANTOM VPN 客服中心。我是您的智能客服助手，有什么可以帮助您的吗？';
-            addMessage('bot', welcomeMsg);
+            await addBotMessageStream(welcomeMsg);
         };
 
         closeBtn?.addEventListener('click', closeModal);

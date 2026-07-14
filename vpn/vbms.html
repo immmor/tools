@@ -637,7 +637,6 @@
                 <a href="#nodes" class="menu-item" onclick="showPage('nodes')">节点管理</a>
                 <a href="#settings" class="menu-item" onclick="showPage('settings')">系统设置</a>
                 <a href="#messages" class="menu-item" onclick="showPage('messages')">消息管理</a>
-                <a href="#support" class="menu-item" onclick="showPage('support')">客服聊天</a>
                 <a href="#football" class="menu-item" onclick="showPage('football')">游戏管理</a>
             </nav>
         </aside>
@@ -647,10 +646,7 @@
             <!-- 顶部导航栏 -->
             <nav class="top-nav">
                 <h1 id="pageTitle">仪表盘</h1>
-                <div style="display: flex; align-items: center; gap: 1rem;">
-                    <span id="currentUser" style="color: #4a5568; font-weight: 500;"></span>
-                    <button class="logout-btn top-nav-logout" onclick="logout()">退出登录</button>
-                </div>
+                <button class="logout-btn top-nav-logout" onclick="logout()">退出登录</button>
             </nav>
 
             <!-- 页面内容 -->
@@ -1008,36 +1004,6 @@
                                 <tr><td colspan="6" style="text-align:center;color:#999;">请选择查看范围并点击查询</td></tr>
                             </tbody>
                         </table>
-                    </div>
-                </div>
-
-                <!-- 客服聊天页面 -->
-                <div id="supportPage" class="page-section" style="display: none;">
-                    <div class="data-table" style="height: calc(100vh - 180px); display: flex; flex-direction: column;">
-                        <div class="table-header">
-                            <h3>客服聊天</h3>
-                            <div style="display: flex; gap: 10px; align-items: center;">
-                                <button id="supportOnlineBtn" class="add-btn" onclick="toggleSupportOnline()" style="background-color: #48bb78;">上线</button>
-                                <button class="add-btn" onclick="loadSupportMessages()" style="background-color: #667eea;">刷新</button>
-                            </div>
-                        </div>
-                        <div style="flex: 1; display: flex; overflow: hidden;">
-                            <div style="width: 250px; border-right: 1px solid #e2e8f0; overflow-y: auto;">
-                                <div id="supportUsersList" style="padding: 1rem;">
-                                    <div style="text-align: center; color: #718096; padding: 2rem;">加载中...</div>
-                                </div>
-                            </div>
-                            <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
-                                <div id="supportChatHeader" style="padding: 1rem; background-color: #f7fafc; border-bottom: 1px solid #e2e8f0; font-weight: 600;">请选择用户开始聊天</div>
-                                <div id="supportMessages" style="flex: 1; overflow-y: auto; padding: 1rem; background-color: #fff;">
-                                    <div style="text-align: center; color: #718096; padding: 4rem;">选择左侧用户开始聊天</div>
-                                </div>
-                                <div style="padding: 1rem; border-top: 1px solid #e2e8f0; display: flex; gap: 10px;">
-                                    <input type="text" id="supportInput" placeholder="输入消息..." style="flex: 1; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 4px;">
-                                    <button class="btn" onclick="sendSupportMessage()" style="width: auto;">发送</button>
-                                </div>
-                            </div>
-                        </div>
                     </div>
                 </div>
 
@@ -1611,7 +1577,6 @@
                 'nodes': '节点管理',
                 'settings': '系统设置',
                 'messages': '消息管理',
-                'support': '客服聊天',
                 'football': '游戏管理'
             };
             document.getElementById('pageTitle').textContent = pageTitles[pageName] || pageName;
@@ -1631,9 +1596,6 @@
                 await loadLinks();
             } else if (pageName === 'messages') {
                 // 消息管理页面不需要加载数据
-            } else if (pageName === 'support') {
-                await loadSupportMessages();
-                await checkSupportOnline();
             } else if (pageName === 'football') {
                     await loadFootballMatches();
                     await loadFootballBets();
@@ -1641,151 +1603,6 @@
                     await loadSlotBets();
                     await loadScratchBets();
                 }
-        }
-
-        let currentSupportUser = null;
-
-        async function checkSupportOnline() {
-            try {
-                const res = await fetch(NEW_API_BASE + '/api/support/status');
-                const data = await res.json();
-                const btn = document.getElementById('supportOnlineBtn');
-                if (data.data?.online) {
-                    btn.textContent = '下线';
-                    btn.style.backgroundColor = '#e53e3e';
-                } else {
-                    btn.textContent = '上线';
-                    btn.style.backgroundColor = '#48bb78';
-                }
-            } catch (err) { console.error('检查客服状态失败:', err); }
-        }
-
-        async function toggleSupportOnline() {
-            try {
-                const btn = document.getElementById('supportOnlineBtn');
-                const isOnline = btn.textContent === '下线';
-                const res = await fetch(NEW_API_BASE + '/api/support/status', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ online: !isOnline })
-                });
-                const data = await res.json();
-                if (data.code === 200) {
-                    await checkSupportOnline();
-                }
-            } catch (err) { console.error('切换客服状态失败:', err); }
-        }
-
-        async function loadSupportMessages() {
-            try {
-                const res = await fetch(NEW_API_BASE + '/api/messages?all=true');
-                const data = await res.json();
-                if (data.code === 200 && data.data) {
-                    const messages = Array.isArray(data.data) ? data.data : [];
-                    const users = {};
-                    messages.forEach(m => {
-                        if (m.content?.includes('[用户留言]')) {
-                            const match = m.content.match(/\[用户留言\]\s*(\S+?):/);
-                            const username = match ? match[1] : m.username;
-                            if (!users[username]) {
-                                users[username] = {
-                                    username,
-                                    lastMessage: m.content,
-                                    lastTime: m.created_at,
-                                    isRead: m.is_read
-                                };
-                            }
-                        }
-                    });
-                    renderSupportUsers(users);
-                }
-            } catch (err) { console.error('加载消息失败:', err); }
-        }
-
-        function renderSupportUsers(users) {
-            const list = document.getElementById('supportUsersList');
-            const userList = Object.values(users);
-            if (userList.length === 0) {
-                list.innerHTML = '<div style="text-align: center; color: #718096; padding: 2rem;">暂无用户留言</div>';
-                return;
-            }
-            list.innerHTML = userList.map(u => `
-                <div onclick="selectSupportUser('${u.username}')" 
-                     style="padding: 0.75rem; border-bottom: 1px solid #e2e8f0; cursor: pointer; ${!u.isRead ? 'background-color: #fff3cd;' : ''}">
-                    <div style="font-weight: 600; color: #4a5568;">${u.username}</div>
-                    <div style="font-size: 0.875rem; color: #718096; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${u.lastMessage?.replace('[用户留言] ' + u.username + ': ', '').slice(0, 30)}...</div>
-                    <div style="font-size: 0.75rem; color: #a0aec0;">${u.lastTime}</div>
-                </div>
-            `).join('');
-        }
-
-        function selectSupportUser(username) {
-            currentSupportUser = username;
-            document.getElementById('supportChatHeader').textContent = `与 ${username} 的对话`;
-            document.getElementById('supportMessages').innerHTML = '<div style="text-align: center; color: #718096; padding: 2rem;">加载对话中...</div>';
-            loadSupportChat(username);
-        }
-
-        async function loadSupportChat(username) {
-            try {
-                const res = await fetch(NEW_API_BASE + '/api/messages?username=' + encodeURIComponent(username));
-                const data = await res.json();
-                if (data.code === 200 && data.data) {
-                    const messages = data.data.filter(m => m.username === username || (m.content?.includes('[用户留言]') && m.content?.includes(username)));
-                    const container = document.getElementById('supportMessages');
-                    if (messages.length === 0) {
-                        container.innerHTML = '<div style="text-align: center; color: #718096; padding: 4rem;">暂无对话记录</div>';
-                        return;
-                    }
-                    container.innerHTML = messages.map(m => {
-                        const isSupport = m.username === 'immmor';
-                        const content = m.content?.replace('[用户留言] ' + currentSupportUser + ': ', '');
-                        return `
-                            <div style="display: flex; gap: 1rem; margin-bottom: 1rem; ${isSupport ? 'justify-content: flex-end;' : ''}">
-                                <div style="${isSupport ? 'order: 2;' : ''}">
-                                    <div style="max-width: 70%; padding: 0.75rem 1rem; border-radius: 8px; ${isSupport ? 'background-color: #667eea; color: white;' : 'background-color: #e2e8f0; color: #2d3748;'}">
-                                        ${content}
-                                    </div>
-                                    <div style="font-size: 0.75rem; color: #a0aec0; margin-top: 0.25rem; ${isSupport ? 'text-align: right;' : ''}">
-                                        ${m.created_at}
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-                    }).join('');
-                    container.scrollTop = container.scrollHeight;
-                }
-            } catch (err) { console.error('加载对话失败:', err); }
-        }
-
-        async function sendSupportMessage() {
-            const content = document.getElementById('supportInput').value.trim();
-            if (!content || !currentSupportUser) return;
-            
-            const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
-            const container = document.getElementById('supportMessages');
-            container.innerHTML += `
-                <div style="display: flex; gap: 1rem; margin-bottom: 1rem; justify-content: flex-end;">
-                    <div style="order: 2;">
-                        <div style="max-width: 70%; padding: 0.75rem 1rem; border-radius: 8px; background-color: #667eea; color: white;">
-                            ${content}
-                        </div>
-                        <div style="font-size: 0.75rem; color: #a0aec0; margin-top: 0.25rem; text-align: right;">
-                            ${now}
-                        </div>
-                    </div>
-                </div>
-            `;
-            container.scrollTop = container.scrollHeight;
-            document.getElementById('supportInput').value = '';
-
-            try {
-                await fetch(NEW_API_BASE + '/api/messages', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username: currentSupportUser, content })
-                });
-            } catch (err) { console.error('发送消息失败:', err); }
         }
 
         async function loadPricePlan() {
