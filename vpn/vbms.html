@@ -638,6 +638,7 @@
                 <a href="#settings" class="menu-item" onclick="showPage('settings')">系统设置</a>
                 <a href="#messages" class="menu-item" onclick="showPage('messages')">消息管理</a>
                 <a href="#football" class="menu-item" onclick="showPage('football')">游戏管理</a>
+                <a href="#withdraw" class="menu-item" onclick="showPage('withdraw')">提现管理</a>
             </nav>
         </aside>
 
@@ -1116,6 +1117,40 @@
                         </table>
                     </div>
                 </div>
+
+                <!-- 提现管理页面 -->
+                <div id="withdrawPage" class="page-section" style="display: none;">
+                    <div class="data-table">
+                        <div class="table-header">
+                            <h3>提现申请</h3>
+                            <div style="display: flex; gap: 10px;">
+                                <select id="withdrawStatusFilter" onchange="loadWithdrawals()" style="padding: 0.5rem; border: 1px solid #e2e8f0; border-radius: 4px;">
+                                    <option value="">全部</option>
+                                    <option value="pending">待处理</option>
+                                    <option value="approved">已通过</option>
+                                    <option value="rejected">已拒绝</option>
+                                </select>
+                                <button class="add-btn" onclick="loadWithdrawals()" style="background-color: #667eea;">刷新</button>
+                            </div>
+                        </div>
+                        <table id="withdrawTable">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>用户</th>
+                                    <th>金额</th>
+                                    <th>方式</th>
+                                    <th>收款码</th>
+                                    <th>状态</th>
+                                    <th>申请时间</th>
+                                    <th>审核时间</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="withdrawTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
             </main>
         </div>
     </div>
@@ -1577,7 +1612,8 @@
                 'nodes': '节点管理',
                 'settings': '系统设置',
                 'messages': '消息管理',
-                'football': '游戏管理'
+                'football': '游戏管理',
+                'withdraw': '提现管理'
             };
             document.getElementById('pageTitle').textContent = pageTitles[pageName] || pageName;
             
@@ -1602,6 +1638,8 @@
                     await loadWheelBets();
                     await loadSlotBets();
                     await loadScratchBets();
+                } else if (pageName === 'withdraw') {
+                    await loadWithdrawals();
                 }
         }
 
@@ -3326,6 +3364,65 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
                     <td>${b.created_at || ''}</td>
                 </tr>
             `).join('');
+        }
+
+        // ========== 提现管理 ==========
+        async function loadWithdrawals() {
+            const tbody = document.getElementById('withdrawTableBody');
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">加载中...</td></tr>';
+            const status = document.getElementById('withdrawStatusFilter')?.value || '';
+            const url = `/api/withdraw/list${status ? '?status=' + status : ''}`;
+            const res = await newApiRequest(url, 'GET');
+            if (res.success && res.data) {
+                renderWithdrawals(res.data);
+            } else {
+                tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:red;">加载失败: ${res.message || '未知错误'}</td></tr>`;
+            }
+        }
+
+        function renderWithdrawals(list) {
+            const tbody = document.getElementById('withdrawTableBody');
+            if (!list.length) {
+                tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#999;">暂无提现申请</td></tr>';
+                return;
+            }
+            const statusMap = { pending: '待处理', approved: '已通过', rejected: '已拒绝' };
+            const statusColor = { pending: '#e53e3e', approved: '#48bb78', rejected: '#a0aec0' };
+            const methodMap = { wechat: '微信', alipay: '支付宝' };
+            tbody.innerHTML = list.map(r => `
+                <tr>
+                    <td>${r.id}</td>
+                    <td>${r.username}</td>
+                    <td>¥${parseFloat(r.amount).toFixed(2)}</td>
+                    <td>${methodMap[r.method] || r.method}</td>
+                    <td>${r.qr_code ? `<img src="${r.qr_code}" style="width:150px;height:150px;object-fit:contain;" alt="收款码">` : '-'}</td>
+                    <td style="color:${statusColor[r.status] || '#000'}">${statusMap[r.status] || r.status}</td>
+                    <td>${r.created_at || ''}</td>
+                    <td>${r.reviewed_at || '-'}</td>
+                    <td>${r.status === 'pending' ? `<button class="add-btn" style="background:#48bb78;" onclick="reviewWithdraw(${r.id},'approve')">通过</button> <button class="delete-btn" onclick="reviewWithdraw(${r.id},'reject')">拒绝</button>` : '-'}</td>
+                </tr>
+            `).join('');
+            window._withdrawData = list;
+        }
+
+        function viewQrCode(id) {
+            const item = window._withdrawData?.find(r => r.id == id);
+            if (!item || !item.qr_code) return;
+            const w = window.open('', '_blank');
+            w.document.write(`<html><head><title>收款码 - ${item.username}</title></head><body style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;background:#1a1a1a;"><img src="${item.qr_code}" style="max-width:400px;max-height:400px;"><p style="color:#fff;margin-top:10px;">${item.username} - ¥${parseFloat(item.amount).toFixed(2)}</p></body></html>`);
+        }
+
+        async function reviewWithdraw(id, action) {
+            if (!confirm(action === 'approve' ? '确认通过此提现申请？' : '确认拒绝此提现申请？金额将退回用户')) return;
+            const res = await newApiRequest('/api/withdraw/review', 'POST', {
+                id, action, operator: currentUserInfo?.username || 'admin'
+            });
+            if (res.success) {
+                alert(res.message);
+                loadWithdrawals();
+            } else {
+                alert(res.message || '操作失败');
+            }
         }
 
         // 点击模态框外部关闭

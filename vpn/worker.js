@@ -872,7 +872,7 @@ export default {
         if (!name) return resJson({ code: 400, msg: '请传入name参数，例：?name=kkk' }, 400);
         
         const result = await DB
-          .prepare('SELECT rowid as id, username, balance, v_expire_date, v_token, v_link_clash, v_link_v2ray, invite_code, source, vorders, free_expire_date, last_checkin FROM user WHERE username = ?')
+          .prepare('SELECT rowid as id, username, balance, v_expire_date, v_token, v_link_clash, v_link_v2ray, invite_code, source, vorders, free_expire_date, last_checkin, game_winnings FROM user WHERE username = ?')
           .bind(name)
           .first();
         
@@ -1529,26 +1529,29 @@ rules:
       // ========== 签到接口 ==========
       if (path === '/api/checkin' && request.method === 'POST') {
         try {
-          const { username } = await request.json();
+          const { username, timezoneOffset } = await request.json();
           if (!username) return resJson({ code: 400, msg: '缺少username参数' }, 400);
 
           const user = await DB.prepare('SELECT last_checkin, free_expire_date FROM user WHERE username = ?').bind(username).first();
           if (!user) return resJson({ code: 404, msg: '用户不存在' }, 404);
 
-          const today = new Date().toISOString().slice(0, 10);
-          if (user.last_checkin === today) {
+          const offset = typeof timezoneOffset === 'number' ? timezoneOffset : 0;
+          const now = new Date();
+          const localDate = new Date(now.getTime() - offset * 60 * 1000);
+          const todayStr = localDate.toISOString().slice(0, 10);
+
+          if (user.last_checkin === todayStr) {
             return resJson({ code: 200, msg: '今日已签到', free_expire_date: user.free_expire_date });
           }
 
-          const expireDate = user.free_expire_date 
-            ? new Date(user.free_expire_date) 
-            : new Date();
-          expireDate.setDate(expireDate.getDate() + 1);
+          const localEndOfDay = new Date(now.getTime() - offset * 60 * 1000);
+          localEndOfDay.setUTCHours(23, 59, 59, 999);
+          const expireDate = new Date(localEndOfDay.getTime() + offset * 60 * 1000);
 
           await DB.prepare('UPDATE user SET last_checkin = ?, free_expire_date = ? WHERE username = ?')
-            .bind(today, expireDate.toISOString().slice(0, 10), username).run();
+            .bind(todayStr, expireDate.toISOString(), username).run();
 
-          return resJson({ code: 200, msg: '签到成功，免费节点延长1天', free_expire_date: expireDate.toISOString().slice(0, 10) });
+          return resJson({ code: 200, msg: '签到成功，免费节点有效期至今日23:59', free_expire_date: expireDate.toISOString() });
         } catch (err) {
           return resJson({ code: 500, msg: '签到失败', error: err.message }, 500);
         }
@@ -1577,8 +1580,8 @@ rules:
           }
           
           // 检查免费节点是否过期
-          const today = new Date().toISOString().slice(0, 10);
-          if (!user.free_expire_date || user.free_expire_date < today) {
+          const now = new Date();
+          if (!user.free_expire_date || new Date(user.free_expire_date) < now) {
             const mockConfig = `mixed-port: 7890
 allow-lan: true
 mode: rule
@@ -1615,7 +1618,6 @@ rules:
           }
           
           // 根据当前日期生成链接（获取昨天的配置文件）
-          const now = new Date();
           // 减去1天获取昨天的日期
           const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
           const year = yesterday.getFullYear();
@@ -1674,8 +1676,8 @@ rules:
           }
           
           // 检查免费节点是否过期
-          const today = new Date().toISOString().slice(0, 10);
-          if (!user.free_expire_date || user.free_expire_date < today) {
+          const now = new Date();
+          if (!user.free_expire_date || new Date(user.free_expire_date) < now) {
             const mockConfig = `{
   "v": "2",
   "ps": "🚀 免费节点已到期",
@@ -1699,7 +1701,6 @@ rules:
           }
           
           // 根据当前日期生成链接（获取昨天的配置文件）
-          const now = new Date();
           // 减去 1 天获取昨天的日期
           const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
           const year = yesterday.getFullYear();
@@ -2525,8 +2526,8 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
               .bind(newStatus, payout, bet.id).run();
 
             if (isWin) {
-              await DB.prepare('UPDATE user SET balance = balance + ? WHERE username = ?')
-                .bind(payout, bet.username).run();
+              await DB.prepare('UPDATE user SET balance = balance + ?, game_winnings = COALESCE(game_winnings, 0) + ? WHERE username = ?')
+                .bind(payout, payout, bet.username).run();
               totalPayout += payout;
               winCount++;
 
@@ -2604,7 +2605,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           const prize = prizes[prizeIndex];
           const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
-          await DB.prepare('UPDATE user SET balance = balance - ? + ? WHERE username = ?').bind(cost, prize, username).run();
+          await DB.prepare('UPDATE user SET balance = balance - ? + ?, game_winnings = COALESCE(game_winnings, 0) + ? WHERE username = ?').bind(cost, prize, prize, username).run();
           await DB.prepare('INSERT INTO game_bet (username, game_type, cost, prize, result, created_at) VALUES (?, ?, ?, ?, ?, ?)')
             .bind(username, 'wheel', cost, prize, `¥${prize}`, now).run();
 
@@ -2648,7 +2649,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           const resultStr = (s1 === s2 && s2 === s3) ? `${s1}${s2}${s3}` : `${s1} ${s2} ${s3}`;
           const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
-          await DB.prepare('UPDATE user SET balance = balance - ? + ? WHERE username = ?').bind(cost, prize, username).run();
+          await DB.prepare('UPDATE user SET balance = balance - ? + ?, game_winnings = COALESCE(game_winnings, 0) + ? WHERE username = ?').bind(cost, prize, prize, username).run();
           await DB.prepare('INSERT INTO game_bet (username, game_type, cost, prize, result, created_at) VALUES (?, ?, ?, ?, ?, ?)')
             .bind(username, 'slot', cost, prize, resultStr, now).run();
 
@@ -2681,7 +2682,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
 
           const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
-          await DB.prepare('UPDATE user SET balance = balance - ? + ? WHERE username = ?').bind(cost, prize, username).run();
+          await DB.prepare('UPDATE user SET balance = balance - ? + ?, game_winnings = COALESCE(game_winnings, 0) + ? WHERE username = ?').bind(cost, prize, prize, username).run();
           await DB.prepare('INSERT INTO game_bet (username, game_type, cost, prize, result, created_at) VALUES (?, ?, ?, ?, ?, ?)')
             .bind(username, 'scratch', cost, prize, `¥${prize}`, now).run();
 
@@ -2721,6 +2722,134 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
 
           const result = await DB.prepare(query).bind(...params).all();
           return resJson({ success: true, history: result.results || [] });
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
+        }
+      }
+
+      // ========== 提现：保存收款码 ==========
+      if (path === '/api/withdraw/save-qr' && request.method === 'POST') {
+        try {
+          const { username, method, qrCode } = await request.json();
+          if (!username) return resJson({ success: false, message: '请先登录' }, 401);
+          if (!method || !['wechat', 'alipay'].includes(method)) return resJson({ success: false, message: '参数错误' }, 400);
+          if (!qrCode) return resJson({ success: false, message: '请上传收款码' }, 400);
+
+          const key = `withdraw_qr_${username}_${method}`;
+          await DB.prepare('INSERT OR REPLACE INTO link (key, value) VALUES (?, ?)').bind(key, qrCode).run();
+          return resJson({ success: true, message: '收款码已保存' });
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
+        }
+      }
+
+      // ========== 提现：获取已保存的收款码 ==========
+      if (path === '/api/withdraw/get-qr' && request.method === 'POST') {
+        try {
+          const { username } = await request.json();
+          if (!username) return resJson({ success: false, message: '请先登录' }, 401);
+
+          const wechatRow = await DB.prepare('SELECT value FROM link WHERE key = ?').bind(`withdraw_qr_${username}_wechat`).first();
+          const alipayRow = await DB.prepare('SELECT value FROM link WHERE key = ?').bind(`withdraw_qr_${username}_alipay`).first();
+          return resJson({ success: true, qrCodes: { wechat: wechatRow?.value || '', alipay: alipayRow?.value || '' } });
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
+        }
+      }
+
+      // ========== 提现：提交提现申请 ==========
+      if (path === '/api/withdraw' && request.method === 'POST') {
+        try {
+          const { username, amount, method, qrCode } = await request.json();
+          if (!username) return resJson({ success: false, message: '请先登录' }, 401);
+          if (!amount || amount <= 0) return resJson({ success: false, message: '请输入有效金额' }, 400);
+          if (!method || !['wechat', 'alipay'].includes(method)) return resJson({ success: false, message: '请选择收款方式' }, 400);
+          if (!qrCode) return resJson({ success: false, message: '请上传收款码' }, 400);
+
+          const user = await DB.prepare('SELECT balance, game_winnings FROM user WHERE username = ?').bind(username).first();
+          if (!user) return resJson({ success: false, message: '用户不存在' }, 404);
+
+          const withdrawAmount = parseFloat(amount);
+          const gameWinnings = parseFloat(user.game_winnings || 0);
+
+          if (withdrawAmount > gameWinnings) return resJson({ success: false, message: `可提现金额不足，最多可提现 ¥${gameWinnings.toFixed(2)}` }, 400);
+          if (withdrawAmount > user.balance) return resJson({ success: false, message: '余额不足' }, 400);
+
+          const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+          await DB.prepare('UPDATE user SET balance = balance - ?, game_winnings = game_winnings - ? WHERE username = ?')
+            .bind(withdrawAmount, withdrawAmount, username).run();
+
+          await DB.prepare('INSERT INTO withdraw (username, amount, method, qr_code, status, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+            .bind(username, withdrawAmount, method, qrCode, 'pending', now).run();
+
+          await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
+            .bind('immmor', `💰 新的提现申请！用户 ${username} 申请提现 ¥${withdrawAmount.toFixed(2)}（${method === 'wechat' ? '微信' : '支付宝'}）`, now).run();
+
+          return resJson({ success: true, message: '提现申请已提交，我们会尽快处理' });
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
+        }
+      }
+
+      // ========== 提现：获取提现记录 ==========
+      if (path === '/api/withdraw/history' && request.method === 'POST') {
+        try {
+          const { username } = await request.json();
+          if (!username) return resJson({ success: false, message: '请先登录' }, 401);
+
+          const result = await DB.prepare('SELECT * FROM withdraw WHERE username = ? ORDER BY id DESC LIMIT 50').bind(username).all();
+          return resJson({ success: true, history: result.results || [] });
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
+        }
+      }
+
+      // ========== 提现：后台获取所有提现申请 ==========
+      if (path === '/api/withdraw/list' && request.method === 'GET') {
+        try {
+          const status = url.searchParams.get('status') || '';
+          let query = 'SELECT * FROM withdraw';
+          let params = [];
+          if (status && ['pending', 'approved', 'rejected'].includes(status)) {
+            query += ' WHERE status = ?';
+            params.push(status);
+          }
+          query += ' ORDER BY id DESC LIMIT 500';
+          const result = params.length ? await DB.prepare(query).bind(...params).all() : await DB.prepare(query).all();
+          return resJson({ success: true, data: result.results || [] });
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
+        }
+      }
+
+      // ========== 提现：后台审核（通过/拒绝） ==========
+      if (path === '/api/withdraw/review' && request.method === 'POST') {
+        try {
+          const { id, action, operator } = await request.json();
+          if (!id || !['approve', 'reject'].includes(action)) return resJson({ success: false, message: '参数错误' }, 400);
+
+          const record = await DB.prepare('SELECT * FROM withdraw WHERE id = ?').bind(id).first();
+          if (!record) return resJson({ success: false, message: '提现记录不存在' }, 404);
+          if (record.status !== 'pending') return resJson({ success: false, message: '该申请已处理' }, 400);
+
+          const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+          if (action === 'approve') {
+            await DB.prepare('UPDATE withdraw SET status = ?, reviewed_at = ?, reviewer = ? WHERE id = ?')
+              .bind('approved', now, operator || 'admin', id).run();
+            await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
+              .bind(record.username, `✅ 您的提现申请 ¥${parseFloat(record.amount).toFixed(2)} 已通过审核，请注意查收`, now).run();
+          } else {
+            await DB.prepare('UPDATE withdraw SET status = ?, reviewed_at = ?, reviewer = ? WHERE id = ?')
+              .bind('rejected', now, operator || 'admin', id).run();
+            await DB.prepare('UPDATE user SET balance = balance + ?, game_winnings = game_winnings + ? WHERE username = ?')
+              .bind(record.amount, record.amount, record.username).run();
+            await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
+              .bind(record.username, `❌ 您的提现申请 ¥${parseFloat(record.amount).toFixed(2)} 已被拒绝，金额已退回`, now).run();
+          }
+
+          return resJson({ success: true, message: action === 'approve' ? '已通过' : '已拒绝' });
         } catch (err) {
           return resJson({ success: false, message: err.message }, 500);
         }
