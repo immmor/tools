@@ -1257,20 +1257,38 @@
                     <div class="text-xs text-zinc-400 mb-1" data-i18n="withdraw_available">可提现金额</div>
                     <div class="text-2xl font-black text-[var(--neon-green)]" id="withdraw-available">¥0.00</div>
                 </div>
+                <div class="space-y-2">
+                    <div class="flex items-center gap-2 text-xs" id="withdraw-check-min">
+                        <span class="w-4 h-4 rounded-full border border-zinc-600 flex items-center justify-center text-zinc-500">✗</span>
+                        <span class="text-zinc-500">金额不低于50元</span>
+                    </div>
+                    <div class="flex items-center gap-2 text-xs" id="withdraw-check-game">
+                        <span class="w-4 h-4 rounded-full border border-zinc-600 flex items-center justify-center text-zinc-500">✗</span>
+                        <span class="text-zinc-500">金额不超过可提现余额</span>
+                    </div>
+                    <div class="flex items-center gap-2 text-xs" id="withdraw-check-method">
+                        <span class="w-4 h-4 rounded-full border border-zinc-600 flex items-center justify-center text-zinc-500">✗</span>
+                        <span class="text-zinc-500">已选择收款方式</span>
+                    </div>
+                    <div class="flex items-center gap-2 text-xs" id="withdraw-check-qr">
+                        <span class="w-4 h-4 rounded-full border border-zinc-600 flex items-center justify-center text-zinc-500">✗</span>
+                        <span class="text-zinc-500">已上传收款码</span>
+                    </div>
+                </div>
                 <div>
                     <label class="text-xs text-zinc-400 block mb-2" data-i18n="withdraw_amount">提现金额</label>
-                    <input type="number" id="withdraw-amount" class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:border-[var(--neon-green)]" placeholder="0.00" step="0.01">
+                    <input type="number" id="withdraw-amount" class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:border-[var(--neon-green)]" placeholder="0.00" step="0.01" min="0">
                 </div>
                 <div>
                     <label class="text-xs text-zinc-400 block mb-2" data-i18n="withdraw_method">收款方式</label>
                     <div class="flex gap-2">
                         <button class="withdraw-method-btn flex-1 py-3 rounded-lg border border-zinc-700 text-sm transition-all text-zinc-400 hover:border-[var(--neon-green)] hover:text-white flex flex-col items-center gap-1" data-method="wechat">
                             <i class="fab fa-weixin text-xl"></i>
-                            <span>微信</span>
+                            <span data-i18n="withdraw_wechat">微信</span>
                         </button>
                         <button class="withdraw-method-btn flex-1 py-3 rounded-lg border border-zinc-700 text-sm transition-all text-zinc-400 hover:border-[var(--neon-green)] hover:text-white flex flex-col items-center gap-1" data-method="alipay">
                             <i class="fab fa-alipay text-xl"></i>
-                            <span>支付宝</span>
+                            <span data-i18n="withdraw_alipay">支付宝</span>
                         </button>
                     </div>
                 </div>
@@ -3265,6 +3283,47 @@
             let withdrawQrBase64 = '';
             let savedQrCodes = { wechat: '', alipay: '' };
 
+            const updateWithdrawChecks = () => {
+                const amount = parseFloat(els.withdrawAmount.value);
+                const gameWinnings = parseFloat(userInfo.game_winnings || 0);
+                const hasMethod = withdrawMethod !== '';
+                const hasQr = withdrawQrBase64 !== '';
+                const minOK = amount >= 50;
+                const gameOK = amount <= gameWinnings;
+
+                const setCheck = (id, ok, text) => {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    const icon = el.querySelector('span:first-child');
+                    const label = el.querySelector('span:last-child');
+                    if (ok) {
+                        icon.className = 'w-4 h-4 rounded-full bg-[var(--neon-green)] flex items-center justify-center text-black';
+                        icon.textContent = '✓';
+                        label.className = 'text-[var(--neon-green)]';
+                    } else {
+                        icon.className = 'w-4 h-4 rounded-full border border-zinc-600 flex items-center justify-center text-zinc-500';
+                        icon.textContent = '✗';
+                        label.className = 'text-zinc-500';
+                    }
+                    label.textContent = text;
+                };
+
+                const t = translations[currentLang] || {};
+                const minText = amount > 0 && amount < 50 
+                    ? (t.withdraw_min_insufficient || `金额不足50元（还差¥${(50 - amount).toFixed(2)}）`)
+                    : (t.withdraw_min_ok || '金额不低于50元');
+                const gameText = amount > gameWinnings 
+                    ? (t.withdraw_game_insufficient || `超出可提现余额（¥${gameWinnings.toFixed(2)}）`)
+                    : (t.withdraw_game_ok || '金额不超过可提现余额');
+
+                setCheck('withdraw-check-min', minOK, minText);
+                setCheck('withdraw-check-game', gameOK, gameText);
+                setCheck('withdraw-check-method', hasMethod, t.withdraw_method_ok || '已选择收款方式');
+                setCheck('withdraw-check-qr', hasQr, t.withdraw_qr_ok || '已上传收款码');
+
+                els.withdrawSubmit.disabled = !(amount >= 50 && gameOK && hasMethod && hasQr);
+            };
+
             const openWithdrawModal = () => {
                 if (!userInfo || !userInfo.username) return;
                 closeDropdown();
@@ -3282,6 +3341,7 @@
                 els.withdrawMsg.classList.add('hidden');
                 els.withdrawModal.classList.remove('hidden');
                 els.withdrawModal.classList.add('flex');
+                updateWithdrawChecks();
                 loadSavedQrCodes();
                 loadWithdrawHistory();
             };
@@ -3330,11 +3390,12 @@
                         els.withdrawHistory.innerHTML = '';
                         return;
                     }
-                    const statusMap = { pending: '待处理', approved: '已通过', rejected: '已拒绝' };
+                    const t = translations[currentLang] || {};
+                    const statusMap = { pending: t.withdraw_status_pending || '待处理', approved: t.withdraw_status_approved || '已通过', rejected: t.withdraw_status_rejected || '已拒绝' };
                     const statusColor = { pending: 'text-[var(--neon-orange)]', approved: 'text-[var(--neon-green)]', rejected: 'text-[var(--neon-red)]' };
-                    const methodMap = { wechat: '微信', alipay: '支付宝' };
+                    const methodMap = { wechat: t.withdraw_wechat || '微信', alipay: t.withdraw_alipay || '支付宝' };
                     els.withdrawHistory.innerHTML = `
-                        <div class="text-xs text-zinc-500 pt-2 border-t border-zinc-800">提现记录</div>
+                        <div class="text-xs text-zinc-500 pt-2 border-t border-zinc-800">${t.withdraw_history || '提现记录'}</div>
                         ${data.history.map(r => `
                             <div class="flex gap-3 p-3 bg-zinc-800/50 rounded-lg">
                                 ${r.qr_code ? `<img src="${r.qr_code}" class="w-16 h-16 object-contain rounded shrink-0" alt="收款码">` : ''}
@@ -4112,6 +4173,8 @@
                 els.withdrawClose.addEventListener('click', closeWithdrawModal);
                 els.withdrawSubmit.addEventListener('click', handleWithdraw);
 
+                els.withdrawAmount.addEventListener('input', updateWithdrawChecks);
+
                 document.querySelectorAll('.withdraw-method-btn').forEach(btn => {
                     btn.addEventListener('click', () => {
                         document.querySelectorAll('.withdraw-method-btn').forEach(b => {
@@ -4122,6 +4185,7 @@
                         btn.classList.remove('border-zinc-700', 'text-zinc-400');
                         withdrawMethod = btn.dataset.method;
                         showQrCode(savedQrCodes[withdrawMethod] || '');
+                        updateWithdrawChecks();
                     });
                 });
 
@@ -4136,6 +4200,7 @@
                                 els.withdrawQrImg.src = withdrawQrBase64;
                                 els.withdrawQrPreview.classList.remove('hidden');
                                 els.withdrawQrPlaceholder.classList.add('hidden');
+                                updateWithdrawChecks();
                             };
                             reader.readAsDataURL(file);
                         }

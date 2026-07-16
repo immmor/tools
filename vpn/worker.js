@@ -2772,13 +2772,13 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           const withdrawAmount = parseFloat(amount);
           const gameWinnings = parseFloat(user.game_winnings || 0);
 
+          if (withdrawAmount < 50) return resJson({ success: false, message: '最低提现金额为50元' }, 400);
           if (withdrawAmount > gameWinnings) return resJson({ success: false, message: `可提现金额不足，最多可提现 ¥${gameWinnings.toFixed(2)}` }, 400);
-          if (withdrawAmount > user.balance) return resJson({ success: false, message: '余额不足' }, 400);
 
           const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
-          await DB.prepare('UPDATE user SET balance = balance - ?, game_winnings = game_winnings - ? WHERE username = ?')
-            .bind(withdrawAmount, withdrawAmount, username).run();
+          await DB.prepare('UPDATE user SET game_winnings = game_winnings - ? WHERE username = ?')
+            .bind(withdrawAmount, username).run();
 
           await DB.prepare('INSERT INTO withdraw (username, amount, method, qr_code, status, created_at) VALUES (?, ?, ?, ?, ?, ?)')
             .bind(username, withdrawAmount, method, qrCode, 'pending', now).run();
