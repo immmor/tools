@@ -1146,16 +1146,25 @@
                 mouse.y = -(clientY / window.innerHeight) * 2 + 1;
                 raycaster.setFromCamera(mouse, camera);
 
-                // 射线检测是否点击到了生成的 3D 物体物体
+                // 射线检测是否点击到了生成的 3D 物体
                 const intersects = raycaster.intersectObjects(objectsGroup.children, true);
                 
                 if (intersects.length > 0) {
                     const hitObject = intersects[0].object;
-                    // 判断是否按下了 Shift 键实现跨物体多选
-                    handleObjectSelection(hitObject, e.shiftKey);
+                    
+                    // 【核心移动端优化】：如果是触屏/手机端，直接默认开启多选模式（无需按住 Shift 键）
+                    const isTouch = (e.pointerType === 'touch' || e.touches || (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents));
+                    const isMultiSelect = isTouch ? true : e.shiftKey;
+                    
+                    handleObjectSelection(hitObject, isMultiSelect);
                 } else {
-                    // 如果点到了空白区域且没有拖拽轴，则清除选择
-                    if (!e.shiftKey) {
+                    // 如果点到了空白区域，且不是多选状态，则清除选择
+                    const isTouch = (e.pointerType === 'touch' || e.touches || (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents));
+                    if (isTouch) {
+                        // 手机端：点击空白处直接清空选中
+                        clearSelection();
+                    } else if (!e.shiftKey) {
+                        // 电脑端：没有按住 Shift 键点击空白处时清空选中
                         clearSelection();
                     }
                 }
