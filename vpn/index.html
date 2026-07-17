@@ -1617,7 +1617,7 @@
                     <label class="block text-xs text-zinc-500 mb-2 uppercase tracking-widest" data-i18n="complaint_content">投诉内容</label>
                     <textarea id="complaint-content" rows="5" class="w-full bg-zinc-900 border border-zinc-700 px-4 py-3 text-white focus:border-[var(--neon-blue)] focus:outline-none resize-none" required placeholder="请详细描述您的问题..." data-i18n-placeholder="complaint_placeholder"></textarea>
                 </div>
-                <button type="submit" class="w-full bg-[var(--neon-blue)] hover:bg-blue-600 text-black font-bold py-3 px-4 transition-colors" data-i18n="complaint_submit">提交投诉</button>
+                <button type="submit" class="w-full bg-[var(--neon-blue)] hover:bg-blue-600 text-black font-bold py-3 px-4 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" data-i18n="complaint_submit">提交投诉</button>
             </form>
             <div id="complaint-message" class="mt-4 text-center text-xs hidden"></div>
         </div>
@@ -2963,12 +2963,15 @@
                     const div = document.createElement('div');
                     div.className = 'px-4 py-3 border-b border-zinc-800/50 hover:bg-zinc-800/50 transition-colors cursor-pointer notification-item relative';
                     div.innerHTML = `
-                        <div class="flex justify-between items-start">
-                            <div>
+                        <div class="flex justify-between items-start gap-2">
+                            <div class="flex-1 min-w-0">
                                 <p class="text-sm ${!notif.is_read ? 'text-white font-bold' : 'text-zinc-400'}">${getMessageContent(notif.content)}</p>
                                 <p class="text-xs text-zinc-600 mt-1">${formatTime(notif.created_at)}</p>
                             </div>
-                            ${!notif.is_read ? '<span class="absolute top-2 right-2 w-2 h-2 bg-[var(--neon-red)] rounded-full"></span>' : ''}
+                            <div class="flex items-center gap-2 shrink-0 mt-0.5">
+                                ${!notif.is_read ? '<span class="w-2 h-2 bg-[var(--neon-red)] rounded-full shrink-0"></span>' : ''}
+                                <button class="notif-reply-btn shrink-0 text-xs text-[var(--neon-blue)] hover:text-white hover:border-[var(--neon-blue)] transition-colors px-2 py-1 rounded border border-zinc-700">${translations[currentLang]?.notification_reply || '回复'}</button>
+                            </div>
                         </div>
                     `;
                     div.onclick = async () => {
@@ -2977,6 +2980,22 @@
                             notifications[idx].is_read = true;
                             renderNotifications(notifications);
                             checkUnread(notifications);
+                        }
+                    };
+                    div.querySelector('.notif-reply-btn').onclick = (e) => {
+                        e.stopPropagation();
+                        notificationDropdown.classList.add('hidden');
+                        if (userInfo) {
+                            resetForm();
+                            modal.dataset.type = 'reply';
+                            const dict = translations[currentLang];
+                            if (title) title.textContent = (dict?.notification_reply_title || '回复消息');
+                            if (label) label.textContent = (dict?.notification_reply_label || '回复内容');
+                            if (content) content.placeholder = (dict?.notification_reply_placeholder || '请输入您的回复...');
+                            if (submitBtn) submitBtn.textContent = (dict?.notification_reply_submit || '发送回复');
+                            toggleModal(true);
+                        } else {
+                            openModal();
                         }
                     };
                     list.appendChild(div);
@@ -3241,6 +3260,9 @@
                 } else if (type === 'custom') {
                     txt = `[定制节点] 用户: ${userInfo.username}\n需求: ${content.value.trim()}`;
                     successMsg = dict ? dict.complaint_custom_success : '定制申请提交成功！我们会尽快联系您。';
+                } else if (type === 'reply') {
+                    txt = `[回复] 用户: ${userInfo.username}\n内容: ${content.value.trim()}`;
+                    successMsg = dict ? dict.notification_reply_success : '回复发送成功！';
                 } else {
                     txt = `[投诉] 用户: ${userInfo.username}\n内容: ${content.value.trim()}`;
                     successMsg = dict ? dict.complaint_success : '提交成功！';
@@ -3255,7 +3277,7 @@
                 } else {
                     showComplaintMsg(r1.msg || r2.msg || '提交失败', true, msg);
                 }
-                submitBtn.textContent = type === 'ad' ? (dict ? dict.ad_modal_submit : '提交申请') : type === 'agent' ? (dict ? dict.agent_modal_submit : '提交申请') : type === 'invest' ? (dict ? dict.invest_modal_submit : '提交申请') : type === 'custom' ? (dict ? dict.custom_modal_submit : '提交定制申请') : (dict ? dict.complaint_submit : '提交');
+                submitBtn.textContent = type === 'ad' ? (dict ? dict.ad_modal_submit : '提交申请') : type === 'agent' ? (dict ? dict.agent_modal_submit : '提交申请') : type === 'invest' ? (dict ? dict.invest_modal_submit : '提交申请') : type === 'custom' ? (dict ? dict.custom_modal_submit : '提交定制申请') : type === 'reply' ? (dict ? dict.notification_reply_submit : '发送回复') : (dict ? dict.complaint_submit : '提交');
                 submitBtn.disabled = false;
             });
             
