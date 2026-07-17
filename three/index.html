@@ -988,13 +988,25 @@ function switchTool(toolId) {
     if (currentTool === 'shape') {
         submenu.style.display = 'flex';
         
-        // 实时计算按钮位置并精准吸附在右侧
         const shapeBtn = document.getElementById('tool-shape');
         const rect = shapeBtn.getBoundingClientRect();
         
-        submenu.style.left = (rect.right + 12) + 'px';
-        submenu.style.top = (rect.top + rect.height / 2) + 'px';
-        submenu.style.transform = 'translateY(-50%)'; 
+        // 检测是否为小屏幕/移动端 (屏宽 <= 768px)
+        const isMobile = window.innerWidth <= 768;
+        
+        if (isMobile) {
+            // 📱 移动端：二级菜单从下往上（垂直排列），定位在 Shape 按钮的正上方
+            submenu.style.flexDirection = 'column-reverse'; // 从下往上列出 (Box在最下靠近按钮，Torus在最上)
+            submenu.style.left = (rect.left + rect.width / 2) + 'px';
+            submenu.style.top = (rect.top - 12) + 'px';
+            submenu.style.transform = 'translateY(-100%) translateX(-50%)'; // 居中且置于按钮上方
+        } else {
+            // 💻 电脑端：二级菜单从左往右（水平排列），定位在 Shape 按钮的正右侧
+            submenu.style.flexDirection = 'row';
+            submenu.style.left = (rect.right + 12) + 'px';
+            submenu.style.top = (rect.top + rect.height / 2) + 'px';
+            submenu.style.transform = 'translateY(-50%)'; 
+        }
     } else {
         submenu.style.display = 'none';
     }
@@ -1477,20 +1489,9 @@ function createInstance(point, type) {
     mesh.castShadow = true;
     mesh.receiveShadow = true;
 
-    mesh.scale.set(0.01, 0.01, 0.01);
+    mesh.scale.set(1, 1, 1); // 默认直接以原始大小生成
     objectsGroup.add(mesh);
-    
     currentStrokeObjects.push(mesh);
-
-    let progress = 0;
-    function grow() {
-        if(progress < 1) {
-            progress += 0.15;
-            mesh.scale.setScalar(Math.min(progress, 1));
-            requestAnimationFrame(grow);
-        }
-    }
-    grow();
 }
 
         function onPointerDown(e) {
@@ -1573,6 +1574,26 @@ function createInstance(point, type) {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
+
+            // 在 onWindowResize() 函数内的最底部，替换为以下适配代码：
+if (currentTool === 'shape') {
+    const submenu = document.getElementById('shape-submenu');
+    const shapeBtn = document.getElementById('tool-shape');
+    const rect = shapeBtn.getBoundingClientRect();
+    const isMobile = window.innerWidth <= 768;
+    
+    if (isMobile) {
+        submenu.style.flexDirection = 'column-reverse';
+        submenu.style.left = (rect.left + rect.width / 2) + 'px';
+        submenu.style.top = (rect.top - 12) + 'px';
+        submenu.style.transform = 'translateY(-100%) translateX(-50%)';
+    } else {
+        submenu.style.flexDirection = 'row';
+        submenu.style.left = (rect.right + 12) + 'px';
+        submenu.style.top = (rect.top + rect.height / 2) + 'px';
+        submenu.style.transform = 'translateY(-50%)';
+    }
+}
         }
 
         function animate() {
