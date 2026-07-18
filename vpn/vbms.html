@@ -632,6 +632,7 @@
             </div>
             <nav class="sidebar-menu">
                 <a href="#dashboard" class="menu-item active" onclick="showPage('dashboard')">仪表盘</a>
+                <a href="#insights" class="menu-item" onclick="showPage('insights')">智能运营</a>
                 <a href="#users" class="menu-item" onclick="showPage('users')">用户管理</a>
                 <a href="#orders" class="menu-item" onclick="showPage('orders')">订单管理</a>
                 <a href="#nodes" class="menu-item" onclick="showPage('nodes')">节点管理</a>
@@ -700,6 +701,35 @@
                         <div class="stat-card">
                             <h3 style="margin-bottom: 1rem; color: #4a5568;">收入分布</h3>
                             <canvas id="revenueChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 智能运营页面 -->
+                <div id="insightsPage" class="page-section" style="display: none;">
+                    <div id="insightMetrics" class="dashboard-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
+                        <div class="stat-card"><div class="stat-info"><h3>-</h3><p>加载中...</p></div></div>
+                    </div>
+
+                    <div class="data-table" style="margin-top: 1.5rem;">
+                        <div class="table-header">
+                            <h3>💡 智能运营策略建议</h3>
+                            <button class="add-btn" style="background-color:#667eea;" onclick="loadInsights()">🔄 刷新分析</button>
+                        </div>
+                        <div id="insightAdvice" style="padding: 1.5rem;">正在分析用户数据...</div>
+                    </div>
+
+                    <div class="data-table" style="margin-top: 1.5rem;">
+                        <div class="table-header">
+                            <h3>🎯 智能用户分群</h3>
+                            <div id="insightTabs" style="display:flex; gap:8px; flex-wrap:wrap;"></div>
+                        </div>
+                        <div id="insightSegmentBar" style="padding: 1rem 1.5rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;"></div>
+                        <div style="overflow-x:auto;">
+                            <table id="insightTable" style="min-width: 900px;">
+                                <thead id="insightThead"></thead>
+                                <tbody id="insightTableBody"></tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
@@ -966,6 +996,10 @@
                                 <label for="messageTarget">发送对象</label>
                                 <select id="messageTarget" style="width: 100%; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 4px;">
                                     <option value="all">所有用户</option>
+                                    <option value="vip">VIP用户</option>
+                                    <option value="nonvip">非VIP用户</option>
+                                    <option value="trusted">信任用户</option>
+                                    <option value="untrusted">非信任用户</option>
                                     <option value="single">单个用户</option>
                                 </select>
                             </div>
@@ -1608,6 +1642,368 @@
             });
         }
 
+        // ==================== 智能运营分析 ====================
+        let insightData = null;        // 分析结果缓存
+        let insightActiveSeg = 'potential';
+        const DAY_MS = 24 * 60 * 60 * 1000;
+
+        // 安全解析日期为时间戳（无效返回 null）
+        function _ts(v) {
+            if (!v) return null;
+            const t = new Date(v).getTime();
+            return isNaN(t) ? null : t;
+        }
+
+        // 判断最近 N 天内是否有活动
+        function _recentDays(v) {
+            const t = _ts(v);
+            if (t === null) return Infinity;
+            return Math.floor((Date.now() - t) / DAY_MS);
+        }
+
+        // 加载并分析（复用已有 /api/users 与 /api/orders 数据，不新增接口）
+        async function loadInsights() {
+            document.getElementById('insightAdvice').innerHTML = '正在分析用户数据...';
+            // 确保用户与订单数据已加载
+            if (!usersData || usersData.length === 0) {
+                const ur = await apiRequest('/api/users?page=1&limit=9999', 'GET');
+                if (ur.code === 200) usersData = ur.data.users || [];
+            }
+            if (!ordersData || ordersData.length === 0) {
+                const or = await apiRequest('/api/orders?page=1&limit=9999', 'GET');
+                if (or.code === 200) ordersData = or.data.orders || [];
+            }
+            insightData = analyzeUsers();
+            renderInsightMetrics(insightData);
+            renderInsightAdvice(insightData);
+            renderInsightTabs(insightData);
+            renderInsightSegment(insightActiveSeg);
+        }
+
+        // 核心：对每个用户打标签、评分、分群
+        function analyzeUsers() {
+            const now = Date.now();
+            // 预聚合每个用户的付费订单
+            const paidByUser = {};
+            ordersData.forEach(o => {
+                if (o.status !== 'paid') return;
+                const u = o.username;
+                if (!paidByUser[u]) paidByUser[u] = [];
+                paidByUser[u].push(o);
+            });
+
+            const segments = {
+                potential: [],   // 潜在用户：从未付费但有活跃迹象
+                expiring: [],    // 即将到期：VIP 7 天内到期
+                winback: [],     // 可召回：曾付费但已过期
+                highvalue: []    // 高价值：当前 VIP 且付费多/金额高
+            };
+
+            let payingUsers = 0, repurchaseUsers = 0, vipActive = 0, autoOn = 0;
+            let totalPaidAmount = 0, totalPaidOrders = 0;
+
+            usersData.forEach(user => {
+                const paid = paidByUser[user.username] || [];
+                const successCount = paid.length;
+                const successAmount = paid.reduce((s, o) => s + (parseFloat(o.amount) || 0), 0);
+                const paidTimes = paid.map(o => _ts(o.created_at)).filter(t => t !== null);
+                const lastPaidTs = paidTimes.length ? Math.max(...paidTimes) : null;
+
+                const vExpTs = _ts(user.v_expire_date);
+                const isVIP = vExpTs !== null && vExpTs > now;
+                const daysToExpire = isVIP ? Math.ceil((vExpTs - now) / DAY_MS) : null;
+                const daysSinceExpire = (vExpTs !== null && vExpTs <= now) ? Math.floor((now - vExpTs) / DAY_MS) : null;
+                const checkinDays = _recentDays(user.last_checkin);
+                const freeActive = (_ts(user.free_expire_date) || 0) > now;
+                const hasSurvey = user.survey && String(user.survey).trim() && user.survey !== '-';
+                const balance = parseFloat(user.balance) || 0;
+                const autoRenew = (user.auto_rewn === 1 || user.auto_rewn === '1' || user.auto_rewn === true);
+
+                if (successCount >= 1) payingUsers++;
+                if (successCount >= 2) repurchaseUsers++;
+                if (isVIP) vipActive++;
+                if (autoRenew) autoOn++;
+                totalPaidAmount += successAmount;
+                totalPaidOrders += successCount;
+
+                const base = {
+                    username: user.username, isVIP, successCount, successAmount,
+                    daysToExpire, daysSinceExpire, checkinDays, freeActive,
+                    hasSurvey, balance, autoRenew, source: user.source || '-',
+                    vExpireStr: vExpTs ? new Date(vExpTs).toLocaleDateString() : '-'
+                };
+
+                // 1) 潜在用户：从未付费，评估转化意向分（0-100）
+                if (successCount === 0) {
+                    let score = 0;
+                    const reasons = [];
+                    if (checkinDays <= 7) { score += 30; reasons.push('近7天有签到'); }
+                    else if (checkinDays <= 30) { score += 15; reasons.push('近30天有签到'); }
+                    if (freeActive) { score += 25; reasons.push('正在使用免费节点'); }
+                    if (balance > 0) { score += 20; reasons.push('账户有余额¥' + balance); }
+                    if (hasSurvey) { score += 15; reasons.push('已填写问卷'); }
+                    if (user.source && user.source !== '-') { score += 10; reasons.push('渠道:' + user.source); }
+                    if (score > 100) score = 100;
+                    if (score >= 25) { // 有一定意向才纳入潜在池
+                        segments.potential.push({ ...base, score, reasons,
+                            level: score >= 60 ? '高意向' : (score >= 40 ? '中意向' : '低意向') });
+                    }
+                }
+
+                // 2) 即将到期：VIP 且 7 天内到期
+                if (isVIP && daysToExpire !== null && daysToExpire <= 7) {
+                    segments.expiring.push({ ...base,
+                        urgency: daysToExpire <= 3 ? '紧急' : '提醒',
+                        reasons: [`VIP将在${daysToExpire}天后到期`, autoRenew ? '已开启自动续费' : '未开启自动续费，需主动触达'] });
+                }
+
+                // 3) 可召回流失：曾付费但当前已过期
+                if (successCount >= 1 && !isVIP && daysSinceExpire !== null) {
+                    let stage, stageScore;
+                    if (daysSinceExpire <= 15) { stage = '黄金召回期'; stageScore = 3; }
+                    else if (daysSinceExpire <= 60) { stage = '沉睡期'; stageScore = 2; }
+                    else { stage = '深度流失'; stageScore = 1; }
+                    // 召回优先级 = 历史价值 + 时效
+                    const priority = successAmount + stageScore * 50;
+                    segments.winback.push({ ...base, stage, priority,
+                        reasons: [`已过期${daysSinceExpire}天`, `历史付费${successCount}次/¥${successAmount.toFixed(0)}`, stage] });
+                }
+
+                // 4) 高价值 VIP：当前有效且复购或高消费
+                if (isVIP && (successCount >= 2 || successAmount >= 100)) {
+                    segments.highvalue.push({ ...base,
+                        reasons: [`付费${successCount}次/¥${successAmount.toFixed(0)}`,
+                            autoRenew ? '已自动续费' : '未开启自动续费', `${daysToExpire !== null ? '距到期' + daysToExpire + '天' : ''}`] });
+                }
+            });
+
+            // 排序：各分群按优先级从高到低
+            segments.potential.sort((a, b) => b.score - a.score);
+            segments.expiring.sort((a, b) => a.daysToExpire - b.daysToExpire);
+            segments.winback.sort((a, b) => b.priority - a.priority);
+            segments.highvalue.sort((a, b) => b.successAmount - a.successAmount);
+
+            const totalUsers = usersData.length;
+            const metrics = {
+                totalUsers,
+                payingUsers,
+                convRate: totalUsers ? (payingUsers / totalUsers * 100) : 0,
+                repurchaseRate: payingUsers ? (repurchaseUsers / payingUsers * 100) : 0,
+                vipActive,
+                autoRate: payingUsers ? (autoOn / payingUsers * 100) : 0,
+                avgOrder: totalPaidOrders ? (totalPaidAmount / totalPaidOrders) : 0,
+                arpu: payingUsers ? (totalPaidAmount / payingUsers) : 0
+            };
+
+            return { segments, metrics };
+        }
+
+        // 渲染顶部运营指标卡片
+        function renderInsightMetrics(data) {
+            const m = data.metrics;
+            const cards = [
+                { icon: '🎯', label: '潜在可转化用户', value: data.segments.potential.length, color: '#667eea' },
+                { icon: '⏰', label: '7天内待续费', value: data.segments.expiring.length, color: '#ed8936' },
+                { icon: '🔁', label: '可召回流失用户', value: data.segments.winback.length, color: '#e53e3e' },
+                { icon: '👑', label: '高价值VIP', value: data.segments.highvalue.length, color: '#48bb78' },
+                { icon: '💹', label: '付费转化率', value: m.convRate.toFixed(1) + '%', color: '#4fd1c5' },
+                { icon: '🔂', label: '复购率', value: m.repurchaseRate.toFixed(1) + '%', color: '#9f7aea' },
+                { icon: '🔄', label: '自动续费开启率', value: m.autoRate.toFixed(1) + '%', color: '#38b2ac' },
+                { icon: '💰', label: '付费用户人均(ARPU)', value: '¥' + m.arpu.toFixed(0), color: '#f6ad55' }
+            ];
+            document.getElementById('insightMetrics').innerHTML = cards.map(c => `
+                <div class="stat-card" style="border-left:4px solid ${c.color};">
+                    <div class="stat-info">
+                        <h3 style="color:${c.color};">${c.value}</h3>
+                        <p>${c.label}</p>
+                    </div>
+                    <div class="stat-icon">${c.icon}</div>
+                </div>`).join('');
+        }
+
+        // 渲染动态运营策略建议
+        function renderInsightAdvice(data) {
+            const m = data.metrics;
+            const s = data.segments;
+            const advices = [];
+
+            advices.push({
+                t: '① 挖掘潜在用户 · 提升首单转化',
+                d: `当前有 <b>${s.potential.length}</b> 位从未付费但活跃的用户${s.potential.filter(u => u.level === '高意向').length ? `，其中 <b style="color:#e53e3e;">${s.potential.filter(u => u.level === '高意向').length}</b> 位为高意向` : ''}。`,
+                a: [
+                    '对"高意向"用户推送<b>首单限时折扣</b>（如首月立减/1元体验7天），临门一脚促成转化',
+                    '对仍在用免费节点的用户，在免费节点即将到期时提示"升级不断线"',
+                    '利用签到活跃度，给连续签到用户发放<b>VIP体验券</b>，先体验后付费',
+                    '有余额的用户直接引导"余额抵扣开通VIP"，降低支付门槛'
+                ]
+            });
+
+            advices.push({
+                t: '② 促续费 · 降低到期流失',
+                d: `<b>${s.expiring.length}</b> 位 VIP 将在 7 天内到期${s.expiring.filter(u => !u.autoRenew).length ? `，其中 <b style="color:#ed8936;">${s.expiring.filter(u => !u.autoRenew).length}</b> 位未开启自动续费` : ''}。自动续费开启率仅 <b>${m.autoRate.toFixed(1)}%</b>。`,
+                a: [
+                    '到期前 <b>7天/3天/1天</b> 分级推送续费提醒，越临近折扣越大',
+                    '主推<b>年付套餐</b>：用"月付×12 vs 年付"的省钱对比引导长周期锁定',
+                    '引导开启<b>自动续费</b>并赠送额外时长，把一次性消费变成稳定订阅',
+                    '对高价值 VIP 提供专属续费礼包 / 老用户忠诚价，防止被竞品挖走'
+                ]
+            });
+
+            advices.push({
+                t: '③ 召回流失用户 · 唤醒已续过费的用户',
+                d: `<b>${s.winback.length}</b> 位曾付费用户已过期，其中<b style="color:#e53e3e;">黄金召回期(15天内)</b> ${s.winback.filter(u => u.stage === '黄金召回期').length} 位、沉睡期 ${s.winback.filter(u => u.stage === '沉睡期').length} 位。`,
+                a: [
+                    '<b>黄金召回期</b>用户最易唤回：发"回归专享折扣券"+"节点已升级"消息，趁记忆未淡',
+                    '<b>沉睡期</b>用户用大额优惠（如买1年送1-3月）+ 短信/站内信双触达',
+                    '<b>深度流失</b>用户做流失问卷调研，了解原因，用新功能/降价做最后一次唤醒',
+                    '按历史付费金额分层：高价值流失用户可人工/一对一挽回，性价比最高'
+                ]
+            });
+
+            advices.push({
+                t: '④ 维系高价值用户 · 提升 LTV',
+                d: `<b>${s.highvalue.length}</b> 位高价值 VIP 贡献主要收入，付费用户人均 ARPU <b>¥${m.arpu.toFixed(0)}</b>、平均客单价 <b>¥${m.avgOrder.toFixed(0)}</b>。`,
+                a: [
+                    '给高价值用户<b>专属客服/优先节点/更高设备数</b>，强化尊享感',
+                    '推<b>邀请返利</b>：老带新，让高价值用户成为增长渠道',
+                    '生日/纪念日赠送时长，提升情感黏性，降低流失概率'
+                ]
+            });
+
+            document.getElementById('insightAdvice').innerHTML = advices.map(a => `
+                <div style="margin-bottom:1.25rem; padding:1rem 1.25rem; background:#f7fafc; border-radius:8px; border-left:4px solid #667eea;">
+                    <div style="font-weight:600; color:#2d3748; margin-bottom:.5rem;">${a.t}</div>
+                    <div style="color:#4a5568; margin-bottom:.6rem;">${a.d}</div>
+                    <ul style="margin:0; padding-left:1.2rem; color:#4a5568;">
+                        ${a.a.map(x => `<li style="margin-bottom:.3rem;">${x}</li>`).join('')}
+                    </ul>
+                </div>`).join('');
+        }
+
+        // 分群配置
+        const INSIGHT_SEG_META = {
+            potential: { name: '🎯 潜在用户', color: '#667eea', tpl: '体验还满意吗？现在开通VIP享首单专属优惠，解锁全部高速节点，先到先得~' },
+            expiring:  { name: '⏰ 即将到期', color: '#ed8936', tpl: '您的VIP会员即将到期，现在续费立享优惠并可开启自动续费再送时长，避免服务中断哦~' },
+            winback:   { name: '🔁 可召回流失', color: '#e53e3e', tpl: '好久不见！您的会员已过期，专属回归福利已就位：续费享折扣，节点已全面升级，欢迎回来~' },
+            highvalue: { name: '👑 高价值VIP', color: '#48bb78', tpl: '感谢您的一路支持！专属老用户礼遇已送达，续费享忠诚价+额外时长，尊享更快节点~' }
+        };
+
+        // 渲染分群 Tab
+        function renderInsightTabs(data) {
+            const tabs = Object.keys(INSIGHT_SEG_META).map(key => {
+                const meta = INSIGHT_SEG_META[key];
+                const count = data.segments[key].length;
+                const active = key === insightActiveSeg;
+                return `<button onclick="switchInsightSeg('${key}')" style="cursor:pointer; padding:.45rem .8rem; border-radius:6px; border:1px solid ${meta.color};
+                    background:${active ? meta.color : '#fff'}; color:${active ? '#fff' : meta.color}; font-size:.9rem;">
+                    ${meta.name} <b>${count}</b></button>`;
+            }).join('');
+            document.getElementById('insightTabs').innerHTML = tabs;
+        }
+
+        function switchInsightSeg(key) {
+            insightActiveSeg = key;
+            renderInsightTabs(insightData);
+            renderInsightSegment(key);
+        }
+
+        // 渲染分群列表
+        function renderInsightSegment(key) {
+            const meta = INSIGHT_SEG_META[key];
+            const list = insightData.segments[key];
+            const thead = document.getElementById('insightThead');
+            const tbody = document.getElementById('insightTableBody');
+            const bar = document.getElementById('insightSegmentBar');
+
+            bar.innerHTML = `
+                <div style="color:#4a5568;">共 <b style="color:${meta.color};">${list.length}</b> 位用户，建议触达文案：
+                    <span style="color:#718096;">"${meta.tpl}"</span></div>
+                <div style="display:flex; gap:8px;">
+                    <button class="add-btn" style="background:${meta.color};" onclick="sendSegmentMessage('${key}')">📣 一键群发本组</button>
+                    <button class="add-btn" style="background:#718096;" onclick="copySegmentUsers('${key}')">📋 复制用户名单</button>
+                </div>`;
+
+            const cols = {
+                potential: ['用户名', '意向', '意向分', '判断依据', '操作'],
+                expiring:  ['用户名', '紧急度', '到期日', '自动续费', '判断依据', '操作'],
+                winback:   ['用户名', '召回阶段', '历史付费', '判断依据', '操作'],
+                highvalue: ['用户名', '付费次数', '累计金额', '自动续费', '判断依据', '操作']
+            };
+            thead.innerHTML = '<tr>' + cols[key].map(c => `<th>${c}</th>`).join('') + '</tr>';
+
+            if (!list.length) {
+                tbody.innerHTML = `<tr><td colspan="${cols[key].length}" style="text-align:center; color:#999; padding:1.5rem;">该分群暂无用户</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = list.map(u => {
+                const reason = `<span style="color:#718096; font-size:.85rem;">${(u.reasons || []).filter(Boolean).join('、')}</span>`;
+                const act = `<button class="action-btn edit-btn" onclick="sendInsightMessage('${u.username}','${key}')">发消息</button>
+                             <button class="action-btn" onclick="editUser('${u.username}')">查看</button>`;
+                if (key === 'potential') {
+                    const badge = u.level === '高意向' ? '#e53e3e' : (u.level === '中意向' ? '#ed8936' : '#a0aec0');
+                    return `<tr><td>${u.username}</td>
+                        <td><span style="color:#fff; background:${badge}; padding:2px 8px; border-radius:10px; font-size:.8rem;">${u.level}</span></td>
+                        <td><b>${u.score}</b></td><td>${reason}</td><td>${act}</td></tr>`;
+                }
+                if (key === 'expiring') {
+                    const badge = u.urgency === '紧急' ? '#e53e3e' : '#ed8936';
+                    return `<tr><td>${u.username}</td>
+                        <td><span style="color:#fff; background:${badge}; padding:2px 8px; border-radius:10px; font-size:.8rem;">${u.urgency}</span></td>
+                        <td>${u.vExpireStr}（${u.daysToExpire}天）</td>
+                        <td>${u.autoRenew ? '✅ 已开' : '❌ 未开'}</td><td>${reason}</td><td>${act}</td></tr>`;
+                }
+                if (key === 'winback') {
+                    const badge = u.stage === '黄金召回期' ? '#e53e3e' : (u.stage === '沉睡期' ? '#ed8936' : '#a0aec0');
+                    return `<tr><td>${u.username}</td>
+                        <td><span style="color:#fff; background:${badge}; padding:2px 8px; border-radius:10px; font-size:.8rem;">${u.stage}</span></td>
+                        <td>${u.successCount}次 / ¥${u.successAmount.toFixed(0)}</td><td>${reason}</td><td>${act}</td></tr>`;
+                }
+                // highvalue
+                return `<tr><td>${u.username}</td>
+                    <td>${u.successCount}</td><td>¥${u.successAmount.toFixed(0)}</td>
+                    <td>${u.autoRenew ? '✅ 已开' : '❌ 未开'}</td><td>${reason}</td><td>${act}</td></tr>`;
+            }).join('');
+        }
+
+        // 单个用户触达（复用已有 /api/send-message，target=single）
+        async function sendInsightMessage(username, segKey) {
+            const meta = INSIGHT_SEG_META[segKey];
+            const content = prompt(`向【${username}】发送运营消息：`, meta.tpl);
+            if (!content) return;
+            try {
+                const result = await newApiRequest('/api/send-message', 'POST', { content, target: 'single', username });
+                alert(result.code === 200 ? `已发送给 ${username}` : (result.msg || '发送失败'));
+            } catch (e) { alert('发送失败：' + e.message); }
+        }
+
+        // 分群群发（逐个精准发送，避免误伤非本群用户）
+        async function sendSegmentMessage(segKey) {
+            const meta = INSIGHT_SEG_META[segKey];
+            const list = insightData.segments[segKey];
+            if (!list.length) { alert('该分群暂无用户'); return; }
+            const content = prompt(`将向【${meta.name}】共 ${list.length} 位用户群发消息：`, meta.tpl);
+            if (!content) return;
+            if (!confirm(`确认向 ${list.length} 位用户发送该消息？`)) return;
+            let ok = 0, fail = 0;
+            for (const u of list) {
+                try {
+                    const r = await newApiRequest('/api/send-message', 'POST', { content, target: 'single', username: u.username });
+                    r.code === 200 ? ok++ : fail++;
+                } catch (e) { fail++; }
+            }
+            alert(`群发完成：成功 ${ok} 条，失败 ${fail} 条`);
+        }
+
+        // 复制分群用户名单
+        function copySegmentUsers(segKey) {
+            const names = insightData.segments[segKey].map(u => u.username).join('\n');
+            if (!names) { alert('该分群暂无用户'); return; }
+            navigator.clipboard.writeText(names)
+                .then(() => alert('已复制 ' + insightData.segments[segKey].length + ' 个用户名到剪贴板'))
+                .catch(() => alert('复制失败'));
+        }
+
         // 页面切换
         async function showPage(pageName) {
             // 隐藏所有页面
@@ -1637,6 +2033,7 @@
             // 更新页面标题
             const pageTitles = {
                 'dashboard': '仪表盘',
+                'insights': '智能运营',
                 'users': '用户管理',
                 'orders': '订单管理',
                 'nodes': '节点管理',
@@ -1650,6 +2047,8 @@
             // 根据页面加载对应数据
             if (pageName === 'dashboard') {
                 await loadDashboardData();
+            } else if (pageName === 'insights') {
+                await loadInsights();
             } else if (pageName === 'users') {
                 await loadUsers();
             } else if (pageName === 'orders') {

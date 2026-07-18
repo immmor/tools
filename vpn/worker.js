@@ -2012,40 +2012,15 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           
           const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
           
-          if (target === 'all') {
-            const users = await DB
-              .prepare('SELECT username FROM user')
-              .all();
+          const targetSql = {
+            all: '',
+            vip: " WHERE v_expire_date IS NOT NULL AND v_expire_date > ?",
+            nonvip: " WHERE v_expire_date IS NULL OR v_expire_date <= ?",
+            trusted: " WHERE COALESCE(not_trusted, '') = ''",
+            untrusted: " WHERE not_trusted = 'yes'"
+          };
 
-            if (!users.results || users.results.length === 0) {
-              return resJson({ code: 404, msg: '暂无用户' }, 404);
-            }
-
-            const BATCH_SIZE = 30;
-            let totalInserted = 0;
-
-            for (let i = 0; i < users.results.length; i += BATCH_SIZE) {
-              const batch = users.results.slice(i, i + BATCH_SIZE);
-              const placeholders = batch.map(() => '(?, ?, ?, 0)').join(', ');
-              const values = batch.flatMap(user => [user.username, content, now]);
-              
-              await DB
-                .prepare(`INSERT INTO messages (username, content, created_at, is_read) VALUES ${placeholders}`)
-                .bind(...values)
-                .run();
-              
-              totalInserted += batch.length;
-            }
-
-            return resJson({
-              code: 200,
-              msg: '发送成功',
-              data: {
-                total: totalInserted,
-                content
-              }
-            });
-          } else if (target === 'single') {
+          if (target === 'single') {
             // 检查用户是否存在
             const existingUser = await DB
               .prepare('SELECT * FROM user WHERE username = ?')
@@ -2075,7 +2050,36 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
               return resJson({ code: 500, msg: '发送失败，请重试' }, 500);
             }
           } else {
-            return resJson({ code: 400, msg: '无效的发送目标' }, 400);
+            const where = targetSql[target];
+            if (!where && target !== 'all') {
+              return resJson({ code: 400, msg: '无效的发送目标' }, 400);
+            }
+
+            const query = 'SELECT username FROM user' + where;
+            const stmt = where.includes('?') ? DB.prepare(query).bind(now) : DB.prepare(query);
+            const users = await stmt.all();
+
+            if (!users.results || users.results.length === 0) {
+              return resJson({ code: 404, msg: '暂无符合条件的用户' }, 404);
+            }
+
+            const BATCH_SIZE = 30;
+            let totalInserted = 0;
+
+            for (let i = 0; i < users.results.length; i += BATCH_SIZE) {
+              const batch = users.results.slice(i, i + BATCH_SIZE);
+              const placeholders = batch.map(() => '(?, ?, ?, 0)').join(', ');
+              const values = batch.flatMap(user => [user.username, content, now]);
+
+              await DB
+                .prepare(`INSERT INTO messages (username, content, created_at, is_read) VALUES ${placeholders}`)
+                .bind(...values)
+                .run();
+
+              totalInserted += batch.length;
+            }
+
+            return resJson({ code: 200, msg: '发送成功', data: { total: totalInserted, content, target } });
           }
         } catch (err) {
           console.error('发送消息错误:', err);
