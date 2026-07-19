@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>优雅智能简历生成器 | 精英专属版</title>
+    <style>
+        /* 页面基础重置与极致现代色彩方案 */
+        :root {
+            --primary-color: #0f172a; /* 奢华深蓝灰 */
+            --accent-color: #0284c7;  /* 优雅天青蓝 */
+            --bg-light: #f8fafc;
+            --text-main: #334155;
+            --text-muted: #64748b;
+            --border-color: rgba(226, 232, 240, 0.8);
+            --glass-bg: rgba(255, 255, 255, 0.75);
+            --glass-border: rgba(255, 255, 255, 0.6);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Serif SC", serif;
+            background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            overflow-y: auto;
+        }
+
+        /* 顶部导航栏 - 优雅毛玻璃效果 */
+        header {
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--glass-border);
+            padding: 0 32px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 50;
+            height: 65px;
+            position: sticky;
+            top: 0;
+        }
+
+        .logo {
+            font-size: 16px;
+            font-weight: 300;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            color: #0f172a;
+        }
+        .logo span {
+            font-weight: 700;
+            color: var(--accent-color);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 12px;
+        }
+
+        button {
+            padding: 8px 18px;
+            border-radius: 20px; /* 更加圆润优雅 */
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1px solid transparent;
+        }
+
+        .btn-ai {
+            background: linear-gradient(135deg, #4f46e5, #0284c7);
+            color: white;
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2);
+        }
+        .btn-ai:hover { 
+            opacity: 0.95; 
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(79, 70, 229, 0.3);
+        }
+        .btn-ai:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn-pdf {
+            background: var(--primary-color);
+            color: white;
+        }
+        .btn-pdf:hover { 
+            background: #1e293b; 
+            transform: translateY(-1px);
+        }
+
+        .btn-png {
+            background: rgba(255, 255, 255, 0.8);
+            border-color: rgba(15, 23, 42, 0.08);
+            color: #475569;
+            backdrop-filter: blur(4px);
+        }
+        .btn-png:hover { 
+            background: #ffffff; 
+            border-color: rgba(15, 23, 42, 0.15);
+        }
+
+        /* 主体布局 */
+        main {
+            flex: 1;
+            display: flex;
+            height: calc(100vh - 65px);
+            overflow: hidden;
+        }
+
+        /* 左侧编辑区 - 极简现代化 */
+        .editor-section {
+            width: 50%;
+            display: flex;
+            flex-direction: column;
+            padding: 40px 24px;
+            position: relative;
+            background: rgba(255, 255, 255, 0.4);
+            border-right: 1px solid rgba(15, 23, 42, 0.05);
+            height: 100%;
+            overflow-y: auto;
+            backdrop-filter: blur(5px);
+        }
+
+        .editor-header {
+            position: absolute;
+            top: 12px;
+            left: 24px;
+            right: 24px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            color: var(--text-muted);
+            font-weight: 500;
+            letter-spacing: 0.5px;
+            z-index: 1;
+        }
+
+        #md-input {
+            width: 100%;
+            flex-shrink: 0;
+            height: calc(100vh - 160px); /* 默认占位，大屏时由脚本与预览区高度同步 */
+            padding: 20px;
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            border-radius: 12px;
+            font-family: "Fira Code", "Courier New", Courier, monospace;
+            font-size: 13px;
+            resize: none;
+            outline: none;
+            background: rgba(255, 255, 255, 0.7);
+            color: #1e293b;
+            line-height: 1.6;
+            overflow-y: auto;
+            transition: all 0.3s;
+        }
+        #md-input:focus {
+            background: #ffffff;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 4px rgba(2, 132, 199, 0.1);
+        }
+
+        /* 右侧预览区 */
+        .preview-section {
+            width: 50%;
+            padding: 40px 24px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            height: 100%;
+        }
+
+        /* 简历外层包裹器 */
+        .paper-container {
+            width: 210mm;
+            height: 297mm;
+            flex-shrink: 0;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+        }
+
+        /* A4 简历纸张样式 - 严格固定比例 */
+        #resume-paper {
+            width: 210mm !important;
+            height: 297mm !important;
+            flex-shrink: 0 !important;
+            background: #ffffff;
+            padding: 50px 45px;
+            box-shadow: 0 20px 40px rgba(15, 23, 42, 0.06);
+            border-radius: 4px;
+            position: relative;
+            box-sizing: border-box;
+            transform-origin: top center;
+        }
+
+        /* 核心简历排版样式 */
+        .resume-render {
+            color: #1e293b;
+            line-height: 1.6;
+            font-size: 14px;
+        }
+        .resume-render h1 {
+            font-size: 34px;
+            font-weight: 700;
+            text-align: center;
+            color: #0f172a;
+            margin-bottom: 6px;
+            letter-spacing: 2px;
+        }
+        .resume-render .subtitle-block {
+            text-align: center;
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-bottom: 28px;
+        }
+        .resume-render h2 {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--accent-color); 
+            border-bottom: 1px solid #e2e8f0; 
+            padding-bottom: 6px;
+            margin-top: 24px;
+            margin-bottom: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+        .resume-render h3 {
+            font-size: 14px;
+            font-weight: 600;
+            color: #0f172a;
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+            margin-bottom: 6px;
+        }
+        .resume-render h3 span {
+            font-weight: normal;
+            color: var(--text-muted);
+            font-size: 12px;
+        }
+        .resume-render p {
+            margin-bottom: 6px;
+            text-align: justify;
+            color: #334155;
+        }
+        .resume-render ul {
+            margin-left: 18px;
+            margin-bottom: 12px;
+        }
+        .resume-render li {
+            margin-bottom: 5px;
+            color: #475569;
+        }
+        .resume-render strong {
+            color: #0f172a;
+        }
+
+        /* 弹窗样式 - 高级毛玻璃效果 */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.15);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+        }
+        .modal {
+            background: rgba(255, 255, 255, 0.85);
+            border: 1px solid var(--glass-border);
+            padding: 22px;
+            border-radius: 16px;
+            width: 100%;
+            max-width: 440px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 24px 48px rgba(15, 23, 42, 0.1);
+        }
+        .modal-title {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 14px;
+            display: flex;
+            justify-content: space-between;
+            color: #0f172a;
+        }
+        .form-group {
+            margin-bottom: 12px;
+        }
+        .form-group label {
+            display: block;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .form-group select, .form-group textarea, .form-group input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.6);
+            font-family: inherit;
+            font-size: 13px;
+            outline: none;
+            transition: all 0.3s;
+            resize: none;
+        }
+        .form-group textarea {
+            height: 230px;
+        }
+        .form-group select:focus, .form-group textarea:focus {
+            background: #ffffff;
+            border-color: var(--accent-color);
+        }
+
+        /* 响应式屏幕适配 */
+        @media (max-width: 1024px) {
+            main {
+                flex-direction: column;
+                height: auto;
+                overflow: visible;
+            }
+            .editor-section, .preview-section {
+                width: 100%;
+                height: auto;
+                overflow: visible;
+            }
+            textarea {
+                min-height: 320px;
+            }
+            .preview-section {
+                height: auto;
+                padding: 20px 10px;
+                overflow-x: hidden;
+            }
+            .editor-section {
+                backdrop-filter: none;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo">CVAI</div>
+        <div class="btn-group">
+            <button class="btn-ai" onclick="openAI()">AI生成</button>
+            <button class="btn-pdf" onclick="exportToPDF()">导出PDF</button>
+            <button class="btn-png" onclick="exportToPNG()">导出PNG</button>
+        </div>
+    </header>
+
+    <main>
+        <section class="editor-section">
+            <div class="editor-header">
+                <span>Markdown 编辑器</span>
+                <span>实时渲染</span>
+            </div>
+            <textarea id="md-input" placeholder="请输入简历的Markdown代码..."></textarea>
+        </section>
+
+        <section class="preview-section" id="preview-viewport">
+            <div class="paper-container" id="paper-container">
+                <div id="resume-paper">
+                    <div class="resume-render" id="render-target"></div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <div class="modal-overlay" id="ai-modal">
+        <div class="modal">
+            <div class="modal-title">
+                <span>✨ AI 智能简历助手</span>
+                <span style="cursor:pointer;color:#94a3b8;font-size:20px;" onclick="closeAI()">&times;</span>
+            </div>
+            <div class="form-group">
+                <label>你想让AI做什么？</label>
+                <select id="ai-type">
+                    <option value="all">根据岗位，帮我全新生成一份简历</option>
+                    <option value="polish">帮我精修、润色当下的简历表述</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>API Base URL</label>
+                <input type="text" id="ai-baseurl" placeholder="https://api.openai.com/v1" />
+            </div>
+            <div class="form-group">
+                <label>API Key</label>
+                <input type="password" id="ai-apikey" placeholder="sk-..." />
+            </div>
+            <div class="form-group">
+                <label>模型</label>
+                <input type="text" id="ai-model" placeholder="gpt-4o-mini" />
+            </div>
+            <div class="form-group">
+                <label>输入目标岗位/个人简介</label>
+                <textarea id="ai-prompt" rows="2" placeholder="例如：应聘高级产品经理，有3年电商和AI产品设计经验..."></textarea>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px;">
+                <button class="btn-png" onclick="closeAI()">取消</button>
+                <button class="btn-ai" onclick="runAI()">立即智能模拟生成</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const initTemplate = `# 陆 鸣 泽 (Mingze Lu)
+<div class="subtitle-block">手机: 139-0000-0000 | 邮箱: lu.mingze@design.com | 现居: 深圳 | 个人主页: github.com/mingze</div>
+
+## 🎓 教育背景
+### **南方科技大学** <span>计算机科学与技术 · 本科</span>
+*2020.09 - 2024.06*
+* **所获荣誉**：连续三年斩获一等奖学金、校级优秀毕业设计大奖。
+
+## 💼 工作经历
+### **腾讯科技有限公司** <span>全栈开发工程师 (核心业务组)</span>
+*2024.07 - 至今*
+* **核心系统重构**：主导重构高并发数据中台系统，采用分布式缓存架构，将数据吞吐效率提升 **42%**，接口延迟缩短至 **45ms**。
+* **高质色彩体验**：独立开发全新的 UI 主题样式引擎，解决全平台多色彩模式切换痛点，首月上线获得百万用户高评分反馈。
+* **效率工程落地**：主导落地轻量化 CI/CD 构建流水线，将日常项目上线部署周期由 20分钟 **压缩至 4分钟**。
+
+## 🚀 项目经验
+### **独立作品：智能轻量化简历编辑器** <span>架构设计 & 核心独立开发者</span>
+*2025.03 - 2025.08*
+* **痛点解决**：针对传统简历工具依赖繁重后端、极易泄露隐私的劣势，开发纯前端免服务、基于 SVG 的无损无依赖渲染方案。
+* **核心成就**：项目开源仅两周，在 GitHub 上斩获 **1.5k+ Stars**，成为周榜热门应用。
+
+## 🛠 技术清单
+* **编程语言**：熟练掌握 JavaScript (ES6+), TypeScript, Go, Python。
+* **前端生态**：精通 Vue3 全家桶、React 框架及高效响应式页面开发。
+* **云原生工具**：熟练掌握 Docker 容器化技术及 Kubernetes 基础运维。`;
+
+        const inputEl = document.getElementById('md-input');
+        const targetEl = document.getElementById('render-target');
+        
+        inputEl.value = initTemplate;
+
+        function customMarkdownParser(text) {
+            let html = text;
+            html = html.replace(/^# (.*)$/gm, '<h1>$1</h1>');
+            html = html.replace(/^## (.*)$/gm, '<h2>$1</h2>');
+            html = html.replace(/^### (.*)$/gm, '<h3>$1</h3>');
+            html = html.replace(/<span>(.*?)<\/span>/g, '<span>$1</span>');
+            html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            html = html.replace(/^\*(.+?)\*$/gm, '<em style="font-style:normal;color:#64748b;font-size:13px;display:block;margin-bottom:6px;">$1</em>');
+            html = html.replace(/^\* (.+)$/gm, '<li>$1</li>');
+            
+            let lines = html.split('\n');
+            let inList = false;
+            for (let i = 0; i < lines.length; i++) {
+                if (lines[i].trim().startsWith('<li>')) {
+                    if (!inList) {
+                        lines[i] = '<ul>' + lines[i];
+                        inList = true;
+                    }
+                } else {
+                    if (inList) {
+                        lines[i-1] = lines[i-1] + '</ul>';
+                        inList = false;
+                    }
+                }
+            }
+            if (inList) { lines[lines.length-1] += '</ul>'; }
+            
+            html = lines.join('\n');
+            html = html.split('\n').map(line => {
+                if (!line.trim()) return '';
+                if (line.trim().startsWith('<h') || line.trim().startsWith('<ul') || line.trim().startsWith('</ul') || line.trim().startsWith('<li') || line.trim().startsWith('<div') || line.trim().startsWith('<em')) {
+                    return line;
+                }
+                return '<p>' + line + '</p>';
+            }).join('\n');
+
+            return html;
+        }
+
+        function resizePreview() {
+            const viewport = document.getElementById('preview-viewport');
+            const container = document.getElementById('paper-container');
+            const paper = document.getElementById('resume-paper');
+            
+            const padding = 40;
+            const availableWidth = viewport.clientWidth - padding;
+            const targetWidth = paper.offsetWidth;
+            
+            let scale;
+            if (availableWidth < targetWidth) {
+                scale = availableWidth / targetWidth;
+                paper.style.transform = `scale(${scale})`;
+                container.style.width = `${targetWidth * scale}px`;
+                container.style.height = `${paper.offsetHeight * scale}px`;
+            } else {
+                scale = 1;
+                paper.style.transform = 'scale(1)';
+                container.style.width = '210mm';
+                container.style.height = '297mm';
+            }
+
+            // 大屏下让左侧 Markdown 编辑器区域高度与右侧预览（A4 纸张）高度保持一致
+            if (inputEl) {
+                if (window.innerWidth > 1024) {
+                    inputEl.style.height = `${paper.offsetHeight * scale}px`;
+                } else {
+                    inputEl.style.height = '';
+                }
+            }
+        }
+
+        function refreshView() {
+            targetEl.innerHTML = customMarkdownParser(inputEl.value);
+            setTimeout(resizePreview, 10);
+        }
+
+        inputEl.addEventListener('input', refreshView);
+        window.addEventListener('resize', resizePreview);
+        refreshView();
+
+        function generateCanvas(callback) {
+            const paper = document.getElementById('resume-paper');
+            const currentTransform = paper.style.transform;
+            paper.style.transform = 'scale(1)';
+
+            const w = paper.offsetWidth;
+            const h = paper.offsetHeight;
+            const styles = document.getElementsByTagName('style')[0].innerHTML;
+            const content = paper.innerHTML;
+
+            paper.style.transform = currentTransform;
+
+            const dataUri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(`
+                <svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
+                    <foreignObject width="100%" height="100%">
+                        <div xmlns="http://www.w3.org/1999/xhtml">
+                            <style>
+                                ${styles}
+                                #resume-paper { box-shadow: none !important; border: none !important; width: 100% !important; margin: 0 !important; }
+                            </style>
+                            <div id="resume-paper">
+                                ${content}
+                            </div>
+                        </div>
+                    </foreignObject>
+                </svg>
+            `);
+
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.src = dataUri;
+            
+            img.onload = function() {
+                const canvas = document.createElement('canvas');
+                const scale = 2.5; 
+                canvas.width = w * scale;
+                canvas.height = h * scale;
+                const ctx = canvas.getContext('2d');
+                ctx.scale(scale, scale);
+                
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, w, h);
+                ctx.drawImage(img, 0, 0, w, h);
+                
+                callback(canvas);
+            };
+        }
+
+        function exportToPDF() {
+            generateCanvas(function(canvas) {
+                try {
+                    const imgData = canvas.toDataURL('image/jpeg', 0.95);
+                    const base64Data = imgData.split(',')[1];
+                    
+                    const binaryString = atob(base64Data);
+                    const len = binaryString.length;
+                    const bytes = new Uint8Array(len);
+                    for (let i = 0; i < len; i++) {
+                        bytes[i] = binaryString.charCodeAt(i);
+                    }
+
+                    const a4Width = 595.28;
+                    const a4Height = 841.89;
+                    const canvasRatio = canvas.height / canvas.width;
+                    
+                    let renderWidth = a4Width;
+                    let renderHeight = a4Width * canvasRatio;
+                    let offsetX = 0;
+                    let offsetY = a4Height - renderHeight;
+
+                    if (renderHeight > a4Height) {
+                        renderHeight = a4Height;
+                        renderWidth = a4Height / canvasRatio;
+                        offsetX = (a4Width - renderWidth) / 2;
+                        offsetY = 0;
+                    }
+
+                    const header = `%PDF-1.3\n`;
+                    const obj1 = `1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n`;
+                    const obj2 = `2 0 obj\n<< /Type /Pages /Count 1 /Kids [ 3 0 R ] >>\nendobj\n`;
+                    const obj3 = `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [ 0 0 ${a4Width} ${a4Height} ] /Contents 4 0 R /Resources << /XObject << /Img1 5 0 R >> >> >>\nendobj\n`;
+                    const obj4 = `4 0 obj\n<< /Length 100 >>\nstream\nq\n${renderWidth.toFixed(2)} 0 0 ${renderHeight.toFixed(2)} ${offsetX.toFixed(2)} ${offsetY.toFixed(2)} cm\n/Img1 Do\nQ\nendstream\nendobj\n`;
+                    
+                    const obj5Header = `5 0 obj\n<< /Type /XObject /Subtype /Image /Width ${canvas.width} /Height ${canvas.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${len} >>\nstream\n`;
+                    const obj5Footer = `\nendstream\nendobj\n`;
+                    
+                    const trailer = `xref\n0 6\n0000000000 65535 f\n` + 
+                                    `trailer\n<< /Size 6 /Root 1 0 R >>\n` + 
+                                    `%%EOF`;
+
+                    const blobParts = [
+                        header, obj1, obj2, obj3, obj4, 
+                        obj5Header, bytes, obj5Footer, 
+                        trailer
+                    ];
+
+                    const pdfBlob = new Blob(blobParts, { type: 'application/pdf' });
+                    
+                    const downloadLink = document.createElement('a');
+                    downloadLink.href = URL.createObjectURL(pdfBlob);
+                    downloadLink.download = '我的高解析简历.pdf';
+                    document.body.appendChild(downloadLink);
+                    downloadLink.click();
+                    document.body.removeChild(downloadLink);
+                    
+                    setTimeout(() => URL.revokeObjectURL(downloadLink.href), 100);
+
+                } catch(err) {
+                    console.error(err);
+                    alert('纯前端转PDF失败，已自动为您下载图片！');
+                    exportToPNG();
+                }
+            });
+        }
+
+        function exportToPNG() {
+            generateCanvas(function(canvas) {
+                try {
+                    const a = document.createElement('a');
+                    a.download = '我的精美高颜值简历.png';
+                    a.href = canvas.toDataURL('image/png', 1.0);
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                } catch (e) {
+                    alert('图片下载失败，请重试！');
+                }
+            });
+        }
+
+        function openAI() {
+            document.getElementById('ai-modal').style.display = 'flex';
+            // 回填已保存的配置
+            try {
+                const saved = JSON.parse(localStorage.getItem('cvai_config') || '{}');
+                if (saved.baseurl) document.getElementById('ai-baseurl').value = saved.baseurl;
+                if (saved.apikey) document.getElementById('ai-apikey').value = saved.apikey;
+                if (saved.model) document.getElementById('ai-model').value = saved.model;
+            } catch (e) {}
+        }
+        function closeAI() {
+            document.getElementById('ai-modal').style.display = 'none';
+        }
+
+        function runAI() {
+            const type = document.getElementById('ai-type').value;
+            const prompt = document.getElementById('ai-prompt').value.trim() || '通用岗位';
+            const baseurl = document.getElementById('ai-baseurl').value.trim();
+            const apikey = document.getElementById('ai-apikey').value.trim();
+            const model = document.getElementById('ai-model').value.trim();
+
+            // 持久化配置
+            try {
+                localStorage.setItem('cvai_config', JSON.stringify({ baseurl, apikey, model }));
+            } catch (e) {}
+
+            if (!baseurl || !apikey || !model) {
+                alert('请先填写 API Base URL、API Key 和模型名称。');
+                return;
+            }
+
+            const runBtn = document.querySelector('#ai-modal .btn-ai');
+            const originalText = runBtn.textContent;
+            runBtn.textContent = '生成中...';
+            runBtn.disabled = true;
+
+            const sysPrompt = `你是一位专业的简历撰写助手。请只输出 Markdown 格式的简历，不要包含任何解释、前言或 \`\`\` 代码块标记。需严格遵循以下格式：
+- 第一行用 "# 姓名 (English Name)" 作为大标题
+- 紧接着一行用 <div class="subtitle-block">手机 | 邮箱 | 现居 | 主页</div> 作为副标题
+- 章节用 "## 🎓 教育背景" 这类二级标题
+- 每条经历用 "### **公司/学校名** <span>职位/学位</span>" 三级标题
+- 时间区间用 *2024.07 - 至今* 表示（单独成行的斜体）
+- 要点用 "* 内容" 列表项，关键词用 **加粗**
+- 整体简洁、专业、量化，篇幅合理。`;
+
+            const userPrompt = (type === 'all')
+                ? `请根据以下目标岗位/个人简介，帮我全新生成一份完整的中文简历 Markdown：\n${prompt}`
+                : `请帮我精修、润色下面这份现有简历的表述，使其更专业、量化、有说服力，保持原有格式与结构：\n\n${inputEl.value}`;
+
+            const endpoint = baseurl.replace(/\/+$/, '') + '/chat/completions';
+
+            fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + apikey
+                },
+                body: JSON.stringify({
+                    model: model,
+                    messages: [
+                        { role: 'system', content: sysPrompt },
+                        { role: 'user', content: userPrompt }
+                    ],
+                    temperature: 0.7
+                })
+            })
+            .then(resp => {
+                if (!resp.ok) {
+                    return resp.text().then(t => { throw new Error('接口返回 ' + resp.status + '：' + t); });
+                }
+                return resp.json();
+            })
+            .then(data => {
+                let result = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+                if (!result) throw new Error('接口未返回有效内容');
+                // 去除模型可能包裹的 ``` 代码块标记
+                result = result.trim().replace(/^```[a-zA-Z]*\n?/, '').replace(/```$/, '').trim();
+
+                inputEl.value = result;
+                refreshView();
+                closeAI();
+            })
+            .catch(err => {
+                console.error(err);
+                alert('生成失败：' + err.message);
+            })
+            .finally(() => {
+                runBtn.textContent = originalText;
+                runBtn.disabled = false;
+            });
+        }
+    </script>
+</body>
+</html>
