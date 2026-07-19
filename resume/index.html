@@ -1735,20 +1735,15 @@
 
             paper.style.transform = currentTransform;
 
-            // 计算 A4 单页对应的像素高度，将纸张高度向上取整为整页整数倍，
-            // 这样主题背景会随纸张自然铺满每一页（包括末页无文本的区域），不会出现白底。
-            const a4Width = 595.28, a4Height = 841.89;
-            const pageHpx = a4Height * w / a4Width;                       // 单页高度（与宽度同比例，单位 px）
-            const nPages = Math.max(1, Math.ceil(h / pageHpx - 1e-4));    // 向上取整，溢出即生成新页
-            const targetH = nPages * pageHpx;                            // 扩展后的整页高度
-
+            // 不做分页：纸张高度以实际内容为准（CSS 已设 min-height: 297mm，即至少一页 A4），
+            // 超出的内容自然向下延伸，主题背景随纸张铺满整张，无分页概念。
             const dataUri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(`
-                <svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${targetH}">
+                <svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
                     <foreignObject width="100%" height="100%">
                         <div xmlns="http://www.w3.org/1999/xhtml">
                             <style>
                                 ${styles}
-                                #resume-paper { box-shadow: none !important; border: none !important; width: 100% !important; margin: 0 !important; min-height: ${targetH}px !important; -webkit-text-size-adjust: 100% !important; text-size-adjust: 100% !important; }
+                                #resume-paper { box-shadow: none !important; border: none !important; width: 100% !important; margin: 0 !important; -webkit-text-size-adjust: 100% !important; text-size-adjust: 100% !important; }
                             </style>
                             <div id="resume-paper"${themeClass}>
                                 ${content}
@@ -1766,13 +1761,13 @@
                 const canvas = document.createElement('canvas');
                 const scale = 2.5; 
                 canvas.width = w * scale;
-                canvas.height = targetH * scale;
+                canvas.height = h * scale;
                 const ctx = canvas.getContext('2d');
                 ctx.scale(scale, scale);
                 
                 ctx.fillStyle = '#ffffff';
-                ctx.fillRect(0, 0, w, targetH);
-                ctx.drawImage(img, 0, 0, w, targetH);
+                ctx.fillRect(0, 0, w, h);
+                ctx.drawImage(img, 0, 0, w, h);
                 
                 callback(canvas);
             };
@@ -1792,32 +1787,23 @@
                     }
 
                     const a4Width = 595.28;
-                    const a4Height = 841.89;
                     const drawW = a4Width;                                    // 简历铺满整页宽度
-                    const drawH = drawW * (canvas.height / canvas.width);     // 等比高度（PDF 单位）
-                    const nPages = Math.max(1, Math.ceil(drawH / a4Height - 0.01));  // 长文本自动分页，整页边界避免多余空白页
+                    const drawH = drawW * (canvas.height / canvas.width);     // 简历实际高度（PDF 单位，已至少一页 A4）
 
+                    // 单页：页面高度即简历实际高度，内容连续无分页
                     const catalogNum = 1;
                     const pagesNum = 2;
-                    const pageStart = 3;
-                    const contentStart = pageStart + nPages;
-                    const imgNum = contentStart + nPages;
+                    const pageNum = 3;
+                    const contentNum = 4;
+                    const imgNum = 5;
 
                     const objects = {};
                     objects[catalogNum] = `1 0 obj\n<< /Type /Catalog /Pages ${pagesNum} 0 R >>\nendobj\n`;
+                    objects[pagesNum] = `2 0 obj\n<< /Type /Pages /Count 1 /Kids [ ${pageNum} 0 R ] >>\nendobj\n`;
 
-                    const kids = [];
-                    for (let i = 0; i < nPages; i++) kids.push((pageStart + i) + ' 0 R');
-                    objects[pagesNum] = `2 0 obj\n<< /Type /Pages /Count ${nPages} /Kids [ ${kids.join(' ')} ] >>\nendobj\n`;
-
-                    for (let i = 0; i < nPages; i++) {
-                        const ty = (i + 1) * a4Height - drawH;                 // 每页显示不同纵向切片
-                        const content = `q\n${drawW.toFixed(2)} 0 0 ${drawH.toFixed(2)} 0 ${ty.toFixed(2)} cm\n/Img1 Do\nQ\n`;
-                        const pageNum = pageStart + i;
-                        const cNum = contentStart + i;
-                        objects[pageNum] = `${pageNum} 0 obj\n<< /Type /Page /Parent ${pagesNum} 0 R /MediaBox [ 0 0 ${a4Width} ${a4Height} ] /Contents ${cNum} 0 R /Resources << /XObject << /Img1 ${imgNum} 0 R >> >> >>\nendobj\n`;
-                        objects[cNum] = `${cNum} 0 obj\n<< /Length ${content.length} >>\nstream\n${content}endstream\nendobj\n`;
-                    }
+                    const content = `q\n${drawW.toFixed(2)} 0 0 ${drawH.toFixed(2)} 0 0 cm\n/Img1 Do\nQ\n`;
+                    objects[pageNum] = `${pageNum} 0 obj\n<< /Type /Page /Parent ${pagesNum} 0 R /MediaBox [ 0 0 ${a4Width.toFixed(2)} ${drawH.toFixed(2)} ] /Contents ${contentNum} 0 R /Resources << /XObject << /Img1 ${imgNum} 0 R >> >> >>\nendobj\n`;
+                    objects[contentNum] = `${contentNum} 0 obj\n<< /Length ${content.length} >>\nstream\n${content}endstream\nendobj\n`;
 
                     const imgHeader = `${imgNum} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${canvas.width} /Height ${canvas.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${len} >>\nstream\n`;
                     const imgFooter = `\nendstream\nendobj\n`;
