@@ -47,12 +47,12 @@
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
             border-bottom: 1px solid var(--glass-border);
-            padding: 0 32px;
+            padding: 0 25px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             z-index: 50;
-            height: 65px;
+            height: 52px;
             position: sticky;
             top: 0;
         }
@@ -71,7 +71,8 @@
 
         .btn-group {
             display: flex;
-            gap: 12px;
+            align-items: center;
+            gap: 8px;
         }
 
         button {
@@ -102,11 +103,17 @@
         }
 
         .btn-pdf {
-            background: var(--primary-color);
-            color: white;
+            background: transparent;
+            color: #475569;
+            border: none;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+            height: 38px;
         }
         .btn-pdf:hover { 
-            background: #1e293b; 
             transform: translateY(-1px);
         }
 
@@ -119,6 +126,80 @@
         .btn-png:hover { 
             background: #ffffff; 
             border-color: rgba(15, 23, 42, 0.15);
+        }
+
+        .btn-import {
+            background: transparent;
+            color: #0284c7;
+            border: none;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+            height: 38px;
+        }
+        .btn-import:hover {
+            transform: translateY(-1px);
+        }
+
+        /* 用户头像 logo（与导入/导出等距，由 .btn-group 统一控制） */
+        .user-logo {
+            width: 38px;
+            height: 38px;
+            flex: 0 0 38px;
+            border-radius: 50%;
+            border: 1.5px solid #cbd5e1;
+            background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: #334155;
+            transition: all .3s;
+            overflow: hidden;
+            padding: 0;
+            outline: none;
+        }
+        .user-logo:hover {
+            border-color: #94a3b8;
+            background: linear-gradient(135deg, #ffffff, #eef2f7);
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.16);
+            transform: translateY(-1px);
+        }
+        .user-logo svg { width: 20px; height: 20px; display: block; }
+
+        /* 登录/注册 弹窗 */
+        .tab-btn {
+            flex: 1;
+            padding: 9px;
+            border-radius: 10px;
+            border: 1px solid rgba(15, 23, 42, 0.12);
+            background: rgba(255, 255, 255, 0.6);
+            color: var(--text-muted);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all .2s;
+        }
+        .tab-btn.active {
+            background: linear-gradient(135deg, #4f46e5, #0284c7);
+            color: #fff;
+            border-color: transparent;
+            box-shadow: 0 4px 10px rgba(79, 70, 229, 0.25);
+        }
+        .account-avatar {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            margin: 4px auto 10px;
+            background: linear-gradient(135deg, #4f46e5, #0284c7);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 26px;
+            font-weight: 600;
         }
 
         /* 导出下拉菜单 */
@@ -1518,14 +1599,20 @@
             }
         }
     </style>
+    <!-- Tesseract.js：图片/PDF 转图片后的文字识别 (OCR) -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <!-- PDF.js：把 PDF 逐页渲染成图片 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
 </head>
 <body>
 
     <header>
         <div class="logo">CVAI</div>
         <div class="btn-group">
+            <button id="import-btn" class="btn btn-import">导入</button>
+            <input type="file" id="import-file" accept="image/*,application/pdf" style="display:none">
             <div class="export-wrap">
-                <button class="btn-pdf" onclick="toggleExportMenu(event)">导出 ▾</button>
+                <button class="btn-pdf" onclick="toggleExportMenu(event)">导出</button>
                 <div class="export-menu" id="export-menu">
                     <div class="filename-row" onclick="event.stopPropagation()">
                         <label>文件名</label>
@@ -1535,6 +1622,7 @@
                     <div onclick="exportToPNG()">导出 PNG</div>
                 </div>
             </div>
+            <button id="user-btn" class="user-logo" title="登录 / 注册" onclick="openUser()"></button>
         </div>
     </header>
 
@@ -1601,6 +1689,82 @@
             </div>
         </section>
     </main>
+
+    <!-- 导入识别进度浮层 -->
+    <div class="modal-overlay" id="import-overlay">
+        <div class="modal" style="max-width: 380px; text-align: center;">
+            <div class="modal-title" style="justify-content: center;">
+                <span>🔍 识别中…</span>
+            </div>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-muted);margin:-4px 0 10px;justify-content:center;cursor:pointer;">
+                <input type="checkbox" id="import-format" checked style="width:auto;margin:0;"> 自动整理为简历 Markdown 格式
+            </label>
+            <div id="import-status" style="font-size: 13px; color: var(--text-muted); line-height: 1.8; min-height: 20px;"></div>
+            <div style="margin-top: 14px; height: 6px; background: rgba(15,23,42,0.08); border-radius: 4px; overflow: hidden;">
+                <div id="import-progress" style="height: 100%; width: 0%; background: linear-gradient(90deg,#4f46e5,#0284c7); transition: width .2s;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 用户登录 / 注册（模拟） -->
+    <div class="modal-overlay" id="user-modal" onclick="if(event.target===this)closeUser()">
+        <div class="modal" style="max-width: 360px;">
+            <div class="modal-title">
+                <span id="user-modal-title">账号登录</span>
+                <span style="cursor:pointer;color:#94a3b8;font-size:22px;line-height:1;" onclick="closeUser()">&times;</span>
+            </div>
+
+            <!-- 已登录：账号视图 -->
+            <div id="account-view" style="display:none;">
+                <div class="account-avatar" id="account-avatar">U</div>
+                <div id="account-name" style="text-align:center;font-weight:600;color:#0f172a;font-size:15px;"></div>
+                <div id="account-sub" style="text-align:center;font-size:12px;color:var(--text-muted);margin-top:2px;"></div>
+                <button class="btn-png" style="width:100%;margin-top:18px;" onclick="doLogout()">退出登录</button>
+            </div>
+
+            <!-- 未登录：登录 / 注册 -->
+            <div id="login-register-wrap">
+                <div style="display:flex;gap:8px;margin-bottom:16px;">
+                    <button class="tab-btn active" id="tab-login" onclick="switchUserTab('login')">登录</button>
+                    <button class="tab-btn" id="tab-register" onclick="switchUserTab('register')">注册</button>
+                </div>
+
+                <div id="login-form">
+                    <div class="form-group">
+                        <label>邮箱 / 手机号</label>
+                        <input type="text" id="login-account" placeholder="you@example.com" autocomplete="off">
+                    </div>
+                    <div class="form-group">
+                        <label>密码</label>
+                        <input type="password" id="login-pwd" placeholder="••••••" autocomplete="off">
+                    </div>
+                    <button class="btn-ai" style="width:100%;margin-top:6px;" onclick="doLogin()">登录</button>
+                </div>
+
+                <div id="register-form" style="display:none;">
+                    <div class="form-group">
+                        <label>昵称</label>
+                        <input type="text" id="reg-name" placeholder="你的名字" autocomplete="off">
+                    </div>
+                    <div class="form-group">
+                        <label>邮箱 / 手机号</label>
+                        <input type="text" id="reg-account" placeholder="you@example.com" autocomplete="off">
+                    </div>
+                    <div class="form-group">
+                        <label>密码</label>
+                        <input type="password" id="reg-pwd" placeholder="至少 6 位" autocomplete="off">
+                    </div>
+                    <div class="form-group">
+                        <label>确认密码</label>
+                        <input type="password" id="reg-pwd2" placeholder="再次输入密码" autocomplete="off">
+                    </div>
+                    <button class="btn-ai" style="width:100%;margin-top:6px;" onclick="doRegister()">注册</button>
+                </div>
+
+                <div id="user-msg" style="font-size:12px;color:#dc2626;min-height:16px;margin-top:8px;"></div>
+            </div>
+        </div>
+    </div>
 
     <div class="modal-overlay" id="ai-modal">
         <div class="modal">
@@ -2036,6 +2200,324 @@
                 runBtn.disabled = false;
             });
         }
+
+        /* ===================== 导入功能（图片 / PDF 转文字） ===================== */
+        // PDF.js worker 路径（与引入的版本一致）
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+            'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+
+        const importBtn = document.getElementById('import-btn');
+        const importFile = document.getElementById('import-file');
+        importBtn.addEventListener('click', () => importFile.click());
+        importFile.addEventListener('change', handleImport);
+
+        function showImportOverlay() {
+            document.getElementById('import-overlay').style.display = 'flex';
+            document.getElementById('import-status').textContent = '准备中…';
+            document.getElementById('import-progress').style.width = '0%';
+        }
+        function updateImportStatus(text, pct) {
+            if (text) document.getElementById('import-status').textContent = text;
+            if (pct != null) {
+                const p = Math.max(0, Math.min(100, pct));
+                document.getElementById('import-progress').style.width = p + '%';
+            }
+        }
+        function hideImportOverlay() {
+            document.getElementById('import-overlay').style.display = 'none';
+        }
+
+        async function handleImport(e) {
+            const file = e.target.files && e.target.files[0];
+            e.target.value = ''; // 允许再次选择同一文件
+            if (!file) return;
+
+            const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+            showImportOverlay();
+
+            try {
+                const recognized = isPdf ? await ocrPdf(file) : await ocrImage(file);
+                if (!recognized || !recognized.trim()) {
+                    hideImportOverlay();
+                    alert('未能识别出文字内容，请确认文件清晰、包含文字。');
+                    return;
+                }
+                const wantFormat = document.getElementById('import-format').checked;
+                let finalText = recognized.trim();
+                if (wantFormat) {
+                    updateImportStatus('整理为简历格式…', 95);
+                    finalText = formatResumeMarkdown(recognized);
+                }
+                // 若编辑器仍是初始模板则直接替换，否则追加
+                const current = inputEl.value.trim();
+                if (current === initTemplate.trim()) {
+                    inputEl.value = finalText;
+                } else {
+                    const sep = current ? '\n\n' : '';
+                    inputEl.value = current + sep + finalText;
+                }
+                refreshView();
+                hideImportOverlay();
+            } catch (err) {
+                console.error(err);
+                hideImportOverlay();
+                alert('导入失败：' + (err && err.message ? err.message : err));
+            }
+        }
+
+        // 图片直接 OCR
+        function ocrImage(file) {
+            return new Promise((resolve, reject) => {
+                const url = URL.createObjectURL(file);
+                updateImportStatus('识别图片文字中…', 20);
+                Tesseract.recognize(url, 'chi_sim+eng', {
+                    logger: m => {
+                        if (m.status === 'recognizing text') {
+                            updateImportStatus('识别中… ' + Math.round(m.progress * 100) + '%', 20 + m.progress * 70);
+                        }
+                    }
+                })
+                .then(({ data }) => { URL.revokeObjectURL(url); resolve(data.text); })
+                .catch(err => { URL.revokeObjectURL(url); reject(err); });
+            });
+        }
+
+        // PDF：逐页渲染成图片再 OCR
+        async function ocrPdf(file) {
+            const buf = await file.arrayBuffer();
+            updateImportStatus('解析 PDF 中…', 5);
+            const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+            const total = pdf.numPages;
+            let fullText = '';
+
+            for (let i = 1; i <= total; i++) {
+                const base = 10 + ((i - 1) / total) * 90; // 该页 OCR 起点
+                updateImportStatus('渲染第 ' + i + ' / ' + total + ' 页…', base);
+
+                const page = await pdf.getPage(i);
+                const viewport = page.getViewport({ scale: 2 });
+                const canvas = document.createElement('canvas');
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+                const ctx = canvas.getContext('2d');
+                await page.render({ canvasContext: ctx, viewport }).promise;
+                const imgDataUrl = canvas.toDataURL('image/png');
+
+                const pageText = await new Promise((resolve, reject) => {
+                    Tesseract.recognize(imgDataUrl, 'chi_sim+eng', {
+                        logger: m => {
+                            if (m.status === 'recognizing text') {
+                                updateImportStatus('识别第 ' + i + ' / ' + total + ' 页… ' + Math.round(m.progress * 100) + '%',
+                                    base + m.progress * (90 / total));
+                            }
+                        }
+                    })
+                    .then(r => resolve(r.data.text))
+                    .catch(reject);
+                });
+
+                fullText += (fullText ? '\n\n' : '') + pageText.trim();
+            }
+            return fullText;
+        }
+
+        /* ===================== 纯前端启发式：纯文本 → 简历 Markdown ===================== */
+        // 仅做离线排版，质量一般，导入后建议再人工微调。
+        const RESUME_CONTACT_KW = ['电话', '手机', '邮箱', 'e-mail', 'email', '微信', 'qq',
+            '地址', '籍贯', '现居', '出生', '政治', '主页', '网站', 'blog', 'github'];
+        const RESUME_EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+        const RESUME_PHONE_RE = /\+?\d[\d\-\s]{6,}\d/;
+        const RESUME_DATE_RE = /(\d{4})\s*[.\/年-]\s*\d{0,2}\s*月?\s*[-–—~～至到]\s*(\d{4}\s*[.\/年-]\s*\d{0,2}\s*月?|至今|现在|present|现)/i;
+        const RESUME_SECTION_MAP = [
+            [/教育|学业/, '教育背景'],
+            [/实习/, '实习经历'],
+            [/工作|职业|任职/, '工作经历'],
+            [/项目/, '项目经验'],
+            [/技能|专长|能力/, '专业技能'],
+            [/获奖|荣誉|奖励|竞赛/, '获奖荣誉'],
+            [/证书|资格|认证|资质/, '证书资质'],
+            [/自我评价|个人简介|自述|关于我/, '自我评价'],
+            [/兴趣|爱好/, '兴趣爱好'],
+            [/语言/, '语言能力']
+        ];
+        const RESUME_ROLE_RE = /(全栈|前端|后端|开发|工程师|架构|技术|经理|总监|主管|助理|顾问|专家|负责人|总裁|董事|ceo|cto|coo|cfo|pm|设计|分析|运营|销售|产品|测试|运维|研究|科学|老师|教师|医师|护士|律师|会计|专员|管培|实习)/i;
+
+        function resumeIsContact(ln) {
+            if (RESUME_CONTACT_KW.some(kw => ln.toLowerCase().includes(kw))) return true;
+            if (RESUME_EMAIL_RE.test(ln)) return true;
+            if (RESUME_PHONE_RE.test(ln) && ln.replace(/\D/g, '').length >= 7) return true;
+            return false;
+        }
+        function resumeIsSection(ln) {
+            return RESUME_SECTION_MAP.some(([re]) => re.test(ln));
+        }
+        function resumeSplitDate(line) {
+            const m = line.match(RESUME_DATE_RE);
+            if (!m) return null;
+            const date = m[0].replace(/\s+/g, ' ').trim();
+            const rest = line.replace(m[0], '').replace(/^[\s\-–—~～|｜·•:：]+/, '').trim();
+            return { date, rest };
+        }
+        function resumeStripBullet(ln) {
+            return ln.replace(/^[\s•·\-–—*‣▪▶●○◆]+/, '')
+                     .replace(/^\(\d+\)/, '')
+                     .replace(/^\d+[.、)）]/, '')
+                     .trim();
+        }
+        function resumeIsBullet(ln) {
+            return /^[•·\-–—*‣▪▶●○◆]/.test(ln) ||
+                   /^\(\d+\)/.test(ln) ||
+                   /^\d+[.、)）]/.test(ln);
+        }
+        function resumeEmphasize(ln) {
+            return ln.replace(/(\d+(?:\.\d+)?%)/g, '**$1**');
+        }
+        function resumeSplitOrgRole(text) {
+            const m = text.match(RESUME_ROLE_RE);
+            if (!m) return null;
+            const org = text.slice(0, m.index).replace(/[\s·•\-—–|｜:：]+$/, '').trim();
+            const role = text.slice(m.index).trim();
+            if (!org) return '### ' + role;
+            return '### **' + org + '** <span>' + role + '</span>';
+        }
+        function resumeContentLine(ln, afterDate) {
+            if (resumeIsBullet(ln)) return '* ' + resumeEmphasize(resumeStripBullet(ln));
+            const orgRole = resumeSplitOrgRole(ln);
+            if (orgRole) return orgRole;
+            if (afterDate && ln.length < 30) return '### **' + ln + '**';
+            return resumeEmphasize(ln);
+        }
+
+        function formatResumeMarkdown(raw) {
+            const lines = String(raw).split(/\r?\n/).map(l => l.trim()).filter(l => l.length);
+            if (!lines.length) return '';
+
+            const out = [];
+            const contacts = [];
+
+            // 第一行作为姓名（排除联系方式 / 章节 / 时间行）
+            let nameLine = null, nameIdx = -1;
+            for (let k = 0; k < lines.length; k++) {
+                const ln = lines[k];
+                if (!resumeIsContact(ln) && !resumeIsSection(ln) && !RESUME_DATE_RE.test(ln)) {
+                    nameLine = ln;
+                    nameIdx = k;
+                    break;
+                }
+            }
+            if (nameLine) out.push('# ' + nameLine.replace(/^["“]|["”]$/g, '').trim());
+
+            let prevWasDate = false;
+            for (let i = (nameIdx >= 0 ? nameIdx + 1 : 0); i < lines.length; i++) {
+                const ln = lines[i];
+                if (resumeIsContact(ln)) { contacts.push(ln); continue; }
+                const sec = RESUME_SECTION_MAP.find(([re]) => re.test(ln));
+                if (sec) { out.push('## ' + sec[1]); prevWasDate = false; continue; }
+                const d = resumeSplitDate(ln);
+                if (d) {
+                    out.push('* ' + d.date + ' *');
+                    if (d.rest) { out.push(resumeContentLine(d.rest, true)); prevWasDate = true; }
+                    continue;
+                }
+                out.push(resumeContentLine(ln, prevWasDate));
+                prevWasDate = false;
+            }
+
+            if (contacts.length) {
+                const sub = '<div class="subtitle-block">' + contacts.join(' | ') + '</div>';
+                if (out.length && out[0].startsWith('# ')) out.splice(1, 0, sub);
+                else out.unshift(sub);
+            }
+            return out.join('\n');
+        }
+
+        /* ===================== 用户登录 / 注册（模拟，localStorage） ===================== */
+        const USER_ICON_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="#334155" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+
+        function getUser() {
+            try { return JSON.parse(localStorage.getItem('cvai_user') || 'null'); }
+            catch (e) { return null; }
+        }
+        function updateUserLogo() {
+            const btn = document.getElementById('user-btn');
+            const u = getUser();
+            if (u) {
+                const ch = (u.name || u.account || '?').trim().charAt(0).toUpperCase();
+                btn.innerHTML = '<span style="font-weight:600;font-size:15px;color:#0f172a;">' + ch + '</span>';
+                btn.title = (u.name || '') + '（点击管理账号）';
+            } else {
+                btn.innerHTML = USER_ICON_SVG;
+                btn.title = '登录 / 注册';
+            }
+        }
+        function openUser() {
+            const u = getUser();
+            if (u) {
+                document.getElementById('login-register-wrap').style.display = 'none';
+                document.getElementById('account-view').style.display = 'block';
+                document.getElementById('user-modal-title').textContent = '我的账号';
+                document.getElementById('account-avatar').textContent = (u.name || u.account || '?').trim().charAt(0).toUpperCase();
+                document.getElementById('account-name').textContent = u.name || u.account;
+                document.getElementById('account-sub').textContent = u.account;
+            } else {
+                document.getElementById('login-register-wrap').style.display = 'block';
+                document.getElementById('account-view').style.display = 'none';
+                document.getElementById('user-modal-title').textContent = '账号登录';
+                switchUserTab('login');
+            }
+            document.getElementById('user-modal').style.display = 'flex';
+        }
+        function closeUser() {
+            document.getElementById('user-modal').style.display = 'none';
+        }
+        function switchUserTab(tab) {
+            document.getElementById('user-msg').textContent = '';
+            const login = tab === 'login';
+            document.getElementById('login-form').style.display = login ? 'block' : 'none';
+            document.getElementById('register-form').style.display = login ? 'none' : 'block';
+            document.getElementById('tab-login').classList.toggle('active', login);
+            document.getElementById('tab-register').classList.toggle('active', !login);
+        }
+        function loadUsers() {
+            try { return JSON.parse(localStorage.getItem('cvai_users') || '{}'); }
+            catch (e) { return {}; }
+        }
+        function doLogin() {
+            const acc = document.getElementById('login-account').value.trim();
+            const pwd = document.getElementById('login-pwd').value;
+            const msg = document.getElementById('user-msg');
+            if (!acc || !pwd) { msg.textContent = '请输入账号和密码'; return; }
+            const users = loadUsers();
+            if (!users[acc] || users[acc].pwd !== pwd) { msg.textContent = '账号或密码错误（模拟数据）'; return; }
+            localStorage.setItem('cvai_user', JSON.stringify({ name: users[acc].name, account: acc }));
+            updateUserLogo();
+            closeUser();
+        }
+        function doRegister() {
+            const name = document.getElementById('reg-name').value.trim();
+            const acc = document.getElementById('reg-account').value.trim();
+            const pwd = document.getElementById('reg-pwd').value;
+            const pwd2 = document.getElementById('reg-pwd2').value;
+            const msg = document.getElementById('user-msg');
+            if (!name || !acc || !pwd) { msg.textContent = '请填写完整信息'; return; }
+            if (pwd.length < 6) { msg.textContent = '密码至少 6 位'; return; }
+            if (pwd !== pwd2) { msg.textContent = '两次输入的密码不一致'; return; }
+            const users = loadUsers();
+            if (users[acc]) { msg.textContent = '该账号已注册'; return; }
+            users[acc] = { name, pwd };
+            localStorage.setItem('cvai_users', JSON.stringify(users));
+            localStorage.setItem('cvai_user', JSON.stringify({ name, account: acc }));
+            updateUserLogo();
+            closeUser();
+        }
+        function doLogout() {
+            localStorage.removeItem('cvai_user');
+            updateUserLogo();
+            closeUser();
+        }
+
+        // 初始化头像
+        updateUserLogo();
     </script>
 </body>
 </html>
