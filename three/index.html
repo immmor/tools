@@ -57,6 +57,16 @@
             z-index: 1;
         }
 
+        /* 框选矩形 */
+        #marquee-overlay {
+            position: fixed;
+            display: none;
+            border: 1.5px dashed var(--accent);
+            background: rgba(99, 102, 241, 0.12);
+            pointer-events: none;
+            z-index: 1500;
+        }
+
         /* 优雅的模糊面板基底 */
         .glass-panel {
             background: var(--panel-bg);
@@ -415,6 +425,9 @@
 
     <div id="canvas-container"></div>
 
+    <!-- 框选矩形遮罩 -->
+    <div id="marquee-overlay"></div>
+
     <!-- 顶部状态栏 -->
     <header class="glass-panel">
         <div class="logo">Aura 3D</div>
@@ -442,6 +455,10 @@
         <button class="tool-btn" id="tool-shape" title="选择并放置 3D 形状 (S)">
             <i class="fa-solid fa-shapes"></i>
             <span class="key-badge">S</span>
+        </button>
+        <button class="tool-btn" id="tool-marquee" title="框选多个物体 (F)">
+            <i class="fa-solid fa-vector-square"></i>
+            <span class="key-badge">F</span>
         </button>
     </div>
 
@@ -541,6 +558,8 @@
         let raycaster, mouse;
         let drawingPlane;
         let isDrawing = false;
+        let isBoxSelecting = false;
+        let boxStart = { x: 0, y: 0 };
         const objectsGroup = new THREE.Group(); 
         
         let actionHistory = [];
@@ -553,6 +572,11 @@
         let playFPS = 24; // 可调节的播放速率（帧率）
         let animationClock = new THREE.Clock();
         let frameTimeline, ticksContainer; 
+
+        // 🎬 视频录制（导出 MP4）相关状态
+        let mediaRecorder = null;
+        let recordedChunks = [];
+        let isRecording = false;
 
         const container = document.getElementById('canvas-container');
 
@@ -685,18 +709,9 @@
             kfBtn.style.borderColor = 'rgba(239, 68, 68, 0.4)';
             kfBtn.style.flex = '1';
             kfBtn.id = 'btn-insert-key';
-            kfBtn.innerHTML = '<i class="fa-solid fa-key" style="color:#ef4444"></i> 插入 <span style="font-size:10px;color:var(--text-muted);margin-left:auto;">[I]</span>';
-
-            const delBtn = document.createElement('button');
-            delBtn.className = 'action-btn';
-            delBtn.style.background = 'rgba(148, 163, 184, 0.15)';
-            delBtn.style.borderColor = 'rgba(148, 163, 184, 0.4)';
-            delBtn.style.flex = '1';
-            delBtn.id = 'btn-delete-key';
-            delBtn.innerHTML = '<i class="fa-regular fa-trash-can"></i> 删除 <span style="font-size:10px;color:var(--text-muted);margin-left:auto;">[X]</span>';
+            kfBtn.innerHTML = '<i class="fa-solid fa-key" style="color:#ef4444"></i> 插入关键帧 <span style="font-size:10px;color:var(--text-muted);margin-left:auto;">[I]</span>';
 
             kfRow.appendChild(kfBtn);
-            kfRow.appendChild(delBtn);
 
             const fpsGroup = document.createElement('div');
             fpsGroup.className = 'control-group';
@@ -709,6 +724,13 @@
             propsPanel.appendChild(animTitle);
             propsPanel.appendChild(kfRow);
             propsPanel.appendChild(fpsGroup);
+
+            const exportBtn = document.createElement('button');
+            exportBtn.className = 'action-btn primary';
+            exportBtn.id = 'btn-export-video';
+            exportBtn.style.marginTop = '8px';
+            exportBtn.innerHTML = '<i class="fa-solid fa-video"></i> 导出视频 (MP4)';
+            propsPanel.appendChild(exportBtn);
 
             // 2. 在屏幕下方注入水平大时间轴容器
             const timelineContainer = document.createElement('div');
@@ -907,8 +929,6 @@
 
             if (removed) {
                 renderTimelineTicks();
-                const btn = document.getElementById('btn-delete-key');
-                if (btn) { btn.style.background = 'rgba(239, 68, 68, 0.3)'; setTimeout(() => { btn.style.background = 'rgba(148, 163, 184, 0.15)'; }, 300); }
             } else {
                 alert("当前帧没有可删除的关键帧。");
             }
@@ -946,6 +966,75 @@
             _wMat.compose(wp, wq, ws);
             _lMat.multiplyMatrices(_pInv, _wMat);
             _lMat.decompose(obj.position, obj.quaternion, obj.scale);
+        }
+
+        function exportVideo() {
+            if (typeof MediaRecorder === 'undefined') { alert('当前浏览器不支持视频录制。'); return; }
+            if (isRecording) { return; }
+            if (selectedObjects.length === 0 && Object.keys(keyframes).length === 0) {
+                if (!confirm('场景中没有可动画的物体，将录制当前静态画面。是否继续？')) return;
+            }
+
+            // 优先 mp4，回退 webm
+            const mimeCandidates = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+            let selectedMime = '';
+            for (const t of mimeCandidates) {
+                if (window.MediaRecorder && MediaRecorder.isTypeSupported(t)) { selectedMime = t; break; }
+            }
+            if (!selectedMime) { alert('当前浏览器不支持视频导出。'); return; }
+
+            // 录制时去掉 gizmo 与选中高亮，画面更干净
+            const attachedObj = transformControls.object;
+            const savedEmissive = [];
+            selectedObjects.forEach(obj => {
+                if (obj.material && obj.material.emissive) {
+                    savedEmissive.push([obj, obj.material.emissive.getHex()]);
+                    obj.material.emissive.setHex(0x000000);
+                }
+            });
+            if (attachedObj) transformControls.detach();
+
+            let stream;
+            try {
+                stream = renderer.domElement.captureStream(playFPS);
+            } catch (e) {
+                alert('无法获取画布视频流：' + e.message);
+                if (attachedObj) transformControls.attach(attachedObj);
+                return;
+            }
+
+            recordedChunks = [];
+            mediaRecorder = new MediaRecorder(stream, { mimeType: selectedMime });
+            mediaRecorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) recordedChunks.push(e.data); };
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(recordedChunks, { type: selectedMime.split(';')[0] });
+                const ext = selectedMime.indexOf('mp4') !== -1 ? 'mp4' : 'webm';
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `Aura3D_Animation_${Date.now()}.${ext}`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(() => URL.revokeObjectURL(url), 2000);
+
+                // 恢复现场
+                savedEmissive.forEach(([obj, hex]) => obj.material.emissive.setHex(hex));
+                if (attachedObj) transformControls.attach(attachedObj);
+                isRecording = false;
+            };
+
+            // 从首帧开始，关闭常规播放
+            isPlaying = false;
+            currentFrame = 0;
+            frameTimeline.value = 0;
+            const lbl0 = document.getElementById('lbl-current-frame');
+            if (lbl0) lbl0.innerText = 0;
+            applyKeyframeInterpolation(0);
+            frameAccumulator = 0;
+            animationClock.getDelta();
+            isRecording = true;
+            mediaRecorder.start();
         }
 
         function applyKeyframeInterpolation(frame) {
@@ -1049,6 +1138,11 @@
                 if (clickedObj.material && clickedObj.material.emissive) clickedObj.material.emissive.setHex(0x222244);
             }
 
+            finalizeSelection();
+        }
+
+        // 根据当前 selectedObjects 重建选择组并挂载 TransformControls
+        function finalizeSelection() {
             if (selectedObjects.length === 1) {
                 if (selectionGroup.children.length > 0) {
                     const temp = [...selectionGroup.children];
@@ -1075,6 +1169,106 @@
 
             // 选中发生变更时，及时刷新该物体的关键帧红点
             renderTimelineTicks();
+        }
+
+        // 用框选结果替换/累加选择，并切回 move 工具便于继续操作
+        function applyBoxSelection(meshes, additive) {
+            if (!additive) clearSelection();
+            meshes.forEach(mesh => {
+                if (!selectedObjects.includes(mesh)) {
+                    selectedObjects.push(mesh);
+                    if (mesh.material && mesh.material.emissive) mesh.material.emissive.setHex(0x222244);
+                }
+            });
+            finalizeSelection();
+            if (currentTool !== 'move') switchTool('move');
+        }
+
+        // 收集落在屏幕矩形内的物体（投影包围盒与矩形相交即选中）
+        function getObjectsInRect(rect) {
+            const meshes = [];
+            objectsGroup.traverse(c => { if (c.isMesh && !selectionGroup.children.includes(c)) meshes.push(c); });
+            selectionGroup.traverse(c => { if (c.isMesh) meshes.push(c); });
+            return meshes.filter(obj => isObjectInScreenRect(obj, rect));
+        }
+
+        function isObjectInScreenRect(obj, rect) {
+            obj.updateMatrixWorld(true);
+            const box = new THREE.Box3().setFromObject(obj);
+            if (box.isEmpty()) return false;
+            const min = box.min, max = box.max;
+            const corners = [
+                [min.x, min.y, min.z], [max.x, min.y, min.z], [min.x, max.y, min.z], [max.x, max.y, min.z],
+                [min.x, min.y, max.z], [max.x, min.y, max.z], [min.x, max.y, max.z], [max.x, max.y, max.z]
+            ];
+            const v = new THREE.Vector3();
+            let sMinX = Infinity, sMinY = Infinity, sMaxX = -Infinity, sMaxY = -Infinity;
+            let onScreen = false;
+            corners.forEach(c => {
+                v.set(c[0], c[1], c[2]).project(camera);
+                if (v.z < -1 || v.z > 1) return;
+                const sx = (v.x * 0.5 + 0.5) * window.innerWidth;
+                const sy = (-v.y * 0.5 + 0.5) * window.innerHeight;
+                sMinX = Math.min(sMinX, sx); sMaxX = Math.max(sMaxX, sx);
+                sMinY = Math.min(sMinY, sy); sMaxY = Math.max(sMaxY, sy);
+                if (sx >= rect.left && sx <= rect.right && sy >= rect.top && sy <= rect.bottom) onScreen = true;
+            });
+            if (!onScreen) {
+                const cx = (rect.left + rect.right) / 2, cy = (rect.top + rect.bottom) / 2;
+                if (cx >= sMinX && cx <= sMaxX && cy >= sMinY && cy <= sMaxY) onScreen = true;
+            }
+            if (!onScreen) {
+                if (sMaxX < rect.left || sMinX > rect.right || sMaxY < rect.top || sMinY > rect.bottom) return false;
+                onScreen = true;
+            }
+            return onScreen;
+        }
+
+        // 框选模式下单击：射线拾取单个物体
+        function pickSingleAt(e, additive) {
+            let clientX, clientY;
+            if (e.touches && e.touches.length > 0) { clientX = e.touches[0].clientX; clientY = e.touches[0].clientY; }
+            else { clientX = e.clientX; clientY = e.clientY; }
+            mouse.x = (clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(objectsGroup.children, true);
+            if (intersects.length > 0) {
+                handleObjectSelection(intersects[0].object, additive);
+                if (currentTool !== 'move') switchTool('move');
+            } else if (!additive) {
+                clearSelection();
+            }
+        }
+
+        function startBoxSelect(e) {
+            let clientX, clientY;
+            if (e.touches && e.touches.length > 0) { clientX = e.touches[0].clientX; clientY = e.touches[0].clientY; }
+            else { clientX = e.clientX; clientY = e.clientY; }
+            // 点到 TransformControls 手柄时不启动框选，交给 gizmo 拖拽
+            if (transformControls.axis) return;
+            boxStart = { x: clientX, y: clientY };
+            isBoxSelecting = true;
+            const overlay = document.getElementById('marquee-overlay');
+            overlay.style.display = 'block';
+            overlay.style.left = clientX + 'px';
+            overlay.style.top = clientY + 'px';
+            overlay.style.width = '0px';
+            overlay.style.height = '0px';
+            window.addEventListener('pointermove', onBoxSelectMove);
+        }
+
+        function onBoxSelectMove(e) {
+            let clientX, clientY;
+            if (e.touches && e.touches.length > 0) { clientX = e.touches[0].clientX; clientY = e.touches[0].clientY; }
+            else { clientX = e.clientX; clientY = e.clientY; }
+            const x = Math.min(boxStart.x, clientX), y = Math.min(boxStart.y, clientY);
+            const w = Math.abs(clientX - boxStart.x), h = Math.abs(clientY - boxStart.y);
+            const overlay = document.getElementById('marquee-overlay');
+            overlay.style.left = x + 'px';
+            overlay.style.top = y + 'px';
+            overlay.style.width = w + 'px';
+            overlay.style.height = h + 'px';
         }
 
         function exportImage() {
@@ -1144,7 +1338,7 @@
                     submenu.style.display = 'none'; switchTool('view'); return;
                 }
             }
-            const tools = ['view', 'move', 'brush', 'shape'];
+            const tools = ['view', 'move', 'brush', 'shape', 'marquee'];
             if (!tools.includes(toolId)) return;
 
             tools.forEach(t => document.getElementById(`tool-${t}`).classList.remove('active'));
@@ -1167,11 +1361,13 @@
                     submenu.style.flexDirection = 'row'; 
                     submenu.style.left = (rect.right + 12) + 'px'; 
                     submenu.style.top = (rect.top + rect.height / 2) + 'px'; 
-                    submenu.style.transform = 'translateY(-50%)'; 
+                    submenu.style.transform = 'translateY(-50%)';
                     submenu.style.zIndex = '99'; // PC 端保持原样
                 }
             } else { submenu.style.display = 'none'; }
-            if (currentTool !== 'move') clearSelection();
+            // move / marquee 都是“选择类”工具，离开它们进入其它工具时才清理选择
+            const selectionTools = ['move', 'marquee'];
+            if (selectionTools.includes(currentTool) && !selectionTools.includes(toolId)) clearSelection();
         }
 
         function clearCanvas() {
@@ -1255,7 +1451,7 @@
         }
 
         function setupUI() {
-            const tools = ['view', 'move', 'brush', 'shape'];
+            const tools = ['view', 'move', 'brush', 'shape', 'marquee'];
             tools.forEach(tool => { document.getElementById(`tool-${tool}`).addEventListener('click', () => { switchTool(tool); }); });
 
             const subShapes = ['box', 'sphere', 'cone', 'cylinder', 'torus'];
@@ -1305,7 +1501,7 @@
 
             // 🎬 绑定关键帧与速率UI节点事件
             document.getElementById('btn-insert-key').addEventListener('click', insertKeyframe);
-            document.getElementById('btn-delete-key').addEventListener('click', deleteKeyframe);
+            document.getElementById('btn-export-video').addEventListener('click', exportVideo);
             
             // 帧率调节滑块事件绑定
             document.getElementById('anim-fps-slider').addEventListener('input', (e) => {
@@ -1396,6 +1592,7 @@
                 else if (key === 'm') switchTool('move');
                 else if (key === 'b') switchTool('brush');
                 else if (key === 's') switchTool('shape');
+                else if (key === 'f') switchTool('marquee');
                 else if (key === 'delete' || key === 'backspace') deleteSelectedObjects();
             });
         }
@@ -1447,12 +1644,14 @@
                 }
                 return;
             }
+            if (currentTool === 'marquee') { startBoxSelect(e); return; }
             if (currentTool === 'view') return;
             const point = getIntersectionPoint(e); if (!point) return;
             isDrawing = true; currentStrokeObjects = []; createInstance(point, currentTool);
         }
 
         function onPointerMove(e) {
+            if (isBoxSelecting) return;
             if (!isDrawing || currentTool === 'view' || currentTool === 'move') return;
             const point = getIntersectionPoint(e); if (!point) return;
             if (currentTool === 'brush') {
@@ -1462,7 +1661,25 @@
             }
         }
 
-        function onPointerUp() { if (isDrawing && currentStrokeObjects.length > 0) actionHistory.push(currentStrokeObjects); isDrawing = false; }
+        function onPointerUp(e) {
+            if (isBoxSelecting) {
+                isBoxSelecting = false;
+                window.removeEventListener('pointermove', onBoxSelectMove);
+                const overlay = document.getElementById('marquee-overlay');
+                const rect = overlay.getBoundingClientRect();
+                overlay.style.display = 'none';
+                const additive = (e && (e.shiftKey || (e.originalEvent && e.originalEvent.shiftKey)));
+                if (rect.width < 5 && rect.height < 5) {
+                    pickSingleAt(e, additive);
+                } else {
+                    const meshes = getObjectsInRect({ left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom });
+                    applyBoxSelection(meshes, additive);
+                }
+                return;
+            }
+            if (isDrawing && currentStrokeObjects.length > 0) actionHistory.push(currentStrokeObjects);
+            isDrawing = false;
+        }
 
         function onWindowResize() {
             camera.aspect = window.innerWidth / window.innerHeight; 
@@ -1499,7 +1716,30 @@
             requestAnimationFrame(animate);
             if (currentTool === 'view') controls.update();
 
-            if (isPlaying) {
+            if (isRecording) {
+                const delta = animationClock.getDelta();
+                frameAccumulator += delta * playFPS;
+
+                if (frameAccumulator >= 1) {
+                    const framesToAdvance = Math.floor(frameAccumulator);
+                    currentFrame += framesToAdvance;
+                    frameAccumulator -= framesToAdvance;
+
+                    if (currentFrame >= maxFrames) {
+                        currentFrame = maxFrames;
+                        frameTimeline.value = currentFrame;
+                        const lblR = document.getElementById('lbl-current-frame');
+                        if (lblR) lblR.innerText = currentFrame;
+                        applyKeyframeInterpolation(currentFrame);
+                        if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+                    } else {
+                        frameTimeline.value = currentFrame;
+                        const lblR = document.getElementById('lbl-current-frame');
+                        if (lblR) lblR.innerText = currentFrame;
+                        applyKeyframeInterpolation(currentFrame);
+                    }
+                }
+            } else if (isPlaying) {
                 const delta = animationClock.getDelta();
                 
                 // 根据可调的 playFPS 数值动态更新增量速率
