@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>优雅智能简历生成器 | 精英专属版</title>
     <style>
         /* 页面基础重置与极致现代色彩方案 */
@@ -158,6 +158,31 @@
             background: var(--bg-light);
             color: var(--accent-color);
         }
+        .export-menu .filename-row {
+            padding: 8px 8px 10px;
+            border-bottom: 1px solid var(--glass-border);
+            margin-bottom: 6px;
+        }
+        .export-menu .filename-row label {
+            display: block;
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-bottom: 5px;
+        }
+        .export-menu .filename-input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 8px 10px;
+            font-size: 14px;
+            border: 1px solid rgba(15, 23, 42, 0.12);
+            border-radius: 8px;
+            outline: none;
+            color: var(--text-main);
+        }
+        .export-menu .filename-input:focus {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.1);
+        }
 
         /* 主体布局 */
         main {
@@ -203,7 +228,7 @@
             border: 1px solid rgba(15, 23, 42, 0.08);
             border-radius: 0;
             font-family: "Fira Code", "Courier New", Courier, monospace;
-            font-size: 13px;
+            font-size: 13px; /* >=16px 避免移动端聚焦输入框时浏览器自动放大页面 */
             resize: none;
             outline: none;
             background: rgba(255, 255, 255, 0.7);
@@ -1503,6 +1528,10 @@
             <div class="export-wrap">
                 <button class="btn-pdf" onclick="toggleExportMenu(event)">导出 ▾</button>
                 <div class="export-menu" id="export-menu">
+                    <div class="filename-row" onclick="event.stopPropagation()">
+                        <label>文件名（默认取首行姓名，可自定义）</label>
+                        <input type="text" id="export-filename" class="filename-input" placeholder="首行姓名" autocomplete="off" />
+                    </div>
                     <div onclick="exportToPDF()">导出 PDF</div>
                     <div onclick="exportToPNG()">导出 PNG</div>
                 </div>
@@ -1835,7 +1864,7 @@
 
                     const downloadLink = document.createElement('a');
                     downloadLink.href = URL.createObjectURL(pdfBlob);
-                    downloadLink.download = '我的高解析简历.pdf';
+                    downloadLink.download = getExportFilename('.pdf');
                     document.body.appendChild(downloadLink);
                     downloadLink.click();
                     document.body.removeChild(downloadLink);
@@ -1854,7 +1883,7 @@
             generateCanvas(function(canvas) {
                 try {
                     const a = document.createElement('a');
-                    a.download = '我的精美高颜值简历.png';
+                    a.download = getExportFilename('.png');
                     a.href = canvas.toDataURL('image/png', 1.0);
                     document.body.appendChild(a);
                     a.click();
@@ -1881,7 +1910,31 @@
 
         function toggleExportMenu(e) {
             e.stopPropagation();
-            document.getElementById('export-menu').classList.toggle('open');
+            const menu = document.getElementById('export-menu');
+            menu.classList.toggle('open');
+            // 打开时若未自定义文件名，则默认取首行姓名
+            if (menu.classList.contains('open')) {
+                const input = document.getElementById('export-filename');
+                if (input && !input.value.trim()) {
+                    input.value = getDefaultName();
+                }
+            }
+        }
+
+        // 取首行（# 姓名）作为默认文件名
+        function getDefaultName() {
+            const firstLine = ((inputEl && inputEl.value) || '').split('\n')[0] || '';
+            const name = firstLine.replace(/^#+\s*/, '').trim();
+            return name || '我的简历';
+        }
+
+        // 处理最终导出文件名：优先用自定义输入，否则用首行姓名，并清理非法字符
+        function getExportFilename(ext) {
+            const input = document.getElementById('export-filename');
+            let name = (input && input.value.trim()) || '';
+            if (!name) name = getDefaultName();
+            name = name.replace(/[\/\\:*?"<>|]/g, '_').trim() || '我的简历';
+            return name + ext;
         }
 
         /* 主题切换：与左侧 AI 生成按钮平行 */
