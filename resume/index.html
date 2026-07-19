@@ -256,9 +256,10 @@
             align-items: flex-start;
         }
 
-        /* A4 简历纸张样式 - 高度完全由内容决定，长文本自动增长、短文本不再留白 */
+        /* A4 简历纸张样式 - 至少占满一整页(297mm)，主题背景铺满整页；长文本自动增长 */
         #resume-paper {
             width: 210mm !important;
+            min-height: 297mm !important;
             flex-shrink: 0 !important;
             background: #ffffff;
             padding: 50px 45px;
@@ -1727,13 +1728,20 @@
 
             paper.style.transform = currentTransform;
 
+            // 计算 A4 单页对应的像素高度，将纸张高度向上取整为整页整数倍，
+            // 这样主题背景会随纸张自然铺满每一页（包括末页无文本的区域），不会出现白底。
+            const a4Width = 595.28, a4Height = 841.89;
+            const pageHpx = a4Height * w / a4Width;                       // 单页高度（与宽度同比例，单位 px）
+            const nPages = Math.max(1, Math.ceil(h / pageHpx - 1e-4));    // 向上取整，溢出即生成新页
+            const targetH = nPages * pageHpx;                            // 扩展后的整页高度
+
             const dataUri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(`
-                <svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
+                <svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${targetH}">
                     <foreignObject width="100%" height="100%">
                         <div xmlns="http://www.w3.org/1999/xhtml">
                             <style>
                                 ${styles}
-                                #resume-paper { box-shadow: none !important; border: none !important; width: 100% !important; margin: 0 !important; }
+                                #resume-paper { box-shadow: none !important; border: none !important; width: 100% !important; margin: 0 !important; min-height: ${targetH}px !important; }
                             </style>
                             <div id="resume-paper"${themeClass}>
                                 ${content}
@@ -1751,13 +1759,13 @@
                 const canvas = document.createElement('canvas');
                 const scale = 2.5; 
                 canvas.width = w * scale;
-                canvas.height = h * scale;
+                canvas.height = targetH * scale;
                 const ctx = canvas.getContext('2d');
                 ctx.scale(scale, scale);
                 
                 ctx.fillStyle = '#ffffff';
-                ctx.fillRect(0, 0, w, h);
-                ctx.drawImage(img, 0, 0, w, h);
+                ctx.fillRect(0, 0, w, targetH);
+                ctx.drawImage(img, 0, 0, w, targetH);
                 
                 callback(canvas);
             };
@@ -1780,7 +1788,7 @@
                     const a4Height = 841.89;
                     const drawW = a4Width;                                    // 简历铺满整页宽度
                     const drawH = drawW * (canvas.height / canvas.width);     // 等比高度（PDF 单位）
-                    const nPages = Math.max(1, Math.ceil(drawH / a4Height));  // 长文本自动分页
+                    const nPages = Math.max(1, Math.ceil(drawH / a4Height - 0.01));  // 长文本自动分页，整页边界避免多余空白页
 
                     const catalogNum = 1;
                     const pagesNum = 2;
