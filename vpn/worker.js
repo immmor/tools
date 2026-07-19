@@ -2732,21 +2732,6 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
       }
 
       // ========== 提现：保存收款码 ==========
-      if (path === '/api/withdraw/save-qr' && request.method === 'POST') {
-        try {
-          const { username, method, qrCode } = await request.json();
-          if (!username) return resJson({ success: false, message: '请先登录' }, 401);
-          if (!method || !['wechat', 'alipay'].includes(method)) return resJson({ success: false, message: '参数错误' }, 400);
-          if (!qrCode) return resJson({ success: false, message: '请上传收款码' }, 400);
-
-          const key = `withdraw_qr_${username}_${method}`;
-          await DB.prepare('INSERT OR REPLACE INTO link (key, value) VALUES (?, ?)').bind(key, qrCode).run();
-          return resJson({ success: true, message: '收款码已保存' });
-        } catch (err) {
-          return resJson({ success: false, message: err.message }, 500);
-        }
-      }
-
       // ========== 提现：获取已保存的收款码 ==========
       if (path === '/api/withdraw/get-qr' && request.method === 'POST') {
         try {
@@ -2765,9 +2750,9 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
       if (path === '/api/withdraw' && request.method === 'POST') {
         try {
           const { username, amount, method, qrCode } = await request.json();
-          if (!username) return resJson({ success: false, message: '请先登录' }, 401);
-          if (!amount || amount <= 0) return resJson({ success: false, message: '请输入有效金额' }, 400);
-          if (!method || !['wechat', 'alipay'].includes(method)) return resJson({ success: false, message: '请选择收款方式' }, 400);
+          if (!username) return resJson({ success: false, key: 'withdraw_err_login', message: '请先登录' }, 401);
+          if (!amount || amount <= 0) return resJson({ success: false, key: 'withdraw_err_amount', message: '请输入有效金额' }, 400);
+          if (!method || !['wechat', 'alipay'].includes(method)) return resJson({ success: false, key: 'withdraw_err_method', message: '请选择收款方式' }, 400);
 
           // 收款码若客户端未上传（复用已存），则从服务端取用，避免重复传输图片
           let finalQrCode = qrCode;
@@ -2779,16 +2764,16 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
               finalQrCode = histRow?.qr_code || null;
             }
           }
-          if (!finalQrCode) return resJson({ success: false, message: '请上传收款码' }, 400);
+          if (!finalQrCode) return resJson({ success: false, key: 'withdraw_err_qr', message: '请上传收款码' }, 400);
 
           const user = await DB.prepare('SELECT balance, game_winnings FROM user WHERE username = ?').bind(username).first();
-          if (!user) return resJson({ success: false, message: '用户不存在' }, 404);
+          if (!user) return resJson({ success: false, key: 'withdraw_err_user', message: '用户不存在' }, 404);
 
           const withdrawAmount = parseFloat(amount);
           const gameWinnings = parseFloat(user.game_winnings || 0);
 
-          if (withdrawAmount < 50) return resJson({ success: false, message: '最低提现金额为50元' }, 400);
-          if (withdrawAmount > gameWinnings) return resJson({ success: false, message: `可提现金额不足，最多可提现 ¥${gameWinnings.toFixed(2)}` }, 400);
+          if (withdrawAmount < 50) return resJson({ success: false, key: 'withdraw_err_min', message: '最低提现金额为50元' }, 400);
+          if (withdrawAmount > gameWinnings) return resJson({ success: false, key: 'withdraw_err_balance', maxAmount: gameWinnings.toFixed(2), message: `可提现金额不足，最多可提现 ¥${gameWinnings.toFixed(2)}` }, 400);
 
           const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
@@ -2807,7 +2792,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
               .bind(`withdraw_qr_${username}_${method}`, finalQrCode).run();
           } catch {}
 
-          return resJson({ success: true, message: '提现申请已提交，我们会尽快处理' });
+          return resJson({ success: true, key: 'withdraw_submitted', message: '提现申请已提交，我们会尽快处理' });
         } catch (err) {
           return resJson({ success: false, message: err.message }, 500);
         }

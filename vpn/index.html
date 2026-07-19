@@ -3321,33 +3321,6 @@
                 }
             };
 
-            // 对已经从服务器取回的收款码（base64 dataURL）再次压缩，避免提交时发送几 MB 的原图
-            const compressDataUrl = (dataUrl, maxSize = 800, quality = 0.85) => new Promise((resolve) => {
-                if (!dataUrl || !dataUrl.startsWith('data:image')) return resolve(dataUrl);
-                const img = new Image();
-                img.onerror = () => resolve(dataUrl); // 解码失败则退回原图
-                img.onload = () => {
-                    let { width, height } = img;
-                    if (width > height && width > maxSize) {
-                        height = Math.round(height * maxSize / width);
-                        width = maxSize;
-                    } else if (height > maxSize) {
-                        width = Math.round(width * maxSize / height);
-                        height = maxSize;
-                    }
-                    const canvas = document.createElement('canvas');
-                    canvas.width = width;
-                    canvas.height = height;
-                    canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-                    try {
-                        resolve(canvas.toDataURL('image/jpeg', quality));
-                    } catch {
-                        resolve(dataUrl);
-                    }
-                };
-                img.src = dataUrl;
-            });
-
             // 上传前压缩图片：缩放至最大边 maxSize，输出 JPEG，显著减小提现请求体积
             const compressImage = (file, maxSize = 800, quality = 0.85) => new Promise((resolve) => {
                 if (!file || !file.type.startsWith('image/')) return resolve(null);
@@ -3459,12 +3432,10 @@
                 } catch {}
             };
 
-            const showQrCode = async (qr) => {
+            const showQrCode = (qr) => {
                 if (qr) {
-                    // 从服务器取回的收款码可能仍是原图，提交前压缩一遍，避免发送大体积 payload
-                    const compressed = await compressDataUrl(qr);
-                    withdrawQrBase64 = compressed;
-                    els.withdrawQrImg.src = compressed;
+                    withdrawQrBase64 = qr;
+                    els.withdrawQrImg.src = qr;
                     els.withdrawQrPreview.classList.remove('hidden');
                     els.withdrawQrPlaceholder.classList.add('hidden');
                 } else {
@@ -3472,7 +3443,6 @@
                     els.withdrawQrPreview.classList.add('hidden');
                     els.withdrawQrPlaceholder.classList.remove('hidden');
                 }
-                updateWithdrawChecks();
             };
 
             const loadWithdrawHistory = async () => {
@@ -3520,22 +3490,24 @@
             };
 
             const handleWithdraw = async () => {
+                const t = translations[currentLang] || {};
                 const amount = parseFloat(els.withdrawAmount.value);
                 if (!amount || amount <= 0) {
-                    showWithdrawMsg('请输入有效金额', 'error');
+                    showWithdrawMsg(t.withdraw_err_amount || '请输入有效金额', 'error');
                     return;
                 }
                 if (!withdrawMethod) {
-                    showWithdrawMsg('请选择收款方式', 'error');
+                    showWithdrawMsg(t.withdraw_err_method || '请选择收款方式', 'error');
                     return;
                 }
                 if (!withdrawQrBase64) {
-                    showWithdrawMsg('请上传收款码', 'error');
+                    showWithdrawMsg(t.withdraw_err_qr || '请上传收款码', 'error');
                     return;
                 }
                 const available = parseFloat(userInfo.game_winnings || 0);
                 if (amount > available) {
-                    showWithdrawMsg(`可提现金额不足，最多可提现 ¥${available.toFixed(2)}`, 'error');
+                    const tpl = t.withdraw_err_balance;
+                    showWithdrawMsg(tpl ? tpl.replace('{amount}', available.toFixed(2)) : `可提现金额不足，最多可提现 ¥${available.toFixed(2)}`, 'error');
                     return;
                 }
 
@@ -3561,7 +3533,7 @@
                     });
                     const data = await res.json();
                     if (data.success) {
-                        showWithdrawMsg(data.message, 'success');
+                        showWithdrawMsg(serverMsg(data), 'success');
                         userInfo.balance = (parseFloat(userInfo.balance) - amount).toFixed(2);
                         userInfo.game_winnings = (available - amount).toFixed(2);
                         localStorage.setItem('userInfo', JSON.stringify(userInfo));
@@ -3571,12 +3543,18 @@
                         loadWithdrawHistory();
                         setTimeout(() => closeWithdrawModal(), 2000);
                     } else {
-                        showWithdrawMsg(data.message, 'error');
+                        showWithdrawMsg(serverMsg(data), 'error');
                     }
                 } catch {
                     showWithdrawMsg('网络错误', 'error');
                 }
                 els.withdrawSubmit.disabled = false;
+            };
+
+            const serverMsg = (data) => {
+                const tpl = translations[currentLang]?.[data.key];
+                if (tpl && data.maxAmount !== undefined) return tpl.replace('{amount}', data.maxAmount);
+                return tpl || data.message || '请求失败，请稍后重试';
             };
 
             const showWithdrawMsg = (msg, type) => {
