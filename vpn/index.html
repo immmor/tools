@@ -3304,6 +3304,8 @@
             let withdrawQrBase64 = '';
             let savedQrCodes = { wechat: '', alipay: '' };
             let historyQrCodes = { wechat: '', alipay: '' };
+            // 仅当用户本次会话重新选了图片才为 true；否则收款码已在服务端，提交时不传图片
+            let qrUploadedThisSession = false;
 
             // 优先复用已保存/历史的收款码，避免每次都要重新上传
             const autoFillWithdrawQr = () => {
@@ -3318,6 +3320,33 @@
                     if (btn) btn.click();
                 }
             };
+
+            // 对已经从服务器取回的收款码（base64 dataURL）再次压缩，避免提交时发送几 MB 的原图
+            const compressDataUrl = (dataUrl, maxSize = 800, quality = 0.85) => new Promise((resolve) => {
+                if (!dataUrl || !dataUrl.startsWith('data:image')) return resolve(dataUrl);
+                const img = new Image();
+                img.onerror = () => resolve(dataUrl); // 解码失败则退回原图
+                img.onload = () => {
+                    let { width, height } = img;
+                    if (width > height && width > maxSize) {
+                        height = Math.round(height * maxSize / width);
+                        width = maxSize;
+                    } else if (height > maxSize) {
+                        width = Math.round(width * maxSize / height);
+                        height = maxSize;
+                    }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                    try {
+                        resolve(canvas.toDataURL('image/jpeg', quality));
+                    } catch {
+                        resolve(dataUrl);
+                    }
+                };
+                img.src = dataUrl;
+            });
 
             // 上传前压缩图片：缩放至最大边 maxSize，输出 JPEG，显著减小提现请求体积
             const compressImage = (file, maxSize = 800, quality = 0.85) => new Promise((resolve) => {
@@ -3400,6 +3429,7 @@
                 els.withdrawAmount.value = '';
                 withdrawMethod = '';
                 withdrawQrBase64 = '';
+                qrUploadedThisSession = false;
                 document.querySelectorAll('.withdraw-method-btn').forEach(btn => {
                     btn.classList.remove('border-[var(--neon-green)]', 'text-white', 'bg-[var(--neon-green)]/10');
                     btn.classList.add('border-zinc-700', 'text-zinc-400');
@@ -3429,10 +3459,12 @@
                 } catch {}
             };
 
-            const showQrCode = (qr) => {
+            const showQrCode = async (qr) => {
                 if (qr) {
-                    withdrawQrBase64 = qr;
-                    els.withdrawQrImg.src = qr;
+                    // 从服务器取回的收款码可能仍是原图，提交前压缩一遍，避免发送大体积 payload
+                    const compressed = await compressDataUrl(qr);
+                    withdrawQrBase64 = compressed;
+                    els.withdrawQrImg.src = compressed;
                     els.withdrawQrPreview.classList.remove('hidden');
                     els.withdrawQrPlaceholder.classList.add('hidden');
                 } else {
@@ -3440,6 +3472,7 @@
                     els.withdrawQrPreview.classList.add('hidden');
                     els.withdrawQrPlaceholder.classList.remove('hidden');
                 }
+                updateWithdrawChecks();
             };
 
             const loadWithdrawHistory = async () => {
@@ -3511,15 +3544,20 @@
                     // 服务端会在提现成功时自动持久化收款码，无需前端额外保存
                     savedQrCodes[withdrawMethod] = withdrawQrBase64;
 
+                    // 收款码若已在服务端（复用历史/已保存的），本次不再上传图片，由服务端取用
+                    const body = {
+                        username: userInfo.username,
+                        amount,
+                        method: withdrawMethod,
+                    };
+                    if (qrUploadedThisSession) {
+                        body.qrCode = withdrawQrBase64;
+                    }
+
                     const res = await fetch(`${API}/api/withdraw`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            username: userInfo.username,
-                            amount,
-                            method: withdrawMethod,
-                            qrCode: withdrawQrBase64
-                        })
+                        body: JSON.stringify(body)
                     });
                     const data = await res.json();
                     if (data.success) {
@@ -4264,6 +4302,7 @@
                             const dataUrl = await compressImage(file, 800, 0.85);
                             if (dataUrl) {
                                 withdrawQrBase64 = dataUrl;
+                                qrUploadedThisSession = true; // 用户重新选了图，才需要上传
                                 els.withdrawQrImg.src = dataUrl;
                                 els.withdrawQrPreview.classList.remove('hidden');
                                 els.withdrawQrPlaceholder.classList.add('hidden');
