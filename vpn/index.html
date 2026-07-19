@@ -3303,6 +3303,53 @@
             let withdrawMethod = '';
             let withdrawQrBase64 = '';
             let savedQrCodes = { wechat: '', alipay: '' };
+            let historyQrCodes = { wechat: '', alipay: '' };
+
+            // 优先复用已保存/历史的收款码，避免每次都要重新上传
+            const autoFillWithdrawQr = () => {
+                if (withdrawMethod) return; // 用户已手动选择则不覆盖
+                const merged = {
+                    wechat: savedQrCodes.wechat || historyQrCodes.wechat,
+                    alipay: savedQrCodes.alipay || historyQrCodes.alipay,
+                };
+                const method = merged.wechat ? 'wechat' : (merged.alipay ? 'alipay' : '');
+                if (method) {
+                    const btn = document.querySelector(`.withdraw-method-btn[data-method="${method}"]`);
+                    if (btn) btn.click();
+                }
+            };
+
+            // 上传前压缩图片：缩放至最大边 maxSize，输出 JPEG，显著减小提现请求体积
+            const compressImage = (file, maxSize = 800, quality = 0.85) => new Promise((resolve) => {
+                if (!file || !file.type.startsWith('image/')) return resolve(null);
+                const reader = new FileReader();
+                reader.onerror = () => resolve(null);
+                reader.onload = (ev) => {
+                    const img = new Image();
+                    img.onerror = () => resolve(ev.target.result); // 解码失败则退回原图
+                    img.onload = () => {
+                        let { width, height } = img;
+                        if (width > height && width > maxSize) {
+                            height = Math.round(height * maxSize / width);
+                            width = maxSize;
+                        } else if (height > maxSize) {
+                            width = Math.round(width * maxSize / height);
+                            height = maxSize;
+                        }
+                        const canvas = document.createElement('canvas');
+                        canvas.width = width;
+                        canvas.height = height;
+                        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                        try {
+                            resolve(canvas.toDataURL('image/jpeg', quality));
+                        } catch {
+                            resolve(ev.target.result);
+                        }
+                    };
+                    img.src = ev.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
 
             const updateWithdrawChecks = () => {
                 const amount = parseFloat(els.withdrawAmount.value);
@@ -3377,11 +3424,7 @@
                     const data = await res.json();
                     if (data.success) {
                         savedQrCodes = data.qrCodes || { wechat: '', alipay: '' };
-                        const defaultMethod = savedQrCodes.wechat ? 'wechat' : (savedQrCodes.alipay ? 'alipay' : '');
-                        if (defaultMethod) {
-                            const btn = document.querySelector(`.withdraw-method-btn[data-method="${defaultMethod}"]`);
-                            if (btn) btn.click();
-                        }
+                        autoFillWithdrawQr();
                     }
                 } catch {}
             };
@@ -3411,6 +3454,14 @@
                         els.withdrawHistory.innerHTML = '';
                         return;
                     }
+                    // 从历史记录里提取最近一次各方式的收款码，供自动填充兜底
+                    historyQrCodes = { wechat: '', alipay: '' };
+                    for (const r of data.history) {
+                        if (r.qr_code && r.method && !historyQrCodes[r.method]) {
+                            historyQrCodes[r.method] = r.qr_code;
+                        }
+                    }
+                    autoFillWithdrawQr();
                     const t = translations[currentLang] || {};
                     const statusMap = { pending: t.withdraw_status_pending || '待处理', approved: t.withdraw_status_approved || '已通过', rejected: t.withdraw_status_rejected || '已拒绝' };
                     const statusColor = { pending: 'text-[var(--neon-orange)]', approved: 'text-[var(--neon-green)]', rejected: 'text-[var(--neon-red)]' };
@@ -3457,12 +3508,7 @@
 
                 els.withdrawSubmit.disabled = true;
                 try {
-                    // 保存收款码供下次使用
-                    fetch(`${API}/api/withdraw/save-qr`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ username: userInfo.username, method: withdrawMethod, qrCode: withdrawQrBase64 })
-                    }).catch(() => {});
+                    // 服务端会在提现成功时自动持久化收款码，无需前端额外保存
                     savedQrCodes[withdrawMethod] = withdrawQrBase64;
 
                     const res = await fetch(`${API}/api/withdraw`, {
@@ -4212,18 +4258,17 @@
 
                 if (els.withdrawQrUpload) {
                     els.withdrawQrUpload.addEventListener('click', () => els.withdrawQrInput.click());
-                    els.withdrawQrInput.addEventListener('change', (e) => {
+                    els.withdrawQrInput.addEventListener('change', async (e) => {
                         const file = e.target.files[0];
                         if (file) {
-                            const reader = new FileReader();
-                            reader.onload = (ev) => {
-                                withdrawQrBase64 = ev.target.result;
-                                els.withdrawQrImg.src = withdrawQrBase64;
+                            const dataUrl = await compressImage(file, 800, 0.85);
+                            if (dataUrl) {
+                                withdrawQrBase64 = dataUrl;
+                                els.withdrawQrImg.src = dataUrl;
                                 els.withdrawQrPreview.classList.remove('hidden');
                                 els.withdrawQrPlaceholder.classList.add('hidden');
                                 updateWithdrawChecks();
-                            };
-                            reader.readAsDataURL(file);
+                            }
                         }
                     });
                 }

@@ -2790,6 +2790,12 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
             .bind('immmor', `💰 新的提现申请！用户 ${username} 申请提现 ¥${withdrawAmount.toFixed(2)}（${method === 'wechat' ? '微信' : '支付宝'}）`, now).run();
 
+          // 持久化收款码，供下次提现自动填充（避免每次都要重新上传）
+          try {
+            await DB.prepare('INSERT OR REPLACE INTO link (key, value) VALUES (?, ?)')
+              .bind(`withdraw_qr_${username}_${method}`, qrCode).run();
+          } catch {}
+
           return resJson({ success: true, message: '提现申请已提交，我们会尽快处理' });
         } catch (err) {
           return resJson({ success: false, message: err.message }, 500);

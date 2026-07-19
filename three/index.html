@@ -70,6 +70,11 @@
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
+        /* 切换大/小屏布局时临时关闭过渡，避免测量到“过渡中”的错误尺寸导致红点错位 */
+        .glass-panel.no-transition {
+            transition: none !important;
+        }
+
         /* 顶部状态栏 */
         header {
             top: 20px;
@@ -336,60 +341,56 @@
             font-size: 16px;
         }
 
-        /* 底部提示栏 */
-        footer {
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            padding: 8px 20px;
-            font-size: 12px;
-            color: var(--text-muted);
-            letter-spacing: 1px;
+        /* 新增：时间轴刻度容器样式 */
+        .timeline-ticks-container {
+            position: relative;
+            width: 100%;
+            height: 8px;
+            margin-top: -4px;
+            margin-bottom: 4px;
             pointer-events: none;
-            white-space: nowrap;
         }
 
-        /* ----------------------------------------------------------------------
-           手机端与小屏幕自适应响应式样式布局 (Media Queries)
-        ------------------------------------------------------------------------- */
+        .timeline-tick-marker {
+            position: absolute;
+            top: 50%;
+            width: 8px;
+            height: 8px;
+            background: #ef4444;
+            border: 1px solid rgba(255, 255, 255, 0.85);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 6px #ef4444;
+            pointer-events: auto;
+            cursor: pointer;
+        }
+
         @media screen and (max-width: 768px) {
             header {
-                top: 10px;
-                left: 10px;
-                right: 10px;
-                height: 50px;
-                padding: 0 16px;
+                top: 10px; left: 10px; right: 10px; height: 50px; padding: 0 16px;
             }
-            .logo {
-                font-size: 15px;
-                letter-spacing: 2px;
-            }
-            .header-actions div:last-child {
-                display: none; /* 移动端隐藏次要文本 */
-            }
+            .logo { font-size: 15px; letter-spacing: 2px; }
+            .header-actions div:last-child { display: none; }
 
-            /* 工具栏转换为底部水平排列 */
+            /* 📱 底部工具栏横条：强行固定在屏幕最绝对的底部，并提升层级 */
             .toolbar {
                 top: auto;
-                bottom: 20px;
-                left: 20px;
-                width: calc(100% - 40px);
+                bottom: 0 !important;
+                left: 0 !important;
+                width: 100% !important;
                 height: 60px;
                 flex-direction: row;
                 justify-content: space-around;
                 padding: 0 10px;
                 gap: 0;
+                border-radius: 16px 16px 0 0; /* 仅上方圆角 */
+                border-bottom: none;
+                z-index: 1001; /* 层级高于时间轴 */
             }
-            .tool-btn {
-                width: 44px;
-                height: 44px;
-            }
-            /* 小屏幕下隐藏物理快捷键角标 */
-            .key-badge {
-                display: none; 
-            }
+            .tool-btn { width: 44px; height: 44px; }
+            .key-badge { display: none; }
 
-            /* 右侧属性面板改为顶部展开式小抽屉，或者精简悬浮在右上角 */
+            /* 右侧属性面板：进一步压缩高度，完美避开底部的双层控制区 */
             .properties-panel {
                 top: 70px;
                 right: 10px;
@@ -397,47 +398,12 @@
                 width: 240px;
                 padding: 16px;
                 gap: 14px;
-                max-height: calc(100% - 170px);
+                max-height: calc(100% - 290px); 
             }
-            .properties-panel.collapsed {
-                transform: translateX(calc(100% + 30px));
-            }
-            .panel-toggle {
-                top: 84px;
-                right: 262px;
-                width: 28px;
-                height: 28px;
-            }
-            .panel-toggle svg {
-                width: 16px;
-                height: 16px;
-            }
-            .panel-toggle.collapsed {
-                right: 10px;
-            }
-            .panel-title {
-                font-size: 12px;
-                margin-bottom: 4px;
-            }
-            .control-group label {
-                font-size: 11px;
-            }
-            input[type="color"] {
-                width: 32px;
-                height: 32px;
-            }
-            .action-btn {
-                padding: 8px;
-                font-size: 12px;
-            }
-            #btn-undo span {
-                display: none; /* 移动端隐藏快捷键提示标签 */
-            }
-
-            /* 移动端由于屏幕受限，隐藏最底部的纯文字长句提示栏 */
-            footer {
-                display: none;
-            }
+            .properties-panel.collapsed { transform: translateX(calc(100% + 30px)); }
+            .panel-toggle { top: 84px; right: 262px; width: 28px; height: 28px; }
+            .panel-toggle svg { width: 16px; height: 16px; }
+            .panel-toggle.collapsed { right: 10px; }
         }
     </style>
     <!-- 引入 Three.js 和 相关控制器 -->
@@ -453,7 +419,6 @@
     <header class="glass-panel">
         <div class="logo">Aura 3D</div>
         <div class="header-actions">
-            <!-- 极简 FontAwesome 物理主题切换按钮 -->
             <button class="theme-btn" id="theme-toggle" title="切换白天/暗黑模式">
                 <i id="theme-icon" class="fa-regular fa-moon"></i>
             </button>
@@ -461,41 +426,33 @@
         </div>
     </header>
 
-    <!-- 找到 toolbar，用以下代码替换原有的 box 和 sphere 按钮 -->
-<div class="toolbar glass-panel">
-    <!-- 视角查看工具 -->
-    <button class="tool-btn active" id="tool-view" title="视角旋转 (V)">
-        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
-        <span class="key-badge">V</span>
-    </button>
-    <!-- 变换工具 -->
-    <button class="tool-btn" id="tool-move" title="移动物体 (M)">
-        <svg viewBox="0 0 24 24"><path d="M13 10V6h3l-4-4-4 4h3v4H7V7l-4 4 4 4v-3h4v4H8l4 4 4-4h-3v-4h4v3l4-4-4-4v3h-4z"/></svg>
-        <span class="key-badge">M</span>
-    </button>
-    <!-- 3D 笔刷工具 -->
-    <button class="tool-btn" id="tool-brush" title="3D 空间画笔 (B)">
-        <svg viewBox="0 0 24 24"><path d="M7 14c-1.66 0-3 1.34-3 3 0 1.31-1.16 2-2 2 .92 1.22 2.49 2 4 2 2.76 0 5-2.24 5-5 0-1.66-1.34-3-3-3zm13.71-9.37l-1.34-1.34c-.39-.39-1.02-.39-1.41 0L9 12.25 11.75 15l8.96-8.96c.39-.39.39-1.02 0-1.41z"/></svg>
-        <span class="key-badge">B</span>
-    </button>
-    
-    <!-- 👇 升级：合并后的“形状选择”复合按钮 -->
-    <button class="tool-btn" id="tool-shape" title="选择并放置 3D 形状 (S)">
-        <i class="fa-solid fa-shapes"></i>
-        <span class="key-badge">S</span>
-    </button>
-</div>
+    <div class="toolbar glass-panel">
+        <button class="tool-btn active" id="tool-view" title="视角旋转 (V)">
+            <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+            <span class="key-badge">V</span>
+        </button>
+        <button class="tool-btn" id="tool-move" title="移动物体 (M)">
+            <svg viewBox="0 0 24 24"><path d="M13 10V6h3l-4-4-4 4h3v4H7V7l-4 4 4 4v-3h4v4H8l4 4 4-4h-3v-4h4v3l4-4-4-4v3h-4z"/></svg>
+            <span class="key-badge">M</span>
+        </button>
+        <button class="tool-btn" id="tool-brush" title="3D 空间画笔 (B)">
+            <svg viewBox="0 0 24 24"><path d="M7 14c-1.66 0-3 1.34-3 3 0 1.31-1.16 2-2 2 .92 1.22 2.49 2 4 2 2.76 0 5-2.24 5-5 0-1.66-1.34-3-3-3zm13.71-9.37l-1.34-1.34c-.39-.39-1.02-.39-1.41 0L9 12.25 11.75 15l8.96-8.96c.39-.39.39-1.02 0-1.41z"/></svg>
+            <span class="key-badge">B</span>
+        </button>
+        <button class="tool-btn" id="tool-shape" title="选择并放置 3D 形状 (S)">
+            <i class="fa-solid fa-shapes"></i>
+            <span class="key-badge">S</span>
+        </button>
+    </div>
 
-<!-- 👇 新增：精美的二级形状选择面板（默认隐藏，点击“形状”按钮时侧向展开） -->
-<div id="shape-submenu" class="glass-panel" style="display: none; position: absolute; width: auto; height: auto; padding: 10px; flex-direction: row; gap: 10px; z-index: 99; align-items: center;">
-    <button class="tool-btn" id="sub-shape-box" title="立方体" style="width:40px; height:40px;"><i class="fa-solid fa-cube"></i></button>
-    <button class="tool-btn" id="sub-shape-sphere" title="球体" style="width:40px; height:40px;"><i class="fa-solid fa-circle"></i></button>
-    <button class="tool-btn" id="sub-shape-cone" title="圆锥体" style="width:40px; height:40px;"><i class="fa-solid fa-play" style="transform: rotate(270deg); font-size: 20px;"></i></button>
-    <button class="tool-btn" id="sub-shape-cylinder" title="圆柱体" style="width:40px; height:40px;"><i class="fa-solid fa-database"></i></button>
-    <button class="tool-btn" id="sub-shape-torus" title="圆环" style="width:40px; height:40px;"><i class="fa-solid fa-circle-dot"></i></button>
-</div>
+    <div id="shape-submenu" class="glass-panel" style="display: none; position: absolute; width: auto; height: auto; padding: 10px; flex-direction: row; gap: 10px; z-index: 99; align-items: center;">
+        <button class="tool-btn" id="sub-shape-box" title="立方体" style="width:40px; height:40px;"><i class="fa-solid fa-cube"></i></button>
+        <button class="tool-btn" id="sub-shape-sphere" title="球体" style="width:40px; height:40px;"><i class="fa-solid fa-circle"></i></button>
+        <button class="tool-btn" id="sub-shape-cone" title="圆锥体" style="width:40px; height:40px;"><i class="fa-solid fa-play" style="transform: rotate(270deg); font-size: 20px;"></i></button>
+        <button class="tool-btn" id="sub-shape-cylinder" title="圆柱体" style="width:40px; height:40px;"><i class="fa-solid fa-database"></i></button>
+        <button class="tool-btn" id="sub-shape-torus" title="圆环" style="width:40px; height:40px;"><i class="fa-solid fa-circle-dot"></i></button>
+    </div>
 
-    <!-- 右侧属性面板切换按钮 -->
     <button class="panel-toggle glass-panel" id="panel-toggle" title="收起/展开面板">
         <svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
     </button>
@@ -544,7 +501,6 @@
             <button class="action-btn" id="btn-export-img" style="font-size: 11px; padding: 8px 4px;"><i class="fa-regular fa-image"></i> 截图</button>
             <button class="action-btn" id="btn-export-obj" style="font-size: 11px; padding: 8px 4px;"><i class="fa-solid fa-cube"></i> 导出</button>
         </div>
-        <!-- 隐藏的文件选择器 -->
         <input type="file" id="obj-file-input" accept=".obj" style="display:none;">
 
         <hr style="border: 0; border-top: 1px solid var(--panel-border); margin: 5px 0;">
@@ -559,12 +515,6 @@
         <button class="action-btn danger" id="btn-clear"><i class="fa-regular fa-trash-can"></i> 清空画布</button>
     </div>
 
-    <!-- 底部提示栏 -->
-    <footer class="glass-panel">
-        快捷键: V-视角 | M-移动(Shift多选) | B-画笔 | C-立方体 | S-球体 | Ctrl+Z-撤销  ||  操作: 左键绘制/操作，右键平移，滚轮缩放
-    </footer>
-
-    <!-- 用于手机端长按保存图片的精美遮罩层 -->
     <div id="mobile-img-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:9999; flex-direction:column; align-items:center; justify-content:center; padding:20px;">
         <p style="color:#fff; font-size:14px; margin-bottom:15px; letter-spacing:1px;"><i class="fa-solid fa-fingerprint"></i> 长按下方图片，选择“保存到相册”</p>
         <img id="mobile-img-preview" style="max-width:90%; max-height:75%; border-radius:12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); border:1px solid rgba(255,255,255,0.1);">
@@ -574,35 +524,35 @@
     <script>
         // --- 全局变量与初始化 ---
         let scene, camera, renderer, controls, transformControls;
-        let currentTool = 'view'; // view, move, brush, box, sphere
-        let activeSubShape = 'box'; // 默认放置立方体
-        let currentTheme = 'dark'; // dark, light
+        let currentTool = 'view'; 
+        let activeSubShape = 'box'; 
+        let currentTheme = 'dark'; 
         let paintColor = '#6366f1';
         let brushSize = 0.5;
         let roughness = 0.2;
         let metalness = 0.5;
 
-        // 用于移动工具的多选与伪容器组
         let selectedObjects = [];
         let selectionGroup = new THREE.Group();
-
-        // 移动前的位置缓存，用于撤销系统
         let prevPositions = []; 
 
-        // 辅助参考线网格
         let gridHelper;
-        // 地平面材质
         let floorMat;
-
-        // 用于画笔模式的虚拟绘制平面和射线检测
         let raycaster, mouse;
         let drawingPlane;
         let isDrawing = false;
         const objectsGroup = new THREE.Group(); 
         
-        // 撤销历史记录：记录每次独立操作（生成物体、或移动物体）
         let actionHistory = [];
         let currentStrokeObjects = [];
+
+        // 🎬 自定义关键帧动画系统核心配置
+        let isPlaying = false;
+        let currentFrame = 0;
+        const maxFrames = 100; 
+        let playFPS = 24; // 可调节的播放速率（帧率）
+        let animationClock = new THREE.Clock();
+        let frameTimeline, ticksContainer; 
 
         const container = document.getElementById('canvas-container');
 
@@ -610,18 +560,15 @@
         animate();
 
         function init() {
-            // 1. 场景创建 (纯粹的暗色调艺术背景 - 默认暗黑)
             scene = new THREE.Scene();
             scene.background = new THREE.Color('#08080a');
             scene.fog = new THREE.FogExp2('#08080a', 0.015);
             scene.add(objectsGroup);
-            scene.add(selectionGroup); // 用于容纳被选中的多个物体同步移动
+            scene.add(selectionGroup);
 
-            // 2. 相机设置
             camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
             camera.position.set(10, 12, 18);
 
-            // 3. 渲染器设置 - preserveDrawingBuffer 必须设为 true 以支持完美截图导出
             renderer = new THREE.WebGLRenderer({ 
                 antialias: true, 
                 alpha: false, 
@@ -636,23 +583,21 @@
             renderer.toneMappingExposure = 1.2;
             container.appendChild(renderer.domElement);
 
-            // 4. 轨道控制器
             controls = new THREE.OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
             controls.dampingFactor = 0.05;
             controls.maxPolarAngle = Math.PI / 2 + 0.1;
 
-            // 5. 变换控制器（移动物体工具）
             transformControls = new THREE.TransformControls(camera, renderer.domElement);
             transformControls.size = 0.8;
             
-            // 解决多物体移动：
-            // 当拖拽轴线移动物体时，禁用轨道相机的视口旋转
             transformControls.addEventListener('dragging-changed', function (event) {
                 controls.enabled = !event.value;
+                if(!event.value && !isPlaying) {
+                    updateKeyframeData();
+                }
             });
             
-            // 监听移动开始，记录原始坐标
             transformControls.addEventListener('mouseDown', function () {
                 prevPositions = selectedObjects.map(obj => ({
                     object: obj,
@@ -660,7 +605,6 @@
                 }));
             });
             
-            // 监听移动结束，将这次的位移操作送入撤销历史栈中
             transformControls.addEventListener('mouseUp', function () {
                 if (prevPositions.length > 0) {
                     const moveHistoryItem = prevPositions.map(item => ({
@@ -675,7 +619,6 @@
             });
             scene.add(transformControls);
 
-            // 6. 环境光与高质感多光源
             const ambientLight = new THREE.AmbientLight('#ffffff', 0.6);
             scene.add(ambientLight);
 
@@ -684,45 +627,26 @@
             dirLight.castShadow = true;
             dirLight.shadow.mapSize.width = 2048;
             dirLight.shadow.mapSize.height = 2048;
-            dirLight.shadow.camera.near = 0.5;
-            dirLight.shadow.camera.far = 100;
-            const d = 20;
-            dirLight.shadow.camera.left = -d;
-            dirLight.shadow.camera.right = d;
-            dirLight.shadow.camera.top = d;
-            dirLight.shadow.camera.bottom = -d;
             dirLight.shadow.bias = -0.0005;
             scene.add(dirLight);
 
-            // 侧边霓虹环境氛围光
             const pointLight1 = new THREE.PointLight('#4f46e5', 2, 50);
             pointLight1.position.set(-15, 10, -15);
             scene.add(pointLight1);
 
-            const pointLight2 = new THREE.PointLight('#ec4899', 1.5, 50);
-            pointLight2.position.set(15, 5, -15);
-            scene.add(pointLight2);
-
-            // 7. 显式的高级网格线 (画布加上清晰的网格支持)
-            gridHelper = new THREE.GridHelper(60, 60, '#6366f1', '#4b5563'); // 调亮网格线颜色
+            gridHelper = new THREE.GridHelper(60, 60, '#6366f1', '#4b5563');
             gridHelper.position.y = 0.001; 
-            gridHelper.material.opacity = 0.7; // 不透明度从 0.5 提升至 0.7
+            gridHelper.material.opacity = 0.7;
             gridHelper.material.transparent = true;
             scene.add(gridHelper);
 
-            // 优雅纯粹的深色哑地平面
             const floorGeo = new THREE.PlaneGeometry(120, 120);
-            floorMat = new THREE.MeshStandardMaterial({
-                color: '#0a0a0d',
-                roughness: 0.95,
-                metalness: 0.0 
-            });
+            floorMat = new THREE.MeshStandardMaterial({ color: '#0a0a0d', roughness: 0.95, metalness: 0.0 });
             const floor = new THREE.Mesh(floorGeo, floorMat);
             floor.rotation.x = -Math.PI / 2;
             floor.receiveShadow = true;
             scene.add(floor);
 
-            // 8. 射线检测与绘制辅助
             raycaster = new THREE.Raycaster();
             mouse = new THREE.Vector2();
             
@@ -731,25 +655,340 @@
             drawingPlane = new THREE.Mesh(planeGeo, new THREE.MeshBasicMaterial({ visible: false }));
             scene.add(drawingPlane);
 
-            // 9. 事件监听 (同时监听 Touch 触摸事件以适配手机屏幕)
             window.addEventListener('resize', onWindowResize);
-            
             renderer.domElement.addEventListener('pointerdown', onPointerDown);
             renderer.domElement.addEventListener('pointermove', onPointerMove);
             window.addEventListener('pointerup', onPointerUp);
 
+            injectAnimationUI(); 
             setupUI();
             setupShortcuts(); 
         }
 
-        // --- 切换白天模式 / 暗黑模式功能 ---
+        // 🎬 核心优化：高内聚的动画 UI 注入与样式自动切换
+        function injectAnimationUI() {
+            const propsPanel = document.getElementById('properties-panel');
+            
+            // 1. 在右侧面板加入“动画录制”与“速率调节”控制
+            const animTitle = document.createElement('div');
+            animTitle.className = 'panel-title';
+            animTitle.style.marginTop = '10px';
+            animTitle.innerHTML = 'Keyframes / 动画刻度录制';
+            
+            const kfRow = document.createElement('div');
+            kfRow.style.display = 'flex';
+            kfRow.style.gap = '8px';
+
+            const kfBtn = document.createElement('button');
+            kfBtn.className = 'action-btn';
+            kfBtn.style.background = 'rgba(239, 68, 68, 0.15)';
+            kfBtn.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+            kfBtn.style.flex = '1';
+            kfBtn.id = 'btn-insert-key';
+            kfBtn.innerHTML = '<i class="fa-solid fa-key" style="color:#ef4444"></i> 插入 <span style="font-size:10px;color:var(--text-muted);margin-left:auto;">[I]</span>';
+
+            const delBtn = document.createElement('button');
+            delBtn.className = 'action-btn';
+            delBtn.style.background = 'rgba(148, 163, 184, 0.15)';
+            delBtn.style.borderColor = 'rgba(148, 163, 184, 0.4)';
+            delBtn.style.flex = '1';
+            delBtn.id = 'btn-delete-key';
+            delBtn.innerHTML = '<i class="fa-regular fa-trash-can"></i> 删除 <span style="font-size:10px;color:var(--text-muted);margin-left:auto;">[X]</span>';
+
+            kfRow.appendChild(kfBtn);
+            kfRow.appendChild(delBtn);
+
+            const fpsGroup = document.createElement('div');
+            fpsGroup.className = 'control-group';
+            fpsGroup.style.marginTop = '8px';
+            fpsGroup.innerHTML = `
+                <label>播放速率 / 帧率 (<span id="fps-val">24</span> FPS)</label>
+                <input type="range" id="anim-fps-slider" class="range-slider" min="5" max="60" step="1" value="24">
+            `;
+
+            propsPanel.appendChild(animTitle);
+            propsPanel.appendChild(kfRow);
+            propsPanel.appendChild(fpsGroup);
+
+            // 2. 在屏幕下方注入水平大时间轴容器
+            const timelineContainer = document.createElement('div');
+            timelineContainer.className = 'glass-panel';
+            timelineContainer.id = 'timeline-container';
+            document.body.appendChild(timelineContainer);
+
+            // 3. 时间轴内部多端通用骨架 HTML
+            timelineContainer.innerHTML = `
+                <div id="timeline-layout" style="display: flex; width: 100%; height: 100%; box-sizing: border-box;">
+                    <div id="timeline-meta" style="display: flex; align-items: center; justify-content: space-between; font-size: 12px;">
+                        <div style="display: flex; gap: 12px; align-items: center;">
+                            <button id="btn-play-toggle" style="background:transparent; border:none; color:var(--text-main); cursor:pointer; font-size:14px; width:18px; padding:0; text-align:center; flex:0 0 auto;"><i class="fa-solid fa-play"></i></button>
+                            <span style="white-space: nowrap;">Frame: <strong id="lbl-current-frame" style="color:var(--accent-color); display:inline-block; min-width:3ch; text-align:right;">0</strong> / ${maxFrames}</span>
+                        </div>
+                        <span id="timeline-tip" style="color:var(--text-muted); font-size:11px;">选中物体改变姿态后按 [I] 录制帧点</span>
+                    </div>
+                    <div id="slider-wrapper" style="position: relative; width: 100%; display: flex; align-items: center;">
+                        <input type="range" id="anim-timeline" class="range-slider" min="0" max="${maxFrames}" value="0" style="width: 100%; margin: 0; display: block;">
+                        <div id="timeline-ticks" class="timeline-ticks-container" style="position: absolute;"></div>
+                    </div>
+                </div>
+            `;
+
+            frameTimeline = document.getElementById('anim-timeline');
+            ticksContainer = document.getElementById('timeline-ticks');
+
+            // 首次运行，手动触发一次样式适配
+            updateTimelineLayout();
+        }
+
+        // 🎬 新增：提取的核心样式切换器（保证进度条上下绝对居中、单行对齐）
+        function updateTimelineLayout() {
+            const timelineContainer = document.getElementById('timeline-container');
+            const layout = document.getElementById('timeline-layout');
+            const meta = document.getElementById('timeline-meta');
+            const tip = document.getElementById('timeline-tip');
+            const sliderWrapper = document.getElementById('slider-wrapper');
+
+            if (!timelineContainer) return;
+
+            if (window.innerWidth <= 768) {
+                // 📱 手机端单行极简控制台
+                timelineContainer.style.cssText = `
+                    position: absolute; width: 100%; left: 0; bottom: 60px; height: 46px; 
+                    padding: 0 16px; border-radius: 0; border-left: none; border-right: none;
+                    pointer-events: auto; z-index: 1000; box-sizing: border-box; display: block;
+                `;
+                
+                tip.style.display = 'none'; // 隐藏无用提示
+                
+                // 强行把布局拉平为单行横向排列，且元素全部垂直居中对齐
+                layout.style.flexDirection = 'row';
+                layout.style.alignItems = 'center';
+                layout.style.justifyContent = 'space-between';
+                layout.style.gap = '16px';
+
+                meta.style.flexShrink = '0';
+                meta.style.display = 'flex';
+                meta.style.alignItems = 'center';
+
+                // 进度条包裹器填满剩余一行空间，且强制上下居中
+                sliderWrapper.style.flexGrow = '1';
+                sliderWrapper.style.display = 'flex';
+                sliderWrapper.style.alignItems = 'center'; 
+                sliderWrapper.style.height = '100%';
+            } else {
+                // 💻 PC 端双行高级控制台
+                timelineContainer.style.cssText = `
+                    position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+                    width: 70%; height: 90px; padding: 12px 24px; border-radius: 16px;
+                    pointer-events: auto; z-index: 1000; box-sizing: border-box; display: block;
+                `;
+                
+                tip.style.display = 'inline';
+                
+                layout.style.flexDirection = 'column';
+                layout.style.alignItems = 'stretch';
+                layout.style.justifyContent = 'center';
+                layout.style.gap = '16px';
+
+                meta.style.flexShrink = '1';
+                meta.style.display = 'flex';
+                meta.style.alignItems = 'center';
+                meta.style.justifyContent = 'space-between';
+
+                sliderWrapper.style.flexGrow = '0';
+                sliderWrapper.style.display = 'block';
+                sliderWrapper.style.height = 'auto';
+            }
+            
+            // 重新绘制已有红点标记，防止拉伸错位
+            if (typeof renderTimelineTicks === "function") renderTimelineTicks();
+        }
+
+        // 🎬 核心更新：在时间轴上渲染显示出已录制的关键帧小红点标记
+        function renderTimelineTicks() {
+            ticksContainer.innerHTML = ''; // 清空原有标记
+            
+            if (selectedObjects.length === 0) return;
+            
+            // 获取当前选中物体的所有录制帧点
+            const obj = selectedObjects[0];
+            if (!obj.userData.keyframes) return;
+
+            const slider = frameTimeline;
+            const wrap = slider.parentElement; // #slider-wrapper
+            const sliderRect = slider.getBoundingClientRect();
+            const wrapRect = wrap.getBoundingClientRect();
+
+            // 让红点容器精确覆盖“滑块元素本身”的渲染盒子（消除大小屏/浏览器下的对齐误差）
+            ticksContainer.style.left = (sliderRect.left - wrapRect.left) + 'px';
+            ticksContainer.style.top = (sliderRect.top - wrapRect.top) + 'px';
+            ticksContainer.style.width = sliderRect.width + 'px';
+            ticksContainer.style.height = sliderRect.height + 'px';
+            ticksContainer.style.right = 'auto';
+            ticksContainer.style.bottom = 'auto';
+            ticksContainer.style.margin = '0';
+
+            const sliderWidth = sliderRect.width || 1;
+            const thumbW = 16;
+            obj.userData.keyframes.forEach(kf => {
+                const marker = document.createElement('div');
+                marker.className = 'timeline-tick-marker';
+
+                // 水平：按 thumb(16px) 中心公式 x = thumbW/2 + pct*(W - thumbW)
+                // 垂直：top:50% 即落在滑块轨道中心（容器已精确覆盖滑块盒子）
+                const pct = kf.frame / maxFrames;
+                const x = thumbW / 2 + pct * (sliderWidth - thumbW);
+                marker.style.left = `${x}px`;
+                marker.style.top = '50%';
+                // 点击红点直接删除该帧关键帧
+                marker.title = '点击删除第 ' + kf.frame + ' 帧关键帧';
+                marker.addEventListener('click', (ev) => {
+                    ev.stopPropagation();
+                    deleteKeyframe(kf.frame);
+                });
+                ticksContainer.appendChild(marker);
+            });
+        }
+
+        // 🎬 插入关键帧
+        function insertKeyframe() {
+            if (selectedObjects.length === 0) {
+                alert("请先用移动工具[M]选中需要做动画的物体。");
+                return;
+            }
+
+            selectedObjects.forEach(obj => {
+                if (!obj.userData.keyframes) {
+                    obj.userData.keyframes = []; 
+                }
+
+                const currentStatus = {
+                    frame: currentFrame,
+                    position: obj.getWorldPosition(new THREE.Vector3()),
+                    quaternion: obj.getWorldQuaternion(new THREE.Quaternion()),
+                    scale: obj.getWorldScale(new THREE.Vector3())
+                };
+
+                const existingIdx = obj.userData.keyframes.findIndex(kf => kf.frame === currentFrame);
+                if (existingIdx !== -1) {
+                    obj.userData.keyframes[existingIdx] = currentStatus;
+                } else {
+                    obj.userData.keyframes.push(currentStatus);
+                }
+
+                obj.userData.keyframes.sort((a, b) => a.frame - b.frame);
+            });
+
+            // 成功录制后刷新渲染底部的红点标记
+            renderTimelineTicks();
+
+            const btn = document.getElementById('btn-insert-key');
+            btn.style.background = 'rgba(34, 197, 94, 0.3)';
+            setTimeout(() => { btn.style.background = 'rgba(239, 68, 68, 0.15)'; }, 300);
+        }
+
+        // 🎬 删除关键帧：删除选中物体在当前帧的关键帧。frame 省略时删除当前帧。
+        function deleteKeyframe(frame) {
+            const targetFrame = (frame === undefined) ? currentFrame : frame;
+            if (selectedObjects.length === 0) {
+                alert("请先选中需要删除关键帧的物体。");
+                return;
+            }
+
+            let removed = false;
+            selectedObjects.forEach(obj => {
+                if (!obj.userData.keyframes) return;
+                const idx = obj.userData.keyframes.findIndex(kf => kf.frame === targetFrame);
+                if (idx !== -1) {
+                    obj.userData.keyframes.splice(idx, 1);
+                    removed = true;
+                }
+            });
+
+            if (removed) {
+                renderTimelineTicks();
+                const btn = document.getElementById('btn-delete-key');
+                if (btn) { btn.style.background = 'rgba(239, 68, 68, 0.3)'; setTimeout(() => { btn.style.background = 'rgba(148, 163, 184, 0.15)'; }, 300); }
+            } else {
+                alert("当前帧没有可删除的关键帧。");
+            }
+        }
+
+        function updateKeyframeData() {
+            selectedObjects.forEach(obj => {
+                if (obj.userData.keyframes) {
+                    const existingIdx = obj.userData.keyframes.findIndex(kf => kf.frame === currentFrame);
+                    if (existingIdx !== -1) {
+                        obj.userData.keyframes[existingIdx].position.copy(obj.getWorldPosition(new THREE.Vector3()));
+                        obj.userData.keyframes[existingIdx].quaternion.copy(obj.getWorldQuaternion(new THREE.Quaternion()));
+                        obj.userData.keyframes[existingIdx].scale.copy(obj.getWorldScale(new THREE.Vector3()));
+                    }
+                }
+            });
+        }
+
+        // 🎬 补间动画插值驱动计算
+        // 关键点：多物体选中时各物体被放进 selectionGroup，移动 gizmo 改变的是“组”的变换，
+        // 单物体的局部 transform 不变。因此统一记录/回放“世界空间”变换，
+        // 再把世界变换换算回各自父级（objectsGroup 或 selectionGroup）下的局部变换，
+        // 这样无论单物体还是多物体（整体一起运动）都能正确同步。
+        const _wp = new THREE.Vector3();
+        const _wq = new THREE.Quaternion();
+        const _ws = new THREE.Vector3();
+        const _pInv = new THREE.Matrix4();
+        const _wMat = new THREE.Matrix4();
+        const _lMat = new THREE.Matrix4();
+
+        function applyWorldTransform(obj, wp, wq, ws) {
+            const parent = obj.parent || objectsGroup;
+            parent.updateMatrixWorld(true);
+            _pInv.copy(parent.matrixWorld).invert();
+            _wMat.compose(wp, wq, ws);
+            _lMat.multiplyMatrices(_pInv, _wMat);
+            _lMat.decompose(obj.position, obj.quaternion, obj.scale);
+        }
+
+        function applyKeyframeInterpolation(frame) {
+            // 同时遍历 objectsGroup 与 selectionGroup，确保多选（在组里）的物体也能被插值
+            const targets = objectsGroup.children.concat(selectionGroup.children);
+            targets.forEach(obj => {
+                if (!obj.isMesh || !obj.userData.keyframes || obj.userData.keyframes.length === 0) return;
+
+                const kfs = obj.userData.keyframes;
+
+                if (kfs.length === 1 || frame <= kfs[0].frame) {
+                    applyWorldTransform(obj, kfs[0].position, kfs[0].quaternion, kfs[0].scale);
+                    return;
+                }
+
+                if (frame >= kfs[kfs.length - 1].frame) {
+                    const last = kfs[kfs.length - 1];
+                    applyWorldTransform(obj, last.position, last.quaternion, last.scale);
+                    return;
+                }
+
+                for (let i = 0; i < kfs.length - 1; i++) {
+                    const prevKf = kfs[i];
+                    const nextKf = kfs[i + 1];
+
+                    if (frame >= prevKf.frame && frame <= nextKf.frame) {
+                        const alpha = (frame - prevKf.frame) / (nextKf.frame - prevKf.frame);
+                        // 先在世界空间插值，再换算回各自父级下的局部空间
+                        _wp.lerpVectors(prevKf.position, nextKf.position, alpha);
+                        THREE.Quaternion.slerp(prevKf.quaternion, nextKf.quaternion, _wq, alpha);
+                        _ws.lerpVectors(prevKf.scale, nextKf.scale, alpha);
+                        applyWorldTransform(obj, _wp, _wq, _ws);
+                        return;
+                    }
+                }
+            });
+        }
+
+        // --- 主题切换 ---
         function toggleTheme() {
             currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
             document.documentElement.className = currentTheme;
-            
             const themeIcon = document.getElementById('theme-icon');
-
-            // 1. 改变 Three.js 场景基础颜色
             const bgColor = currentTheme === 'dark' ? '#08080a' : '#f8fafc';
             const fogColor = currentTheme === 'dark' ? '#08080a' : '#f8fafc';
             const floorColor = currentTheme === 'dark' ? '#0a0a0d' : '#f1f5f9';
@@ -758,18 +997,15 @@
             scene.fog.color.set(fogColor);
             floorMat.color.set(floorColor);
 
-            // 2. 重建网格辅助线颜色，保持极简高级
             scene.remove(gridHelper);
-            // 暗黑模式下使用深灰+紫色，白天模式下使用更清晰的中灰+深紫
             const gridColor1 = currentTheme === 'dark' ? '#6366f1' : '#4f46e5';
-            const gridColor2 = currentTheme === 'dark' ? '#4b5563' : '#94a3b8'; // 白天模式下使用更深的 slate 灰色
+            const gridColor2 = currentTheme === 'dark' ? '#4b5563' : '#94a3b8';
             gridHelper = new THREE.GridHelper(60, 60, gridColor1, gridColor2);
             gridHelper.position.y = 0.001; 
-            gridHelper.material.opacity = currentTheme === 'dark' ? 0.7 : 0.8; // 白天模式下不透明度提升至 0.8 确保清晰
+            gridHelper.material.opacity = currentTheme === 'dark' ? 0.7 : 0.8;
             gridHelper.material.transparent = true;
             scene.add(gridHelper);
 
-            // 3. 更新 FA 图标状态
             if (currentTheme === 'dark') {
                 themeIcon.className = "fa-regular fa-moon";
             } else {
@@ -777,824 +1013,510 @@
             }
         }
 
-        // --- 清空多选高亮与重置选组 ---
         function clearSelection() {
             transformControls.detach();
-            
-            // 如果选组中有物体，全部归还给 objectsGroup 主空间，确保物理位置坐标和父子级层级同步
             if (selectionGroup.children.length > 0) {
-    const tempArray = [...selectionGroup.children];
-    tempArray.forEach(obj => {
-        // 使用 attach 自动保留物体在世界坐标系下的最终位置
-        objectsGroup.attach(obj); 
-    });
-}
-
+                const tempArray = [...selectionGroup.children];
+                tempArray.forEach(obj => { objectsGroup.attach(obj); });
+            }
             selectedObjects.forEach(obj => {
-                if (obj.material && obj.material.emissive) {
-                    obj.material.emissive.setHex(0x000000);
-                }
+                if (obj.material && obj.material.emissive) obj.material.emissive.setHex(0x000000);
             });
             selectedObjects = [];
-            // 重置选组的世界坐标与姿态
             selectionGroup.position.set(0, 0, 0);
             selectionGroup.rotation.set(0, 0, 0);
             selectionGroup.scale.set(1, 1, 1);
             selectionGroup.updateMatrixWorld(true);
+            
+            // 清除选中时同时重置下方的红点刻度槽
+            if(ticksContainer) ticksContainer.innerHTML = '';
         }
 
-        // --- 处理多物体选择与同步拖拽逻辑 ---
         function handleObjectSelection(clickedObj, isMultiSelect) {
-            // 如果不是多选模式（未按住Shift），且点中了一个之前未被选中的物体，则重置先前的所有选中
-            if (!isMultiSelect && !selectedObjects.includes(clickedObj)) {
-                clearSelection();
-            }
+            if (!isMultiSelect && !selectedObjects.includes(clickedObj)) clearSelection();
 
             if (selectedObjects.includes(clickedObj)) {
-                // 如果已经选中过，且按住了 Shift，则是“取消选择该物体”操作
                 if (isMultiSelect) {
-                    // 如果它在 selectionGroup 里，则先将其移回 objectsGroup 还原
                     if (selectionGroup.children.includes(clickedObj)) {
                         selectionGroup.remove(clickedObj);
                         objectsGroup.add(clickedObj);
                     }
-                    if (clickedObj.material && clickedObj.material.emissive) {
-                        clickedObj.material.emissive.setHex(0x000000);
-                    }
+                    if (clickedObj.material && clickedObj.material.emissive) clickedObj.material.emissive.setHex(0x000000);
                     selectedObjects = selectedObjects.filter(item => item !== clickedObj);
                 }
             } else {
-                // 添加新选中的物体
                 selectedObjects.push(clickedObj);
-                if (clickedObj.material && clickedObj.material.emissive) {
-                    clickedObj.material.emissive.setHex(0x222244); // 极简高端微光蓝
-                }
+                if (clickedObj.material && clickedObj.material.emissive) clickedObj.material.emissive.setHex(0x222244);
             }
 
-            // 更新多控制器组装逻辑：核心修复！
             if (selectedObjects.length === 1) {
-                // 单个物体：直接绑定变换控制器
                 if (selectionGroup.children.length > 0) {
                     const temp = [...selectionGroup.children];
-                    temp.forEach(o => {
-                        selectionGroup.remove(o);
-                        objectsGroup.add(o);
-                    });
+                    temp.forEach(o => { selectionGroup.remove(o); objectsGroup.add(o); });
                 }
                 transformControls.attach(selectedObjects[0]);
             } else if (selectedObjects.length > 1) {
-                // 多个物体：先解除控制器，计算并对齐多物体的包围盒中心，实现完美自由拖拽！
                 transformControls.detach();
-                
-                // 1. 重置选组位置
-                selectionGroup.position.set(0, 0, 0);
-                selectionGroup.rotation.set(0, 0, 0);
-                selectionGroup.scale.set(1, 1, 1);
+                selectionGroup.position.set(0, 0, 0); selectionGroup.rotation.set(0, 0, 0); selectionGroup.scale.set(1, 1, 1);
                 selectionGroup.updateMatrixWorld(true);
 
-                // 2. 计算所有选中的物体中心点
                 const box = new THREE.Box3();
-                selectedObjects.forEach(obj => {
-                    box.expandByObject(obj);
-                });
+                selectedObjects.forEach(obj => box.expandByObject(obj));
                 const center = new THREE.Vector3();
                 box.getCenter(center);
 
-                // 3. 将 selectionGroup 设置在中心点
                 selectionGroup.position.copy(center);
                 selectionGroup.updateMatrixWorld(true);
-
-                // 4. 将选中的物体加到 selectionGroup 中（使用 attach 以自动保留世界坐标）
-                selectedObjects.forEach(obj => {
-                    selectionGroup.attach(obj);
-                });
-
-                // 5. 将变换控制器附着在 selectionGroup 上即可完美拖动！
+                selectedObjects.forEach(obj => selectionGroup.attach(obj));
                 transformControls.attach(selectionGroup);
             } else {
                 transformControls.detach();
             }
+
+            // 选中发生变更时，及时刷新该物体的关键帧红点
+            renderTimelineTicks();
         }
 
-        // --- 导出功能实现 ---
-        
-        // 1. 优化后的图片导出函数（兼容手机端与电脑端）
-function exportImage() {
-    const wasAttach = transformControls.object;
-    if (wasAttach) transformControls.detach();
-    
-    selectedObjects.forEach(obj => {
-        if (obj.material && obj.material.emissive) obj.material.emissive.setHex(0x000000);
-    });
+        function exportImage() {
+            const wasAttach = transformControls.object;
+            if (wasAttach) transformControls.detach();
+            selectedObjects.forEach(obj => { if (obj.material && obj.material.emissive) obj.material.emissive.setHex(0x000000); });
+            renderer.render(scene, camera);
+            const dataURL = renderer.domElement.toDataURL('image/png');
+            if (wasAttach) transformControls.attach(wasAttach);
+            selectedObjects.forEach(obj => { if (obj.material && obj.material.emissive) obj.material.emissive.setHex(0x222244); });
 
-    renderer.render(scene, camera);
-    const dataURL = renderer.domElement.toDataURL('image/png');
-
-    if (wasAttach) transformControls.attach(wasAttach);
-    selectedObjects.forEach(obj => {
-        if (obj.material && obj.material.emissive) obj.material.emissive.setHex(0x222244);
-    });
-
-    // 检测是否为移动端
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-
-    if (isMobile) {
-        // 手机端：弹出遮罩层供用户长按保存
-        document.getElementById('mobile-img-preview').src = dataURL;
-        document.getElementById('mobile-img-modal').style.display = 'flex';
-    } else {
-        // 电脑端：直接触发静默下载
-        const link = document.createElement('a');
-        link.download = `Aura3D_Studio_${Date.now()}.png`;
-        link.href = dataURL;
-        link.click();
-    }
-}
-
-// 2. 优化后的模型导出函数
-function exportOBJ() {
-    if (objectsGroup.children.length === 0 && selectionGroup.children.length === 0) {
-        alert("场景中没有任何物体可以导出。");
-        return;
-    }
-
-    let objText = "# Aura3D Studio Exported Model\n";
-    let vertexOffset = 1;
-
-    const allMeshes = [];
-    objectsGroup.traverse(child => { if (child.isMesh) allMeshes.push(child); });
-    selectionGroup.traverse(child => { if (child.isMesh) allMeshes.push(child); });
-
-    allMeshes.forEach(mesh => {
-        const geometry = mesh.geometry;
-        const position = geometry.attributes.position;
-        if (!position) return;
-
-        objText += `g Object_${mesh.id}\n`;
-
-        const tempV = new THREE.Vector3();
-        mesh.updateMatrixWorld(true);
-        for (let i = 0; i < position.count; i++) {
-            tempV.fromBufferAttribute(position, i);
-            tempV.applyMatrix4(mesh.matrixWorld);
-            objText += `v ${tempV.x.toFixed(4)} ${tempV.y.toFixed(4)} ${tempV.z.toFixed(4)}\n`;
-        }
-
-        const index = geometry.index;
-        if (index) {
-            for (let i = 0; i < index.count; i += 3) {
-                objText += `f ${index.getX(i) + vertexOffset} ${index.getX(i+1) + vertexOffset} ${index.getX(i+2) + vertexOffset}\n`;
-            }
-        } else {
-            for (let i = 0; i < position.count; i += 3) {
-                objText += `f ${i + vertexOffset} ${i + 1 + vertexOffset} ${i + 2 + vertexOffset}\n`;
+            if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+                document.getElementById('mobile-img-preview').src = dataURL;
+                document.getElementById('mobile-img-modal').style.display = 'flex';
+            } else {
+                const link = document.createElement('a');
+                link.download = `Aura3D_Studio_${Date.now()}.png`;
+                link.href = dataURL; link.click();
             }
         }
-        vertexOffset += position.count;
-    });
 
-    const blob = new Blob([objText], { type: 'text/plain' });
-    const link = document.createElement('a');
-    link.download = `Aura3D_Model_${Date.now()}.obj`;
-    link.href = URL.createObjectURL(blob);
-    link.target = '_blank'; // 关键：在手机端强制开启新标签页，从而唤醒系统下载或文件预览
-    link.click();
-}
+        function exportOBJ() {
+            if (objectsGroup.children.length === 0 && selectionGroup.children.length === 0) {
+                alert("场景中没有任何物体可以导出。"); return;
+            }
+            let objText = "# Aura3D Studio Exported Model\n";
+            let vertexOffset = 1;
+            const allMeshes = [];
+            objectsGroup.traverse(child => { if (child.isMesh) allMeshes.push(child); });
+            selectionGroup.traverse(child => { if (child.isMesh) allMeshes.push(child); });
 
-function switchTool(toolId, isSubmenuClick = false) {
-    const submenu = document.getElementById('shape-submenu');
-    
-    // 【核心修复】：只有当用户再次点击主菜单的 Shape 按钮时，才触发收起并切回视图模式
-    if (toolId === 'shape' && currentTool === 'shape' && !isSubmenuClick) {
-        if (submenu.style.display === 'flex') {
-            submenu.style.display = 'none';
-            switchTool('view'); 
-            return;
+            allMeshes.forEach(mesh => {
+                const geometry = mesh.geometry;
+                const position = geometry.attributes.position;
+                if (!position) return;
+                objText += `g Object_${mesh.id}\n`;
+                const tempV = new THREE.Vector3();
+                mesh.updateMatrixWorld(true);
+                for (let i = 0; i < position.count; i++) {
+                    tempV.fromBufferAttribute(position, i);
+                    tempV.applyMatrix4(mesh.matrixWorld);
+                    objText += `v ${tempV.x.toFixed(4)} ${tempV.y.toFixed(4)} ${tempV.z.toFixed(4)}\n`;
+                }
+                const index = geometry.index;
+                if (index) {
+                    for (let i = 0; i < index.count; i += 3) {
+                        objText += `f ${index.getX(i) + vertexOffset} ${index.getX(i+1) + vertexOffset} ${index.getX(i+2) + vertexOffset}\n`;
+                    }
+                } else {
+                    for (let i = 0; i < position.count; i += 3) {
+                        objText += `f ${i + vertexOffset} ${i + 1 + vertexOffset} ${i + 2 + vertexOffset}\n`;
+                    }
+                }
+                vertexOffset += position.count;
+            });
+            const blob = new Blob([objText], { type: 'text/plain' });
+            const link = document.createElement('a');
+            link.download = `Aura3D_Model_${Date.now()}.obj`;
+            link.href = URL.createObjectURL(blob);
+            link.target = '_blank'; link.click();
         }
-    }
 
-    const tools = ['view', 'move', 'brush', 'shape'];
-    if (!tools.includes(toolId)) return;
+        function switchTool(toolId, isSubmenuClick = false) {
+            const submenu = document.getElementById('shape-submenu');
+            if (toolId === 'shape' && currentTool === 'shape' && !isSubmenuClick) {
+                if (submenu.style.display === 'flex') {
+                    submenu.style.display = 'none'; switchTool('view'); return;
+                }
+            }
+            const tools = ['view', 'move', 'brush', 'shape'];
+            if (!tools.includes(toolId)) return;
 
-    tools.forEach(t => document.getElementById(`tool-${t}`).classList.remove('active'));
-    document.getElementById(`tool-${toolId}`).classList.add('active');
-    
-    currentTool = toolId;
-    controls.enabled = (currentTool === 'view');
+            tools.forEach(t => document.getElementById(`tool-${t}`).classList.remove('active'));
+            document.getElementById(`tool-${toolId}`).classList.add('active');
+            currentTool = toolId;
+            controls.enabled = (currentTool === 'view');
 
-    // 动态定位二级菜单
-    if (currentTool === 'shape') {
-        submenu.style.display = 'flex';
-        
-        const shapeBtn = document.getElementById('tool-shape');
-        const rect = shapeBtn.getBoundingClientRect();
-        const isMobile = window.innerWidth <= 768;
-        
-        if (isMobile) {
-            submenu.style.flexDirection = 'column-reverse';
-            submenu.style.left = (rect.left + rect.width / 2) + 'px';
-            submenu.style.top = (rect.top - 12) + 'px';
-            submenu.style.transform = 'translateY(-100%) translateX(-50%)';
-        } else {
-            submenu.style.flexDirection = 'row';
-            submenu.style.left = (rect.right + 12) + 'px';
-            submenu.style.top = (rect.top + rect.height / 2) + 'px';
-            submenu.style.transform = 'translateY(-50%)'; 
+            if (currentTool === 'shape') {
+                submenu.style.display = 'flex';
+                const shapeBtn = document.getElementById('tool-shape');
+                const rect = shapeBtn.getBoundingClientRect();
+                if (window.innerWidth <= 768) {
+                    submenu.style.flexDirection = 'column-reverse'; 
+                    submenu.style.left = (rect.left + rect.width / 2) + 'px'; 
+                    submenu.style.top = (rect.top - 12) + 'px'; 
+                    submenu.style.transform = 'translateY(-100%) translateX(-50%)';
+                    // ⚡ 核心修复：小屏幕下强行将二级菜单层级提到时间轴（1000）之上
+                    submenu.style.zIndex = '1005'; 
+                } else {
+                    submenu.style.flexDirection = 'row'; 
+                    submenu.style.left = (rect.right + 12) + 'px'; 
+                    submenu.style.top = (rect.top + rect.height / 2) + 'px'; 
+                    submenu.style.transform = 'translateY(-50%)'; 
+                    submenu.style.zIndex = '99'; // PC 端保持原样
+                }
+            } else { submenu.style.display = 'none'; }
+            if (currentTool !== 'move') clearSelection();
         }
-    } else {
-        submenu.style.display = 'none';
-    }
 
-    if (currentTool !== 'move') {
-        clearSelection();
-    }
-}
-
-        // --- 一键清空画布封装 ---
         function clearCanvas() {
             clearSelection();
-            while(objectsGroup.children.length > 0){
-                const obj = objectsGroup.children[0];
-                objectsGroup.remove(obj);
-            }
-            actionHistory = [];
-            currentStrokeObjects = [];
+            while(objectsGroup.children.length > 0) objectsGroup.remove(objectsGroup.children[0]);
+            actionHistory = []; currentStrokeObjects = [];
         }
 
-        // 1. 删除选中物体的核心函数
-function deleteSelectedObjects() {
-    if (selectedObjects.length === 0) return;
-
-    // 创建一个临时数组，用来记录被删除的物体，以便支持 Ctrl+Z 撤销
-    const deletedGroup = [...selectedObjects];
-
-    // 解除控制器绑定并清空高亮
-    transformControls.detach();
-
-    // 循环将物体从场景中移除（兼容单选和多选 Group 的情况）
-    deletedGroup.forEach(obj => {
-        if (selectionGroup.children.includes(obj)) {
-            selectionGroup.remove(obj);
-        } else if (objectsGroup.children.includes(obj)) {
-            objectsGroup.remove(obj);
+        function deleteSelectedObjects() {
+            if (selectedObjects.length === 0) return;
+            const deletedGroup = [...selectedObjects];
+            transformControls.detach();
+            deletedGroup.forEach(obj => {
+                if (selectionGroup.children.includes(obj)) selectionGroup.remove(obj);
+                else if (objectsGroup.children.includes(obj)) objectsGroup.remove(obj);
+                if (obj.material && obj.material.emissive) obj.material.emissive.setHex(0x000000);
+            });
+            actionHistory.push(deletedGroup);
+            selectedObjects = [];
+            selectionGroup.position.set(0,0,0); selectionGroup.rotation.set(0,0,0); selectionGroup.scale.set(1,1,1);
+            selectionGroup.updateMatrixWorld(true);
+            if(ticksContainer) ticksContainer.innerHTML = '';
         }
-        
-        // 恢复物体的自发光颜色，防止撤销后物体一直亮着
-        if (obj.material && obj.material.emissive) {
-            obj.material.emissive.setHex(0x000000);
+
+        let copiedObjectsData = [];
+        function copySelectedObjects() {
+            if (selectedObjects.length === 0) return;
+            copiedObjectsData = [];
+            selectedObjects.forEach(obj => {
+                if (!obj.isMesh) return;
+                const worldPos = new THREE.Vector3(); const worldRot = new THREE.Quaternion(); const worldScale = new THREE.Vector3();
+                obj.getWorldPosition(worldPos); obj.getWorldQuaternion(worldRot); obj.getWorldScale(worldScale);
+                copiedObjectsData.push({
+                    geometry: obj.geometry.clone(), color: obj.material.color.getHex(),
+                    roughness: obj.material.roughness, metalness: obj.material.metalness,
+                    position: worldPos, quaternion: worldRot, scale: worldScale,
+                    keyframes: obj.userData.keyframes ? JSON.parse(JSON.stringify(obj.userData.keyframes)) : null
+                });
+            });
         }
-    });
 
-    // 将这一步删除操作记录到撤销历史栈中
-    actionHistory.push(deletedGroup);
+        function pasteObjects() {
+            if (copiedObjectsData.length === 0) return;
+            clearSelection();
+            const pastedGroup = [];
+            copiedObjectsData.forEach(data => {
+                const material = new THREE.MeshStandardMaterial({ color: new THREE.Color(data.color), roughness: data.roughness, metalness: data.metalness });
+                const mesh = new THREE.Mesh(data.geometry, material);
+                mesh.position.copy(data.position).add(new THREE.Vector3(1.5, 0, 1.5));
+                mesh.quaternion.copy(data.quaternion); mesh.scale.copy(data.scale);
+                mesh.castShadow = true; mesh.receiveShadow = true;
+                
+                if (data.keyframes) {
+                    mesh.userData.keyframes = data.keyframes.map(kf => ({
+                        frame: kf.frame,
+                        position: new THREE.Vector3(kf.position.x + 1.5, kf.position.y, kf.position.z + 1.5),
+                        quaternion: new THREE.Quaternion(kf.quaternion._x, kf.quaternion._y, kf.quaternion._z, kf.quaternion._w),
+                        scale: new THREE.Vector3(kf.scale.x, kf.scale.y, kf.scale.z)
+                    }));
+                }
 
-    // 彻底清空当前选中状态
-    selectedObjects = [];
-    selectionGroup.position.set(0, 0, 0);
-    selectionGroup.rotation.set(0, 0, 0);
-    selectionGroup.scale.set(1, 1, 1);
-    selectionGroup.updateMatrixWorld(true);
-}
-
-// 全局变量，用来暂存被复制的物体数据
-let copiedObjectsData = [];
-
-// 1. 复制选中物体 (Copy)
-function copySelectedObjects() {
-    if (selectedObjects.length === 0) return;
-    
-    copiedObjectsData = []; // 清空上一次复制的内容
-    
-    // 遍历所有选中的物体，保存它们的几何参数、材质属性以及当前的空间姿态
-    selectedObjects.forEach(obj => {
-        if (!obj.isMesh) return;
-        
-        // 记录该物体的世界坐标（由于可能存在于临时 selectionGroup 中，需要获取世界坐标）
-        const worldPos = new THREE.Vector3();
-        const worldRot = new THREE.Quaternion();
-        const worldScale = new THREE.Vector3();
-        obj.getWorldPosition(worldPos);
-        obj.getWorldQuaternion(worldRot);
-        obj.getWorldScale(worldScale);
-        
-        copiedObjectsData.push({
-            geometry: obj.geometry.clone(), // 复制几何体数据
-            color: obj.material.color.getHex(),
-            roughness: obj.material.roughness,
-            metalness: obj.material.metalness,
-            position: worldPos,
-            quaternion: worldRot,
-            scale: worldScale
-        });
-    });
-}
-
-// 2. 粘贴物体 (Paste)
-function pasteObjects() {
-    if (copiedObjectsData.length === 0) return;
-    
-    // 清除当前的高亮选中
-    clearSelection();
-    
-    const pastedGroup = [];
-
-    copiedObjectsData.forEach(data => {
-        // 创建全新的材质实例与几何体
-        const material = new THREE.MeshStandardMaterial({
-            color: new THREE.Color(data.color),
-            roughness: data.roughness,
-            metalness: data.metalness
-        });
-        
-        const mesh = new THREE.Mesh(data.geometry, material);
-        
-        // 应用克隆的空间属性，并默认在 X 轴与 Z 轴各偏移 1.5 个单位，防止原位重叠
-        mesh.position.copy(data.position).add(new THREE.Vector3(1.5, 0, 1.5));
-        mesh.quaternion.copy(data.quaternion);
-        mesh.scale.copy(data.scale);
-        
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-        
-        // 加入场景
-        objectsGroup.add(mesh);
-        pastedGroup.push(mesh);
-        
-        // 赋予新物体的微光高亮并加入当前的选中列表
-        if (mesh.material && mesh.material.emissive) {
-            mesh.material.emissive.setHex(0x222244);
+                objectsGroup.add(mesh); pastedGroup.push(mesh);
+                if (mesh.material && mesh.material.emissive) mesh.material.emissive.setHex(0x222244);
+                selectedObjects.push(mesh);
+            });
+            actionHistory.push(pastedGroup);
+            switchTool('move');
+            if (selectedObjects.length === 1) transformControls.attach(selectedObjects[0]);
         }
-        selectedObjects.push(mesh);
-    });
-    
-    // 将这次的“粘贴生成”放入撤销栈
-    actionHistory.push(pastedGroup);
-    
-    // 自动重组并激活移动工具，绑定手柄到刚刚粘贴出来的物体上
-    switchTool('move');
-    if (selectedObjects.length === 1) {
-        transformControls.attach(selectedObjects[0]);
-    } else if (selectedObjects.length > 1) {
-        // 重组 selectionGroup
-        const box = new THREE.Box3();
-        selectedObjects.forEach(obj => box.expandByObject(obj));
-        const center = new THREE.Vector3();
-        box.getCenter(center);
-        
-        selectionGroup.position.copy(center);
-        selectionGroup.updateMatrixWorld(true);
-        
-        selectedObjects.forEach(obj => selectionGroup.attach(obj));
-        transformControls.attach(selectionGroup);
-    }
-}
 
-        // --- 撤销功能封装 (兼容生成与位移) ---
         function undoAction() {
             if (actionHistory.length > 0) {
                 clearSelection();
                 const lastAction = actionHistory.pop();
-                
-                // 判断撤销的动作类型
                 if (Array.isArray(lastAction) && lastAction[0] && lastAction[0].type === 'move') {
-                    // 撤销移动：将物体移回初始坐标
-                    lastAction.forEach(item => {
-                        item.object.position.copy(item.from);
-                    });
+                    lastAction.forEach(item => { item.object.position.copy(item.from); });
                 } else {
-                    // 撤销生成：移出场景
-                    lastAction.forEach(obj => {
-                        objectsGroup.remove(obj);
-                    });
+                    lastAction.forEach(obj => { objectsGroup.remove(obj); });
                 }
             }
         }
 
-function setupUI() {
-    // 1. 绑定左侧一级工具栏切换
-    const tools = ['view', 'move', 'brush', 'shape'];
-    tools.forEach(tool => {
-        document.getElementById(`tool-${tool}`).addEventListener('click', () => {
-            switchTool(tool);
-        });
-    });
+        function setupUI() {
+            const tools = ['view', 'move', 'brush', 'shape'];
+            tools.forEach(tool => { document.getElementById(`tool-${tool}`).addEventListener('click', () => { switchTool(tool); }); });
 
-    // 2. 绑定二级形状菜单的点击与高亮逻辑
-    const subShapes = ['box', 'sphere', 'cone', 'cylinder', 'torus'];
-    subShapes.forEach(shape => {
-        const btn = document.getElementById(`sub-shape-${shape}`);
-        
-        // 默认初始化高亮当前的子形状按钮
-        if (shape === activeSubShape) {
-            btn.classList.add('active');
+            const subShapes = ['box', 'sphere', 'cone', 'cylinder', 'torus'];
+            subShapes.forEach(shape => {
+                const btn = document.getElementById(`sub-shape-${shape}`);
+                if (shape === activeSubShape) btn.classList.add('active');
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation(); 
+                    subShapes.forEach(s => document.getElementById(`sub-shape-${s}`).classList.remove('active'));
+                    btn.classList.add('active'); activeSubShape = shape; switchTool('shape', true);
+                });
+            });
+
+            document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
+            document.getElementById('btn-export-img').addEventListener('click', exportImage);
+            document.getElementById('btn-export-obj').addEventListener('click', exportOBJ);
+
+            const fileInput = document.getElementById('obj-file-input');
+            document.getElementById('btn-import-obj').addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', handleOBJImport);
+
+            document.getElementById('btn-mode-translate').addEventListener('click', () => { if (currentTool === 'move') transformControls.setMode('translate'); });
+            document.getElementById('btn-mode-rotate').addEventListener('click', () => { if (currentTool === 'move') transformControls.setMode('rotate'); });
+            document.getElementById('btn-mode-scale').addEventListener('click', () => { if (currentTool === 'move') transformControls.setMode('scale'); });
+
+            document.getElementById('btn-delete-selected').addEventListener('click', deleteSelectedObjects);
+            document.getElementById('btn-undo').addEventListener('click', undoAction);
+            document.getElementById('btn-clear').addEventListener('click', clearCanvas);
+            document.getElementById('btn-copy').addEventListener('click', copySelectedObjects);
+            document.getElementById('btn-paste').addEventListener('click', pasteObjects);
+
+            const colorPicker = document.getElementById('block-color');
+            colorPicker.addEventListener('input', (e) => {
+                paintColor = e.target.value; document.getElementById('color-hex').innerText = paintColor.toUpperCase();
+                selectedObjects.forEach(obj => { if (obj.material) obj.material.color.set(paintColor); });
+            });
+
+            const sizeSlider = document.getElementById('block-size');
+            sizeSlider.addEventListener('input', (e) => { brushSize = parseFloat(e.target.value); document.getElementById('size-val').innerText = brushSize; });
+            document.getElementById('mat-roughness').addEventListener('input', (e) => { roughness = parseFloat(e.target.value); selectedObjects.forEach(obj => { if(obj.material) obj.material.roughness = roughness; }); });
+            document.getElementById('mat-metalness').addEventListener('input', (e) => { metalness = parseFloat(e.target.value); selectedObjects.forEach(obj => { if(obj.material) obj.material.metalness = metalness; }); });
+
+            document.getElementById('panel-toggle').addEventListener('click', () => {
+                const panel = document.getElementById('properties-panel'); const toggle = document.getElementById('panel-toggle');
+                panel.classList.toggle('collapsed'); toggle.classList.toggle('collapsed');
+            });
+
+            // 🎬 绑定关键帧与速率UI节点事件
+            document.getElementById('btn-insert-key').addEventListener('click', insertKeyframe);
+            document.getElementById('btn-delete-key').addEventListener('click', deleteKeyframe);
+            
+            // 帧率调节滑块事件绑定
+            document.getElementById('anim-fps-slider').addEventListener('input', (e) => {
+                playFPS = parseInt(e.target.value);
+                document.getElementById('fps-val').innerText = playFPS;
+            });
+
+            const playToggle = document.getElementById('btn-play-toggle');
+            playToggle.addEventListener('click', () => {
+                isPlaying = !isPlaying;
+                playToggle.innerHTML = isPlaying ? '<i class="fa-solid fa-pause"></i>' : '<i class="fa-solid fa-play"></i>';
+                if(isPlaying) animationClock.getDelta(); 
+            });
+
+            frameTimeline.addEventListener('input', (e) => {
+                currentFrame = parseInt(e.target.value);
+                document.getElementById('lbl-current-frame').innerText = currentFrame;
+                applyKeyframeInterpolation(currentFrame); 
+            });
         }
 
-        btn.addEventListener('click', (e) => {
-            // 阻止冒泡，防止触发画布在点击位置产生绘制
-            e.stopPropagation(); 
-            
-            // 清除其他子形状按钮的高亮，点亮当前点击的
-            subShapes.forEach(s => document.getElementById(`sub-shape-${s}`).classList.remove('active'));
-            btn.classList.add('active');
-            
-            // 切换当前的子形状
-            activeSubShape = shape;
-            
-            // 确保主工具切换到 shape 模式
-            switchTool('shape', true);
-        });
-    });
-
-    // 3. 绑定主题切换按钮 (白天/暗黑模式)
-    document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
-
-    // 4. 绑定导出功能（图片/OBJ模型）
-    document.getElementById('btn-export-img').addEventListener('click', exportImage);
-    document.getElementById('btn-export-obj').addEventListener('click', exportOBJ);
-
-    // 5. 绑定导入功能 (隐藏的 input 选择器触发)
-    const fileInput = document.getElementById('obj-file-input');
-    document.getElementById('btn-import-obj').addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', handleOBJImport);
-
-    // 6. 绑定变换控制器模式切换 (移动/旋转/缩放)
-    document.getElementById('btn-mode-translate').addEventListener('click', () => {
-        if (currentTool === 'move') transformControls.setMode('translate');
-    });
-    document.getElementById('btn-mode-rotate').addEventListener('click', () => {
-        if (currentTool === 'move') transformControls.setMode('rotate');
-    });
-    document.getElementById('btn-mode-scale').addEventListener('click', () => {
-        if (currentTool === 'move') transformControls.setMode('scale');
-    });
-
-    // 7. 绑定删除选中与清空画布
-    document.getElementById('btn-delete-selected').addEventListener('click', deleteSelectedObjects);
-    document.getElementById('btn-undo').addEventListener('click', undoAction);
-    document.getElementById('btn-clear').addEventListener('click', clearCanvas);
-    document.getElementById('btn-copy').addEventListener('click', copySelectedObjects);
-    document.getElementById('btn-paste').addEventListener('click', pasteObjects);
-
-    // 8. 材质属性控制器实时调节
-    const colorPicker = document.getElementById('block-color');
-    colorPicker.addEventListener('input', (e) => {
-        paintColor = e.target.value;
-        document.getElementById('color-hex').innerText = paintColor.toUpperCase();
-        // 实时为当前选中的物体改色，增强友好交互体验
-        selectedObjects.forEach(obj => {
-            if (obj.material) obj.material.color.set(paintColor);
-        });
-    });
-
-    const sizeSlider = document.getElementById('block-size');
-    sizeSlider.addEventListener('input', (e) => {
-        brushSize = parseFloat(e.target.value);
-        document.getElementById('size-val').innerText = brushSize;
-    });
-
-    document.getElementById('mat-roughness').addEventListener('input', (e) => { 
-        roughness = parseFloat(e.target.value); 
-        selectedObjects.forEach(obj => { if(obj.material) obj.material.roughness = roughness; });
-    });
-
-    document.getElementById('mat-metalness').addEventListener('input', (e) => { 
-        metalness = parseFloat(e.target.value); 
-        selectedObjects.forEach(obj => { if(obj.material) obj.material.metalness = metalness; });
-    });
-
-    // 9. 右侧属性面板收起与展开
-    document.getElementById('panel-toggle').addEventListener('click', () => {
-        const panel = document.getElementById('properties-panel');
-        const toggle = document.getElementById('panel-toggle');
-        panel.classList.toggle('collapsed');
-        toggle.classList.toggle('collapsed');
-    });
-}
-
-        // OBJ 文件解析及导入主逻辑
-function handleOBJImport(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = function (evt) {
-        const text = evt.target.result;
-        
-        try {
-            // 解析 OBJ 的顶点(v)与面片(f)
-            const lines = text.split('\n');
-            const vertices = [];
-            const indices = [];
-            
-            for (let i = 0; i < lines.length; i++) {
-                const line = lines[i].trim();
-                if (line.startsWith('v ')) {
-                    const parts = line.split(/\s+/).slice(1).map(Number);
-                    vertices.push(new THREE.Vector3(parts[0], parts[1], parts[2]));
-                } else if (line.startsWith('f ')) {
-                    const parts = line.split(/\s+/).slice(1).map(p => {
-                        // 兼容处理 f 1/1/1 或 f 1 格式，转化为从 0 开始的索引
-                        return parseInt(p.split('/')[0]) - 1;
-                    });
-                    // 将多边形面自动拆分为三角形（三角化）
-                    for (let j = 1; j < parts.length - 1; j++) {
-                        indices.push(parts[0], parts[j], parts[j+1]);
+        function handleOBJImport(e) {
+            const file = e.target.files[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function (evt) {
+                const text = evt.target.result;
+                try {
+                    const lines = text.split('\n'); const vertices = []; const indices = [];
+                    for (let i = 0; i < lines.length; i++) {
+                        const line = lines[i].trim();
+                        if (line.startsWith('v ')) {
+                            const parts = line.split(/\s+/).slice(1).map(Number); vertices.push(new THREE.Vector3(parts[0], parts[1], parts[2]));
+                        } else if (line.startsWith('f ')) {
+                            const parts = line.split(/\s+/).slice(1).map(p => parseInt(p.split('/')[0]) - 1);
+                            for (let j = 1; j < parts.length - 1; j++) indices.push(parts[0], parts[j], parts[j+1]);
+                        }
                     }
-                }
-            }
+                    if (vertices.length === 0) { alert("未在文件中解析出合法的3D顶点数据。"); return; }
+                    const geometry = new THREE.BufferGeometry(); const finalPositions = [];
+                    indices.forEach(idx => { const v = vertices[idx]; if (v) finalPositions.push(v.x, v.y, v.z); });
+                    geometry.setAttribute('position', new THREE.Float32BufferAttribute(finalPositions, 3)); geometry.computeVertexNormals();
 
-            if (vertices.length === 0) {
-                alert("未在文件中解析出合法的3D顶点数据。");
-                return;
-            }
+                    const material = new THREE.MeshStandardMaterial({ color: new THREE.Color(paintColor), roughness: roughness, metalness: metalness });
+                    const mesh = new THREE.Mesh(geometry, material); mesh.castShadow = true; mesh.receiveShadow = true;
+                    geometry.computeBoundingBox(); const center = new THREE.Vector3(); geometry.boundingBox.getCenter(center);
+                    mesh.position.sub(center); mesh.position.y += 1;
 
-            // 用解析出的数据重建 BufferGeometry 
-            const geometry = new THREE.BufferGeometry();
-            const finalPositions = [];
-            
-            indices.forEach(idx => {
-                const v = vertices[idx];
-                if (v) {
-                    finalPositions.push(v.x, v.y, v.z);
-                }
-            });
-
-            geometry.setAttribute('position', new THREE.Float32BufferAttribute(finalPositions, 3));
-            geometry.computeVertexNormals(); // 自动计算法线以呈现高光与金属感阴影
-
-            // 使用当前选中的材质参数创建新模型
-            const material = new THREE.MeshStandardMaterial({
-                color: new THREE.Color(paintColor),
-                roughness: roughness,
-                metalness: metalness
-            });
-
-            const mesh = new THREE.Mesh(geometry, material);
-            mesh.castShadow = true;
-            mesh.receiveShadow = true;
-
-            // 自动计算包围盒，并把导入的模型归一化、居中对齐到原点上方，防止飞得太远
-            geometry.computeBoundingBox();
-            const center = new THREE.Vector3();
-            geometry.boundingBox.getCenter(center);
-            mesh.position.sub(center); // 居中
-            mesh.position.y += 1;      // 稍微悬空放置，避免埋入地平面
-
-            // 载入场景，并将其加入撤销栈中
-            objectsGroup.add(mesh);
-            actionHistory.push([mesh]); 
-            
-            // 自动切换为移动工具并选中导入的模型，方便用户调整
-            switchTool('move');
-            handleObjectSelection(mesh, false);
-
-            alert("模型导入成功！");
-        } catch (error) {
-            console.error(error);
-            alert("OBJ 模型解析失败，请确保该文件为标准的 Wavefront OBJ 纯文本格式。");
+                    objectsGroup.add(mesh); actionHistory.push([mesh]); 
+                    switchTool('move'); handleObjectSelection(mesh, false);
+                    alert("模型导入成功！");
+                } catch (error) { alert("OBJ 模型解析失败。"); }
+            };
+            reader.readAsText(file); e.target.value = '';
         }
-    };
-    reader.readAsText(file);
-    // 重置 input 以便能重复导入同一个文件
-    e.target.value = '';
-}
 
-        // --- 全局快捷键监听逻辑 ---
         function setupShortcuts() {
             window.addEventListener('keydown', (e) => {
                 if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-
-                // 捕获 Ctrl + Z 撤销快捷键
-                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
-                    e.preventDefault();
-                    undoAction();
-                    return;
-                }
-
-                // 1. 拦截 Ctrl + C (复制)
-                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
-                    e.preventDefault();
-                    copySelectedObjects();
-                    return;
-                }
-
-                // 2. 拦截 Ctrl + V (粘贴)
-                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
-                    e.preventDefault();
-                    pasteObjects();
-                    return;
-                }
+                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undoAction(); return; }
+                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') { e.preventDefault(); copySelectedObjects(); return; }
+                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') { e.preventDefault(); pasteObjects(); return; }
 
                 const key = e.key.toLowerCase();
+                
+                if (key === 'i') {
+                    e.preventDefault();
+                    insertKeyframe();
+                    return;
+                }
+                if (key === 'x') {
+                    e.preventDefault();
+                    deleteKeyframe();
+                    return;
+                }
+                if (e.code === 'Space') {
+                    e.preventDefault();
+                    document.getElementById('btn-play-toggle').click();
+                    return;
+                }
 
                 if (currentTool === 'move' && selectedObjects.length > 0) {
-                    if (key === 'w') {
-                        transformControls.setMode('translate'); // W 键切换为：移动
-                    } else if (key === 'e') {
-                        transformControls.setMode('rotate');    // E 键切换为：旋转
-                    } else if (key === 'r') {
-                        transformControls.setMode('scale');     // R 键切换为：缩放（调整大小）
-                    }
+                    if (key === 'w') transformControls.setMode('translate');
+                    else if (key === 'e') transformControls.setMode('rotate');
+                    else if (key === 'r') transformControls.setMode('scale');
                 }
 
-                if (key === 'v') {
-                    switchTool('view');
-                } else if (key === 'm') {
-                    switchTool('move');
-                } else if (key === 'b') {
-                    switchTool('brush');
-                } else if (key === 'c') {
-                    switchTool('box');
-                } else if (key === 's') {
-                    switchTool('shape');
-                } else if (key === 'delete' || key === 'backspace') {
-                    deleteSelectedObjects();
-                }
+                if (key === 'v') switchTool('view');
+                else if (key === 'm') switchTool('move');
+                else if (key === 'b') switchTool('brush');
+                else if (key === 's') switchTool('shape');
+                else if (key === 'delete' || key === 'backspace') deleteSelectedObjects();
             });
         }
 
-        // --- 核心坐标与射线检测物理逻辑 ---
         function getIntersectionPoint(e) {
-            let clientX = e.clientX;
-            let clientY = e.clientY;
-            
-            if (e.changedTouches && e.changedTouches.length > 0) {
-                clientX = e.changedTouches[0].clientX;
-                clientY = e.changedTouches[0].clientY;
-            } else if (e.touches && e.touches.length > 0) {
-                clientX = e.touches[0].clientX;
-                clientY = e.touches[0].clientY;
-            }
-
-            mouse.x = (clientX / window.innerWidth) * 2 - 1;
-            mouse.y = -(clientY / window.innerHeight) * 2 + 1;
+            let clientX = e.clientX, clientY = e.clientY;
+            if (e.touches && e.touches.length > 0) { clientX = e.touches[0].clientX; clientY = e.touches[0].clientY; }
+            mouse.x = (clientX / window.innerWidth) * 2 - 1; mouse.y = -(clientY / window.innerHeight) * 2 + 1;
             raycaster.setFromCamera(mouse, camera);
-            
             if (currentTool === 'shape' && objectsGroup.children.length > 0) {
                 const intersectsObjects = raycaster.intersectObjects(objectsGroup.children);
-                if(intersectsObjects.length > 0) {
-                    return intersectsObjects[0].point.add(intersectsObjects[0].face.normal.clone().multiplyScalar(brushSize/2));
-                }
+                if(intersectsObjects.length > 0) return intersectsObjects[0].point.add(intersectsObjects[0].face.normal.clone().multiplyScalar(brushSize/2));
             }
-
             const intersectsPlane = raycaster.intersectObject(drawingPlane);
-            if (intersectsPlane.length > 0) {
-                return intersectsPlane[0].point;
-            }
+            if (intersectsPlane.length > 0) return intersectsPlane[0].point;
             return null;
         }
 
-        // 替换原有的 createInstance 里的几何体生成分支：
-function createInstance(point, type) {
-    let geometry;
+        function createInstance(point, type) {
+            let geometry; const shapeType = (type === 'brush') ? 'brush' : activeSubShape;
+            if (shapeType === 'box' || shapeType === 'brush') geometry = new THREE.BoxGeometry(brushSize, brushSize, brushSize);
+            else if (shapeType === 'sphere') geometry = new THREE.SphereGeometry(brushSize / 2, 32, 32);
+            else if (shapeType === 'cone') geometry = new THREE.ConeGeometry(brushSize / 2, brushSize, 32);
+            else if (shapeType === 'cylinder') geometry = new THREE.CylinderGeometry(brushSize / 2, brushSize / 2, brushSize, 32);
+            else if (shapeType === 'torus') geometry = new THREE.TorusGeometry(brushSize / 2.5, brushSize / 8, 16, 100);
 
-    // 如果当前是一级画笔工具，生成盒子；如果是形状工具，则根据 activeSubShape 生成对应 3D 几何体
-    const shapeType = (type === 'brush') ? 'brush' : activeSubShape;
+            const material = new THREE.MeshStandardMaterial({ color: new THREE.Color(paintColor), roughness: roughness, metalness: metalness });
+            const mesh = new THREE.Mesh(geometry, material); mesh.position.copy(point);
+            if (type !== 'brush' && (shapeType === 'box' || shapeType === 'cylinder' || shapeType === 'cone')) mesh.position.y = Math.max(mesh.position.y, brushSize / 2);
 
-    if (shapeType === 'box' || shapeType === 'brush') {
-        geometry = new THREE.BoxGeometry(brushSize, brushSize, brushSize);
-    } else if (shapeType === 'sphere') {
-        geometry = new THREE.SphereGeometry(brushSize / 2, 32, 32);
-    } else if (shapeType === 'cone') {
-        // 圆锥体 (底面半径, 高度, 分段数)
-        geometry = new THREE.ConeGeometry(brushSize / 2, brushSize, 32);
-    } else if (shapeType === 'cylinder') {
-        // 圆柱体 (顶半径, 底半径, 高度, 分段数)
-        geometry = new THREE.CylinderGeometry(brushSize / 2, brushSize / 2, brushSize, 32);
-    } else if (shapeType === 'torus') {
-        // 圆环 (总半径, 管道粗细, 径向分段, 管状分段)
-        geometry = new THREE.TorusGeometry(brushSize / 2.5, brushSize / 8, 16, 100);
-    }
-
-    const material = new THREE.MeshStandardMaterial({
-        color: new THREE.Color(paintColor),
-        roughness: roughness,
-        metalness: metalness
-    });
-
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.copy(point);
-    
-    // 如果是立方体或圆柱体，底面贴地
-    if (type !== 'brush' && (shapeType === 'box' || shapeType === 'cylinder' || shapeType === 'cone')) {
-        mesh.position.y = Math.max(mesh.position.y, brushSize / 2);
-    }
-
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-
-    mesh.scale.set(1, 1, 1); // 默认直接以原始大小生成
-    objectsGroup.add(mesh);
-    currentStrokeObjects.push(mesh);
-}
+            mesh.castShadow = true; mesh.receiveShadow = true;
+            mesh.scale.set(1, 1, 1);
+            objectsGroup.add(mesh); currentStrokeObjects.push(mesh);
+        }
 
         function onPointerDown(e) {
-            // 如果处于移动工具模式下
             if (currentTool === 'move') {
-                // 如果用户点到了正在操作的轴线控制柄本身，不做重复射线选中检测
                 if (transformControls.dragging) return;
-
-                let clientX = e.clientX;
-                let clientY = e.clientY;
-                if (e.touches && e.touches.length > 0) {
-                    clientX = e.touches[0].clientX;
-                    clientY = e.touches[0].clientY;
-                }
-                mouse.x = (clientX / window.innerWidth) * 2 - 1;
-                mouse.y = -(clientY / window.innerHeight) * 2 + 1;
+                let clientX = e.clientX, clientY = e.clientY;
+                if (e.touches && e.touches.length > 0) { clientX = e.touches[0].clientX; clientY = e.touches[0].clientY; }
+                mouse.x = (clientX / window.innerWidth) * 2 - 1; mouse.y = -(clientY / window.innerHeight) * 2 + 1;
                 raycaster.setFromCamera(mouse, camera);
-
-                // 射线检测是否点击到了生成的 3D 物体
                 const intersects = raycaster.intersectObjects(objectsGroup.children, true);
-                
                 if (intersects.length > 0) {
-                    const hitObject = intersects[0].object;
-                    
-                    // 【核心移动端优化】：如果是触屏/手机端，直接默认开启多选模式（无需按住 Shift 键）
-                    const isTouch = (e.pointerType === 'touch' || e.touches || (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents));
-                    const isMultiSelect = isTouch ? true : e.shiftKey;
-                    
-                    handleObjectSelection(hitObject, isMultiSelect);
+                    const isTouch = (e.pointerType === 'touch' || e.touches);
+                    handleObjectSelection(intersects[0].object, isTouch ? true : e.shiftKey);
                 } else {
-                    // 如果点到了空白区域，且不是多选状态，则清除选择
-                    const isTouch = (e.pointerType === 'touch' || e.touches || (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents));
-                    if (isTouch) {
-                        // 手机端：点击空白处直接清空选中
-                        clearSelection();
-                    } else if (!e.shiftKey) {
-                        // 电脑端：没有按住 Shift 键点击空白处时清空选中
-                        clearSelection();
-                    }
+                    if (e.pointerType === 'touch' || !e.shiftKey) clearSelection();
                 }
                 return;
             }
-
             if (currentTool === 'view') return;
-            const point = getIntersectionPoint(e);
-            if (!point) return;
-
-            isDrawing = true;
-            currentStrokeObjects = []; // 开始新的一笔操作
-            createInstance(point, currentTool);
+            const point = getIntersectionPoint(e); if (!point) return;
+            isDrawing = true; currentStrokeObjects = []; createInstance(point, currentTool);
         }
 
         function onPointerMove(e) {
             if (!isDrawing || currentTool === 'view' || currentTool === 'move') return;
-            const point = getIntersectionPoint(e);
-            if (!point) return;
-
+            const point = getIntersectionPoint(e); if (!point) return;
             if (currentTool === 'brush') {
                 const lastObj = currentStrokeObjects[currentStrokeObjects.length - 1];
-                if (lastObj) {
-                    const dist = lastObj.position.distanceTo(point);
-                    if (dist > brushSize * 0.3) {
-                        createInstance(point, 'brush');
-                    }
+                if (lastObj && lastObj.position.distanceTo(point) > brushSize * 0.3) createInstance(point, 'brush');
+                else if (!lastObj) createInstance(point, 'brush');
+            }
+        }
+
+        function onPointerUp() { if (isDrawing && currentStrokeObjects.length > 0) actionHistory.push(currentStrokeObjects); isDrawing = false; }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight; 
+            camera.updateProjectionMatrix(); 
+            renderer.setSize(window.innerWidth, window.innerHeight);
+
+            // 切换大/小屏时容器有 0.3s 过渡动画，若不关闭会在“过渡中”测量滑块宽度，导致红点错位。
+            // 临时关闭过渡（用 class 而非 inline，因为 updateTimelineLayout 用 cssText 重写内联样式），
+            // 让尺寸立即生效、红点精确对齐，下一帧再恢复过渡。
+            const tc = document.getElementById('timeline-container');
+            if (tc) tc.classList.add('no-transition');
+            updateTimelineLayout();
+            if (tc) requestAnimationFrame(() => tc.classList.remove('no-transition'));
+
+            if (currentTool === 'shape') {
+                const submenu = document.getElementById('shape-submenu'); 
+                const shapeBtn = document.getElementById('tool-shape'); 
+                const rect = shapeBtn.getBoundingClientRect();
+                if (window.innerWidth <= 768) {
+                    submenu.style.flexDirection = 'column-reverse'; submenu.style.left = (rect.left + rect.width / 2) + 'px'; submenu.style.top = (rect.top - 12) + 'px'; submenu.style.transform = 'translateY(-100%) translateX(-50%)';
+                    // ⚡ 同步修复
+                    submenu.style.zIndex = '1005'; 
                 } else {
-                    createInstance(point, 'brush');
+                    submenu.style.flexDirection = 'row'; submenu.style.left = (rect.right + 12) + 'px'; submenu.style.top = (rect.top + rect.height / 2) + 'px'; submenu.style.transform = 'translateY(-50%)';
+                    // ⚡ 同步修复
+                    submenu.style.zIndex = '99'; 
                 }
             }
         }
-
-        function onPointerUp() {
-            if (isDrawing && currentStrokeObjects.length > 0) {
-                // 将刚才这一笔生成的所有对象存入撤销历史栈
-                actionHistory.push(currentStrokeObjects);
-            }
-            isDrawing = false;
-        }
-
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-
-            // 在 onWindowResize() 函数内的最底部，替换为以下适配代码：
-if (currentTool === 'shape') {
-    const submenu = document.getElementById('shape-submenu');
-    const shapeBtn = document.getElementById('tool-shape');
-    const rect = shapeBtn.getBoundingClientRect();
-    const isMobile = window.innerWidth <= 768;
-    
-    if (isMobile) {
-        submenu.style.flexDirection = 'column-reverse';
-        submenu.style.left = (rect.left + rect.width / 2) + 'px';
-        submenu.style.top = (rect.top - 12) + 'px';
-        submenu.style.transform = 'translateY(-100%) translateX(-50%)';
-    } else {
-        submenu.style.flexDirection = 'row';
-        submenu.style.left = (rect.right + 12) + 'px';
-        submenu.style.top = (rect.top + rect.height / 2) + 'px';
-        submenu.style.transform = 'translateY(-50%)';
-    }
-}
-        }
-
+        
+        // 🎬 时间轴播放驱动
+        let frameAccumulator = 0;
         function animate() {
             requestAnimationFrame(animate);
-            if (currentTool === 'view') {
-                controls.update();
+            if (currentTool === 'view') controls.update();
+
+            if (isPlaying) {
+                const delta = animationClock.getDelta();
+                
+                // 根据可调的 playFPS 数值动态更新增量速率
+                frameAccumulator += delta * playFPS; 
+
+                if (frameAccumulator >= 1) {
+                    const framesToAdvance = Math.floor(frameAccumulator);
+                    currentFrame = (currentFrame + framesToAdvance) % (maxFrames + 1);
+                    frameAccumulator -= framesToAdvance;
+
+                    frameTimeline.value = currentFrame;
+                    document.getElementById('lbl-current-frame').innerText = currentFrame;
+
+                    applyKeyframeInterpolation(currentFrame);
+                }
             }
+
             renderer.render(scene, camera);
         }
     </script>
