@@ -70,6 +70,11 @@
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
+        /* 切换大/小屏布局时临时关闭过渡，避免测量到“过渡中”的错误尺寸导致红点错位 */
+        .glass-panel.no-transition {
+            transition: none !important;
+        }
+
         /* 顶部状态栏 */
         header {
             top: 20px;
@@ -348,12 +353,16 @@
 
         .timeline-tick-marker {
             position: absolute;
-            width: 6px;
-            height: 6px;
+            top: 50%;
+            width: 8px;
+            height: 8px;
             background: #ef4444;
+            border: 1px solid rgba(255, 255, 255, 0.85);
             border-radius: 50%;
-            transform: translateX(-3px);
+            transform: translate(-50%, -50%);
             box-shadow: 0 0 6px #ef4444;
+            pointer-events: auto;
+            cursor: pointer;
         }
 
         @media screen and (max-width: 768px) {
@@ -696,14 +705,14 @@
                 <div id="timeline-layout" style="display: flex; width: 100%; height: 100%; box-sizing: border-box;">
                     <div id="timeline-meta" style="display: flex; align-items: center; justify-content: space-between; font-size: 12px;">
                         <div style="display: flex; gap: 12px; align-items: center;">
-                            <button id="btn-play-toggle" style="background:transparent; border:none; color:var(--text-main); cursor:pointer; font-size:14px;"><i class="fa-solid fa-play"></i></button>
-                            <span style="white-space: nowrap;">Frame: <strong id="lbl-current-frame" style="color:var(--accent-color)">0</strong> / ${maxFrames}</span>
+                            <button id="btn-play-toggle" style="background:transparent; border:none; color:var(--text-main); cursor:pointer; font-size:14px; width:18px; padding:0; text-align:center; flex:0 0 auto;"><i class="fa-solid fa-play"></i></button>
+                            <span style="white-space: nowrap;">Frame: <strong id="lbl-current-frame" style="color:var(--accent-color); display:inline-block; min-width:3ch; text-align:right;">0</strong> / ${maxFrames}</span>
                         </div>
                         <span id="timeline-tip" style="color:var(--text-muted); font-size:11px;">选中物体改变姿态后按 [I] 录制帧点</span>
                     </div>
                     <div id="slider-wrapper" style="position: relative; width: 100%; display: flex; align-items: center;">
                         <input type="range" id="anim-timeline" class="range-slider" min="0" max="${maxFrames}" value="0" style="width: 100%; margin: 0; display: block;">
-                        <div id="timeline-ticks" class="timeline-ticks-container" style="position: absolute; width: 100%; bottom: -4px;"></div>
+                        <div id="timeline-ticks" class="timeline-ticks-container" style="position: absolute;"></div>
                     </div>
                 </div>
             `;
@@ -763,7 +772,7 @@
                 layout.style.flexDirection = 'column';
                 layout.style.alignItems = 'stretch';
                 layout.style.justifyContent = 'center';
-                layout.style.gap = '6px';
+                layout.style.gap = '16px';
 
                 meta.style.flexShrink = '1';
                 meta.style.display = 'flex';
@@ -789,13 +798,32 @@
             const obj = selectedObjects[0];
             if (!obj.userData.keyframes) return;
 
+            const slider = frameTimeline;
+            const wrap = slider.parentElement; // #slider-wrapper
+            const sliderRect = slider.getBoundingClientRect();
+            const wrapRect = wrap.getBoundingClientRect();
+
+            // 让红点容器精确覆盖“滑块元素本身”的渲染盒子（消除大小屏/浏览器下的对齐误差）
+            ticksContainer.style.left = (sliderRect.left - wrapRect.left) + 'px';
+            ticksContainer.style.top = (sliderRect.top - wrapRect.top) + 'px';
+            ticksContainer.style.width = sliderRect.width + 'px';
+            ticksContainer.style.height = sliderRect.height + 'px';
+            ticksContainer.style.right = 'auto';
+            ticksContainer.style.bottom = 'auto';
+            ticksContainer.style.margin = '0';
+
+            const sliderWidth = sliderRect.width || 1;
+            const thumbW = 16;
             obj.userData.keyframes.forEach(kf => {
                 const marker = document.createElement('div');
                 marker.className = 'timeline-tick-marker';
-                
-                // 计算当前帧对应的百分比横坐标位置值
-                const percent = (kf.frame / maxFrames) * 100;
-                marker.style.left = `${percent}%`;
+
+                // 水平：按 thumb(16px) 中心公式 x = thumbW/2 + pct*(W - thumbW)
+                // 垂直：top:50% 即落在滑块轨道中心（容器已精确覆盖滑块盒子）
+                const pct = kf.frame / maxFrames;
+                const x = thumbW / 2 + pct * (sliderWidth - thumbW);
+                marker.style.left = `${x}px`;
+                marker.style.top = '50%';
                 ticksContainer.appendChild(marker);
             });
         }
@@ -1376,8 +1404,14 @@
             camera.aspect = window.innerWidth / window.innerHeight; 
             camera.updateProjectionMatrix(); 
             renderer.setSize(window.innerWidth, window.innerHeight);
-            
+
+            // 切换大/小屏时容器有 0.3s 过渡动画，若不关闭会在“过渡中”测量滑块宽度，导致红点错位。
+            // 临时关闭过渡（用 class 而非 inline，因为 updateTimelineLayout 用 cssText 重写内联样式），
+            // 让尺寸立即生效、红点精确对齐，下一帧再恢复过渡。
+            const tc = document.getElementById('timeline-container');
+            if (tc) tc.classList.add('no-transition');
             updateTimelineLayout();
+            if (tc) requestAnimationFrame(() => tc.classList.remove('no-transition'));
 
             if (currentTool === 'shape') {
                 const submenu = document.getElementById('shape-submenu'); 
