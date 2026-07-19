@@ -23,6 +23,13 @@
             padding: 0;
         }
 
+        /* 禁止移动端浏览器自动放大小号字体，保证手机端与电脑端字体大小、排版一致，
+           也避免移动端因字号被放大导致内容变高而多出空白页 */
+        html {
+            -webkit-text-size-adjust: 100%;
+            text-size-adjust: 100%;
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Serif SC", serif;
             background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
@@ -1728,13 +1735,12 @@
 
             paper.style.transform = currentTransform;
 
-            // 以纸张实测宽度 w（即 210mm 的像素值）推算“一页（297mm）”的像素高度。
-            // 这样分页基准与纸张真实 min-height 完全一致，且跨设备（手机/电脑）一致，
-            // 避免出现“内容没满一页却多出空白页”的问题（之前用 A4 常量算会偏大 ~0.5px）。
+            // 计算 A4 单页对应的像素高度，将纸张高度向上取整为整页整数倍，
+            // 这样主题背景会随纸张自然铺满每一页（包括末页无文本的区域），不会出现白底。
             const a4Width = 595.28, a4Height = 841.89;
-            const onePagePx = w * 297 / 210;                             // 单页（297mm）在当前设备下的真实像素高度
-            const nPages = Math.max(1, Math.ceil(h / onePagePx - 1e-4)); // 向上取整，溢出即生成新页
-            const targetH = nPages * onePagePx;                         // 扩展后的整页高度
+            const pageHpx = a4Height * w / a4Width;                       // 单页高度（与宽度同比例，单位 px）
+            const nPages = Math.max(1, Math.ceil(h / pageHpx - 1e-4));    // 向上取整，溢出即生成新页
+            const targetH = nPages * pageHpx;                            // 扩展后的整页高度
 
             const dataUri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(`
                 <svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${targetH}">
@@ -1742,7 +1748,7 @@
                         <div xmlns="http://www.w3.org/1999/xhtml">
                             <style>
                                 ${styles}
-                                #resume-paper { box-shadow: none !important; border: none !important; width: 100% !important; margin: 0 !important; min-height: ${targetH}px !important; }
+                                #resume-paper { box-shadow: none !important; border: none !important; width: 100% !important; margin: 0 !important; min-height: ${targetH}px !important; -webkit-text-size-adjust: 100% !important; text-size-adjust: 100% !important; }
                             </style>
                             <div id="resume-paper"${themeClass}>
                                 ${content}
