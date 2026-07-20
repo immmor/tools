@@ -2740,7 +2740,12 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
 
           const wechatRow = await DB.prepare('SELECT value FROM link WHERE key = ?').bind(`withdraw_qr_${username}_wechat`).first();
           const alipayRow = await DB.prepare('SELECT value FROM link WHERE key = ?').bind(`withdraw_qr_${username}_alipay`).first();
-          return resJson({ success: true, qrCodes: { wechat: wechatRow?.value || '', alipay: alipayRow?.value || '' } });
+          const cryptoRows = await DB.prepare('SELECT key, value FROM link WHERE key LIKE ?').bind(`withdraw_account_${username}_%`).all();
+          const accounts = {};
+          for (const row of cryptoRows.results || []) {
+            accounts[row.key.replace(`withdraw_account_${username}_`, '')] = row.value;
+          }
+          return resJson({ success: true, qrCodes: { wechat: wechatRow?.value || '', alipay: alipayRow?.value || '' }, accounts });
         } catch (err) {
           return resJson({ success: false, message: err.message }, 500);
         }
@@ -2749,22 +2754,31 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
       // ========== 提现：提交提现申请 ==========
       if (path === '/api/withdraw' && request.method === 'POST') {
         try {
-          const { username, amount, method, qrCode } = await request.json();
+          const { username, amount, method, qrCode, account } = await request.json();
           if (!username) return resJson({ success: false, key: 'withdraw_err_login', message: '请先登录' }, 401);
           if (!amount || amount <= 0) return resJson({ success: false, key: 'withdraw_err_amount', message: '请输入有效金额' }, 400);
-          if (!method || !['wechat', 'alipay'].includes(method)) return resJson({ success: false, key: 'withdraw_err_method', message: '请选择收款方式' }, 400);
+          if (!method) return resJson({ success: false, key: 'withdraw_err_method', message: '请选择收款方式' }, 400);
+          if (method !== 'wechat' && method !== 'alipay' && !method.startsWith('crypto_')) return resJson({ success: false, key: 'withdraw_err_method', message: '请选择收款方式' }, 400);
 
-          // 收款码若客户端未上传（复用已存），则从服务端取用，避免重复传输图片
-          let finalQrCode = qrCode;
-          if (!finalQrCode) {
-            const linkRow = await DB.prepare('SELECT value FROM link WHERE key = ?').bind(`withdraw_qr_${username}_${method}`).first();
-            finalQrCode = linkRow?.value || null;
+          let finalQrCode = null;
+          if (method.startsWith('crypto_')) {
+            // 数字货币通过收款账号提现，无需二维码
+            const acc = (account || '').trim();
+            if (!acc) return resJson({ success: false, key: 'withdraw_err_qr', message: '请填写收款账号' }, 400);
+            finalQrCode = acc;
+          } else {
+            // 收款码若客户端未上传（复用已存），则从服务端取用，避免重复传输图片
+            finalQrCode = qrCode;
             if (!finalQrCode) {
-              const histRow = await DB.prepare('SELECT qr_code FROM withdraw WHERE username = ? AND method = ? AND qr_code IS NOT NULL ORDER BY rowid DESC LIMIT 1').bind(username, method).first();
-              finalQrCode = histRow?.qr_code || null;
+              const linkRow = await DB.prepare('SELECT value FROM link WHERE key = ?').bind(`withdraw_qr_${username}_${method}`).first();
+              finalQrCode = linkRow?.value || null;
+              if (!finalQrCode) {
+                const histRow = await DB.prepare('SELECT qr_code FROM withdraw WHERE username = ? AND method = ? AND qr_code IS NOT NULL ORDER BY rowid DESC LIMIT 1').bind(username, method).first();
+                finalQrCode = histRow?.qr_code || null;
+              }
             }
+            if (!finalQrCode) return resJson({ success: false, key: 'withdraw_err_qr', message: '请上传收款码' }, 400);
           }
-          if (!finalQrCode) return resJson({ success: false, key: 'withdraw_err_qr', message: '请上传收款码' }, 400);
 
           const user = await DB.prepare('SELECT balance, game_winnings FROM user WHERE username = ?').bind(username).first();
           if (!user) return resJson({ success: false, key: 'withdraw_err_user', message: '用户不存在' }, 404);
@@ -2783,13 +2797,20 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           await DB.prepare('INSERT INTO withdraw (username, amount, method, qr_code, status, created_at) VALUES (?, ?, ?, ?, ?, ?)')
             .bind(username, withdrawAmount, method, finalQrCode, 'pending', now).run();
 
+          const cryptoLabelMap = { crypto_usdt_trc20: 'USDT(TRC20)', crypto_usdt_erc20: 'USDT(ERC20)', crypto_btc: 'BTC', crypto_eth: 'ETH', crypto_sol: 'SOL', crypto_usdc: 'USDC' };
+          const methodLabel = method === 'wechat' ? '微信' : (method === 'alipay' ? '支付宝' : (cryptoLabelMap[method] || '数字货币'));
           await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
-            .bind('immmor', `💰 新的提现申请！用户 ${username} 申请提现 ¥${withdrawAmount.toFixed(2)}（${method === 'wechat' ? '微信' : '支付宝'}）`, now).run();
+            .bind('immmor', `💰 新的提现申请！用户 ${username} 申请提现 ¥${withdrawAmount.toFixed(2)}（${methodLabel}）`, now).run();
 
-          // 持久化收款码，供下次提现自动填充（避免每次都要重新上传）
+          // 持久化收款码/账号，供下次提现自动填充（避免每次都要重新上传）
           try {
-            await DB.prepare('INSERT OR REPLACE INTO link (key, value) VALUES (?, ?)')
-              .bind(`withdraw_qr_${username}_${method}`, finalQrCode).run();
+            if (method.startsWith('crypto_')) {
+              await DB.prepare('INSERT OR REPLACE INTO link (key, value) VALUES (?, ?)')
+                .bind(`withdraw_account_${username}_crypto`, finalQrCode).run();
+            } else {
+              await DB.prepare('INSERT OR REPLACE INTO link (key, value) VALUES (?, ?)')
+                .bind(`withdraw_qr_${username}_${method}`, finalQrCode).run();
+            }
           } catch {}
 
           return resJson({ success: true, key: 'withdraw_submitted', message: '提现申请已提交，我们会尽快处理' });

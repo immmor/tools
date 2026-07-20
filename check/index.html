@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FAUV-VISION // 野兽派人物检测</title>
+  <style>
+    /* ==========================================
+       野兽派全局变量：高饱和配色与粗犷构图
+       ========================================== */
+    :root {
+      --bg-color: #FFDE00;       /* 亮黄底色 */
+      --primary-red: #FF0055;    /* 野兽红 */
+      --electric-blue: #002244;  /* 深海蓝 */
+      --vivid-cyan: #00E5FF;     /* 霓虹青 */
+      --raw-orange: #FF5500;     /* 强烈橙 */
+      --acid-green: #76FF03;     /* 酸性绿 */
+      --border-thick: 6px solid #000000;
+      --shadow-brutal: 8px 8px 0px #000000;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Impac', 'Arial Black', sans-serif, system-ui;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: #000;
+      padding: 20px;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* ==========================================
+       Header：不对称与强烈色彩冲撞
+       ========================================== */
+    header {
+      width: 100%;
+      max-width: 1000px;
+      background: var(--primary-red);
+      border: var(--border-thick);
+      box-shadow: var(--shadow-brutal);
+      padding: 20px;
+      margin-bottom: 25px;
+      transform: rotate(-1.5deg);
+    }
+
+    h1 {
+      font-size: clamp(2rem, 5vw, 3.5rem);
+      color: var(--acid-green);
+      text-transform: uppercase;
+      text-shadow: 4px 4px 0px #000;
+      letter-spacing: 2px;
+      line-height: 1.1;
+    }
+
+    p.subtitle {
+      font-size: 1.1rem;
+      color: #FFF;
+      background: #000;
+      display: inline-block;
+      padding: 4px 10px;
+      margin-top: 10px;
+      font-weight: bold;
+    }
+
+    /* ==========================================
+       主布局：桌面双栏 / 手机单栏
+       ========================================== */
+    main {
+      width: 100%;
+      max-width: 1000px;
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 25px;
+    }
+
+    /* 视口与检测画布容器 */
+    .viewport-card {
+      background: var(--vivid-cyan);
+      border: var(--border-thick);
+      box-shadow: var(--shadow-brutal);
+      padding: 15px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .canvas-container {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      background: #000;
+      border: 4px solid #000;
+      overflow: hidden;
+    }
+
+    video {
+      display: none; /* 隐藏原生 video，统一在 canvas 上渲染绘制 */
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    /* 控制面板与仪表盘 */
+    .controls-card {
+      background: var(--raw-orange);
+      border: var(--border-thick);
+      box-shadow: var(--shadow-brutal);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      transform: rotate(1deg);
+    }
+
+    .btn-fauve {
+      background: var(--acid-green);
+      color: #000;
+      font-size: 1.3rem;
+      font-weight: 900;
+      padding: 15px;
+      border: 4px solid #000;
+      box-shadow: 5px 5px 0px #000;
+      cursor: pointer;
+      text-transform: uppercase;
+      transition: all 0.1s ease;
+    }
+
+    .btn-fauve:hover {
+      transform: translate(-2px, -2px);
+      box-shadow: 7px 7px 0px #000;
+      background: #FFF;
+    }
+
+    .btn-fauve:active {
+      transform: translate(3px, 3px);
+      box-shadow: 2px 2px 0px #000;
+    }
+
+    .stat-box {
+      background: #FFF;
+      border: 4px solid #000;
+      padding: 15px;
+      box-shadow: 4px 4px 0px #000;
+    }
+
+    .stat-title {
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      background: var(--electric-blue);
+      color: #FFF;
+      padding: 2px 6px;
+      display: inline-block;
+      margin-bottom: 8px;
+    }
+
+    .stat-value {
+      font-size: 2.5rem;
+      font-weight: 900;
+      color: var(--primary-red);
+    }
+
+    /* 野兽派风格标签饰品 */
+    .wild-tag {
+      position: absolute;
+      top: -15px;
+      right: -15px;
+      background: var(--primary-red);
+      color: #FFF;
+      padding: 5px 15px;
+      border: 3px solid #000;
+      font-weight: bold;
+      transform: rotate(12deg);
+      z-index: 10;
+    }
+
+    /* ==========================================
+       响应式适配：手机平板端（屏宽 <= 768px）
+       ========================================== */
+    @media (max-width: 768px) {
+      body {
+        padding: 12px;
+      }
+
+      main {
+        grid-template-columns: 1fr; /* 切换为单栏垂直布局 */
+        gap: 20px;
+      }
+
+      header {
+        transform: rotate(0deg);
+      }
+
+      .controls-card {
+        transform: rotate(0deg);
+      }
+
+      h1 {
+        font-size: 2.2rem;
+      }
+
+      .wild-tag {
+        font-size: 0.8rem;
+        top: -10px;
+        right: -10px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>HUMAN DETECTOR</h1>
+    <p class="subtitle">// 野兽派视觉捕捉引擎</p>
+  </header>
+
+  <main>
+    <!-- 左侧/上方：画幅区 -->
+    <section class="viewport-card">
+      <div class="wild-tag">RAW CANVAS</div>
+      <div class="canvas-container">
+        <video id="video" autoplay playsinline></video>
+        <canvas id="outputCanvas"></canvas>
+      </div>
+    </section>
+
+    <!-- 右侧/下方：控制与状态 -->
+    <section class="controls-card">
+      <button class="btn-fauve" id="toggleBtn">开启野兽之眼</button>
+      
+      <div class="stat-box">
+        <div class="stat-title">检测到的目标</div>
+        <div class="stat-value" id="countVal">0</div>
+      </div>
+
+      <div class="stat-box">
+        <div class="stat-title">色彩饱和度 (色彩碰撞)</div>
+        <p style="font-weight: bold; margin-top: 5px;">MAXIMUM INTENSITY</p>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('outputCanvas');
+    const ctx = canvas.getContext('2d');
+    const toggleBtn = document.getElementById('toggleBtn');
+    const countVal = document.getElementById('countVal');
+
+    let isStreaming = false;
+    let mockDetections = [];
+
+    // 初始化画布尺寸
+    function resizeCanvas() {
+      canvas.width = canvas.clientWidth || 640;
+      canvas.height = canvas.clientHeight || 480;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // 开关摄像头
+    toggleBtn.addEventListener('click', async () => {
+      if (!isStreaming) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }
+          });
+          video.srcObject = stream;
+          await video.play();
+          isStreaming = true;
+          toggleBtn.textContent = '关闭检测器';
+          toggleBtn.style.background = 'var(--primary-red)';
+          toggleBtn.style.color = '#FFF';
+          requestAnimationFrame(renderFrame);
+        } catch (err) {
+          alert('无法获取摄像头权限或未找到摄像头设备。');
+          console.error(err);
+        }
+      } else {
+        const stream = video.srcObject;
+        if (stream) {
+          stream.getTracks().forEach(track => track.stop());
+        }
+        video.srcObject = null;
+        isStreaming = false;
+          toggleBtn.textContent = '开启野兽之眼';
+        toggleBtn.style.background = 'var(--acid-green)';
+        toggleBtn.style.color = '#000';
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        countVal.textContent = '0';
+      }
+    });
+
+    // 渲染帧与野兽派风格线条绘制
+    function renderFrame() {
+      if (!isStreaming) return;
+
+      resizeCanvas();
+      
+      // 1. 绘制视频帧
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      // 2. 模拟/实时人物检测（此处为演示生成的动态野兽框，可替换为 TensorFlow.js / coco-ssd 检测模型）
+      updateMockDetections();
+
+      // 3. 绘制野兽派风格检测框
+      drawFauvistBoxes();
+
+      countVal.textContent = mockDetections.length;
+
+      requestAnimationFrame(renderFrame);
+    }
+
+    // 模拟检测算法生成框（演示效果）
+    function updateMockDetections() {
+      // 模拟 1~2 个检测目标的位置抖动与偏移
+      const time = Date.now() * 0.003;
+      mockDetections = [
+        {
+          x: canvas.width * 0.3 + Math.sin(time) * 20,
+          y: canvas.height * 0.2 + Math.cos(time) * 10,
+          w: canvas.width * 0.35,
+          h: canvas.height * 0.6,
+          label: 'HUMAN // 98%'
+        }
+      ];
+    }
+
+    // 野兽派独特笔触绘制函数
+    function drawFauvistBoxes() {
+      mockDetections.forEach((det) => {
+        // 大胆粗糙的不规则多重描边
+        ctx.save();
+        
+        // 填充高饱和半透明色块
+        ctx.fillStyle = 'rgba(255, 0, 85, 0.25)';
+        ctx.fillRect(det.x, det.y, det.w, det.h);
+
+        // 主画笔：粗黑高对比外框
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 8;
+        ctx.strokeRect(det.x, det.y, det.w, det.h);
+
+        // 错位亮绿线条（表现野兽派色彩分割与表现主义粗犷感）
+        ctx.strokeStyle = '#76FF03';
+        ctx.lineWidth = 5;
+        ctx.strokeRect(det.x - 6, det.y - 6, det.w + 12, det.h + 12);
+
+        // 亮紫标签底块
+        ctx.fillStyle = '#00E5FF';
+        ctx.fillRect(det.x - 6, det.y - 45, 180, 35);
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(det.x - 6, det.y - 45, 180, 35);
+
+        // 标签文字
+        ctx.fillStyle = '#000';
+        ctx.font = '900 16px Impact, Arial Black';
+        ctx.fillText(det.label, det.x + 4, det.y - 22);
+
+        ctx.restore();
+      });
+    }
+  </script>
+</body>
+</html>

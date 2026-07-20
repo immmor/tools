@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D 沉浸式演唱会立体订票系统</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+        body {
+            font-family: 'PingFang SC', 'Helvetica Neue', Arial, sans-serif;
+            background-color: #020208;
+            color: #fff;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        #webgl-container {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        /* 界面UI层 */
+        .ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 24px;
+        }
+
+        .interactive {
+            pointer-events: auto;
+        }
+
+        /* 顶部导航 */
+        header {
+            background: rgba(10, 10, 25, 0.65);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 16px 28px;
+            border-radius: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+        }
+
+        .concert-info h1 {
+            font-size: 22px;
+            font-weight: 800;
+            letter-spacing: 1px;
+            background: linear-gradient(90deg, #ff0055, #7928ca, #00f3ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .concert-info p {
+            font-size: 13px;
+            color: #8a8aa3;
+            margin-top: 4px;
+        }
+
+        /* 票价图例 */
+        .legend {
+            display: flex;
+            gap: 16px;
+            background: rgba(5, 5, 12, 0.8);
+            padding: 8px 16px;
+            border-radius: 20px;
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: #ccc;
+        }
+
+        .color-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            box-shadow: 0 0 8px currentColor;
+        }
+
+        /* 侧边选票面板 */
+        .booking-panel {
+            position: absolute;
+            right: 24px;
+            top: 100px;
+            width: 320px;
+            background: rgba(15, 15, 30, 0.75);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 20px;
+            padding: 24px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.9);
+        }
+
+        .panel-title {
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .seat-details {
+            margin-bottom: 24px;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 14px;
+            font-size: 13px;
+            color: #a0a0b5;
+        }
+
+        .detail-value {
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .price-tag {
+            font-size: 28px;
+            color: #00f3ff;
+            font-weight: 800;
+            text-shadow: 0 0 12px rgba(0, 243, 255, 0.5);
+        }
+
+        .btn-buy {
+            width: 100%;
+            padding: 16px;
+            border: none;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #ff0055, #7928ca);
+            color: white;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 25px rgba(255, 0, 85, 0.4);
+            letter-spacing: 1px;
+        }
+
+        .btn-buy:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(255, 0, 85, 0.7);
+        }
+
+        .btn-buy:disabled {
+            background: rgba(255, 255, 255, 0.1);
+            color: #666;
+            box-shadow: none;
+            cursor: not-allowed;
+        }
+
+        .controls-tip {
+            align-self: center;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 12px;
+            color: #888;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+        }
+    </style>
+    <!-- Three.js & Controls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+    <div id="webgl-container"></div>
+
+    <div class="ui-layer">
+        <header class="interactive">
+            <div class="concert-info">
+                <h1>2026 WORLD TOUR — 赛博超越演唱会</h1>
+                <p>场馆：国家奥林匹克体育馆 | 时间：2026.09.20 19:30</p>
+            </div>
+            <div class="legend">
+                <div class="legend-item">
+                    <span class="color-dot" style="background: #ff0055; color: #ff0055;"></span> 内场 VIP ¥1880
+                </div>
+                <div class="legend-item">
+                    <span class="color-dot" style="background: #00f3ff; color: #00f3ff;"></span> 一层看台 ¥1280
+                </div>
+                <div class="legend-item">
+                    <span class="color-dot" style="background: #7928ca; color: #7928ca;"></span> 二层看台 ¥880
+                </div>
+                <div class="legend-item">
+                    <span class="color-dot" style="background: #00ff88; color: #00ff88;"></span> 三层看台 ¥480
+                </div>
+            </div>
+        </header>
+
+        <div class="booking-panel interactive">
+            <div class="panel-title">
+                <span>看台视角预览</span>
+                <span id="status-badge" style="font-size: 12px; color: #ff0055;">点击看台选择</span>
+            </div>
+            <div class="seat-details">
+                <div class="detail-row">
+                    <span>所选区域：</span>
+                    <span class="detail-value" id="zone-name">请在3D视图中选择</span>
+                </div>
+                <div class="detail-row">
+                    <span>观演体验：</span>
+                    <span class="detail-value" id="zone-view">--</span>
+                </div>
+                <div class="detail-row" style="margin-top: 20px; align-items: baseline;">
+                    <span>票价：</span>
+                    <span class="price-tag" id="zone-price">¥ 0</span>
+                </div>
+            </div>
+            <button class="btn-buy" id="buy-btn" disabled>锁定此区域席位</button>
+        </div>
+
+        <div class="controls-tip">
+            🎥 按住左键拖拽旋转视角 | 滚轮缩放镜头 | 点击三维看台进行视角聚焦与选座
+        </div>
+    </div>
+
+    <script>
+        // --- 1. 基础场景与渲染器配置 ---
+        const container = document.getElementById('webgl-container');
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x020208, 0.005); // 舞台烟雾暗沉感
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 70, 110);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.2;
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxPolarAngle = Math.PI / 2 - 0.02; // 防止穿透地面
+        controls.minDistance = 15;
+        controls.maxDistance = 180;
+
+        // --- 2. 真实灯光系统 (舞台聚光灯 + 体积光效果) ---
+        const ambientLight = new THREE.AmbientLight(0x0a0a20, 1.5);
+        scene.add(ambientLight);
+
+        // 舞台四角与中央的强力追光灯
+        const spotLights = [];
+        const lightColors = [0xff0055, 0x00f3ff, 0x7928ca, 0x00ff88];
+
+        function createStageSpotlight(x, y, z, color) {
+            const spot = new THREE.SpotLight(color, 12);
+            spot.position.set(x, y, z);
+            spot.angle = Math.PI / 6;
+            spot.penumbra = 0.6;
+            spot.decay = 1.5;
+            spot.distance = 150;
+            spot.castShadow = true;
+            scene.add(spot);
+            spotLights.push(spot);
+
+            // 用透明圆柱体模拟立体可见光束 (Volumetric Light Cone)
+            const coneGeo = new THREE.ConeGeometry(12, 60, 32, 1, true);
+            const coneMat = new THREE.MeshBasicMaterial({
+                color: color,
+                transparent: true,
+                opacity: 0.15,
+                side: THREE.DoubleSide,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+            const cone = new THREE.Mesh(coneGeo, coneMat);
+            cone.position.set(x, y - 30, z);
+            scene.add(cone);
+
+            return spot;
+        }
+
+        const spot1 = createStageSpotlight(-25, 35, -25, 0xff0055);
+        const spot2 = createStageSpotlight(25, 35, -25, 0x00f3ff);
+        const spot3 = createStageSpotlight(-15, 35, -35, 0x7928ca);
+        const spot4 = createStageSpotlight(15, 35, -35, 0x00ff88);
+
+        // --- 3. 构造场景模型 ---
+        const interactiveObjects = [];
+
+        // 3.1 暗色磨砂金属地面
+        const groundGeo = new THREE.PlaneGeometry(250, 250);
+        const groundMat = new THREE.MeshStandardMaterial({ color: 0x05050a, roughness: 0.4, metalness: 0.6 });
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // 3.2 高逼真演唱会主舞台
+        const stageGroup = new THREE.Group();
+
+        // 主台面
+        const stageMainGeo = new THREE.BoxGeometry(40, 2.5, 22);
+        const stageMat = new THREE.MeshStandardMaterial({ color: 0x111118, roughness: 0.2, metalness: 0.8 });
+        const stageMain = new THREE.Mesh(stageMainGeo, stageMat);
+        stageMain.position.set(0, 1.25, -25);
+        stageGroup.add(stageMain);
+
+        // 延伸T台
+        const runwayGeo = new THREE.BoxGeometry(8, 2.3, 20);
+        const runway = new THREE.Mesh(runwayGeo, stageMat);
+        runway.position.set(0, 1.15, -4);
+        stageGroup.add(runway);
+
+        // T台前端圆形副舞台
+        const subStageGeo = new THREE.CylinderGeometry(8, 8, 2.4, 32);
+        const subStage = new THREE.Mesh(subStageGeo, stageMat);
+        subStage.position.set(0, 1.2, 6);
+        stageGroup.add(subStage);
+
+        // 巨型弧形主 LED 背景屏
+        const screenGeo = new THREE.CylinderGeometry(28, 28, 16, 32, 1, true, Math.PI * 0.75, Math.PI * 0.5);
+        const screenMat = new THREE.MeshBasicMaterial({ color: 0xff0055, side: THREE.DoubleSide });
+        const screen = new THREE.Mesh(screenGeo, screenMat);
+        screen.position.set(0, 10.5, -30);
+        screen.rotation.y = Math.PI;
+        stageGroup.add(screen);
+
+        // 舞台桁架 (金属框架)
+        const frameGeo = new THREE.BoxGeometry(44, 1.5, 1.5);
+        const frameMat = new THREE.MeshStandardMaterial({ color: 0x333344, metalness: 0.9, roughness: 0.1 });
+        const topFrame = new THREE.Mesh(frameGeo, frameMat);
+        topFrame.position.set(0, 22, -25);
+        stageGroup.add(topFrame);
+
+        scene.add(stageGroup);
+
+        // 3.3 构建真实的椭圆形梯级看台
+        const seatZones = [
+            { id: 'vip', name: '内场 VIP 前排摇滚区', price: 1880, color: 0xff0055, minR: 18, maxR: 28, minY: 0.5, height: 1.5, view: '近距离看偶像/顶级声光音效沉浸' },
+            { id: 'cat1', name: '一层看台 - 核心视角区', price: 1280, color: 0x00f3ff, minR: 32, maxR: 44, minY: 3, height: 6, view: '全场最佳正面视角/视听极佳' },
+            { id: 'cat2', name: '二层看台 - 环状体验区', price: 880, color: 0x7928ca, minR: 48, maxR: 60, minY: 10, height: 10, view: '俯瞰舞台与观众席全景荧光海' },
+            { id: 'cat3', name: '三层看台 - 高空俯瞰区', price: 480, color: 0x00ff88, minR: 64, maxR: 76, minY: 21, height: 14, view: '超高清大屏同步/现场震撼气氛' }
+        ];
+
+        seatZones.forEach((zone) => {
+            const segments = 12; // 将看台划分为多个扇形区块
+            const startAngle = Math.PI * 0.18;
+            const totalAngle = Math.PI * 1.64;
+            const step = totalAngle / segments;
+
+            for (let i = 0; i < segments; i++) {
+                const a1 = startAngle + i * step;
+                const a2 = a1 + step - 0.03; // 留出走道缝隙
+
+                // 生成梯形台阶 Geometry
+                const shape = new THREE.Shape();
+                shape.absarc(0, 0, zone.maxR, a1, a2, false);
+                shape.lineTo(Math.cos(a2) * zone.minR, Math.sin(a2) * zone.minR);
+                shape.absarc(0, 0, zone.minR, a2, a1, true);
+
+                const extrudeSettings = { depth: zone.height, bevelEnabled: true, bevelThickness: 0.3, bevelSize: 0.3, bevelSegments: 2 };
+                const geometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
+
+                const material = new THREE.MeshStandardMaterial({
+                    color: zone.color,
+                    roughness: 0.4,
+                    metalness: 0.2,
+                    transparent: true,
+                    opacity: 0.88
+                });
+
+                const block = new THREE.Mesh(geometry, material);
+                block.rotation.x = -Math.PI / 2;
+                block.position.y = zone.minY;
+                
+                // 矫正极坐标下的看台角度与位置，避开舞台后方
+                block.position.z = -5;
+
+                block.userData = {
+                    zoneId: zone.id,
+                    name: `${zone.name} - ${i + 1}区`,
+                    price: zone.price,
+                    view: zone.view,
+                    originalColor: zone.color,
+                    centerPos: new THREE.Vector3(
+                        Math.cos(a1 + step/2) * ((zone.minR + zone.maxR)/2),
+                        zone.minY + zone.height,
+                        Math.sin(a1 + step/2) * ((zone.minR + zone.maxR)/2) - 5
+                    )
+                };
+
+                scene.add(block);
+                interactiveObjects.push(block);
+            }
+        });
+
+        // 3.4 人群与荧光棒海洋粒子 (Glow Sticks / Crowd simulation)
+        const lightStickCount = 12000;
+        const stickGeo = new THREE.BufferGeometry();
+        const stickPositions = new Float32Array(lightStickCount * 3);
+        const stickColors = new Float32Array(lightStickCount * 3);
+
+        const palette = [new THREE.Color(0xff0055), new THREE.Color(0x00f3ff), new THREE.Color(0x7928ca), new THREE.Color(0x00ff88)];
+
+        for (let i = 0; i < lightStickCount; i++) {
+            // 随机分布在看台上
+            const angle = Math.PI * 0.15 + Math.random() * Math.PI * 1.7;
+            const radius = 18 + Math.random() * 58;
+            const x = Math.cos(angle) * radius;
+            const z = Math.sin(angle) * radius - 5;
+            const y = (radius - 18) * 0.35 + Math.random() * 1.5 + 0.5;
+
+            stickPositions[i * 3] = x;
+            stickPositions[i * 3 + 1] = y;
+            stickPositions[i * 3 + 2] = z;
+
+            const c = palette[Math.floor(Math.random() * palette.length)];
+            stickColors[i * 3] = c.r;
+            stickColors[i * 3 + 1] = c.g;
+            stickColors[i * 3 + 2] = c.b;
+        }
+
+        stickGeo.setAttribute('position', new THREE.BufferAttribute(stickPositions, 3));
+        stickGeo.setAttribute('color', new THREE.BufferAttribute(stickColors, 3));
+
+        const stickMat = new THREE.PointsMaterial({
+            size: 0.8,
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.9,
+            blending: THREE.AdditiveBlending
+        });
+
+        const crowdLightSticks = new THREE.Points(stickGeo, stickMat);
+        scene.add(crowdLightSticks);
+
+        // --- 4. 拾取交互 (Raycasting) ---
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        let hoveredObject = null;
+        let selectedObject = null;
+
+        window.addEventListener('pointermove', (event) => {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(interactiveObjects);
+
+            if (intersects.length > 0) {
+                const obj = intersects[0].object;
+                if (hoveredObject !== obj && obj !== selectedObject) {
+                    if (hoveredObject && hoveredObject !== selectedObject) {
+                        hoveredObject.material.color.setHex(hoveredObject.userData.originalColor);
+                        hoveredObject.material.opacity = 0.88;
+                    }
+                    hoveredObject = obj;
+                    hoveredObject.material.color.setHex(0xffffff);
+                    hoveredObject.material.opacity = 1.0;
+                    document.body.style.cursor = 'pointer';
+                }
+            } else {
+                if (hoveredObject && hoveredObject !== selectedObject) {
+                    hoveredObject.material.color.setHex(hoveredObject.userData.originalColor);
+                    hoveredObject.material.opacity = 0.88;
+                    hoveredObject = null;
+                }
+                document.body.style.cursor = 'default';
+            }
+        });
+
+        window.addEventListener('click', () => {
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(interactiveObjects);
+
+            if (intersects.length > 0) {
+                if (selectedObject) {
+                    selectedObject.material.color.setHex(selectedObject.userData.originalColor);
+                }
+
+                selectedObject = intersects[0].object;
+                selectedObject.material.color.setHex(0xffea00); // 选中显眼黄色
+
+                updateUI(selectedObject.userData);
+                zoomToSeatView(selectedObject.userData.centerPos);
+            }
+        });
+
+        function updateUI(data) {
+            document.getElementById('zone-name').innerText = data.name;
+            document.getElementById('zone-view').innerText = data.view;
+            document.getElementById('zone-price').innerText = `¥ ${data.price}`;
+            
+            const badge = document.getElementById('status-badge');
+            badge.innerText = '已选中区域';
+            badge.style.color = '#00f3ff';
+
+            const buyBtn = document.getElementById('buy-btn');
+            buyBtn.disabled = false;
+            buyBtn.innerText = `锁定并购买 ¥${data.price}`;
+        }
+
+        // 镜头平滑移动到看台模拟视觉点
+        function zoomToSeatView(seatPos) {
+            const startCam = camera.position.clone();
+            const startTarget = controls.target.clone();
+
+            // 镜头目标：面向舞台中央 (0, 5, -20)
+            const stageCenter = new THREE.Vector3(0, 6, -20);
+            
+            // 相机置于看台位置微高处
+            const endCam = seatPos.clone().add(new THREE.Vector3(0, 3, 0));
+
+            let p = 0;
+            function animateZoom() {
+                p += 0.035;
+                if (p <= 1) {
+                    camera.position.lerpVectors(startCam, endCam, p);
+                    controls.target.lerpVectors(startTarget, stageCenter, p);
+                    requestAnimationFrame(animateZoom);
+                }
+            }
+            animateZoom();
+        }
+
+        document.getElementById('buy-btn').addEventListener('click', () => {
+            if(selectedObject) {
+                alert(`🎟️ 订票成功！\n\n已成功锁定座位：${selectedObject.userData.name}\n支付总额：¥${selectedObject.userData.price}\n\n出票二维码已发送至您的手机。`);
+            }
+        });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // --- 5. 动态渲染循环 (LED闪烁、舞台聚光灯旋转、荧光棒晃动) ---
+        let time = 0;
+        function animate() {
+            requestAnimationFrame(animate);
+            time += 0.02;
+
+            // 舞台聚光灯交替扫射
+            spot1.target.position.set(Math.sin(time) * 20, 0, Math.cos(time) * 10 - 10);
+            spot2.target.position.set(Math.cos(time * 1.2) * 20, 0, Math.sin(time * 1.2) * 10 - 10);
+            spot1.target.updateMatrixWorld();
+            spot2.target.updateMatrixWorld();
+
+            // 主屏幕颜色变换与闪烁
+            screenMat.color.setHSL((Math.sin(time * 0.5) + 1) / 2, 0.9, 0.5);
+
+            // 荧光棒海微弱晃动与闪烁
+            const positions = crowdLightSticks.geometry.attributes.position.array;
+            for(let i = 1; i < lightStickCount * 3; i += 3) {
+                positions[i] += Math.sin(time * 3 + i) * 0.015;
+            }
+            crowdLightSticks.geometry.attributes.position.needsUpdate = true;
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        animate();
+    </script>
+</body>
+</html>

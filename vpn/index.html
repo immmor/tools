@@ -1280,7 +1280,7 @@
                 </div>
                 <div>
                     <label class="text-xs text-zinc-400 block mb-2" data-i18n="withdraw_method">收款方式</label>
-                    <div class="flex gap-2">
+                    <div class="grid grid-cols-2 gap-2">
                         <button class="withdraw-method-btn flex-1 py-3 rounded-lg border border-zinc-700 text-sm transition-all text-zinc-400 hover:border-[var(--neon-green)] hover:text-white flex flex-col items-center gap-1" data-method="wechat">
                             <i class="fab fa-weixin text-xl"></i>
                             <span data-i18n="withdraw_wechat">微信</span>
@@ -1289,9 +1289,33 @@
                             <i class="fab fa-alipay text-xl"></i>
                             <span data-i18n="withdraw_alipay">支付宝</span>
                         </button>
+                        <button class="withdraw-method-btn flex-1 py-3 rounded-lg border border-zinc-700 text-sm transition-all text-zinc-400 hover:border-[var(--neon-green)] hover:text-white flex flex-col items-center gap-1" data-method="crypto_usdt_trc20">
+                            <span class="text-base font-bold">USDT</span>
+                            <span class="text-xs text-zinc-500">TRC20</span>
+                        </button>
+                        <button class="withdraw-method-btn flex-1 py-3 rounded-lg border border-zinc-700 text-sm transition-all text-zinc-400 hover:border-[var(--neon-green)] hover:text-white flex flex-col items-center gap-1" data-method="crypto_usdt_erc20">
+                            <span class="text-base font-bold">USDT</span>
+                            <span class="text-xs text-zinc-500">ERC20</span>
+                        </button>
+                        <button class="withdraw-method-btn flex-1 py-3 rounded-lg border border-zinc-700 text-sm transition-all text-zinc-400 hover:border-[var(--neon-green)] hover:text-white flex flex-col items-center gap-1" data-method="crypto_btc">
+                            <span class="text-base font-bold">BTC</span>
+                            <span class="text-xs text-zinc-500">比特币</span>
+                        </button>
+                        <button class="withdraw-method-btn flex-1 py-3 rounded-lg border border-zinc-700 text-sm transition-all text-zinc-400 hover:border-[var(--neon-green)] hover:text-white flex flex-col items-center gap-1" data-method="crypto_eth">
+                            <span class="text-base font-bold">ETH</span>
+                            <span class="text-xs text-zinc-500">以太坊</span>
+                        </button>
+                        <button class="withdraw-method-btn flex-1 py-3 rounded-lg border border-zinc-700 text-sm transition-all text-zinc-400 hover:border-[var(--neon-green)] hover:text-white flex flex-col items-center gap-1" data-method="crypto_sol">
+                            <span class="text-base font-bold">SOL</span>
+                            <span class="text-xs text-zinc-500">索拉纳</span>
+                        </button>
+                        <button class="withdraw-method-btn flex-1 py-3 rounded-lg border border-zinc-700 text-sm transition-all text-zinc-400 hover:border-[var(--neon-green)] hover:text-white flex flex-col items-center gap-1" data-method="crypto_usdc">
+                            <span class="text-base font-bold">USDC</span>
+                            <span class="text-xs text-zinc-500">美元稳定币</span>
+                        </button>
                     </div>
                 </div>
-                <div>
+                <div id="withdraw-qr-wrap">
                     <label class="text-xs text-zinc-400 block mb-2" data-i18n="withdraw_qr">上传收款码</label>
                     <div id="withdraw-qr-upload" class="border-2 border-dashed border-zinc-700 rounded-lg p-6 text-center cursor-pointer hover:border-[var(--neon-green)] transition-colors">
                         <div id="withdraw-qr-preview" class="hidden mb-2">
@@ -1303,6 +1327,13 @@
                         </div>
                         <input type="file" id="withdraw-qr-input" accept="image/*" class="hidden">
                     </div>
+                </div>
+                <div id="withdraw-crypto-wrap" class="hidden">
+                    <label class="text-xs text-zinc-400 block mb-2">收款账号</label>
+                    <input id="withdraw-account" type="text" autocomplete="off"
+                           class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:border-[var(--neon-green)]"
+                           placeholder="请输入 USDT / 数字货币收款地址">
+                    <p class="text-xs text-zinc-500 mt-2">请仔细核对收款地址，链上转账不可逆，填错将无法找回。</p>
                 </div>
                 <button id="withdraw-submit" class="w-full py-3 bg-[var(--neon-green)] text-black font-bold rounded-lg text-sm hover:opacity-90 transition-opacity" data-i18n="withdraw_submit">提交申请</button>
                 <div id="withdraw-msg" class="text-center text-xs hidden"></div>
@@ -2600,6 +2631,9 @@
             withdrawQrPreview: $('withdraw-qr-preview'),
             withdrawQrImg: $('withdraw-qr-img'),
             withdrawQrPlaceholder: $('withdraw-qr-placeholder'),
+            withdrawQrWrap: $('withdraw-qr-wrap'),
+            withdrawCryptoWrap: $('withdraw-crypto-wrap'),
+            withdrawAccount: $('withdraw-account'),
             withdrawHistory: $('withdraw-history'),
             forgotPwdBtn: $('forgot-pwd'),
             forgotPwdContainer: $('forgot-pwd-container'),
@@ -3306,6 +3340,16 @@
             let historyQrCodes = { wechat: '', alipay: '' };
             // 仅当用户本次会话重新选了图片才为 true；否则收款码已在服务端，提交时不传图片
             let qrUploadedThisSession = false;
+            let withdrawAccount = ''; // 数字货币收款账号
+            let savedCryptoAccounts = {}; // 各数字货币方式已保存的收款账号
+            const cryptoMap = {
+                crypto_usdt_trc20: { label: 'USDT (TRC20)', placeholder: '请输入 USDT TRC20 收款地址' },
+                crypto_usdt_erc20: { label: 'USDT (ERC20)', placeholder: '请输入 USDT ERC20 收款地址' },
+                crypto_btc: { label: 'BTC 比特币', placeholder: '请输入 BTC 收款地址' },
+                crypto_eth: { label: 'ETH 以太坊', placeholder: '请输入 ETH 收款地址' },
+                crypto_sol: { label: 'SOL 索拉纳', placeholder: '请输入 SOL 收款地址' },
+                crypto_usdc: { label: 'USDC', placeholder: '请输入 USDC 收款地址' },
+            };
 
             // 优先复用已保存/历史的收款码，避免每次都要重新上传
             const autoFillWithdrawQr = () => {
@@ -3357,7 +3401,8 @@
                 const amount = parseFloat(els.withdrawAmount.value);
                 const gameWinnings = parseFloat(userInfo.game_winnings || 0);
                 const hasMethod = withdrawMethod !== '';
-                const hasQr = withdrawQrBase64 !== '';
+                const isCrypto = (withdrawMethod || '').startsWith('crypto_');
+                const hasQr = isCrypto ? (withdrawAccount.trim() !== '') : (withdrawQrBase64 !== '');
                 const minOK = amount >= 50;
                 const gameOK = amount <= gameWinnings;
 
@@ -3389,7 +3434,7 @@
                 setCheck('withdraw-check-min', minOK, minText);
                 setCheck('withdraw-check-game', gameOK, gameText);
                 setCheck('withdraw-check-method', hasMethod, t.withdraw_method_ok || '已选择收款方式');
-                setCheck('withdraw-check-qr', hasQr, t.withdraw_qr_ok || '已上传收款码');
+                setCheck('withdraw-check-qr', hasQr, isCrypto ? (t.withdraw_account_ok || '已填写收款账号') : (t.withdraw_qr_ok || '已上传收款码'));
 
                 els.withdrawSubmit.disabled = !(amount >= 50 && gameOK && hasMethod && hasQr);
             };
@@ -3403,6 +3448,10 @@
                 withdrawMethod = '';
                 withdrawQrBase64 = '';
                 qrUploadedThisSession = false;
+                withdrawAccount = '';
+                if (els.withdrawAccount) els.withdrawAccount.value = '';
+                els.withdrawQrWrap.classList.remove('hidden');
+                els.withdrawCryptoWrap.classList.add('hidden');
                 document.querySelectorAll('.withdraw-method-btn').forEach(btn => {
                     btn.classList.remove('border-[var(--neon-green)]', 'text-white', 'bg-[var(--neon-green)]/10');
                     btn.classList.add('border-zinc-700', 'text-zinc-400');
@@ -3427,6 +3476,7 @@
                     const data = await res.json();
                     if (data.success) {
                         savedQrCodes = data.qrCodes || { wechat: '', alipay: '' };
+                        savedCryptoAccounts = data.accounts || {};
                         autoFillWithdrawQr();
                     }
                 } catch {}
@@ -3469,17 +3519,25 @@
                     const statusMap = { pending: t.withdraw_status_pending || '待处理', approved: t.withdraw_status_approved || '已通过', rejected: t.withdraw_status_rejected || '已拒绝' };
                     const statusColor = { pending: 'text-[var(--neon-orange)]', approved: 'text-[var(--neon-green)]', rejected: 'text-[var(--neon-red)]' };
                     const methodMap = { wechat: t.withdraw_wechat || '微信', alipay: t.withdraw_alipay || '支付宝' };
+                    for (const k in cryptoMap) methodMap[k] = cryptoMap[k].label;
                     els.withdrawHistory.innerHTML = `
                         <div class="text-xs text-zinc-500 pt-2 border-t border-zinc-800">${t.withdraw_history || '提现记录'}</div>
-                        ${data.history.map(r => `
+                        ${data.history.map(r => {
+                            const isCrypto = (r.method || '').startsWith('crypto_');
+                            const thumb = isCrypto
+                                ? `<div class="w-16 h-16 flex items-center justify-center rounded bg-zinc-800 shrink-0 text-[var(--neon-orange)] text-2xl">₿</div>`
+                                : (r.qr_code ? `<img src="${r.qr_code}" class="w-16 h-16 object-contain rounded shrink-0" alt="收款码">` : '');
+                            const accountLine = (isCrypto && r.qr_code) ? `<div class="text-zinc-500 break-all">${r.qr_code}</div>` : '';
+                            return `
                             <div class="flex gap-3 p-3 bg-zinc-800/50 rounded-lg">
-                                ${r.qr_code ? `<img src="${r.qr_code}" class="w-16 h-16 object-contain rounded shrink-0" alt="收款码">` : ''}
+                                ${thumb}
                                 <div class="flex-1 text-xs space-y-1">
                                     <div class="flex justify-between"><span class="text-zinc-400">¥${parseFloat(r.amount).toFixed(2)}</span><span class="${statusColor[r.status] || 'text-zinc-400'}">${statusMap[r.status] || r.status}</span></div>
                                     <div class="text-zinc-500">${methodMap[r.method] || r.method} · ${r.created_at || ''}</div>
+                                    ${accountLine}
                                 </div>
-                            </div>
-                        `).join('')}
+                            </div>`;
+                        }).join('')}
                     `;
                 } catch {}
             };
@@ -3500,7 +3558,12 @@
                     showWithdrawMsg(t.withdraw_err_method || '请选择收款方式', 'error');
                     return;
                 }
-                if (!withdrawQrBase64) {
+                if (withdrawMethod.startsWith('crypto_')) {
+                    if (!withdrawAccount) {
+                        showWithdrawMsg('请填写收款账号', 'error');
+                        return;
+                    }
+                } else if (!withdrawQrBase64) {
                     showWithdrawMsg(t.withdraw_err_qr || '请上传收款码', 'error');
                     return;
                 }
@@ -3513,17 +3576,20 @@
 
                 els.withdrawSubmit.disabled = true;
                 try {
-                    // 服务端会在提现成功时自动持久化收款码，无需前端额外保存
-                    savedQrCodes[withdrawMethod] = withdrawQrBase64;
-
-                    // 收款码若已在服务端（复用历史/已保存的），本次不再上传图片，由服务端取用
                     const body = {
                         username: userInfo.username,
                         amount,
                         method: withdrawMethod,
                     };
-                    if (qrUploadedThisSession) {
-                        body.qrCode = withdrawQrBase64;
+                    if (withdrawMethod.startsWith('crypto_')) {
+                        body.account = withdrawAccount;
+                    } else {
+                        // 服务端会在提现成功时自动持久化收款码，无需前端额外保存
+                        savedQrCodes[withdrawMethod] = withdrawQrBase64;
+                        // 收款码若已在服务端（复用历史/已保存的），本次不再上传图片，由服务端取用
+                        if (qrUploadedThisSession) {
+                            body.qrCode = withdrawQrBase64;
+                        }
                     }
 
                     const res = await fetch(`${API}/api/withdraw`, {
@@ -4267,7 +4333,17 @@
                         btn.classList.add('border-[var(--neon-green)]', 'text-white', 'bg-[var(--neon-green)]/10');
                         btn.classList.remove('border-zinc-700', 'text-zinc-400');
                         withdrawMethod = btn.dataset.method;
-                        showQrCode(savedQrCodes[withdrawMethod] || '');
+                        const isCrypto = (withdrawMethod || '').startsWith('crypto_');
+                        els.withdrawQrWrap.classList.toggle('hidden', isCrypto);
+                        els.withdrawCryptoWrap.classList.toggle('hidden', !isCrypto);
+                        if (isCrypto) {
+                            const info = cryptoMap[withdrawMethod] || {};
+                            els.withdrawAccount.placeholder = info.placeholder || '请输入收款地址（请确认与所选网络一致）';
+                            els.withdrawAccount.value = savedCryptoAccounts[withdrawMethod] || '';
+                            withdrawAccount = els.withdrawAccount.value.trim();
+                        } else {
+                            showQrCode(savedQrCodes[withdrawMethod] || '');
+                        }
                         updateWithdrawChecks();
                     });
                 });
@@ -4287,6 +4363,12 @@
                                 updateWithdrawChecks();
                             }
                         }
+                    });
+                }
+                if (els.withdrawAccount) {
+                    els.withdrawAccount.addEventListener('input', () => {
+                        withdrawAccount = els.withdrawAccount.value.trim();
+                        updateWithdrawChecks();
                     });
                 }
                 const togglePasswordVisibility = (btnId, inputId) => {
