@@ -3,7 +3,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FAUV-VISION // 野兽派人物检测</title>
+  <title>FAUV-VISION // 野兽派 AI 人物检测</title>
+
+  <!-- 1. 引入 TensorFlow.js 核心库与 COCO-SSD 人物/物体检测模型 -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+
   <style>
     /* ==========================================
        野兽派全局变量：高饱和配色与粗犷构图
@@ -36,9 +41,6 @@
       align-items: center;
     }
 
-    /* ==========================================
-       Header：不对称与强烈色彩冲撞
-       ========================================== */
     header {
       width: 100%;
       max-width: 1000px;
@@ -51,7 +53,7 @@
     }
 
     h1 {
-      font-size: clamp(2rem, 5vw, 3.5rem);
+      font-size: clamp(1.8rem, 4vw, 3.2rem);
       color: var(--acid-green);
       text-transform: uppercase;
       text-shadow: 4px 4px 0px #000;
@@ -60,7 +62,7 @@
     }
 
     p.subtitle {
-      font-size: 1.1rem;
+      font-size: 1rem;
       color: #FFF;
       background: #000;
       display: inline-block;
@@ -69,9 +71,6 @@
       font-weight: bold;
     }
 
-    /* ==========================================
-       主布局：桌面双栏 / 手机单栏
-       ========================================== */
     main {
       width: 100%;
       max-width: 1000px;
@@ -80,7 +79,6 @@
       gap: 25px;
     }
 
-    /* 视口与检测画布容器 */
     .viewport-card {
       background: var(--vivid-cyan);
       border: var(--border-thick);
@@ -102,7 +100,7 @@
     }
 
     video {
-      display: none; /* 隐藏原生 video */
+      display: none;
     }
 
     canvas {
@@ -111,7 +109,6 @@
       display: block;
     }
 
-    /* 控制面板 */
     .controls-card {
       background: var(--raw-orange);
       border: var(--border-thick);
@@ -136,13 +133,19 @@
       transition: all 0.1s ease;
     }
 
-    .btn-fauve:hover {
+    .btn-fauve:disabled {
+      background: #CCC;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .btn-fauve:hover:not(:disabled) {
       transform: translate(-2px, -2px);
       box-shadow: 6px 6px 0px #000;
       background: #FFF;
     }
 
-    .btn-fauve:active {
+    .btn-fauve:active:not(:disabled) {
       transform: translate(2px, 2px);
       box-shadow: 2px 2px 0px #000;
     }
@@ -188,33 +191,12 @@
     }
 
     @media (max-width: 768px) {
-      body {
-        padding: 12px;
-      }
-
-      main {
-        grid-template-columns: 1fr;
-        gap: 20px;
-      }
-
-      header, .controls-card {
-        transform: rotate(0deg);
-      }
-
-      h1 {
-        font-size: 2.2rem;
-      }
-
-      .canvas-container {
-        /* 在移动端将画幅设为 3:4，更适合手机竖屏成像视角 */
-        aspect-ratio: 3 / 4;
-      }
-
-      .wild-tag {
-        font-size: 0.8rem;
-        top: -10px;
-        right: -10px;
-      }
+      body { padding: 12px; }
+      main { grid-template-columns: 1fr; gap: 20px; }
+      header, .controls-card { transform: rotate(0deg); }
+      h1 { font-size: 2rem; }
+      .canvas-container { aspect-ratio: 3 / 4; }
+      .wild-tag { font-size: 0.8rem; top: -10px; right: -10px; }
     }
   </style>
 </head>
@@ -222,12 +204,12 @@
 
   <header>
     <h1>HUMAN DETECTOR</h1>
-    <p class="subtitle">// 野兽派视觉捕捉引擎</p>
+    <p class="subtitle">// TF.js 真实 AI 引擎加载中...</p>
   </header>
 
   <main>
     <section class="viewport-card">
-      <div class="wild-tag">RAW CANVAS</div>
+      <div class="wild-tag">AI REALTIME</div>
       <div class="canvas-container" id="canvasContainer">
         <video id="video" autoplay playsinline></video>
         <canvas id="outputCanvas"></canvas>
@@ -235,17 +217,17 @@
     </section>
 
     <section class="controls-card">
-      <button class="btn-fauve" id="toggleBtn">开启野兽之眼</button>
+      <button class="btn-fauve" id="toggleBtn" disabled>正在载入 AI 模型...</button>
       <button class="btn-fauve btn-flip" id="flipBtn">反转镜头 ↺</button>
       
       <div class="stat-box">
-        <div class="stat-title">检测到的目标</div>
+        <div class="stat-title">检测到的人数</div>
         <div class="stat-value" id="countVal">0</div>
       </div>
 
       <div class="stat-box">
-        <div class="stat-title">镜头状态</div>
-        <p id="cameraModeText" style="font-weight: bold; margin-top: 5px; font-size: 0.9rem;">前置镜头 (FACING USER)</p>
+        <div class="stat-title">模型状态</div>
+        <p id="statusText" style="font-weight: bold; margin-top: 5px; font-size: 0.85rem;">准备就绪</p>
       </div>
     </section>
   </main>
@@ -259,16 +241,31 @@
     const toggleBtn = document.getElementById('toggleBtn');
     const flipBtn = document.getElementById('flipBtn');
     const countVal = document.getElementById('countVal');
-    const cameraModeText = document.getElementById('cameraModeText');
+    const statusText = document.getElementById('statusText');
 
+    let model = null;             // 真实模型对象
     let isStreaming = false;
-    let currentFacingMode = 'user'; // 'user' (前置) 或 'environment' (后置)
-    let mockDetections = [];
+    let currentFacingMode = 'user';
+    let realDetections = [];
+    let isDetecting = false;
 
-    // 存储渲染时的裁切与缩放参数，保证像素坐标对齐
-    let renderTransform = { drawX: 0, drawY: 0, drawW: 0, drawH: 0, scale: 1 };
+    // 1. 初始化并加载 TF.js COCO-SSD AI 模型
+    async function initModel() {
+      try {
+        statusText.textContent = '正在下载 AI 权重模型...';
+        // 载入轻量级目标检测模型
+        model = await cocoSsd.load({ base: 'lite_mobilenet_v2' });
+        statusText.textContent = '模型就绪，可以开启检测';
+        toggleBtn.disabled = false;
+        toggleBtn.textContent = '开启野兽之眼';
+      } catch (err) {
+        statusText.textContent = '模型加载失败，请检查网络';
+        console.error('TF.js 模型加载失败:', err);
+      }
+    }
 
-    // 适配画布尺寸（像素级对齐容器）
+    initModel();
+
     function syncCanvasSize() {
       const rect = container.getBoundingClientRect();
       if (canvas.width !== rect.width || canvas.height !== rect.height) {
@@ -276,25 +273,22 @@
         canvas.height = rect.height;
       }
     }
-
     window.addEventListener('resize', syncCanvasSize);
 
-    // 启动/重启摄像头流
+    // 2. 调起摄像头
     async function startCamera() {
       if (video.srcObject) {
         video.srcObject.getTracks().forEach(track => track.stop());
       }
 
-      const constraints = {
-        video: {
-          facingMode: { exact: currentFacingMode },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
-        }
-      };
-
       try {
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: currentFacingMode },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          }
+        });
         video.srcObject = stream;
         await video.play();
         isStreaming = true;
@@ -303,24 +297,14 @@
         toggleBtn.style.background = 'var(--primary-red)';
         toggleBtn.style.color = '#FFF';
         
-        cameraModeText.textContent = currentFacingMode === 'user' ? '前置镜头 (FACING USER)' : '后置镜头 (ENVIRONMENT)';
-        requestAnimationFrame(renderFrame);
+        statusText.textContent = currentFacingMode === 'user' ? '前置镜头 (运行中)' : '后置镜头 (运行中)';
+        requestAnimationFrame(renderLoop);
       } catch (err) {
-        // 如果指定 exact 模式失败，尝试降级请求
-        try {
-          const fallbackStream = await navigator.mediaDevices.getUserMedia({ video: true });
-          video.srcObject = fallbackStream;
-          await video.play();
-          isStreaming = true;
-          requestAnimationFrame(renderFrame);
-        } catch (e) {
-          alert('无法获取指定的摄像头。设备可能不支持或权限被拒绝。');
-          console.error(err);
-        }
+        alert('无法调起摄像头，请检查权限。');
+        console.error(err);
       }
     }
 
-    // 关闭摄像头
     function stopCamera() {
       if (video.srcObject) {
         video.srcObject.getTracks().forEach(track => track.stop());
@@ -334,27 +318,58 @@
       countVal.textContent = '0';
     }
 
-    // 开启 / 关闭按钮
     toggleBtn.addEventListener('click', () => {
-      if (!isStreaming) {
-        startCamera();
-      } else {
-        stopCamera();
-      }
+      if (!isStreaming) startCamera();
+      else stopCamera();
     });
 
-    // 切换前后镜头
     flipBtn.addEventListener('click', () => {
       currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
-      if (isStreaming) {
-        startCamera(); // 重新加载新视角的流
-      } else {
-        cameraModeText.textContent = currentFacingMode === 'user' ? '预设：前置镜头' : '预设：后置镜头';
-      }
+      if (isStreaming) startCamera();
     });
 
-    // 主渲染循环：核心解决【比例不扭曲】
-    function renderFrame() {
+    // 3. 核心：调用真正的 AI 模型进行人物检测与坐标映射
+    async function detectFrame(drawX, drawY, drawW, drawH, videoW, videoH) {
+      if (!model || !isStreaming || isDetecting) return;
+      
+      isDetecting = true;
+      try {
+        // 调用 TF.js 模型识别图像中的目标
+        const predictions = await model.detect(video);
+        
+        // 只筛选出 'person' (人) 目标
+        const persons = predictions.filter(p => p.class === 'person' && p.score > 0.4);
+        
+        const scaleX = drawW / videoW;
+        const scaleY = drawH / videoH;
+
+        realDetections = persons.map(p => {
+          let [bx, by, bw, bh] = p.bbox;
+
+          // 若前置摄像头应用了水平镜像，计算坐标反转
+          if (currentFacingMode === 'user') {
+            bx = videoW - bx - bw;
+          }
+
+          return {
+            x: drawX + bx * scaleX,
+            y: drawY + by * scaleY,
+            w: bw * scaleX,
+            h: bh * scaleY,
+            score: Math.round(p.score * 100)
+          };
+        });
+
+        countVal.textContent = realDetections.length;
+      } catch (e) {
+        console.error("AI 检测过程出错:", e);
+      } finally {
+        isDetecting = false;
+      }
+    }
+
+    // 4. 渲染循环
+    function renderLoop() {
       if (!isStreaming) return;
 
       syncCanvasSize();
@@ -364,96 +379,76 @@
       const videoW = video.videoWidth || 640;
       const videoH = video.videoHeight || 480;
 
-      // === 算法：不扭曲的等比例 Cover 填充计算 ===
+      // 等比例 Cover 适配计算（防止画面拉伸扭曲）
       const canvasAspect = canvasW / canvasH;
       const videoAspect = videoW / videoH;
 
       let drawW, drawH, drawX, drawY;
-
       if (videoAspect > canvasAspect) {
-        // 视频较宽，按高度对齐，裁剪两边
         drawH = canvasH;
         drawW = canvasH * videoAspect;
         drawX = (canvasW - drawW) / 2;
         drawY = 0;
       } else {
-        // 视频较窄/较长，按宽度对齐，裁剪上下
         drawW = canvasW;
         drawH = canvasW / videoAspect;
         drawX = 0;
         drawY = (canvasH - drawH) / 2;
       }
 
-      // 保存变换矩阵（前置摄像头自动镜像翻转，更符合人类直觉）
+      // 渲染视频画面
       ctx.save();
       ctx.clearRect(0, 0, canvasW, canvasH);
 
       if (currentFacingMode === 'user') {
         ctx.translate(canvasW, 0);
         ctx.scale(-1, 1);
-        // 水平镜像后，绘图坐标需要反向计算
         ctx.drawImage(video, canvasW - (drawX + drawW), drawY, drawW, drawH);
       } else {
         ctx.drawImage(video, drawX, drawY, drawW, drawH);
       }
       ctx.restore();
 
-      // 记录渲染比例，用于把检测框精准叠加在视频对应位置
-      renderTransform = { drawX, drawY, drawW, drawH, scale: drawW / videoW };
+      // 触发 AI 检测任务
+      detectFrame(drawX, drawY, drawW, drawH, videoW, videoH);
 
-      // 更新并绘制人像检测框
-      updateMockDetections(drawX, drawY, drawW, drawH);
+      // 绘制野兽派检测框
       drawFauvistBoxes();
 
-      countVal.textContent = mockDetections.length;
-
-      requestAnimationFrame(renderFrame);
+      requestAnimationFrame(renderLoop);
     }
 
-    // 模拟基于渲染区域的相对位置框
-    function updateMockDetections(x, y, w, h) {
-      const time = Date.now() * 0.003;
-      // 保证框限制在视频真实绘制区域内，不发生形变
-      mockDetections = [
-        {
-          x: x + w * 0.3 + Math.sin(time) * 15,
-          y: y + h * 0.2 + Math.cos(time) * 10,
-          w: w * 0.4,
-          h: h * 0.55,
-          label: 'HUMAN // 99%'
-        }
-      ];
-    }
-
-    // 野兽派笔触绘制（检测框）
+    // 5. 绘制野兽派框选风格
     function drawFauvistBoxes() {
-      mockDetections.forEach((det) => {
+      realDetections.forEach((det) => {
         ctx.save();
         
-        // 1. 半透明撞色填充
-        ctx.fillStyle = 'rgba(255, 0, 85, 0.25)';
+        // 填充撞色半透明底
+        ctx.fillStyle = 'rgba(255, 0, 85, 0.3)';
         ctx.fillRect(det.x, det.y, det.w, det.h);
 
-        // 2. 粗黑主框
+        // 粗黑边框
         ctx.strokeStyle = '#000000';
         ctx.lineWidth = 6;
         ctx.strokeRect(det.x, det.y, det.w, det.h);
 
-        // 3. 霓虹绿偏移边框（野兽派重叠线条）
+        // 高亮绿双层边框
         ctx.strokeStyle = '#76FF03';
         ctx.lineWidth = 4;
-        ctx.strokeRect(det.x - 5, det.y - 5, det.w + 10, det.h + 10);
+        ctx.strokeRect(det.x - 4, det.y - 4, det.w + 8, det.h + 8);
 
-        // 4. 标签底快与文字
+        // 标签背景块
+        const labelText = `HUMAN // ${det.score}%`;
         ctx.fillStyle = '#00E5FF';
-        ctx.fillRect(det.x - 5, det.y - 40, 160, 32);
+        ctx.fillRect(det.x - 4, det.y - 38, 165, 32);
         ctx.strokeStyle = '#000';
         ctx.lineWidth = 3;
-        ctx.strokeRect(det.x - 5, det.y - 40, 160, 32);
+        ctx.strokeRect(det.x - 4, det.y - 38, 165, 32);
 
+        // 标签文字
         ctx.fillStyle = '#000';
         ctx.font = '900 15px Impact, Arial Black';
-        ctx.fillText(det.label, det.x + 5, det.y - 18);
+        ctx.fillText(labelText, det.x + 4, det.y - 16);
 
         ctx.restore();
       });
