@@ -1147,6 +1147,9 @@
     const webcamVideo = document.getElementById('webcam');
     const cameraFallback = document.getElementById('cameraFallback');
     let currentFilterIndex = 0;
+    let currentFacingMode = 'user'; // 'user' 前置 / 'environment' 后置
+    let plainStream = null;         // 普通模式下的媒体流（用于切换时释放）
+    let gestureCameraObj = null;    // MediaPipe 摄像头实例
     const filters = [
         'contrast(1.05) brightness(1.08) saturate(1.15)', // 自然美颜
         'contrast(1.1) brightness(1.15) sepia(0.15)',      // 暖色高光
@@ -1154,22 +1157,45 @@
         'none'                                           // 原图
     ];
 
-    async function initCamera() {
+    // 前置镜头默认镜像（自拍习惯），后置镜头不镜像
+    function applyMirror(isFront) {
+        const tf = isFront ? 'scaleX(-1)' : 'scaleX(1)';
+        webcamVideo.style.transform = tf;
+        gestureCanvas.style.transform = tf;
+    }
+
+    // 普通模式下启动/切换摄像头
+    async function startPlainCamera() {
         try {
+            if (plainStream) {
+                plainStream.getTracks().forEach(t => t.stop());
+            }
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: {
                     width: { ideal: 1280 },
                     height: { ideal: 720 },
-                    facingMode: "user"
+                    facingMode: currentFacingMode
                 },
                 audio: false
             });
+            plainStream = stream;
             webcamVideo.srcObject = stream;
             cameraFallback.style.display = 'none';
+            applyMirror(currentFacingMode === 'user');
         } catch (err) {
+            // 后置摄像头不存在时，自动回退到前置
+            if (currentFacingMode === 'environment') {
+                currentFacingMode = 'user';
+                applyMirror(true);
+                return startPlainCamera();
+            }
             console.warn("无法调用摄像头，使用备用渐变背景:", err);
             cameraFallback.style.display = 'flex';
         }
+    }
+
+    async function initCamera() {
+        await startPlainCamera();
     }
 
     function toggleFilter() {
@@ -1178,9 +1204,58 @@
         showToast(`滤镜模式 ${currentFilterIndex + 1}`);
     }
 
-    function switchCamera() {
-        showToast("已重置镜像视角");
-        webcamVideo.style.transform = webcamVideo.style.transform === 'scaleX(1)' ? 'scaleX(-1)' : 'scaleX(1)';
+    // 翻转 = 真实切换前后摄像头
+    async function switchCamera() {
+        currentFacingMode = (currentFacingMode === 'user') ? 'environment' : 'user';
+        const isFront = currentFacingMode === 'user';
+        applyMirror(isFront);
+        showToast(isFront ? '已切换至前置摄像头' : '已切换至后置摄像头');
+
+        if (gestureCameraObj) {
+            // 手势模式下由 MediaPipe Camera 接管，需重建以应用新 facingMode
+            try { gestureCameraObj.stop(); } catch (e) {}
+            try {
+                gestureCameraObj = new Camera(webcamVideo, {
+                    onFrame: async () => {
+                        if (gestureEnabled && gestureHands) {
+                            await gestureHands.send({ image: webcamVideo });
+                        }
+                    },
+                    width: 1280,
+                    height: 720,
+                    facingMode: currentFacingMode
+                });
+                await gestureCameraObj.start();
+                cameraFallback.style.display = 'none';
+            } catch (e) {
+                // 后置不可用则回退前置
+                if (currentFacingMode === 'environment') {
+                    currentFacingMode = 'user';
+                    applyMirror(true);
+                    try {
+                        gestureCameraObj = new Camera(webcamVideo, {
+                            onFrame: async () => {
+                                if (gestureEnabled && gestureHands) {
+                                    await gestureHands.send({ image: webcamVideo });
+                                }
+                            },
+                            width: 1280,
+                            height: 720,
+                            facingMode: currentFacingMode
+                        });
+                        await gestureCameraObj.start();
+                        cameraFallback.style.display = 'none';
+                        showToast('已切换至前置摄像头');
+                    } catch (e2) {
+                        showToast('摄像头切换失败');
+                    }
+                } else {
+                    showToast('摄像头切换失败');
+                }
+            }
+        } else {
+            startPlainCamera();
+        }
     }
 
     // 简单轻提示
@@ -1278,7 +1353,7 @@
             const input = document.getElementById('chatInput');
             const val = input.value.trim();
             if (val) {
-                appendChatMessage("我 (榜一大哥)", val, true, 52);
+                appendChatMessage("主播(我)", val, true, 52);
                 input.value = '';
             }
         }
@@ -1292,7 +1367,7 @@
     let comboTracker = {};
 
     function sendGift(giftName, emoji, cost) {
-        const username = "榜一大哥(我)";
+        const username = "主播(我)";
         triggerGiftEffect(username, giftName, emoji, true);
         toggleGiftDrawer(false);
     }
@@ -1446,19 +1521,18 @@
     const gestureHelpPanel = document.getElementById('gestureHelpPanel');
 
     let gestureHands = null;
-    let gestureCamera = null;
     let gestureEnabled = false;
 
-    // 每种手势对应的评论内容
+    // 每种手势对应的「主播对粉丝说的话」
     const GESTURE_COMMENTS = {
-        like:    { emoji: '👍', name: '点赞',   comment: '主播太给力了，已三连点赞！👍' },
-        cheer:   { emoji: '🙌', name: '欢呼',   comment: '6666！主播加油，太棒了！🔥' },
-        heart:   { emoji: '🤟', name: '比心',   comment: '爱你哟主播～比个心心❤️' },
-        ily:     { emoji: '🤟', name: '爱你',   comment: 'I Love You！永远支持主播！🤟' },
-        victory: { emoji: '✌️', name: '加油',   comment: '奥利给！冲冲冲，干就完了！💪' },
-        rock:    { emoji: '🤘', name: '摇滚',   comment: '摇滚起来！嗨翻全场🤘' },
-        point:   { emoji: '👉', name: '看这里', comment: '快看这个宝贝！上链接！👉' },
-        hush:    { emoji: '✊', name: '安静',   comment: '嘘——安静一下，听主播说重点🤫' },
+        like:    { emoji: '👍', name: '点赞',   comment: '谢谢家人们的三连点赞！爱你们❤️' },
+        cheer:   { emoji: '🙌', name: '欢呼',   comment: '感谢大家的支持，你们最棒啦！🔥' },
+        heart:   { emoji: '🤟', name: '比心',   comment: '比心心，爱你们哟～❤️' },
+        ily:     { emoji: '🤟', name: '爱你',   comment: 'I Love You 家人们！永远爱你们🤟' },
+        victory: { emoji: '✌️', name: '加油',   comment: '冲冲冲！今天福利给到位💪' },
+        rock:    { emoji: '🤘', name: '摇滚',   comment: '嗨起来！音乐走起🤘' },
+        point:   { emoji: '👉', name: '看这里', comment: '1号链接宝贝在这，快去拍👉' },
+        hush:    { emoji: '✊', name: '安静',   comment: '家人们安静一下，讲个重点🤫' },
     };
 
     const GESTURE_COOLDOWN = 3000; // 同一手势最短发送间隔(ms)
@@ -1574,7 +1648,7 @@
     function sendGestureComment(key) {
         const g = GESTURE_COMMENTS[key];
         if (!g) return;
-        appendChatMessage("我 (手势评论)", g.comment, true, 52);
+        appendChatMessage("主播(手势)", g.comment, true, 52);
         playGiftSound();
         // 点赞/比心额外飘心反馈
         if (key === 'like' || key === 'heart' || key === 'ily') {
@@ -1630,16 +1704,17 @@
             });
             gestureHands.onResults(onResults);
 
-            gestureCamera = new Camera(webcamVideo, {
+            gestureCameraObj = new Camera(webcamVideo, {
                 onFrame: async () => {
                     if (gestureEnabled && gestureHands) {
                         await gestureHands.send({ image: webcamVideo });
                     }
                 },
                 width: 1280,
-                height: 720
+                height: 720,
+                facingMode: currentFacingMode
             });
-            await gestureCamera.start();
+            await gestureCameraObj.start();
             cameraFallback.style.display = 'none';
 
             gestureEnabled = true;
@@ -1683,16 +1758,16 @@
 
     // 关键词 → 评论规则（按顺序匹配，命中第一条）
     const VOICE_RULES = [
-        { keys: ['点赞', '赞', '三连'],        comment: '主播太棒了，已三连点赞！👍' },
-        { keys: ['666', '牛', '厉害', '强'],    comment: '6666！这操作太牛了！🔥' },
-        { keys: ['买', '下单', '链接', '上架'], comment: '已下单，快上链接！🛒' },
-        { keys: ['好看', '漂亮', '美', '帅'],    comment: '主播好漂亮啊，爱了爱了！😍' },
-        { keys: ['关注', '粉了', '取关'],        comment: '已关注主播，冲冲冲！✨' },
-        { keys: ['爱你', '喜欢', '爱了', '比心'],comment: '爱你哟主播～比个心心❤️' },
-        { keys: ['笑死', '搞笑', '哈哈', '逗'],  comment: '哈哈哈笑死我了，太有意思！😂' },
-        { keys: ['加油', '冲', '奥利给'],        comment: '奥利给！主播加油！💪' },
-        { keys: ['再见', '拜拜', '下次'],        comment: '主播再见，下次还来！👋' },
-        { keys: ['歌', '唱', '音乐', '好听'],    comment: '主播唱得真好听！🎤' },
+        { keys: ['点赞', '赞', '三连'],        comment: '谢谢家人们的点赞，已看到啦！❤️' },
+        { keys: ['666', '牛', '厉害', '强'],    comment: '哈哈谢谢夸奖，爱你们！🔥' },
+        { keys: ['买', '下单', '链接', '上架'], comment: '1号链接已上架，姐妹们冲！🛒' },
+        { keys: ['好看', '漂亮', '美', '帅'],    comment: '谢谢夸我美，么么哒😘' },
+        { keys: ['关注', '粉了', '取关'],        comment: '感谢关注，记得开播提醒哦✨' },
+        { keys: ['爱你', '喜欢', '爱了', '比心'],comment: '我也爱你们！比个心心❤️' },
+        { keys: ['笑死', '搞笑', '哈哈', '逗'],  comment: '哈哈哈你们太逗了😂' },
+        { keys: ['加油', '冲', '奥利给'],        comment: '冲冲冲，家人们一起加油！💪' },
+        { keys: ['再见', '拜拜', '下次'],        comment: '拜拜家人们，下播啦明天见👋' },
+        { keys: ['歌', '唱', '音乐', '好听'],    comment: '谢谢喜欢这首歌，再来一首🎤' },
     ];
 
     function setVoiceHud(state, text) {
@@ -1726,10 +1801,10 @@
         }
 
         if (matched) {
-            appendChatMessage("我 (语音)", matched, true, 52);
+            appendChatMessage("主播(语音)", matched, true, 52);
         } else {
             // 未命中关键词，也把说的话发出来
-            appendChatMessage("我 (语音)", text, true, 52);
+            appendChatMessage("主播(语音)", text, true, 52);
         }
         playGiftSound();
     }
