@@ -1,0 +1,1841 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>抖音高清直播间 - 极速旗舰版</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+        }
+
+        body {
+            background-color: #0c0d14;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            color: #fff;
+        }
+
+        /* 手机端/直播间外层容器 */
+        .live-stage {
+            position: relative;
+            width: 100%;
+            max-width: 440px;
+            height: 100vh;
+            max-height: 920px;
+            background-color: #000;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
+        }
+
+        @media (min-width: 450px) {
+            .live-stage {
+                border-radius: 28px;
+                height: 94vh;
+                border: 2px solid rgba(255, 255, 255, 0.1);
+            }
+        }
+
+        /* 真实摄像头画面层 */
+        .camera-wrapper {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            background: #111;
+            overflow: hidden;
+        }
+
+        #webcam {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transform: scaleX(-1); /* 镜像翻转，符合自拍习惯 */
+            transition: filter 0.3s ease;
+        }
+
+        /* 降级备用背景 (无摄像头权限时) */
+        .camera-fallback {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: radial-gradient(circle at 50% 30%, #302347, #0a0913);
+            z-index: 0;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .camera-fallback .glow-circle {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #ff0050, #00f2fe);
+            filter: blur(30px);
+            opacity: 0.6;
+            animation: pulse 3s infinite alternate;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.8); opacity: 0.4; }
+            100% { transform: scale(1.2); opacity: 0.8; }
+        }
+
+        /* 遮罩渐变：增强UI文字可读性 */
+        .overlay-gradient {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            pointer-events: none;
+            background: linear-gradient(180deg, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0) 20%, rgba(0,0,0,0) 60%, rgba(0,0,0,0.85) 100%);
+        }
+
+        /* ---------------- 顶部 UI 区域 ---------------- */
+        .top-container {
+            position: relative;
+            z-index: 10;
+            padding: 12px 12px 0 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* 主播卡片 */
+        .anchor-card {
+            display: flex;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.45);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            padding: 3px 12px 3px 3px;
+            border-radius: 30px;
+            border: 0.5px solid rgba(255, 255, 255, 0.15);
+        }
+
+        .anchor-avatar-box {
+            position: relative;
+            width: 38px;
+            height: 38px;
+        }
+
+        .anchor-avatar {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 1.5px solid #ff0050;
+        }
+
+        .live-tag {
+            position: absolute;
+            bottom: -2px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #ff0050;
+            color: #fff;
+            font-size: 8px;
+            padding: 1px 4px;
+            border-radius: 6px;
+            font-weight: bold;
+        }
+
+        .anchor-meta {
+            margin-left: 8px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .anchor-name {
+            font-size: 13px;
+            font-weight: 700;
+            color: #ffffff;
+            letter-spacing: 0.3px;
+            max-width: 90px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .online-status {
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.8);
+            display: flex;
+            align-items: center;
+            gap: 3px;
+        }
+
+        .follow-btn {
+            background: linear-gradient(90deg, #ff0050, #ff2e63);
+            color: #fff;
+            border: none;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 10px;
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(255, 0, 80, 0.4);
+            transition: transform 0.1s;
+        }
+
+        .follow-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* 榜单与观众头像列表 */
+        .top-audience {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .audience-avatars {
+            display: flex;
+            align-items: center;
+        }
+
+        .aud-item {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            border: 1.5px solid rgba(255, 255, 255, 0.6);
+            margin-left: -8px;
+            background-size: cover;
+            background-position: center;
+            position: relative;
+        }
+
+        .aud-item:first-child {
+            margin-left: 0;
+            border-color: #ffd700; /* 金榜 */
+        }
+        .aud-item:nth-child(2) {
+            border-color: #e0e0e0; /* 银榜 */
+        }
+        .aud-item:nth-child(3) {
+            border-color: #cd7f32; /* 铜榜 */
+        }
+
+        .close-btn {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.35);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            color: #fff;
+            backdrop-filter: blur(5px);
+            cursor: pointer;
+        }
+
+        /* 二级状态栏 (小时榜/带货榜) */
+        .sub-header-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .pill-badge {
+            background: rgba(0, 0, 0, 0.35);
+            backdrop-filter: blur(8px);
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 10px;
+            color: #ffde6a;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            border: 0.5px solid rgba(255, 222, 106, 0.2);
+        }
+
+        /* ---------------- 动态特效层 ---------------- */
+        .effects-stage {
+            position: absolute;
+            top: 15%;
+            left: 0;
+            width: 100%;
+            height: 45%;
+            z-index: 8;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        /* 大礼物通告横幅 */
+        .gift-banner-container {
+            position: absolute;
+            left: 12px;
+            top: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .gift-card {
+            display: flex;
+            align-items: center;
+            background: linear-gradient(90deg, rgba(255, 0, 80, 0.85) 0%, rgba(120, 0, 255, 0.75) 70%, rgba(0,0,0,0) 100%);
+            padding: 4px 16px 4px 6px;
+            border-radius: 30px;
+            animation: giftIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+            box-shadow: 0 4px 15px rgba(255, 0, 80, 0.3);
+            backdrop-filter: blur(4px);
+        }
+
+        @keyframes giftIn {
+            from { transform: translateX(-110%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        .gift-user-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: 1px solid #fff;
+        }
+
+        .gift-info {
+            margin-left: 8px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .gift-username {
+            font-size: 11px;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .gift-action {
+            font-size: 10px;
+            color: #ffe600;
+        }
+
+        .gift-icon-anim {
+            font-size: 32px;
+            margin-left: 10px;
+            animation: bounce 0.6s infinite alternate;
+        }
+
+        .gift-combo {
+            font-size: 22px;
+            font-weight: 900;
+            font-style: italic;
+            color: #ffe600;
+            text-shadow: 0 0 8px rgba(255, 230, 0, 0.8), 2px 2px 0px #ff0050;
+            margin-left: 8px;
+            animation: popCombo 0.2s ease-out;
+        }
+
+        @keyframes popCombo {
+            0% { transform: scale(1.8); }
+            100% { transform: scale(1); }
+        }
+
+        @keyframes bounce {
+            from { transform: translateY(0) scale(1); }
+            to { transform: translateY(-6px) scale(1.15); }
+        }
+
+        /* 嘉年华全屏高阶特效 */
+        .carnival-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 20;
+        }
+
+        .carnival-overlay.active {
+            opacity: 1;
+            animation: carnivalFlash 2.5s forwards;
+        }
+
+        @keyframes carnivalFlash {
+            0% { background: rgba(255, 0, 128, 0); }
+            20% { background: rgba(255, 0, 128, 0.35); }
+            80% { background: rgba(0, 212, 255, 0.25); }
+            100% { background: rgba(0, 0, 0, 0); }
+        }
+
+        .carnival-title {
+            font-size: 42px;
+            font-weight: 900;
+            background: linear-gradient(45deg, #ffe600, #ff0050, #00f2fe);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+            transform: scale(0.5);
+            animation: zoomCarnival 2s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        @keyframes zoomCarnival {
+            0% { transform: scale(0.3) rotate(-10deg); opacity: 0; }
+            30% { transform: scale(1.2) rotate(3deg); opacity: 1; }
+            70% { transform: scale(1) rotate(0deg); opacity: 1; }
+            100% { transform: scale(1.5); opacity: 0; }
+        }
+
+        /* ---------------- 中下部：弹幕互动区 ---------------- */
+        .bottom-interactive {
+            position: relative;
+            z-index: 10;
+            padding: 0 12px 12px 12px;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        /* 小黄车爆款推送泡泡 */
+        .product-bubble {
+            display: flex;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.95);
+            color: #111;
+            padding: 6px 10px;
+            border-radius: 12px;
+            width: fit-content;
+            max-width: 240px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            animation: floatBubble 3s infinite ease-in-out;
+            cursor: pointer;
+        }
+
+        @keyframes floatBubble {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-4px); }
+        }
+
+        .product-img {
+            width: 36px;
+            height: 36px;
+            border-radius: 6px;
+            background: #ff4d4f;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-weight: bold;
+            font-size: 18px;
+            margin-right: 8px;
+            flex-shrink: 0;
+        }
+
+        .product-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .product-title {
+            font-size: 11px;
+            font-weight: bold;
+            line-height: 1.2;
+            color: #222;
+        }
+
+        .product-price {
+            font-size: 12px;
+            color: #ff0050;
+            font-weight: 800;
+        }
+
+        /* 弹幕长列表 */
+        .chat-scroll-area {
+            height: 220px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            mask-image: linear-gradient(to bottom, transparent 0%, black 18%);
+            -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 18%);
+            padding-right: 5px;
+        }
+
+        .chat-scroll-area::-webkit-scrollbar {
+            display: none;
+        }
+
+        .chat-item {
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            padding: 5px 10px;
+            border-radius: 12px;
+            font-size: 12.5px;
+            line-height: 1.45;
+            color: #ffffff;
+            width: fit-content;
+            max-width: 90%;
+            word-break: break-word;
+            border: 0.5px solid rgba(255, 255, 255, 0.08);
+            animation: chatSlideIn 0.25s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        @keyframes chatSlideIn {
+            from { opacity: 0; transform: translateY(12px) scale(0.96); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        .user-level {
+            display: inline-block;
+            background: linear-gradient(90deg, #67b26f, #4ca2cd);
+            color: #fff;
+            font-size: 9px;
+            font-weight: bold;
+            padding: 1px 5px;
+            border-radius: 8px;
+            margin-right: 5px;
+            vertical-align: middle;
+        }
+
+        .user-level.high {
+            background: linear-gradient(90deg, #ff7300, #fe230b);
+        }
+
+        .user-name {
+            color: rgba(255, 255, 255, 0.7);
+            font-weight: 600;
+            margin-right: 4px;
+        }
+
+        .user-name.vip {
+            color: #ffe600;
+        }
+
+        .chat-text {
+            color: #fff;
+        }
+
+        .sys-notice {
+            background: rgba(255, 0, 80, 0.2);
+            color: #ff99bb;
+            border: 0.5px solid rgba(255, 0, 80, 0.4);
+        }
+
+        /* ---------------- 底部工具栏与输入框 ---------------- */
+        .bottom-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 4px;
+        }
+
+        .input-box-wrapper {
+            flex: 1;
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .chat-input {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.45);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            padding: 8px 14px;
+            color: #fff;
+            font-size: 13px;
+            outline: none;
+            transition: border-color 0.2s, background 0.2s;
+        }
+
+        .chat-input:focus {
+            border-color: #ff0050;
+            background: rgba(0, 0, 0, 0.7);
+        }
+
+        .chat-input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .action-icon-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-circle {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.45);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            cursor: pointer;
+            position: relative;
+            transition: transform 0.15s;
+        }
+
+        .btn-circle:active {
+            transform: scale(0.88);
+        }
+
+        .btn-circle.cart {
+            background: linear-gradient(135deg, #ff9900, #ff4d00);
+            border: none;
+        }
+
+        /* 美颜/摄像头滤镜控制面板 */
+        .camera-controls {
+            position: absolute;
+            right: 12px;
+            top: 130px;
+            z-index: 15;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .ctrl-btn {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(6px);
+            border: 0.5px solid rgba(255, 255, 255, 0.2);
+            color: #fff;
+            font-size: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        /* ---------------- 手势识别相关 ---------------- */
+        #gestureCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            pointer-events: none;
+            transform: scaleX(-1); /* 与镜像摄像头保持一致 */
+        }
+
+        .ctrl-btn.active {
+            border-color: #ff0050;
+            color: #ff7799;
+            box-shadow: 0 0 10px rgba(255, 0, 80, 0.5);
+        }
+
+        /* 手势识别状态 HUD */
+        .gesture-hud {
+            position: absolute;
+            left: 12px;
+            top: 96px;
+            z-index: 14;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 0.5px solid rgba(255, 255, 255, 0.15);
+            border-radius: 14px;
+            padding: 4px 10px;
+            font-size: 11px;
+            color: #fff;
+            max-width: 200px;
+        }
+
+        .gesture-hud-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #888;
+            flex-shrink: 0;
+        }
+
+        .gesture-hud-dot.ready {
+            background: #00e676;
+            box-shadow: 0 0 8px #00e676;
+            animation: hudPulse 1.2s infinite;
+        }
+
+        .gesture-hud-dot.error {
+            background: #ff5252;
+            box-shadow: 0 0 8px #ff5252;
+        }
+
+        @keyframes hudPulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        /* 当前识别手势大字提示 */
+        .gesture-current {
+            position: absolute;
+            left: 50%;
+            top: 22%;
+            transform: translateX(-50%);
+            z-index: 16;
+            font-size: 30px;
+            font-weight: 900;
+            color: #fff;
+            text-shadow: 0 0 16px rgba(255, 0, 80, 0.9), 0 2px 6px rgba(0,0,0,0.8);
+            opacity: 0;
+            transition: opacity 0.25s;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+
+        .gesture-current.show {
+            opacity: 1;
+        }
+
+        /* 手势帮助面板 */
+        .gesture-help-panel {
+            position: absolute;
+            top: 130px;
+            right: 12px;
+            width: 210px;
+            max-height: 60%;
+            overflow-y: auto;
+            background: rgba(18, 18, 26, 0.92);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 16px;
+            padding: 12px;
+            z-index: 30;
+            display: none;
+        }
+
+        .gesture-help-panel.open {
+            display: block;
+        }
+
+        .gesture-help-panel::-webkit-scrollbar {
+            width: 0;
+        }
+
+        .gesture-help-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 10px;
+        }
+
+        .gesture-help-list {
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
+        }
+
+        .gesture-help-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 6px 8px;
+        }
+
+        .gesture-help-emoji {
+            font-size: 20px;
+            width: 26px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        .gesture-help-text {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .gesture-help-name {
+            font-size: 12px;
+            color: #fff;
+            font-weight: 600;
+        }
+
+        .gesture-help-comment {
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.6);
+            line-height: 1.3;
+            word-break: break-word;
+        }
+
+        /* 语音识别状态 HUD */
+        .voice-hud {
+            position: absolute;
+            left: 12px;
+            top: 128px;
+            z-index: 14;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 0.5px solid rgba(255, 255, 255, 0.15);
+            border-radius: 14px;
+            padding: 4px 10px;
+            font-size: 11px;
+            color: #fff;
+            max-width: 200px;
+        }
+
+        .voice-hud-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #888;
+            flex-shrink: 0;
+        }
+
+        .voice-hud-dot.listening {
+            background: #ff3b5c;
+            box-shadow: 0 0 8px #ff3b5c;
+            animation: voicePulse 1s infinite;
+        }
+
+        .voice-hud-dot.error {
+            background: #ff5252;
+            box-shadow: 0 0 8px #ff5252;
+        }
+
+        @keyframes voicePulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.7); }
+        }
+
+        /* 语音实时字幕 */
+        .voice-subtitle {
+            position: absolute;
+            left: 50%;
+            bottom: 150px;
+            transform: translateX(-50%);
+            z-index: 16;
+            max-width: 80%;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 0.5px solid rgba(255, 255, 255, 0.15);
+            border-radius: 16px;
+            padding: 8px 16px;
+            font-size: 14px;
+            color: #fff;
+            text-align: center;
+            line-height: 1.4;
+            opacity: 0;
+            transition: opacity 0.2s;
+            pointer-events: none;
+            word-break: break-word;
+        }
+
+        .voice-subtitle.show {
+            opacity: 1;
+        }
+
+        .voice-subtitle .interim {
+            color: rgba(255, 255, 255, 0.55);
+        }
+
+        /* 飘心动画粒子 */
+        .floating-heart {
+            position: absolute;
+            bottom: 70px;
+            right: 20px;
+            font-size: 26px;
+            pointer-events: none;
+            z-index: 25;
+            animation: heartRise 2.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+        }
+
+        @keyframes heartRise {
+            0% { transform: translateY(0) scale(0.6) rotate(0deg); opacity: 1; }
+            40% { transform: translateY(-120px) scale(1.2) rotate(-15deg); opacity: 0.9; }
+            100% { transform: translateY(-320px) scale(0.8) rotate(20deg); opacity: 0; }
+        }
+
+        /* 快捷刷礼物面板 */
+        .gift-selector-drawer {
+            position: absolute;
+            bottom: -300px;
+            left: 0;
+            width: 100%;
+            background: rgba(18, 18, 26, 0.95);
+            backdrop-filter: blur(20px);
+            border-top-left-radius: 20px;
+            border-top-right-radius: 20px;
+            padding: 16px;
+            z-index: 30;
+            transition: bottom 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .gift-selector-drawer.open {
+            bottom: 0;
+        }
+
+        .drawer-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .gift-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+
+        .gift-item-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 10px 4px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+        }
+
+        .gift-item-btn:hover {
+            background: rgba(255, 0, 80, 0.2);
+            border-color: #ff0050;
+        }
+
+        .gift-item-btn:active {
+            transform: scale(0.92);
+        }
+
+        .gift-item-emoji {
+            font-size: 28px;
+            margin-bottom: 4px;
+        }
+
+        .gift-item-name {
+            font-size: 11px;
+            color: #fff;
+            font-weight: 600;
+        }
+
+        .gift-item-price {
+            font-size: 9px;
+            color: #ffbe00;
+        }
+    </style>
+</head>
+<body>
+
+<!-- MediaPipe Hands 手势识别 -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+
+<div class="live-stage" id="liveStage" onclick="handleStageClick(event)">
+    <!-- 1. 真实摄像头画面层 -->
+    <div class="camera-wrapper">
+        <video id="webcam" autoplay playsinline muted></video>
+        <!-- 手势骨架叠加层 -->
+        <canvas id="gestureCanvas"></canvas>
+        <div class="camera-fallback" id="cameraFallback">
+            <div class="glow-circle"></div>
+            <p style="margin-top: 20px; font-size: 14px; color: rgba(255,255,255,0.8);">正在连接高清镜头...</p>
+            <p style="font-size: 11px; color: rgba(255,255,255,0.4); margin-top: 6px;">若无摄像头权限，将自动切换为高清动态背景</p>
+        </div>
+    </div>
+
+    <!-- 视觉暗角遮罩 -->
+    <div class="overlay-gradient"></div>
+
+    <!-- 手势识别中提示 HUD -->
+    <div class="gesture-hud" id="gestureHud">
+        <span class="gesture-hud-dot" id="gestureHudDot"></span>
+        <span id="gestureHudText">手势识别准备中…</span>
+    </div>
+
+    <!-- 当前识别手势大字提示 -->
+    <div class="gesture-current" id="gestureCurrent"></div>
+
+    <!-- 手势帮助面板 -->
+    <div class="gesture-help-panel" id="gestureHelpPanel">
+        <div class="gesture-help-header">
+            <span>🖐 手势评论对照表</span>
+            <span style="cursor:pointer;" onclick="toggleGestureHelp(false)">✕</span>
+        </div>
+        <div class="gesture-help-list" id="gestureHelpList"></div>
+    </div>
+
+    <!-- 语音识别状态 HUD -->
+    <div class="voice-hud" id="voiceHud">
+        <span class="voice-hud-dot" id="voiceHudDot"></span>
+        <span id="voiceHudText">语音评论未开启</span>
+    </div>
+
+    <!-- 语音识别实时字幕 -->
+    <div class="voice-subtitle" id="voiceSubtitle"></div>
+
+    <!-- 摄像头美颜/滤镜控制 -->
+    <div class="camera-controls">
+        <div class="ctrl-btn" onclick="toggleFilter()" title="滤镜切换">✨<span>滤镜</span></div>
+        <div class="ctrl-btn" onclick="switchCamera()" title="翻转镜头">🔄<span>翻转</span></div>
+        <div class="ctrl-btn" onclick="toggleGestureHelp()" title="手势说明">🖐<span>手势</span></div>
+        <div class="ctrl-btn" id="gestureToggleBtn" onclick="toggleGestureDetection()" title="开关手势">⏸<span>手势</span></div>
+        <div class="ctrl-btn" id="voiceToggleBtn" onclick="toggleVoiceRecognition()" title="语音评论">🎤<span>语音</span></div>
+    </div>
+
+    <!-- 2. 顶部 UI 区域 -->
+    <div class="top-container">
+        <div class="header-row">
+            <!-- 主播卡片 -->
+            <div class="anchor-card">
+                <div class="anchor-avatar-box">
+                    <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80" class="anchor-avatar" alt="头像">
+                    <div class="live-tag">LIVE</div>
+                </div>
+                <div class="anchor-meta">
+                    <div class="anchor-name">大网红·小甜甜</div>
+                    <div class="online-status">
+                        <span id="onlineCountText">6.8万</span> 本场点赞 <span id="likeCountText">258.4万</span>
+                    </div>
+                </div>
+                <button class="follow-btn" onclick="event.stopPropagation(); alert('感谢关注！')">+ 关注</button>
+            </div>
+
+            <!-- 右侧榜单与在线观众 -->
+            <div class="top-audience">
+                <div class="audience-avatars">
+                    <div class="aud-item" style="background-image: url('https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100');"></div>
+                    <div class="aud-item" style="background-image: url('https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100');"></div>
+                    <div class="aud-item" style="background-image: url('https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100');"></div>
+                </div>
+                <div class="close-btn" onclick="event.stopPropagation(); history.back();">✕</div>
+            </div>
+        </div>
+
+        <!-- 二级状态栏 -->
+        <div class="sub-header-row">
+            <div class="pill-badge">🔥 抖音带货榜 TOP 1</div>
+            <div class="pill-badge" style="color: #67e8f9;">🏆 小时榜第 2 名</div>
+        </div>
+    </div>
+
+    <!-- 3. 特效与大礼物横幅展示层 -->
+    <div class="effects-stage">
+        <div class="gift-banner-container" id="giftBannerContainer"></div>
+    </div>
+
+    <!-- 全屏嘉年华高阶特效 -->
+    <div class="carnival-overlay" id="carnivalOverlay">
+        <div class="carnival-title">🎪 尊贵嘉年华 🎪</div>
+    </div>
+
+    <!-- 4. 中下部：带货泡泡 + 弹幕长列表 -->
+    <div class="bottom-interactive">
+        <!-- 带有动的带货商品提示 -->
+        <div class="product-bubble" onclick="event.stopPropagation(); alert('正在跳转小黄车商品详情...');">
+            <div class="product-img">🛍️</div>
+            <div class="product-info">
+                <div class="product-title">1号链接：网红同款美颜冷光灯</div>
+                <div class="product-price">直播专享价 ¥39.9 <span style="font-size: 9px; color: #999; text-decoration: line-through;">¥129</span></div>
+            </div>
+        </div>
+
+        <!-- 弹幕列表 -->
+        <div class="chat-scroll-area" id="chatScrollArea">
+            <div class="chat-item sys-notice">
+                📢 <b>系统公告：</b> 欢迎来到大网红的直播间！严禁禁言违规词汇，营造绿色直播环境。
+            </div>
+        </div>
+
+        <!-- 5. 底部工具栏 -->
+        <div class="bottom-bar" onclick="event.stopPropagation();">
+            <div class="input-box-wrapper">
+                <input type="text" class="chat-input" id="chatInput" placeholder="说点什么..." onkeypress="handleInputKeyPress(event)">
+            </div>
+            <div class="action-icon-group">
+                <div class="btn-circle cart" title="小黄车" onclick="alert('已为你打开主播的商品橱窗')">🛒</div>
+                <div class="btn-circle" title="送礼物" onclick="toggleGiftDrawer(true)">🎁</div>
+                <div class="btn-circle" title="点赞" onclick="triggerManualLike()">❤️</div>
+                <div class="btn-circle" title="分享" onclick="alert('直播间链接已复制到剪贴板！')">↗️</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 6. 快捷刷礼物抽屉面板 -->
+    <div class="gift-selector-drawer" id="giftDrawer" onclick="event.stopPropagation();">
+        <div class="drawer-header">
+            <span>赠送礼物给主播</span>
+            <span style="cursor: pointer;" onclick="toggleGiftDrawer(false)">✕ 关闭</span>
+        </div>
+        <div class="gift-grid">
+            <div class="gift-item-btn" onclick="sendGift('玫瑰花', '🌹', 1)">
+                <span class="gift-item-emoji">🌹</span>
+                <span class="gift-item-name">小心意</span>
+                <span class="gift-item-price">1 抖币</span>
+            </div>
+            <div class="gift-item-btn" onclick="sendGift('小心心', '💖', 10)">
+                <span class="gift-item-emoji">💖</span>
+                <span class="gift-item-name">小心心</span>
+                <span class="gift-item-price">10 抖币</span>
+            </div>
+            <div class="gift-item-btn" onclick="sendGift('保时捷跑车', '🏎️', 1200)">
+                <span class="gift-item-emoji">🏎️</span>
+                <span class="gift-item-name">保时捷</span>
+                <span class="gift-item-price">1200 抖币</span>
+            </div>
+            <div class="gift-item-btn" onclick="sendGift('抖音1号火箭', '🚀', 3000)">
+                <span class="gift-item-emoji">🚀</span>
+                <span class="gift-item-name">抖音1号</span>
+                <span class="gift-item-price">3000 抖币</span>
+            </div>
+            <div class="gift-item-btn" onclick="sendGift('尊贵嘉年华', '🎪', 30000)" style="grid-column: span 4; background: linear-gradient(90deg, rgba(255,0,80,0.3), rgba(0,242,254,0.3));">
+                <span class="gift-item-emoji">🎪 👑 💥</span>
+                <span class="gift-item-name" style="font-size: 13px; color: #ffe600;">炸场嘉年华</span>
+                <span class="gift-item-price">30000 抖币 (全屏高能动画)</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    /* ==================== 1. 真实摄像头调取 ==================== */
+    const webcamVideo = document.getElementById('webcam');
+    const cameraFallback = document.getElementById('cameraFallback');
+    let currentFilterIndex = 0;
+    const filters = [
+        'contrast(1.05) brightness(1.08) saturate(1.15)', // 自然美颜
+        'contrast(1.1) brightness(1.15) sepia(0.15)',      // 暖色高光
+        'contrast(1.2) grayscale(0.8)',                  // 复古冷调
+        'none'                                           // 原图
+    ];
+
+    async function initCamera() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 },
+                    facingMode: "user"
+                },
+                audio: false
+            });
+            webcamVideo.srcObject = stream;
+            cameraFallback.style.display = 'none';
+        } catch (err) {
+            console.warn("无法调用摄像头，使用备用渐变背景:", err);
+            cameraFallback.style.display = 'flex';
+        }
+    }
+
+    function toggleFilter() {
+        currentFilterIndex = (currentFilterIndex + 1) % filters.length;
+        webcamVideo.style.filter = filters[currentFilterIndex];
+        showToast(`滤镜模式 ${currentFilterIndex + 1}`);
+    }
+
+    function switchCamera() {
+        showToast("已重置镜像视角");
+        webcamVideo.style.transform = webcamVideo.style.transform === 'scaleX(1)' ? 'scaleX(-1)' : 'scaleX(1)';
+    }
+
+    // 简单轻提示
+    function showToast(text) {
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.75); color: #fff; padding: 8px 16px; border-radius: 20px;
+            font-size: 12px; z-index: 100; pointer-events: none; backdrop-filter: blur(5px);
+        `;
+        toast.innerText = text;
+        document.getElementById('liveStage').appendChild(toast);
+        setTimeout(() => toast.remove(), 1200);
+    }
+
+    /* ==================== 2. 在线人数与点赞数模拟 ==================== */
+    let onlineCount = 68421;
+    let likeCount = 2584100;
+
+    const onlineCountText = document.getElementById('onlineCountText');
+    const likeCountText = document.getElementById('likeCountText');
+
+    function formatNumber(num) {
+        if (num >= 10000) {
+            return (num / 10000).toFixed(1) + '万';
+        }
+        return num.toLocaleString();
+    }
+
+    // 在线人数在 3w - 10w 浮动
+    setInterval(() => {
+        const delta = Math.floor(Math.random() * 400) - 180;
+        onlineCount = Math.max(32000, Math.min(99800, onlineCount + delta));
+        onlineCountText.innerText = formatNumber(onlineCount);
+    }, 1800);
+
+    // 点赞数不断上升
+    setInterval(() => {
+        likeCount += Math.floor(Math.random() * 25) + 5;
+        likeCountText.innerText = formatNumber(likeCount);
+    }, 400);
+
+    /* ==================== 3. 弹幕引擎 ==================== */
+    const userPool = ["狂暴战神", "小萌兔", "江南皮革厂", "用户_88291", "吃瓜第一线", "绝世榜大哥", "落叶无声", "甜心宝", "追风少年", "神秘大佬"];
+    const textPool = [
+        "主播好漂亮啊！",
+        "今天这状态太牛了！",
+        "小黄车商品包邮吗？",
+        "支持支持！6666",
+        "求回复求互动！",
+        "刚进直播间，发生啥了？",
+        "已下单美颜灯，期待发货！",
+        "太接地气了，关注了！",
+        "主播声音好好听～"
+    ];
+
+    const chatScrollArea = document.getElementById('chatScrollArea');
+
+    function appendChatMessage(name, text, isVip = false, level = 10) {
+        const item = document.createElement('div');
+        item.className = 'chat-item';
+        
+        const isHigh = level >= 25;
+        item.innerHTML = `
+            <span class="user-level ${isHigh ? 'high' : ''}">Lv.${level}</span>
+            <span class="user-name ${isVip ? 'vip' : ''}">${name}:</span>
+            <span class="chat-text">${escapeHtml(text)}</span>
+        `;
+
+        chatScrollArea.appendChild(item);
+        chatScrollArea.scrollTop = chatScrollArea.scrollHeight;
+
+        // 维持弹幕树在 40 条以内
+        if (chatScrollArea.children.length > 40) {
+            chatScrollArea.removeChild(chatScrollArea.children[0]);
+        }
+    }
+
+    function escapeHtml(str) {
+        return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    // 定时自动刷弹幕
+    setInterval(() => {
+        const u = userPool[Math.floor(Math.random() * userPool.length)];
+        const t = textPool[Math.floor(Math.random() * textPool.length)];
+        const isVip = Math.random() > 0.65;
+        const level = Math.floor(Math.random() * 40) + 1;
+        appendChatMessage(u, t, isVip, level);
+    }, 900);
+
+    // 用户发弹幕
+    function handleInputKeyPress(e) {
+        if (e.key === 'Enter') {
+            const input = document.getElementById('chatInput');
+            const val = input.value.trim();
+            if (val) {
+                appendChatMessage("我 (榜一大哥)", val, true, 52);
+                input.value = '';
+            }
+        }
+    }
+
+    /* ==================== 4. 刷礼物与高阶动画 ==================== */
+    const giftBannerContainer = document.getElementById('giftBannerContainer');
+    const carnivalOverlay = document.getElementById('carnivalOverlay');
+
+    // 组合 Combo 记录
+    let comboTracker = {};
+
+    function sendGift(giftName, emoji, cost) {
+        const username = "榜一大哥(我)";
+        triggerGiftEffect(username, giftName, emoji, true);
+        toggleGiftDrawer(false);
+    }
+
+    function triggerGiftEffect(username, giftName, emoji, isSelf = false) {
+        // 音效模拟 (Web Audio API)
+        playGiftSound();
+
+        // 嘉年华全屏高阶特效
+        if (giftName.includes('嘉年华')) {
+            carnivalOverlay.classList.add('active');
+            setTimeout(() => carnivalOverlay.classList.remove('active'), 2500);
+        }
+
+        // 校验是否有连续combo
+        const comboKey = username + '_' + giftName;
+        if (!comboTracker[comboKey]) {
+            comboTracker[comboKey] = 1;
+        } else {
+            comboTracker[comboKey] += 1;
+        }
+        const currentCombo = comboTracker[comboKey];
+
+        const card = document.createElement('div');
+        card.className = 'gift-card';
+        card.innerHTML = `
+            <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=80" class="gift-user-avatar">
+            <div class="gift-info">
+                <div class="gift-username">${username}</div>
+                <div class="gift-action">送出 ${giftName}</div>
+            </div>
+            <div class="gift-icon-anim">${emoji}</div>
+            <div class="gift-combo">x${currentCombo}</div>
+        `;
+
+        giftBannerContainer.appendChild(card);
+
+        // 3秒后移除
+        setTimeout(() => {
+            card.style.opacity = '0';
+            card.style.transform = 'translateX(-100%)';
+            card.style.transition = 'all 0.3s ease';
+            setTimeout(() => {
+                card.remove();
+                if (giftBannerContainer.children.length === 0) {
+                    comboTracker[comboKey] = 0;
+                }
+            }, 300);
+        }, 3200);
+
+        // 弹幕区播报
+        appendChatMessage("直播间提示", `${username} 赠送了 ${giftName} ${emoji}！`, true, 45);
+    }
+
+    // 随机路人赠送礼物
+    const randomGifts = [
+        { name: "玫瑰花", emoji: "🌹" },
+        { name: "保时捷", emoji: "🏎️" },
+        { name: "抖音1号", emoji: "🚀" },
+        { name: "爱的气球", emoji: "🎈" }
+    ];
+
+    setInterval(() => {
+        if (Math.random() > 0.4) {
+            const u = userPool[Math.floor(Math.random() * userPool.length)];
+            const g = randomGifts[Math.floor(Math.random() * randomGifts.length)];
+            triggerGiftEffect(u, g.name, g.emoji);
+        }
+    }, 4500);
+
+    function toggleGiftDrawer(open) {
+        const drawer = document.getElementById('giftDrawer');
+        if (open) {
+            drawer.classList.add('open');
+        } else {
+            drawer.classList.remove('open');
+        }
+    }
+
+    /* ==================== 5. 点赞与多色飘心 ==================== */
+    function spawnHeartAt(x, y) {
+        const hearts = ['❤️', '💖', '💗', '🔥', '✨', '⭐', '🎈'];
+        const heart = document.createElement('div');
+        heart.className = 'floating-heart';
+        heart.innerText = hearts[Math.floor(Math.random() * hearts.length)];
+        
+        // 设置位置
+        const stage = document.getElementById('liveStage').getBoundingClientRect();
+        const relativeX = x - stage.left;
+        const relativeY = y - stage.top;
+
+        heart.style.left = (relativeX - 12) + 'px';
+        heart.style.top = (relativeY - 20) + 'px';
+
+        document.getElementById('liveStage').appendChild(heart);
+
+        setTimeout(() => heart.remove(), 2200);
+
+        // 增加点赞数
+        likeCount += 1;
+        likeCountText.innerText = formatNumber(likeCount);
+    }
+
+    function handleStageClick(e) {
+        spawnHeartAt(e.clientX, e.clientY);
+    }
+
+    function triggerManualLike() {
+        const stage = document.getElementById('liveStage').getBoundingClientRect();
+        spawnHeartAt(stage.right - 40, stage.bottom - 90);
+    }
+
+    // 自动连续飘心模拟人气
+    setInterval(() => {
+        const stage = document.getElementById('liveStage').getBoundingClientRect();
+        const randX = stage.right - 40 + (Math.random() * 30 - 15);
+        const randY = stage.bottom - 80 + (Math.random() * 20 - 10);
+        spawnHeartAt(randX, randY);
+    }, 500);
+
+    /* ==================== 6. Web Audio 音效合成器 ==================== */
+    function playGiftSound() {
+        try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) return;
+            const ctx = new AudioCtx();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+            osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15); // A5
+
+            gain.gain.setValueAtTime(0.15, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            osc.start();
+            osc.stop(ctx.currentTime + 0.2);
+        } catch(e) {}
+    }
+
+    /* ==================== 7. MediaPipe 手势识别 → 自动发评论 ==================== */
+    const gestureCanvas = document.getElementById('gestureCanvas');
+    const gestureCtx = gestureCanvas.getContext('2d');
+    const gestureHudDot = document.getElementById('gestureHudDot');
+    const gestureHudText = document.getElementById('gestureHudText');
+    const gestureCurrent = document.getElementById('gestureCurrent');
+    const gestureHelpPanel = document.getElementById('gestureHelpPanel');
+
+    let gestureHands = null;
+    let gestureCamera = null;
+    let gestureEnabled = false;
+
+    // 每种手势对应的评论内容
+    const GESTURE_COMMENTS = {
+        like:    { emoji: '👍', name: '点赞',   comment: '主播太给力了，已三连点赞！👍' },
+        cheer:   { emoji: '🙌', name: '欢呼',   comment: '6666！主播加油，太棒了！🔥' },
+        heart:   { emoji: '🤟', name: '比心',   comment: '爱你哟主播～比个心心❤️' },
+        ily:     { emoji: '🤟', name: '爱你',   comment: 'I Love You！永远支持主播！🤟' },
+        victory: { emoji: '✌️', name: '加油',   comment: '奥利给！冲冲冲，干就完了！💪' },
+        rock:    { emoji: '🤘', name: '摇滚',   comment: '摇滚起来！嗨翻全场🤘' },
+        point:   { emoji: '👉', name: '看这里', comment: '快看这个宝贝！上链接！👉' },
+        hush:    { emoji: '✊', name: '安静',   comment: '嘘——安静一下，听主播说重点🤫' },
+    };
+
+    const GESTURE_COOLDOWN = 3000; // 同一手势最短发送间隔(ms)
+    const MIN_STABLE_FRAMES = 3;   // 连续稳定帧数后才发送
+    let currentGesture = 'none';
+    let stableCount = 0;
+    const lastSentTime = {};
+
+    // 适配画布分辨率
+    function resizeGestureCanvas() {
+        const wrap = document.querySelector('.camera-wrapper');
+        gestureCanvas.width = wrap.clientWidth;
+        gestureCanvas.height = wrap.clientHeight;
+    }
+
+    function setGestureHud(state, text) {
+        gestureHudDot.className = 'gesture-hud-dot' + (state ? ' ' + state : '');
+        gestureHudText.innerText = text;
+    }
+
+    // 渲染帮助面板
+    function renderGestureHelp() {
+        const list = document.getElementById('gestureHelpList');
+        list.innerHTML = Object.values(GESTURE_COMMENTS).map(g => `
+            <div class="gesture-help-item">
+                <div class="gesture-help-emoji">${g.emoji}</div>
+                <div class="gesture-help-text">
+                    <div class="gesture-help-name">${g.name}</div>
+                    <div class="gesture-help-comment">${escapeHtml(g.comment)}</div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function toggleGestureHelp(force) {
+        const open = typeof force === 'boolean' ? force : !gestureHelpPanel.classList.contains('open');
+        gestureHelpPanel.classList.toggle('open', open);
+    }
+
+    // 显示/隐藏当前手势大字提示
+    function showGestureCurrent(key) {
+        const g = GESTURE_COMMENTS[key];
+        if (!g) { hideGestureCurrent(); return; }
+        gestureCurrent.innerText = `${g.emoji} ${g.name}`;
+        gestureCurrent.classList.add('show');
+    }
+    function hideGestureCurrent() {
+        gestureCurrent.classList.remove('show');
+    }
+
+    // 根据 21 个手部关键点分类手势
+    function classifyGesture(lm) {
+        const d = (a, b) => Math.hypot(lm[a].x - lm[b].x, lm[a].y - lm[b].y);
+        const wrist = 0;
+        const ext = (tip, pip) => d(tip, wrist) > d(pip, wrist);
+        const indexExt  = ext(8, 6);
+        const middleExt = ext(12, 10);
+        const ringExt   = ext(16, 14);
+        const pinkyExt  = ext(20, 18);
+        const thumbExt  = d(4, wrist) > d(2, wrist);
+        const scale = d(0, 9); // 手掌尺度，用于判断"比心"
+
+        // 比心：五指张开但拇指与食指尖相触成环
+        if (thumbExt && indexExt && middleExt && ringExt && pinkyExt && d(4, 8) < 0.45 * scale) return 'heart';
+        // I Love You：拇指+食指+小指
+        if (thumbExt && indexExt && pinkyExt && !middleExt && !ringExt) return 'ily';
+        // 点赞 👍：仅拇指伸出
+        if (thumbExt && !indexExt && !middleExt && !ringExt && !pinkyExt) return 'like';
+        // 胜利 ✌️：食指+中指
+        if (indexExt && middleExt && !ringExt && !pinkyExt) return 'victory';
+        // 摇滚 🤘：食指+小指
+        if (indexExt && pinkyExt && !middleExt && !ringExt) return 'rock';
+        // 指路 👉：仅食指
+        if (indexExt && !middleExt && !ringExt && !pinkyExt) return 'point';
+        // 张开手掌 🙌：四指全开
+        if (indexExt && middleExt && ringExt && pinkyExt) return 'cheer';
+        // 握拳 ✊：全部收起
+        if (!indexExt && !middleExt && !ringExt && !pinkyExt) return 'hush';
+
+        return 'none';
+    }
+
+    function processGesture(landmarks) {
+        const g = classifyGesture(landmarks);
+
+        if (g === currentGesture) {
+            stableCount++;
+        } else {
+            currentGesture = g;
+            stableCount = 1;
+        }
+
+        if (g !== 'none') {
+            showGestureCurrent(g);
+            const now = Date.now();
+            const last = lastSentTime[g] || 0;
+            if (stableCount >= MIN_STABLE_FRAMES && now - last >= GESTURE_COOLDOWN) {
+                lastSentTime[g] = now;
+                sendGestureComment(g);
+            }
+        } else {
+            hideGestureCurrent();
+        }
+    }
+
+    function handleNoHand() {
+        currentGesture = 'none';
+        stableCount = 0;
+        hideGestureCurrent();
+    }
+
+    // 手势命中后发表评论
+    function sendGestureComment(key) {
+        const g = GESTURE_COMMENTS[key];
+        if (!g) return;
+        appendChatMessage("我 (手势评论)", g.comment, true, 52);
+        playGiftSound();
+        // 点赞/比心额外飘心反馈
+        if (key === 'like' || key === 'heart' || key === 'ily') {
+            const stage = document.getElementById('liveStage').getBoundingClientRect();
+            spawnHeartAt(stage.left + stage.width / 2, stage.bottom - 120);
+        }
+    }
+
+    // MediaPipe 回调：绘制骨架 + 识别
+    function onResults(results) {
+        gestureCtx.save();
+        gestureCtx.clearRect(0, 0, gestureCanvas.width, gestureCanvas.height);
+
+        if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+            setGestureHud('ready', '手势识别中…');
+            for (const lm of results.multiHandLandmarks) {
+                if (typeof drawConnectors !== 'undefined' && typeof HAND_CONNECTIONS !== 'undefined') {
+                    drawConnectors(gestureCtx, lm, HAND_CONNECTIONS, { color: '#ff0050', lineWidth: 3 });
+                }
+                if (typeof drawLandmarks !== 'undefined') {
+                    drawLandmarks(gestureCtx, lm, { color: '#00f2fe', lineWidth: 1, radius: 3 });
+                }
+            }
+            // 仅用第一只手做稳定性判断
+            processGesture(results.multiHandLandmarks[0]);
+        } else {
+            handleNoHand();
+        }
+
+        gestureCtx.restore();
+    }
+
+    async function initGesture() {
+        renderGestureHelp();
+        resizeGestureCanvas();
+        window.addEventListener('resize', resizeGestureCanvas);
+
+        if (typeof Hands === 'undefined' || typeof Camera === 'undefined') {
+            setGestureHud('error', '手势库加载失败，仅普通直播');
+            initCamera(); // 降级：普通摄像头
+            return;
+        }
+
+        try {
+            gestureHands = new Hands({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+            });
+            gestureHands.setOptions({
+                maxNumHands: 1,
+                modelComplexity: 0,
+                minDetectionConfidence: 0.6,
+                minTrackingConfidence: 0.6
+            });
+            gestureHands.onResults(onResults);
+
+            gestureCamera = new Camera(webcamVideo, {
+                onFrame: async () => {
+                    if (gestureEnabled && gestureHands) {
+                        await gestureHands.send({ image: webcamVideo });
+                    }
+                },
+                width: 1280,
+                height: 720
+            });
+            await gestureCamera.start();
+            cameraFallback.style.display = 'none';
+
+            gestureEnabled = true;
+            document.getElementById('gestureToggleBtn').classList.add('active');
+            setGestureHud('ready', '手势识别已开启');
+        } catch (err) {
+            console.warn('手势摄像头启动失败，降级普通直播:', err);
+            setGestureHud('error', '手势摄像头不可用');
+            initCamera();
+        }
+    }
+
+    // 手势开关
+    function toggleGestureDetection() {
+        if (typeof Hands === 'undefined') { showToast('手势库未加载'); return; }
+        gestureEnabled = !gestureEnabled;
+        const btn = document.getElementById('gestureToggleBtn');
+        if (gestureEnabled) {
+            btn.classList.add('active');
+            btn.innerHTML = '⏸<span>手势</span>';
+            setGestureHud('ready', '手势识别已开启');
+        } else {
+            btn.classList.remove('active');
+            btn.innerHTML = '▶<span>手势</span>';
+            setGestureHud('', '手势识别已暂停');
+            gestureCtx.clearRect(0, 0, gestureCanvas.width, gestureCanvas.height);
+            hideGestureCurrent();
+            handleNoHand();
+        }
+    }
+
+    /* ==================== 8. 语音识别 → 关键词发表评论 ==================== */
+    const voiceHudDot = document.getElementById('voiceHudDot');
+    const voiceHudText = document.getElementById('voiceHudText');
+    const voiceSubtitle = document.getElementById('voiceSubtitle');
+
+    let voiceRecognition = null;
+    let voiceEnabled = false;
+    let lastVoiceSendTime = 0;
+    const VOICE_COOLDOWN = 1500; // 语音评论最短间隔(ms)
+
+    // 关键词 → 评论规则（按顺序匹配，命中第一条）
+    const VOICE_RULES = [
+        { keys: ['点赞', '赞', '三连'],        comment: '主播太棒了，已三连点赞！👍' },
+        { keys: ['666', '牛', '厉害', '强'],    comment: '6666！这操作太牛了！🔥' },
+        { keys: ['买', '下单', '链接', '上架'], comment: '已下单，快上链接！🛒' },
+        { keys: ['好看', '漂亮', '美', '帅'],    comment: '主播好漂亮啊，爱了爱了！😍' },
+        { keys: ['关注', '粉了', '取关'],        comment: '已关注主播，冲冲冲！✨' },
+        { keys: ['爱你', '喜欢', '爱了', '比心'],comment: '爱你哟主播～比个心心❤️' },
+        { keys: ['笑死', '搞笑', '哈哈', '逗'],  comment: '哈哈哈笑死我了，太有意思！😂' },
+        { keys: ['加油', '冲', '奥利给'],        comment: '奥利给！主播加油！💪' },
+        { keys: ['再见', '拜拜', '下次'],        comment: '主播再见，下次还来！👋' },
+        { keys: ['歌', '唱', '音乐', '好听'],    comment: '主播唱得真好听！🎤' },
+    ];
+
+    function setVoiceHud(state, text) {
+        voiceHudDot.className = 'voice-hud-dot' + (state ? ' ' + state : '');
+        voiceHudText.innerText = text;
+    }
+
+    function showVoiceSubtitle(finalText, interimText) {
+        let html = '';
+        if (finalText) html += escapeHtml(finalText);
+        if (interimText) html += ' <span class="interim">' + escapeHtml(interimText) + '</span>';
+        voiceSubtitle.innerHTML = html;
+        voiceSubtitle.classList.add('show');
+        clearTimeout(showVoiceSubtitle._t);
+        showVoiceSubtitle._t = setTimeout(() => voiceSubtitle.classList.remove('show'), 2500);
+    }
+
+    // 根据识别文本匹配评论并发送
+    function handleVoiceFinal(text) {
+        if (!text) return;
+        const now = Date.now();
+        if (now - lastVoiceSendTime < VOICE_COOLDOWN) return;
+        lastVoiceSendTime = now;
+
+        let matched = null;
+        for (const rule of VOICE_RULES) {
+            if (rule.keys.some(k => text.includes(k))) {
+                matched = rule.comment;
+                break;
+            }
+        }
+
+        if (matched) {
+            appendChatMessage("我 (语音)", matched, true, 52);
+        } else {
+            // 未命中关键词，也把说的话发出来
+            appendChatMessage("我 (语音)", text, true, 52);
+        }
+        playGiftSound();
+    }
+
+    function buildVoiceRecognition() {
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SR) return null;
+        const rec = new SR();
+        rec.lang = 'zh-CN';
+        rec.continuous = true;
+        rec.interimResults = true;
+        rec.maxAlternatives = 1;
+
+        rec.onresult = (event) => {
+            let interim = '';
+            let finalText = '';
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                const res = event.results[i];
+                if (res.isFinal) {
+                    finalText += res[0].transcript;
+                } else {
+                    interim += res[0].transcript;
+                }
+            }
+            showVoiceSubtitle(finalText, interim);
+            if (finalText) handleVoiceFinal(finalText);
+        };
+
+        rec.onerror = (e) => {
+            if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+                voiceEnabled = false;
+                setVoiceHud('error', '麦克风权限被拒绝');
+                updateVoiceBtn();
+            } else if (e.error === 'no-speech') {
+                // 忽略，等待下次
+            } else {
+                setVoiceHud('error', '语音识别出错：' + e.error);
+            }
+        };
+
+        // 连续识别可能自动结束，开启状态下自动重启
+        rec.onend = () => {
+            if (voiceEnabled && voiceRecognition) {
+                try { voiceRecognition.start(); } catch (e) {}
+            } else {
+                setVoiceHud('', '语音评论未开启');
+            }
+        };
+
+        return rec;
+    }
+
+    function updateVoiceBtn() {
+        const btn = document.getElementById('voiceToggleBtn');
+        if (voiceEnabled) {
+            btn.classList.add('active');
+            btn.innerHTML = '🎙<span>语音</span>';
+        } else {
+            btn.classList.remove('active');
+            btn.innerHTML = '🎤<span>语音</span>';
+        }
+    }
+
+    function toggleVoiceRecognition() {
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SR) {
+            showToast('当前浏览器不支持语音识别（建议用 Chrome）');
+            return;
+        }
+
+        if (voiceEnabled) {
+            voiceEnabled = false;
+            if (voiceRecognition) voiceRecognition.stop();
+            setVoiceHud('', '语音评论未开启');
+            updateVoiceBtn();
+            return;
+        }
+
+        if (!voiceRecognition) {
+            voiceRecognition = buildVoiceRecognition();
+        }
+        if (!voiceRecognition) {
+            showToast('语音识别初始化失败');
+            return;
+        }
+
+        try {
+            voiceRecognition.start();
+            voiceEnabled = true;
+            setVoiceHud('listening', '聆听中…说出关键词');
+            updateVoiceBtn();
+        } catch (e) {
+            showToast('无法启动语音识别');
+        }
+    }
+
+    // 初始化
+    window.addEventListener('DOMContentLoaded', () => {
+        if (typeof Hands !== 'undefined' && typeof Camera !== 'undefined') {
+            initGesture();
+        } else {
+            initCamera();
+            setGestureHud('error', '手势库未加载，仅普通直播');
+        }
+    });
+</script>
+
+</body>
+</html>

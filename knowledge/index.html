@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>极简时尚 - 3D 巨量节点球体</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #040508; /* 极深夜空蓝 */
+            font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+        }
+
+        /* 时尚玻璃拟态 UI */
+        .ui-overlay {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            padding: 12px 24px;
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border-radius: 50px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 14px;
+            letter-spacing: 2px;
+            white-space: nowrap;
+            pointer-events: none; /* 穿透点击 */
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        #graph-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="ui-overlay">
+        GLOBAL KNOWLEDGE SPHERE // 1300+ NODES
+    </div>
+
+    <canvas id="graph-canvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('graph-canvas');
+        const ctx = canvas.getContext('2d');
+
+        let width, height, centerX, centerY;
+        let sphereRadius;
+
+        // --- 配置参数 ---
+        // 1300 节点对纯 JS Canvas 是一个极限边缘值，保证流畅度的同时足够震撼
+        const TOTAL_NODES = 1350; 
+        const NODE_COLOR = 'rgba(56, 189, 248,'; // 霓虹蓝 base
+        const LINE_COLOR = 'rgba(56, 189, 248,';
+        const ROTATION_SPEED = 0.002;
+
+        let nodes = [];
+        let angleX = 0;
+        let angleY = 0;
+
+        // 响应式尺寸设置
+        function setCanvasSize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            centerX = width / 2;
+            centerY = height / 2;
+            // 球体半径适配屏幕短边
+            sphereRadius = Math.min(width, height) * 0.4;
+            
+            // 移动端缩小球体
+            if(width < 768) {
+                sphereRadius = Math.min(width, height) * 0.45;
+            }
+        }
+
+        // --- 核心数学：生成球体表面均匀分布的点 ---
+        // 使用斐波那契球体算法 (Fibonacci Sphere) 保证超多节点分布均匀
+        function initNodes() {
+            nodes = [];
+            for (let i = 0; i < TOTAL_NODES; i++) {
+                const y = 1 - (i / (TOTAL_NODES - 1)) * 2; // y 从 1 到 -1
+                const radiusAtY = Math.sqrt(1 - y * y); // 当前 y 轴高度下的圆半径
+
+                const goldenAngle = Math.PI * (3 - Math.sqrt(5)); // 黄金角度
+                const theta = goldenAngle * i; // 绕 y 轴旋转角度
+
+                const x = Math.cos(theta) * radiusAtY;
+                const z = Math.sin(theta) * radiusAtY;
+
+                nodes.push({
+                    x: x * sphereRadius,
+                    y: y * sphereRadius,
+                    z: z * sphereRadius,
+                    // 预留连线目标，只连附近的人
+                    connections: []
+                });
+            }
+
+            // --- 核心优化：预计算连线 ---
+            // 巨量节点下，每一帧遍历计算距离会卡死。这里只在初始化时寻找邻近节点。
+            for (let i = 0; i < TOTAL_NODES; i++) {
+                // 每个点随机找 1 到 2 个邻近的点连线，保证线条简约不拥挤
+                const connectionCount = Math.random() > 0.5 ? 2 : 1;
+                for (let j = 0; j < connectionCount; j++) {
+                    const targetIndex = Math.floor(Math.random() * TOTAL_NODES);
+                    // 简单的随机连线，在斐波那契分布下视觉效果已经很好，且性能最优
+                    if (targetIndex !== i && !nodes[i].connections.includes(targetIndex)) {
+                        nodes[i].connections.push(targetIndex);
+                    }
+                }
+            }
+        }
+
+        // --- 核心数学：3D 旋转与 2D 投影 ---
+        function rotateAndProject() {
+            ctx.clearRect(0, 0, width, height);
+
+            // 用于离屏缓冲或批次渲染优化（ Canvas 对批次路径渲染更友好）
+            ctx.beginPath(); 
+            ctx.lineWidth = 0.5;
+
+            // 预计算旋转矩阵的 sin/cos，节省上千次计算
+            const cosX = Math.cos(angleX);
+            const sinX = Math.sin(angleX);
+            const cosY = Math.cos(angleY);
+            const sinY = Math.sin(angleY);
+
+            const projectedNodes = [];
+
+            // 1. 计算所有点的 3D 旋转和 2D 投影
+            for (let i = 0; i < TOTAL_NODES; i++) {
+                const node = nodes[i];
+
+                // 绕 X 轴旋转
+                let y1 = node.y * cosX - node.z * sinX;
+                let z1 = node.z * cosX + node.y * sinX;
+
+                // 绕 Y 轴旋转
+                let x2 = node.x * cosY + z1 * sinY;
+                let z2 = z1 * cosY - node.x * sinY;
+
+                // 简单的透视投影
+                const perspective = sphereRadius / (sphereRadius + z2 + sphereRadius * 0.5);
+                const screenX = x2 * perspective + centerX;
+                const screenY = y1 * perspective + centerY;
+
+                // 深度（Z轴）决定透明度和大小 - 核心时尚感
+                const alpha = (z2 + sphereRadius) / (2 * sphereRadius); // 0 到 1
+                
+                projectedNodes.push({
+                    x: screenX,
+                    y: screenY,
+                    alpha: alpha * 0.8 + 0.2, // 保证最背面的点也微可见
+                    size: perspective * 1.5,
+                    visible: z2 > -sphereRadius * 0.9 // 裁剪掉极少数在后方的怪点
+                });
+            }
+
+            // 2. 渲染线 (批量渲染，性能极高)
+            ctx.strokeStyle = LINE_COLOR + ' 0.1)'; // 极淡的初始颜色
+            ctx.beginPath();
+            for (let i = 0; i < TOTAL_NODES; i++) {
+                const p1 = projectedNodes[i];
+                if (!p1.visible || p1.alpha < 0.3) continue; // 背面线条不渲染
+
+                const connections = nodes[i].connections;
+                for (let j = 0; j < connections.length; j++) {
+                    const p2 = projectedNodes[connections[j]];
+                    
+                    // 只渲染两个点都在正面的线
+                    if (p2.visible && p2.alpha > 0.3) {
+                        ctx.moveTo(p1.x, p1.y);
+                        ctx.lineTo(p2.x, p2.y);
+                    }
+                }
+            }
+            ctx.stroke(); // 一次性绘制所有线条
+
+            // 3. 渲染点 (独立渲染，为了不同的透明度)
+            for (let i = 0; i < TOTAL_NODES; i++) {
+                const p = projectedNodes[i];
+                if (!p.visible) continue;
+
+                ctx.beginPath();
+                // 根据深度设置透明度，造成立体呼吸感
+                ctx.fillStyle = NODE_COLOR + (p.alpha * 0.7) + ')';
+                
+                // 核心核心核心：1000+节点下，绝对不能用 shadowBlur，会卡死。
+                // 我们用不同透明度的同心圆模拟发光。
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // 对近处的点加一层微发光
+                if(p.alpha > 0.8) {
+                    ctx.beginPath();
+                    ctx.fillStyle = NODE_COLOR + (p.alpha * 0.2) + ')';
+                    ctx.arc(p.x, p.y, p.size * 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+        }
+
+        function animate() {
+            // 自动旋转
+            angleX += ROTATION_SPEED * 0.3;
+            angleY += ROTATION_SPEED;
+            
+            rotateAndProject();
+            requestAnimationFrame(animate);
+        }
+
+        // --- 初始化与适配 ---
+        window.addEventListener('resize', () => {
+            setCanvasSize();
+            initNodes(); // 屏幕尺寸变了，需要重新生成均匀的球
+        });
+
+        // 触摸/鼠标交互：轻微影响旋转
+        let isDrawing = false;
+        let lastX, lastY;
+
+        canvas.addEventListener('pointerdown', (e) => { isDrawing = true; lastX = e.clientX; lastY = e.clientY; });
+        window.addEventListener('pointerup', () => isDrawing = false);
+        canvas.addEventListener('pointermove', (e) => {
+            if (!isDrawing) return;
+            const deltaX = e.clientX - lastX;
+            const deltaY = e.clientY - lastY;
+            angleY += deltaX * 0.005;
+            angleX += deltaY * 0.005;
+            lastX = e.clientX;
+            lastY = e.clientY;
+        });
+
+        // 启动
+        setCanvasSize();
+        initNodes();
+        animate();
+
+    </script>
+</body>
+</html>
