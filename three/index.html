@@ -351,6 +351,93 @@
             font-size: 16px;
         }
 
+        /* 多画布标签栏 */
+        .canvas-tabs-wrap {
+            display: flex;
+            align-items: center;
+            flex: 1;
+            justify-content: center;
+            overflow: hidden;
+            margin: 0 16px;
+            gap: 8px;
+        }
+
+        .canvas-tabs {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            overflow-x: auto;
+            scrollbar-width: none;
+            max-width: 100%;
+        }
+
+        .canvas-tabs::-webkit-scrollbar {
+            display: none;
+        }
+
+        .canvas-tab {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 10px;
+            border-radius: 8px;
+            background: rgba(128, 128, 128, 0.06);
+            border: 1px solid var(--panel-border);
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 12px;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+        }
+
+        .canvas-tab:hover {
+            color: var(--text-main);
+            background: rgba(128, 128, 128, 0.12);
+        }
+
+        .canvas-tab.active {
+            color: #fff;
+            background: var(--accent-color);
+            border-color: transparent;
+            box-shadow: 0 0 12px rgba(99, 102, 241, 0.4);
+        }
+
+        .canvas-tab .tab-close {
+            opacity: 0.6;
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+        }
+
+        .canvas-tab .tab-close:hover {
+            opacity: 1;
+            color: #ef4444;
+        }
+
+        .canvas-tab.active .tab-close:hover {
+            color: #fff;
+        }
+
+        .canvas-add-btn {
+            flex: 0 0 auto;
+            width: 30px;
+            height: 30px;
+            border-radius: 8px;
+            border: 1px dashed var(--panel-border);
+            background: transparent;
+            color: var(--text-muted);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .canvas-add-btn:hover {
+            color: var(--text-main);
+            border-color: var(--accent-color);
+        }
+
         /* 新增：时间轴刻度容器样式 */
         .timeline-ticks-container {
             position: relative;
@@ -381,6 +468,11 @@
             }
             .logo { font-size: 15px; letter-spacing: 2px; }
             .header-actions div:last-child { display: none; }
+
+            /* 📱 画布标签栏在小屏下压缩并允许横向滑动 */
+            .canvas-tabs-wrap { margin: 0 8px; gap: 6px; }
+            .canvas-tab { padding: 4px 8px; font-size: 11px; gap: 4px; }
+            .canvas-add-btn { width: 26px; height: 26px; }
 
             /* 📱 底部工具栏横条：强行固定在屏幕最绝对的底部，并提升层级 */
             .toolbar {
@@ -431,6 +523,10 @@
     <!-- 顶部状态栏 -->
     <header class="glass-panel">
         <div class="logo">Aura 3D</div>
+        <div class="canvas-tabs-wrap">
+            <div class="canvas-tabs" id="canvas-tabs"></div>
+            <button class="canvas-add-btn" id="btn-add-canvas" title="新建画布"><i class="fa-solid fa-plus"></i></button>
+        </div>
         <div class="header-actions">
             <button class="theme-btn" id="theme-toggle" title="切换白天/暗黑模式">
                 <i id="theme-icon" class="fa-regular fa-moon"></i>
@@ -560,7 +656,12 @@
         let isDrawing = false;
         let isBoxSelecting = false;
         let boxStart = { x: 0, y: 0 };
-        const objectsGroup = new THREE.Group(); 
+        let objectsGroup; // 指向当前激活画布的对象组
+
+        // 多画布状态（需在 init 之前声明，避免 TDZ）
+        let canvases = [];
+        let activeCanvasIndex = 0;
+        let canvasSeq = 0;
         
         let actionHistory = [];
         let currentStrokeObjects = [];
@@ -587,7 +688,7 @@
             scene = new THREE.Scene();
             scene.background = new THREE.Color('#08080a');
             scene.fog = new THREE.FogExp2('#08080a', 0.015);
-            scene.add(objectsGroup);
+            initCanvasSystem();
             scene.add(selectionGroup);
 
             camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -1376,6 +1477,100 @@
             actionHistory = []; currentStrokeObjects = [];
         }
 
+        /* ===================== 多画布管理 ===================== */
+        function createCanvas(name) {
+            canvasSeq++;
+            const group = new THREE.Group();
+            return { id: canvasSeq, name: name || ('画布 ' + canvasSeq), group, history: [] };
+        }
+
+        function initCanvasSystem() {
+            const first = createCanvas('画布 1');
+            canvases = [first];
+            activeCanvasIndex = 0;
+            objectsGroup = first.group;
+            actionHistory = first.history;
+            scene.add(objectsGroup);
+            renderCanvasTabs();
+        }
+
+        function addCanvas() {
+            const c = createCanvas();
+            canvases.push(c);
+            switchCanvas(canvases.length - 1);
+        }
+
+        function switchCanvas(index) {
+            if (index < 0 || index >= canvases.length || index === activeCanvasIndex) return;
+            // 保存并卸载当前画布
+            clearSelection();
+            isDrawing = false;
+            currentStrokeObjects = [];
+            canvases[activeCanvasIndex].history = actionHistory;
+            scene.remove(objectsGroup);
+            // 载入目标画布
+            activeCanvasIndex = index;
+            objectsGroup = canvases[activeCanvasIndex].group;
+            actionHistory = canvases[activeCanvasIndex].history;
+            scene.add(objectsGroup);
+            renderCanvasTabs();
+        }
+
+        function closeCanvas(index) {
+            if (canvases.length <= 1) return; // 至少保留一个画布
+            if (!confirm('确定关闭「' + canvases[index].name + '」？该画布内容将被删除。')) return;
+            const closingActive = (index === activeCanvasIndex);
+            const activeCanvasRef = canvases[activeCanvasIndex];
+            if (closingActive) { clearSelection(); scene.remove(objectsGroup); }
+            // 释放资源
+            canvases[index].group.traverse(o => {
+                if (o.geometry) o.geometry.dispose();
+                if (o.material) {
+                    if (Array.isArray(o.material)) o.material.forEach(m => m.dispose());
+                    else o.material.dispose();
+                }
+            });
+            canvases.splice(index, 1);
+            if (closingActive) {
+                activeCanvasIndex = Math.min(index, canvases.length - 1);
+                objectsGroup = canvases[activeCanvasIndex].group;
+                actionHistory = canvases[activeCanvasIndex].history;
+                scene.add(objectsGroup);
+            } else {
+                activeCanvasIndex = canvases.indexOf(activeCanvasRef);
+            }
+            renderCanvasTabs();
+        }
+
+        function renderCanvasTabs() {
+            const bar = document.getElementById('canvas-tabs');
+            if (!bar) return;
+            bar.innerHTML = '';
+            canvases.forEach((c, i) => {
+                const tab = document.createElement('div');
+                tab.className = 'canvas-tab' + (i === activeCanvasIndex ? ' active' : '');
+                const label = document.createElement('span');
+                label.textContent = c.name;
+                label.title = '双击重命名';
+                tab.appendChild(label);
+                tab.addEventListener('click', () => switchCanvas(i));
+                label.addEventListener('dblclick', (e) => {
+                    e.stopPropagation();
+                    const nn = prompt('重命名画布：', c.name);
+                    if (nn && nn.trim()) { c.name = nn.trim(); renderCanvasTabs(); }
+                });
+                if (canvases.length > 1) {
+                    const close = document.createElement('span');
+                    close.className = 'tab-close';
+                    close.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+                    close.title = '关闭画布';
+                    close.addEventListener('click', (e) => { e.stopPropagation(); closeCanvas(i); });
+                    tab.appendChild(close);
+                }
+                bar.appendChild(tab);
+            });
+        }
+
         function deleteSelectedObjects() {
             if (selectedObjects.length === 0) return;
             const deletedGroup = [...selectedObjects];
@@ -1451,6 +1646,7 @@
         }
 
         function setupUI() {
+            document.getElementById('btn-add-canvas').addEventListener('click', addCanvas);
             const tools = ['view', 'move', 'brush', 'shape', 'marquee'];
             tools.forEach(tool => { document.getElementById(`tool-${tool}`).addEventListener('click', () => { switchTool(tool); }); });
 
