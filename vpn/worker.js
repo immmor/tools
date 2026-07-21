@@ -2806,7 +2806,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           try {
             if (method.startsWith('crypto_')) {
               await DB.prepare('INSERT OR REPLACE INTO link (key, value) VALUES (?, ?)')
-                .bind(`withdraw_account_${username}_crypto`, finalQrCode).run();
+                .bind(`withdraw_account_${username}_${method}`, finalQrCode).run();
             } else {
               await DB.prepare('INSERT OR REPLACE INTO link (key, value) VALUES (?, ?)')
                 .bind(`withdraw_qr_${username}_${method}`, finalQrCode).run();
