@@ -453,8 +453,6 @@
   function init() {
     const selectEl = $('fb-match-select');
     if (selectEl) selectEl.addEventListener('change', () => { selectedDate = selectEl.value; removeBetModal(); renderSlider(); });
-
-    loadMatches();
   }
 
   if (document.readyState === 'loading') {

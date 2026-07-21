@@ -245,6 +245,9 @@
                     if (['wheel', 'slot', 'scratch', 'football'].includes(tabId)) {
                         renderGameHistory(tabId);
                     }
+                    if (tabId === 'football' && typeof window.FootballModule?.loadMatches === 'function') {
+                        window.FootballModule.loadMatches();
+                    }
                     if (tabId === 'scratch') {
                         if (isPrizeAdded) {
                             hasValidCard = false;
@@ -294,6 +297,9 @@
         };
 
         initWheel();
+
+        // 幸运转盘为默认激活 Tab，初始化时加载其历史记录
+        renderGameHistory('wheel');
 
         spinBtn.addEventListener('click', async () => {
             if (isWheelSpinning) return;
@@ -698,5 +704,8 @@
         document.addEventListener('languageChanged', () => {
             initScratchCard();
         });
+
+        // 暴露给外部（登录 / 登出时主动刷新幸运转盘数据）
+        window.GameCenterModule = { renderGameHistory, updateBalanceDisplay };
     };
 })();
