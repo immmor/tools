@@ -163,7 +163,7 @@ export default {
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-              from: 'PHANTOM VPN <noreply@phantom.immmor.com>',
+              from: 'PHANTOM VPN <noreply@phantom.funbua.uk>',
               to: [email],
               subject: emailSubject,
               html: emailHtml
