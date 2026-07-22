@@ -1,0 +1,1163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aura Studio Pro — 极简电子设计软件</title>
+    <!-- Fabric.js & Google Fonts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <style>
+        :root {
+            --bg-main: #f8f9fa;
+            --panel-bg: rgba(255, 255, 255, 0.9);
+            --border-color: rgba(0, 0, 0, 0.08);
+            --accent-color: #111111;
+            --accent-hover: #333333;
+            --text-main: #1f2937;
+            --text-muted: #6b7280;
+            --radius: 12px;
+            --shadow: 0 10px 30px rgba(0,0,0,0.06);
+            --blur: blur(20px);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* 顶部导航栏 */
+        header {
+            height: 60px;
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--panel-bg);
+            backdrop-filter: var(--blur);
+            border-bottom: 1px solid var(--border-color);
+            z-index: 30;
+            flex-shrink: 0;
+        }
+
+        .logo {
+            font-size: 1.05rem;
+            font-weight: 600;
+            letter-spacing: -0.5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+            margin-right: 5px;
+        }
+
+        .logo-badge {
+            width: 20px;
+            height: 20px;
+            display: block;
+            flex-shrink: 0;
+            color: var(--accent-color);
+        }
+
+        .logo-badge path {
+            stroke: currentColor;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        /* 右上角精简按钮组 */
+        .actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        /* 极简点击触发下拉菜单 */
+        .dropdown {
+            position: relative;
+            display: inline-block;
+        }
+
+        .dropdown-menu {
+            display: none;
+            position: absolute;
+            right: 0;
+            top: calc(100% + 8px);
+            background: #ffffff;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            padding: 6px;
+            min-width: 76px;
+            text-align: center;
+            z-index: 100;
+        }
+
+        .dropdown.active .dropdown-menu {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .dropdown-item {
+            padding: 9px 12px;
+            font-size: 0.85rem;
+            color: var(--text-main);
+            border-radius: 6px;
+            cursor: pointer;
+            background: transparent;
+            border: none;
+            text-align: center;
+            width: 100%;
+            transition: background 0.15s ease;
+        }
+
+        .dropdown-item:hover {
+            background: rgba(0,0,0,0.05);
+        }
+
+        /* 多画布：顶部标签栏（与 three/index.html 一致） */
+        .canvas-tabs-wrap {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0;
+            margin: 0 auto;
+        }
+
+        .canvas-tabs {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            overflow-x: auto;
+            max-width: 46vw;
+            scrollbar-width: none;
+        }
+
+        .canvas-tabs::-webkit-scrollbar {
+            display: none;
+        }
+
+        .canvas-tab {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: #fff;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            cursor: pointer;
+            white-space: nowrap;
+            font-family: inherit;
+            transition: all 0.15s ease;
+        }
+
+        .canvas-tab:hover {
+            border-color: var(--accent-color);
+        }
+
+        .canvas-tab.active {
+            background: var(--accent-color);
+            color: #fff;
+            border-color: var(--accent-color);
+        }
+
+        .canvas-tab-close {
+            color: inherit;
+            opacity: 0.7;
+            font-size: 1rem;
+            line-height: 1;
+            padding: 0 2px;
+        }
+
+        .canvas-tab-close:hover {
+            opacity: 1;
+        }
+
+        .canvas-add-btn {
+            flex-shrink: 0;
+            width: 34px;
+            height: 34px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            background: #fff;
+            color: var(--text-muted);
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s ease;
+        }
+
+        .canvas-add-btn:hover {
+            border-color: var(--accent-color);
+            color: var(--accent-color);
+        }
+
+        /* 通用按钮 */
+        .btn {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-main);
+            user-select: none;
+        }
+
+        .btn:hover {
+            background: rgba(0,0,0,0.03);
+            border-color: rgba(0,0,0,0.2);
+        }
+
+        .btn-primary {
+            background: var(--accent-color);
+            color: #fff;
+            border: none;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+        }
+
+        /* 主体布局 */
+        main {
+            flex: 1;
+            display: flex;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .panel {
+            background: var(--panel-bg);
+            backdrop-filter: var(--blur);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            z-index: 10;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        /* 左侧工具栏 */
+        .toolbar {
+            position: absolute;
+            left: 20px;
+            top: 20px;
+            width: 54px;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .tool-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-main);
+            transition: all 0.2s;
+        }
+
+        .tool-btn:hover {
+            background: rgba(0,0,0,0.05);
+        }
+
+        .tool-btn.active {
+            background: var(--accent-color);
+            color: #fff;
+        }
+
+        .tool-btn svg {
+            width: 20px;
+            height: 20px;
+            stroke-width: 1.75;
+        }
+
+        .tool-btn i {
+            font-size: 18px;
+            line-height: 1;
+        }
+
+        /* 右侧属性面板 */
+        .properties-panel {
+            position: absolute;
+            right: 20px;
+            top: 20px;
+            width: 250px;
+            max-height: calc(100% - 40px);
+            overflow-y: auto;
+        }
+
+        .panel-title {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        /* 移动端属性面板开关按钮（桌面端隐藏） */
+        .props-toggle {
+            display: none;
+        }
+
+        /* 画布与辅助控制栏 */
+        .canvas-container-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background-image: radial-gradient(rgba(0, 0, 0, 0.1) 1px, transparent 1px);
+            background-size: 24px 24px;
+            overflow: hidden;
+            position: relative;
+            padding: 20px;
+        }
+
+        .canvas-card {
+            box-shadow: 0 20px 50px rgba(0,0,0,0.08);
+            border-radius: 6px;
+            background: #fff;
+        }
+
+        /* 属性面板内的分隔线 */
+        .panel-divider {
+            height: 1px;
+            background: var(--border-color);
+            margin: 2px 0;
+        }
+
+        /* 危险操作按钮（如清空画布） */
+        .btn-danger {
+            background: #e53e3e;
+            color: #fff;
+        }
+
+        .btn-danger:hover {
+            background: #c53030;
+        }
+
+        /* 属性组与输入控件 */
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .control-group label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .control-group input[type="color"] {
+            -webkit-appearance: none;
+            border: none;
+            width: 100%;
+            height: 32px;
+            border-radius: 6px;
+            cursor: pointer;
+            background: none;
+        }
+
+        .control-group input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+        .control-group input[type="color"]::-webkit-color-swatch {
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+        }
+
+        .control-group input[type="range"] {
+            width: 100%;
+            accent-color: var(--accent-color);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 6px;
+        }
+
+        .btn-group .btn {
+            flex: 1;
+            justify-content: center;
+            padding: 6px;
+            font-size: 0.75rem;
+        }
+
+        .divider {
+            height: 1px;
+            background: var(--border-color);
+            margin: 2px 0;
+        }
+
+        #imgLoader, #jsonLoader { display: none; }
+
+        /* 📱 移动端/小屏幕专属优化 */
+        @media (max-width: 768px) {
+            header {
+                padding: 0 16px;
+                height: 54px;
+            }
+
+            .logo { font-size: 0.95rem; }
+
+            .btn {
+                padding: 6px 14px;
+                font-size: 0.8rem;
+            }
+
+            .canvas-container-wrapper {
+                padding: 10px;
+            }
+
+            /* 工具栏悬浮在屏幕底部中央 */
+            .toolbar {
+                left: 50%;
+                bottom: 12px;
+                top: auto;
+                transform: translateX(-50%);
+                flex-direction: row;
+                width: auto;
+                padding: 6px 10px;
+                border-radius: 30px;
+                gap: 4px;
+            }
+
+            .tool-btn {
+                width: 36px;
+                height: 36px;
+            }
+
+            /* 工具栏变为横向排列，分隔线由横线改为竖线 */
+            .toolbar .divider {
+                width: 1px !important;
+                height: 24px;
+                margin: 0 4px;
+            }
+
+            /* 小屏：属性面板改为右侧浮层（与大屏一致），由右下角按钮控制 */
+            .properties-panel {
+                left: auto;
+                right: 12px;
+                top: 12px;
+                bottom: 76px;
+                width: 230px;
+                max-height: none;
+                padding: 12px;
+                gap: 8px;
+                overflow-y: auto;
+                transform: translateX(120%);
+                opacity: 0;
+                pointer-events: none;
+                border-radius: 16px;
+                box-shadow: 0 15px 35px rgba(0,0,0,0.15);
+            }
+
+            .properties-panel.active {
+                transform: translateX(0);
+                opacity: 1;
+                pointer-events: all;
+            }
+
+            /* 右下角浮动开关，手动控制属性面板 */
+            .props-toggle {
+                display: flex;
+                position: absolute;
+                right: 16px;
+                bottom: 16px;
+                width: 46px;
+                height: 46px;
+                border-radius: 50%;
+                background: var(--accent-color);
+                color: #fff;
+                border: none;
+                align-items: center;
+                justify-content: center;
+                font-size: 18px;
+                box-shadow: var(--shadow);
+                z-index: 40;
+                cursor: pointer;
+            }
+
+            .props-toggle:active {
+                background: var(--accent-hover);
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 顶部导航 -->
+    <header>
+        <div class="logo">
+            <span>AURA</span>
+        </div>
+
+        <!-- 多画布：顶部标签栏（与 three/index.html 一致） -->
+        <div class="canvas-tabs-wrap">
+            <div class="canvas-tabs" id="canvasTabs"></div>
+            <button class="canvas-add-btn" onclick="addPage()" title="添加画布"><i class="fa-solid fa-plus"></i></button>
+        </div>
+
+        <!-- 右上角精简：仅保留导入/导出 -->
+        <div class="actions">
+            <!-- 导入下拉菜单 -->
+            <div class="dropdown" id="importDropdown">
+                <button class="btn" onclick="toggleDropdown('importDropdown', event)">导入</button>
+                <div class="dropdown-menu">
+                    <button class="dropdown-item" onclick="document.getElementById('jsonLoader').click()">JSON</button>
+                    <button class="dropdown-item" onclick="document.getElementById('imgLoader').click()">图片</button>
+                </div>
+            </div>
+
+            <!-- 导出下拉菜单 -->
+            <div class="dropdown" id="exportDropdown">
+                <button class="btn btn-primary" onclick="toggleDropdown('exportDropdown', event)">导出</button>
+                <div class="dropdown-menu">
+                    <button class="dropdown-item" onclick="exportPNG()">图片</button>
+                    <button class="dropdown-item" onclick="exportSVG()">SVG</button>
+                    <button class="dropdown-item" onclick="exportJSON()">JSON</button>
+                </div>
+            </div>
+
+            <input type="file" id="jsonLoader" accept=".json" onchange="importJSON(event)">
+            <input type="file" id="imgLoader" accept="image/*" onchange="uploadImage(event)">
+        </div>
+    </header>
+
+    <!-- 主工作区 -->
+    <main>
+        <!-- 左侧工具栏 -->
+        <div class="panel toolbar">
+            <button class="tool-btn" id="selectBtn" onclick="setTool('select')" title="选择工具">
+                <i class="fa-solid fa-arrow-pointer"></i>
+            </button>
+            <button class="tool-btn" id="drawBtn" onclick="setTool('draw')" title="自由画笔">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+            </button>
+            <button class="tool-btn" id="rectBtn" onclick="setTool('rect')" title="矩形">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+            </button>
+            <button class="tool-btn" id="circleBtn" onclick="setTool('circle')" title="圆形">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><circle cx="12" cy="12" r="9"/></svg>
+            </button>
+            <button class="tool-btn" id="lineBtn" onclick="setTool('line')" title="直线">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><line x1="4" y1="20" x2="20" y2="4" stroke-width="2" stroke-linecap="round"/></svg>
+            </button>
+            <button class="tool-btn" id="textBtn" onclick="setTool('text')" title="文本">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M12 6v12m-3 0h6"/></svg>
+            </button>
+
+            <div class="divider" style="width: 100%;"></div>
+
+            <button class="tool-btn" id="deleteBtn" onclick="deleteActive()" title="删除选中">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            </button>
+        </div>
+
+        <!-- 画布主区域 -->
+        <div class="canvas-container-wrapper">
+            <div class="canvas-card">
+                <canvas id="mainCanvas"></canvas>
+            </div>
+
+        </div>
+
+        <!-- 右侧属性调整面板 -->
+        <div class="panel properties-panel" id="propsPanel">
+            <div class="panel-title" id="panelTitle">属性调整</div>
+            
+            <div class="control-group">
+                <label>填充 / 画笔颜色</label>
+                <input type="color" id="fillColor" value="#111111" oninput="updateColor(this.value)">
+            </div>
+
+            <div class="control-group">
+                <label>描边颜色</label>
+                <input type="color" id="strokeColor" value="#000000" oninput="updateStrokeColor(this.value)">
+            </div>
+
+            <div class="control-group">
+                <label>描边 / 画笔粗细: <span id="strokeWidthVal">2</span>px</label>
+                <input type="range" id="strokeWidth" min="1" max="50" value="2" oninput="updateStrokeWidth(this.value)">
+            </div>
+
+            <div class="control-group">
+                <label>不透明度: <span id="opacityVal">100</span>%</label>
+                <input type="range" id="opacity" min="0" max="100" value="100" oninput="updateOpacity(this.value)">
+            </div>
+
+            <div class="control-group">
+                <label>图层调整</label>
+                <div class="btn-group">
+                    <button class="btn" onclick="bringToFront()">移至顶层</button>
+                    <button class="btn" onclick="sendToBack()">移至底层</button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <button class="btn" onclick="cloneActiveObject()">复制当前元素</button>
+            </div>
+
+            <div class="panel-divider"></div>
+
+            <div class="control-group">
+                <label>吸附网格</label>
+                <button class="btn" id="snapBtn" onclick="toggleSnapGrid()">吸附: 关</button>
+            </div>
+
+            <div class="control-group">
+                <label>画布背景色</label>
+                <input type="color" id="bgColorPicker" value="#ffffff" onchange="setCanvasBg(this.value)">
+            </div>
+
+            <div class="control-group">
+                <button class="btn btn-danger" onclick="clearCanvas()">清空画布</button>
+            </div>
+        </div>
+
+        <!-- 移动端：右下角手动控制属性面板的按钮 -->
+        <button class="props-toggle" id="propsToggle" onclick="togglePropsPanel()" title="属性面板">
+            <i class="fa-solid fa-sliders"></i>
+        </button>
+    </main>
+
+    <script>
+        let canvas;
+        let snapGrid = false;
+        let isDrawingMode = false;
+        let currentTool = 'select';
+        let isPlacing = false;
+        let startPoint = null;
+        const GRID_SIZE = 20;
+
+        // 多画布状态
+        let pages = [];
+        let currentPage = 0;
+        let pageUid = 0;
+
+        // 是否处于小屏幕（移动端）
+        function isMobile() {
+            return window.matchMedia('(max-width: 768px)').matches;
+        }
+
+        // 移动端手动开/关属性面板
+        function togglePropsPanel() {
+            document.getElementById('propsPanel').classList.toggle('active');
+        }
+
+        window.onload = () => {
+            initCanvasSize();
+
+            canvas = new fabric.Canvas('mainCanvas', {
+                backgroundColor: '#ffffff',
+                selection: true
+            });
+
+            // 自由画笔默认样式配置
+            canvas.freeDrawingBrush.color = '#111111';
+            canvas.freeDrawingBrush.width = 2;
+
+            // 初始文本
+            const defaultText = new fabric.IText('Aura Studio Pro', {
+                left: canvas.width / 2 - 100,
+                top: canvas.height / 2 - 20,
+                fontSize: 28,
+                fontFamily: 'Inter',
+                fill: '#111111'
+            });
+            canvas.add(defaultText);
+
+            // 事件绑定
+            canvas.on('selection:created', syncProps);
+            canvas.on('selection:updated', syncProps);
+            canvas.on('selection:cleared', hideProps);
+
+            // 网格吸附
+            canvas.on('object:moving', (options) => {
+                if (snapGrid) {
+                    options.target.set({
+                        left: Math.round(options.target.left / GRID_SIZE) * GRID_SIZE,
+                        top: Math.round(options.target.top / GRID_SIZE) * GRID_SIZE
+                    });
+                }
+            });
+
+            // 图形工具：在画板上点击放置 / 拖拽绘制
+            canvas.on('mouse:down', onCanvasMouseDown);
+            canvas.on('mouse:move', onCanvasMouseMove);
+            canvas.on('mouse:up', onCanvasMouseUp);
+
+            initPages();
+            updateToolButtons();
+        };
+
+        // 响应式画布尺寸计算（针对移动端高精准匹配）
+        function initCanvasSize() {
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            const targetCanvas = document.getElementById('mainCanvas');
+
+            // 动态保留上下工具栏所需的空间
+            let canvasWidth = w < 768 ? w - 24 : Math.min(w - 380, 800);
+            let canvasHeight = w < 768 ? h - 180 : Math.min(h - 140, 600);
+
+            if (canvas) {
+                canvas.setWidth(canvasWidth);
+                canvas.setHeight(canvasHeight);
+                canvas.renderAll();
+            } else {
+                targetCanvas.width = canvasWidth;
+                targetCanvas.height = canvasHeight;
+            }
+        }
+
+        // 下拉菜单点击控制
+        function toggleDropdown(id, event) {
+            event.stopPropagation();
+            const current = document.getElementById(id);
+            const isOpened = current.classList.contains('active');
+
+            // 关闭其他下拉框
+            document.querySelectorAll('.dropdown').forEach(d => d.classList.remove('active'));
+
+            if (!isOpened) {
+                current.classList.add('active');
+            }
+        }
+
+        // 点击空白处收起下拉菜单
+        window.onclick = function() {
+            document.querySelectorAll('.dropdown').forEach(d => d.classList.remove('active'));
+        };
+
+        // 工具模式切换（选择 / 画笔 / 矩形 / 圆形 / 直线 / 文本）
+        function setTool(tool) {
+            currentTool = tool;
+            isDrawingMode = (tool === 'draw');
+            canvas.isDrawingMode = isDrawingMode;
+            if (isDrawingMode) canvas.discardActiveObject();
+            canvas.defaultCursor = (tool === 'select') ? 'default' : 'crosshair';
+
+            const panel = document.getElementById('propsPanel');
+            const title = document.getElementById('panelTitle');
+            if (isDrawingMode) {
+                title.innerText = '画笔属性';
+                if (!isMobile()) panel.classList.add('active');
+            } else {
+                title.innerText = '属性调整';
+            }
+            updateToolButtons();
+        }
+
+        function updateToolButtons() {
+            const map = {
+                select: 'selectBtn',
+                draw: 'drawBtn',
+                rect: 'rectBtn',
+                circle: 'circleBtn',
+                line: 'lineBtn',
+                text: 'textBtn'
+            };
+            Object.keys(map).forEach(k => {
+                const el = document.getElementById(map[k]);
+                if (el) el.classList.toggle('active', currentTool === k);
+            });
+        }
+
+        // ===== 多画布（页面）逻辑 =====
+        function closeDropdowns() {
+            document.querySelectorAll('.dropdown').forEach(d => d.classList.remove('active'));
+        }
+
+        function initPages() {
+            pageUid = 1;
+            pages = [{ id: pageUid, name: '画布 1', json: null }];
+            currentPage = 0;
+            updatePageUI();
+        }
+
+        function saveCurrentPage() {
+            if (pages[currentPage]) {
+                pages[currentPage].json = JSON.stringify(canvas.toJSON());
+            }
+        }
+
+        function loadPage(index) {
+            if (index < 0 || index >= pages.length) return;
+            saveCurrentPage();
+            currentPage = index;
+            const data = pages[currentPage].json;
+            closeDropdowns();
+            if (data) {
+                canvas.loadFromJSON(data, function () {
+                    canvas.renderAll();
+                    updatePageUI();
+                    setTool('select');
+                });
+            } else {
+                canvas.clear();
+                canvas.backgroundColor = '#ffffff';
+                canvas.renderAll();
+                updatePageUI();
+                setTool('select');
+            }
+        }
+
+        function switchPage(index) {
+            loadPage(index);
+        }
+
+        function addPage() {
+            saveCurrentPage();
+            pageUid++;
+            pages.push({ id: pageUid, name: '画布 ' + pageUid, json: null });
+            currentPage = pages.length - 1;
+            canvas.clear();
+            canvas.backgroundColor = '#ffffff';
+            canvas.renderAll();
+            closeDropdowns();
+            updatePageUI();
+            setTool('select');
+        }
+
+        function deletePage(index) {
+            if (pages.length <= 1) return;
+            if (index < 0 || index >= pages.length) return;
+            const wasCurrent = (index === currentPage);
+            pages.splice(index, 1);
+            if (index < currentPage) {
+                currentPage--;
+            } else if (wasCurrent && currentPage >= pages.length) {
+                currentPage = pages.length - 1;
+            }
+            closeDropdowns();
+            loadPage(currentPage);
+        }
+
+        function updatePageUI() {
+            const tabs = document.getElementById('canvasTabs');
+            if (!tabs) return;
+            tabs.innerHTML = '';
+            pages.forEach((p, i) => {
+                const tab = document.createElement('div');
+                tab.className = 'canvas-tab' + (i === currentPage ? ' active' : '');
+                tab.innerText = p.name;
+                tab.onclick = (e) => { e.stopPropagation(); switchPage(i); };
+                tab.ondblclick = (e) => { e.stopPropagation(); renamePage(i); };
+                if (pages.length > 1) {
+                    const close = document.createElement('span');
+                    close.className = 'canvas-tab-close';
+                    close.innerHTML = '&times;';
+                    close.onclick = (e) => { e.stopPropagation(); deletePage(i); };
+                    tab.appendChild(close);
+                }
+                tabs.appendChild(tab);
+            });
+        }
+
+        function renamePage(i) {
+            const name = prompt('画布名称', pages[i].name);
+            if (name && name.trim()) {
+                pages[i].name = name.trim();
+                updatePageUI();
+            }
+        }
+
+        // 画板交互：图形工具下点击放置、拖拽绘制
+        function onCanvasMouseDown(opt) {
+            if (currentTool === 'select' || currentTool === 'draw') return;
+            if (opt.target) return; // 点到已有对象则转为选择/移动，不新建
+
+            const p = canvas.getPointer(opt.e);
+            startPoint = { x: p.x, y: p.y };
+            isPlacing = true;
+
+            // 文本：点击即创建并进入编辑
+            if (currentTool === 'text') {
+                isPlacing = false;
+                const t = new fabric.IText('双击文本编辑', {
+                    left: p.x,
+                    top: p.y,
+                    fontSize: 18,
+                    fontFamily: 'Inter',
+                    fill: '#333333'
+                });
+                canvas.add(t);
+                canvas.setActiveObject(t);
+                t.enterEditing();
+                t.selectAll();
+                setTool('select');
+                return;
+            }
+
+            let obj;
+            if (currentTool === 'rect') {
+                obj = new fabric.Rect({ left: p.x, top: p.y, width: 0, height: 0, fill: '#e2e8f0', rx: 8, ry: 8 });
+            } else if (currentTool === 'circle') {
+                obj = new fabric.Circle({ left: p.x, top: p.y, radius: 0, fill: '#111111' });
+            } else if (currentTool === 'line') {
+                obj = new fabric.Line([p.x, p.y, p.x, p.y], { stroke: '#111111', strokeWidth: 3 });
+            }
+            canvas.add(obj);
+            canvas.setActiveObject(obj);
+        }
+
+        function onCanvasMouseMove(opt) {
+            if (!isPlacing || !startPoint) return;
+            const p = canvas.getPointer(opt.e);
+            const obj = canvas.getActiveObject();
+            if (!obj) return;
+
+            if (currentTool === 'rect') {
+                obj.set({
+                    left: Math.min(startPoint.x, p.x),
+                    top: Math.min(startPoint.y, p.y),
+                    width: Math.abs(p.x - startPoint.x),
+                    height: Math.abs(p.y - startPoint.y)
+                });
+            } else if (currentTool === 'circle') {
+                const r = Math.max(Math.abs(p.x - startPoint.x), Math.abs(p.y - startPoint.y));
+                obj.set({ left: startPoint.x - r, top: startPoint.y - r, radius: r });
+            } else if (currentTool === 'line') {
+                obj.set({ x2: p.x, y2: p.y });
+            }
+            canvas.requestRenderAll();
+        }
+
+        function onCanvasMouseUp() {
+            if (!isPlacing) return;
+            isPlacing = false;
+            const obj = canvas.getActiveObject();
+            if (obj && startPoint) {
+                // 仅点击未拖拽时，给一个默认尺寸
+                if (currentTool === 'rect' && (obj.width < 3 || obj.height < 3)) {
+                    obj.set({ width: 100, height: 100, left: startPoint.x - 50, top: startPoint.y - 50 });
+                } else if (currentTool === 'circle' && obj.radius < 3) {
+                    obj.set({ radius: 40, left: startPoint.x - 40, top: startPoint.y - 40 });
+                } else if (currentTool === 'line' && Math.abs(obj.x2 - obj.x1) < 3 && Math.abs(obj.y2 - obj.y1) < 3) {
+                    obj.set({ x2: startPoint.x + 100, y2: startPoint.y });
+                }
+                syncProps();
+            }
+            canvas.requestRenderAll();
+            // 画完一个即回到选择模式，方便继续调整/移动
+            setTool('select');
+        }
+
+        function uploadImage(e) {
+            setTool('select');
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(f) {
+                fabric.Image.fromURL(f.target.result, (img) => {
+                    img.scaleToWidth(160);
+                    img.set({
+                        left: canvas.width / 2 - 80,
+                        top: canvas.height / 2 - 80
+                    });
+                    canvas.add(img);
+                    canvas.setActiveObject(img);
+                });
+            };
+            reader.readAsDataURL(file);
+            e.target.value = '';
+        }
+
+        // 属性修改
+        function updateColor(color) {
+            if (isDrawingMode) {
+                canvas.freeDrawingBrush.color = color;
+                return;
+            }
+            const activeObject = canvas.getActiveObject();
+            if (activeObject) {
+                if (activeObject.type === 'line' || activeObject.type === 'path') {
+                    activeObject.set('stroke', color);
+                } else {
+                    activeObject.set('fill', color);
+                }
+                canvas.renderAll();
+            }
+        }
+
+        function updateStrokeColor(color) {
+            const activeObject = canvas.getActiveObject();
+            if (activeObject) {
+                activeObject.set('stroke', color);
+                canvas.renderAll();
+            }
+        }
+
+        function updateStrokeWidth(width) {
+            document.getElementById('strokeWidthVal').innerText = width;
+            if (isDrawingMode) {
+                canvas.freeDrawingBrush.width = parseInt(width, 10);
+                return;
+            }
+            const activeObject = canvas.getActiveObject();
+            if (activeObject) {
+                activeObject.set('strokeWidth', parseInt(width, 10));
+                canvas.renderAll();
+            }
+        }
+
+        function updateOpacity(val) {
+            document.getElementById('opacityVal').innerText = val;
+            const activeObject = canvas.getActiveObject();
+            if (activeObject) {
+                activeObject.set('opacity', parseFloat(val / 100));
+                canvas.renderAll();
+            }
+        }
+
+        function bringToFront() {
+            const activeObject = canvas.getActiveObject();
+            if (activeObject) canvas.bringToFront(activeObject);
+        }
+
+        function sendToBack() {
+            const activeObject = canvas.getActiveObject();
+            if (activeObject) canvas.sendToBack(activeObject);
+        }
+
+        function cloneActiveObject() {
+            const activeObject = canvas.getActiveObject();
+            if (!activeObject) return;
+            activeObject.clone((cloned) => {
+                canvas.discardActiveObject();
+                cloned.set({ left: cloned.left + 15, top: cloned.top + 15 });
+                canvas.add(cloned);
+                canvas.setActiveObject(cloned);
+                canvas.requestRenderAll();
+            });
+        }
+
+        function toggleSnapGrid() {
+            snapGrid = !snapGrid;
+            document.getElementById('snapBtn').innerText = `吸附: ${snapGrid ? '开' : '关'}`;
+        }
+
+        function setCanvasBg(color) {
+            canvas.setBackgroundColor(color, canvas.renderAll.bind(canvas));
+        }
+
+        function deleteActive() {
+            const activeObjects = canvas.getActiveObjects();
+            canvas.discardActiveObject();
+            activeObjects.forEach((obj) => canvas.remove(obj));
+        }
+
+        function clearCanvas() {
+            canvas.clear();
+            canvas.setBackgroundColor('#ffffff', canvas.renderAll.bind(canvas));
+        }
+
+        // 导入/导出
+        function exportPNG() {
+            const link = document.createElement('a');
+            link.download = 'aura-design.png';
+            link.href = canvas.toDataURL({ format: 'png', quality: 1 });
+            link.click();
+        }
+
+        function exportSVG() {
+            const blob = new Blob([canvas.toSVG()], { type: 'image/svg+xml;charset=utf-8' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'aura-design.svg';
+            link.click();
+        }
+
+        function exportJSON() {
+            const blob = new Blob([JSON.stringify(canvas.toJSON())], { type: 'application/json' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'aura-project.json';
+            link.click();
+        }
+
+        function importJSON(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(f) {
+                canvas.loadFromJSON(f.target.result, canvas.renderAll.bind(canvas));
+            };
+            reader.readAsText(file);
+            e.target.value = '';
+        }
+
+        // 状态同步
+        function syncProps() {
+            if (isDrawingMode) return;
+            document.getElementById('panelTitle').innerText = '属性调整';
+            const obj = canvas.getActiveObject();
+            if (!obj) return;
+
+            // 非小屏时选中对象自动弹出面板；小屏由右下角按钮手动控制
+            if (!isMobile()) {
+                document.getElementById('propsPanel').classList.add('active');
+            }
+
+            if (obj.fill && typeof obj.fill === 'string') {
+                document.getElementById('fillColor').value = obj.fill;
+            }
+            if (obj.stroke) {
+                document.getElementById('strokeColor').value = obj.stroke;
+            }
+            if (obj.strokeWidth !== undefined) {
+                document.getElementById('strokeWidth').value = obj.strokeWidth;
+                document.getElementById('strokeWidthVal').innerText = obj.strokeWidth;
+            }
+            if (obj.opacity !== undefined) {
+                const opVal = Math.round(obj.opacity * 100);
+                document.getElementById('opacity').value = opVal;
+                document.getElementById('opacityVal').innerText = opVal;
+            }
+        }
+
+        function hideProps() {
+            if (!isDrawingMode && !isMobile()) {
+                document.getElementById('propsPanel').classList.remove('active');
+            }
+        }
+
+        // Resize 监听，保持自适应
+        window.onresize = () => {
+            initCanvasSize();
+        };
+    </script>
+</body>
+</html>

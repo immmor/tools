@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AetherEDA - 白天模式</title>
+    <!-- FontAwesome 图标库 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            /* 白天模式色彩系统 */
+            --bg-base: #f4f5f7;
+            --bg-surface: #ffffff;
+            --bg-panel: rgba(255, 255, 255, 0.85);
+            --border-color: #e2e8f0;
+            --border-focus: #4f46e5;
+            --accent-primary: #4f46e5;
+            --accent-hover: #4338ca;
+            --accent-light: #eef2ff;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            
+            /* PCB 高对比配色 (日间高辨识度) */
+            --pcb-board: #1b4332;
+            --pcb-trace: #52b788;
+            --pcb-power: #e63946;
+            --pcb-pad: #ffb703;
+            --sidebar-width: 280px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            user-select: none;
+        }
+
+        body {
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* --- 顶部导航栏 --- */
+        header {
+            height: 52px;
+            background: var(--bg-surface);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 16px;
+            z-index: 100;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 600;
+            font-size: 1.05rem;
+            color: var(--text-main);
+        }
+
+        .brand i {
+            color: var(--accent-primary);
+            font-size: 1.2rem;
+        }
+
+        .layer-switch {
+            display: flex;
+            background: var(--bg-base);
+            padding: 3px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            gap: 2px;
+        }
+
+        .layer-btn {
+            padding: 4px 12px;
+            font-size: 0.75rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            color: var(--text-muted);
+            transition: all 0.2s;
+        }
+
+        .layer-btn.active {
+            background: var(--bg-surface);
+            color: var(--accent-primary);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+        }
+
+        .actions-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .btn:hover {
+            background: var(--bg-base);
+            border-color: #cbd5e1;
+        }
+
+        .btn-primary {
+            background: var(--accent-primary);
+            border-color: var(--accent-primary);
+            color: #ffffff;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+        }
+
+        /* --- 主界面布局 --- */
+        .app-container {
+            flex: 1;
+            display: flex;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* 左侧工具栏 */
+        .toolbar {
+            width: 48px;
+            background: var(--bg-surface);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 12px 0;
+            gap: 12px;
+            z-index: 10;
+        }
+
+        .tool-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .tool-btn:hover {
+            background: var(--bg-base);
+            color: var(--text-main);
+        }
+
+        .tool-btn.active {
+            background: var(--accent-light);
+            color: var(--accent-primary);
+        }
+
+        /* 侧边面板 */
+        .panel {
+            width: var(--sidebar-width);
+            background: var(--bg-panel);
+            backdrop-filter: blur(12px);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.3s ease;
+            z-index: 9;
+        }
+
+        .panel-header {
+            padding: 14px 16px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .component-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .component-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 10px 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: all 0.2s;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+        }
+
+        .component-card:hover {
+            border-color: var(--accent-primary);
+            box-shadow: 0 2px 8px rgba(79, 70, 229, 0.1);
+        }
+
+        .component-icon {
+            width: 32px;
+            height: 32px;
+            background: var(--accent-light);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--accent-primary);
+        }
+
+        .component-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .component-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .component-sub {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        /* Viewport 画布区 */
+        .viewport {
+            flex: 1;
+            position: relative;
+            background-color: var(--bg-base);
+            /* 网格点系设计 */
+            background-image: radial-gradient(#cbd5e1 1.2px, transparent 1.2px);
+            background-size: 20px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        /* PCB 核心板体 */
+        .pcb-board {
+            width: 620px;
+            height: 420px;
+            background: var(--pcb-board);
+            border-radius: 12px;
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            box-shadow: 0 20px 40px rgba(15, 23, 42, 0.15), inset 0 0 20px rgba(0,0,0,0.4);
+            position: relative;
+            transition: transform 0.15s ease-out, width 0.3s, height 0.3s;
+        }
+
+        .pcb-svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .pcb-svg text {
+            cursor: pointer;
+        }
+
+        .pcb-svg path {
+            cursor: pointer;
+            transition: stroke 0.2s, stroke-width 0.2s;
+        }
+
+        .pcb-svg path:hover {
+            stroke: #38bdf8 !important;
+            stroke-width: 4px;
+        }
+
+        /* 右侧属性面板 */
+        .inspector {
+            width: var(--sidebar-width);
+            background: var(--bg-panel);
+            backdrop-filter: blur(12px);
+            border-left: 1px solid var(--border-color);
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .property-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .property-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .property-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.85rem;
+            background: var(--bg-surface);
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+        }
+
+        .property-input {
+            width: 70px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-size: 0.8rem;
+            text-align: right;
+            outline: none;
+            color: var(--text-main);
+        }
+
+        .property-input:focus {
+            border-color: var(--accent-primary);
+        }
+
+        /* 底部状态栏 */
+        footer {
+            height: 28px;
+            background: var(--bg-surface);
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 16px;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            z-index: 100;
+        }
+
+        .mobile-toggle {
+            display: none;
+            cursor: pointer;
+            font-size: 1.1rem;
+            color: var(--text-main);
+        }
+
+        /* 响应式样式 */
+        @media (max-width: 1024px) {
+            .inspector { display: none; }
+        }
+
+        @media (max-width: 768px) {
+            .mobile-toggle { display: block; }
+            .panel {
+                position: absolute;
+                left: 48px; top: 0; bottom: 0;
+                z-index: 20;
+                transform: translateX(-120%);
+                box-shadow: 10px 0 25px rgba(0,0,0,0.1);
+            }
+            .panel.open { transform: translateX(0); }
+            .pcb-board { transform: scale(0.65); }
+            .btn span { display: none; }
+            .layer-switch { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 顶部导航 -->
+    <header>
+        <div class="brand">
+            <i class="fa-solid fa-layer-group"></i>
+            <span>Aether<span style="color:var(--accent-primary);">Studio</span></span>
+        </div>
+
+        <!-- 视图/图层快速切换器 -->
+        <div class="layer-switch">
+            <div class="layer-btn active" id="btnTopLayer" onclick="switchLayer('top')">顶层 (Top)</div>
+            <div class="layer-btn" id="btnBottomLayer" onclick="switchLayer('bottom')">底层 (Bottom)</div>
+        </div>
+
+        <div class="actions-group">
+            <button class="btn" onclick="addCustomTrace()"><i class="fa-solid fa-plus"></i><span>添加走线</span></button>
+            <button class="btn btn-primary" onclick="exportDesign()"><i class="fa-solid fa-floppy-disk"></i><span>保存修改</span></button>
+        </div>
+    </header>
+
+    <div class="app-container">
+        <!-- 工具栏 -->
+        <nav class="toolbar">
+            <div class="tool-btn mobile-toggle" id="togglePanelBtn"><i class="fa-solid fa-bars"></i></div>
+            <div class="tool-btn active" title="选择"><i class="fa-solid fa-arrow-pointer"></i></div>
+            <div class="tool-btn" title="布线" onclick="addCustomTrace()"><i class="fa-solid fa-route"></i></div>
+            <div class="tool-btn" title="过孔"><i class="fa-regular fa-circle-dot"></i></div>
+            <div class="tool-btn" title="测量"><i class="fa-solid fa-ruler-combined"></i></div>
+        </nav>
+
+        <!-- 侧边面板 (元器件库) -->
+        <aside class="panel" id="sidePanel">
+            <div class="panel-header">
+                <span>元器件库 (点击放置)</span>
+                <i class="fa-solid fa-magnifying-glass" style="color: var(--text-muted);"></i>
+            </div>
+            <div class="component-list">
+                <div class="component-card" onclick="placeComponent('MCU')">
+                    <div class="component-icon"><i class="fa-solid fa-microchip"></i></div>
+                    <div class="component-info">
+                        <span class="component-title">STM32 MCU</span>
+                        <span class="component-sub">LQFP-100 封装</span>
+                    </div>
+                </div>
+                <div class="component-card" onclick="placeComponent('USB')">
+                    <div class="component-icon"><i class="fa-solid fa-plug"></i></div>
+                    <div class="component-info">
+                        <span class="component-title">USB Type-C</span>
+                        <span class="component-sub">16-Pin 接口</span>
+                    </div>
+                </div>
+                <div class="component-card" onclick="placeComponent('LDO')">
+                    <div class="component-icon"><i class="fa-solid fa-bolt"></i></div>
+                    <div class="component-info">
+                        <span class="component-title">AMS1117</span>
+                        <span class="component-sub">3.3V 稳压器</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- PCB 主可视区域 -->
+        <main class="viewport">
+            <div class="pcb-board" id="pcbBoard">
+                <svg class="pcb-svg" id="pcbSvg" viewBox="0 0 620 420">
+                    <defs>
+                        <g id="via">
+                            <circle cx="0" cy="0" r="5" fill="var(--pcb-pad)"/>
+                            <circle cx="0" cy="0" r="2.5" fill="#1b4332"/>
+                        </g>
+                    </defs>
+
+                    <!-- 边角定位孔 -->
+                    <circle cx="20" cy="20" r="8" fill="none" stroke="#fff" stroke-width="1.5" opacity="0.4"/>
+                    <circle cx="600" cy="20" r="8" fill="none" stroke="#fff" stroke-width="1.5" opacity="0.4"/>
+                    <circle cx="20" cy="400" r="8" fill="none" stroke="#fff" stroke-width="1.5" opacity="0.4"/>
+                    <circle cx="600" cy="400" r="8" fill="none" stroke="#fff" stroke-width="1.5" opacity="0.4"/>
+
+                    <!-- 可修改/移除的布线层组 -->
+                    <g id="traceGroup" stroke="var(--pcb-trace)" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M 180 180 L 120 180 L 90 150 L 90 90 L 60 90" />
+                        <path d="M 180 190 L 130 190 L 100 160 L 100 100 L 60 100" />
+                        <path d="M 320 200 L 400 200 L 450 250 L 520 250" stroke-width="3.5" stroke="var(--pcb-power)"/>
+                        <path d="M 250 280 L 250 330 L 300 380 L 420 380" />
+                    </g>
+
+                    <!-- 过孔定义 -->
+                    <g id="viaGroup">
+                        <use href="#via" x="120" y="180"/>
+                        <use href="#via" x="130" y="190"/>
+                        <use href="#via" x="450" y="250"/>
+                    </g>
+
+                    <!-- 可双击修改名称的元器件标签层 -->
+                    <g id="componentGroup">
+                        <!-- MCU 主控 -->
+                        <g transform="translate(180, 140)">
+                            <rect x="0" y="0" width="120" height="140" fill="none" stroke="#ffffff" stroke-width="1.5" rx="4" opacity="0.8"/>
+                            <text id="label-mcu" x="60" y="75" fill="#ffffff" font-size="12" text-anchor="middle" font-weight="bold" onclick="editLabel('label-mcu')">STM32H743</text>
+                        </g>
+
+                        <!-- USB-C -->
+                        <g transform="translate(10, 70)">
+                            <rect x="0" y="0" width="50" height="60" fill="none" stroke="#ffffff" stroke-width="1.5" rx="2" opacity="0.8"/>
+                            <text id="label-usb" x="25" y="35" fill="#ffffff" font-size="10" text-anchor="middle" font-weight="bold" onclick="editLabel('label-usb')">TYPE-C</text>
+                        </g>
+
+                        <!-- Flash 存储 -->
+                        <g transform="translate(420, 330)">
+                            <rect x="0" y="0" width="80" height="60" fill="none" stroke="#ffffff" stroke-width="1.5" rx="2" opacity="0.8"/>
+                            <text id="label-flash" x="40" y="35" fill="#ffffff" font-size="10" text-anchor="middle" font-weight="bold" onclick="editLabel('label-flash')">W25Q128</text>
+                        </g>
+                    </g>
+                </svg>
+            </div>
+        </main>
+
+        <!-- 右侧可编辑属性面板 -->
+        <aside class="inspector">
+            <div class="property-group">
+                <span class="property-label">板卡尺寸设置</span>
+                <div class="property-row">
+                    <span>板宽 (Width)</span>
+                    <div><input type="number" id="boardWidth" class="property-input" value="620" onchange="updateBoardSize()"> <small>mm</small></div>
+                </div>
+                <div class="property-row">
+                    <span>板高 (Height)</span>
+                    <div><input type="number" id="boardHeight" class="property-input" value="420" onchange="updateBoardSize()"> <small>mm</small></div>
+                </div>
+            </div>
+
+            <div class="property-group">
+                <span class="property-label">交互与修改参数</span>
+                <div class="property-row">
+                    <span>走线数量</span>
+                    <strong id="traceCount" style="color:var(--accent-primary)">4 条</strong>
+                </div>
+                <div class="property-row">
+                    <span>基板颜色</span>
+                    <input type="color" value="#1b4332" onchange="changeBoardColor(this.value)" style="border:none; cursor:pointer; background:none; width:24px; height:24px;">
+                </div>
+            </div>
+
+            <div class="property-group">
+                <span class="property-label">检查规则 (DRC)</span>
+                <div class="property-row">
+                    <span>线宽/间距</span>
+                    <span style="color:#10b981; font-weight:600;"><i class="fa-solid fa-check"></i> 正常</span>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- 底部状态栏 -->
+    <footer>
+        <div id="mouseCoords"><i class="fa-solid fa-crosshairs"></i> X: 240.50, Y: 112.00 mm</div>
+        <div>当前层: <span id="currentLayerLabel" style="color:var(--accent-primary); font-weight:600;">Top Layer (顶层)</span></div>
+        <div>状态: 准备就绪</div>
+    </footer>
+
+    <!-- 交互与可修改功能逻辑 -->
+    <script>
+        // 1. 响应式面板切换
+        const toggleBtn = document.getElementById('togglePanelBtn');
+        const sidePanel = document.getElementById('sidePanel');
+        toggleBtn.addEventListener('click', () => sidePanel.classList.toggle('open'));
+
+        // 2. 修改板卡物理尺寸
+        function updateBoardSize() {
+            const w = document.getElementById('boardWidth').value;
+            const h = document.getElementById('boardHeight').value;
+            const board = document.getElementById('pcbBoard');
+            const svg = document.getElementById('pcbSvg');
+            
+            board.style.width = w + 'px';
+            board.style.height = h + 'px';
+            svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+        }
+
+        // 3. 切换电路板底色
+        function changeBoardColor(color) {
+            document.getElementById('pcbBoard').style.backgroundColor = color;
+        }
+
+        // 4. 修改标签文字 (点击元件芯片标签修改)
+        function editLabel(elementId) {
+            const el = document.getElementById(elementId);
+            const currentText = el.textContent;
+            const newText = prompt("修改元件型号 / 标签:", currentText);
+            if (newText !== null && newText.trim() !== "") {
+                el.textContent = newText.trim();
+            }
+        }
+
+        // 5. 动态添加走线
+        function addCustomTrace() {
+            const traceGroup = document.getElementById('traceGroup');
+            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            
+            // 随机生成一条连接走线
+            const startX = Math.floor(Math.random() * 200) + 100;
+            const startY = Math.floor(Math.random() * 200) + 100;
+            const pathData = `M ${startX} ${startY} L ${startX + 80} ${startY + 80} L ${startX + 180} ${startY + 80}`;
+            
+            path.setAttribute('d', pathData);
+            path.setAttribute('stroke', '#4f46e5');
+            path.setAttribute('stroke-width', '2.5');
+            
+            traceGroup.appendChild(path);
+            updateTraceCount();
+        }
+
+        function updateTraceCount() {
+            const count = document.getElementById('traceGroup').querySelectorAll('path').length;
+            document.getElementById('traceCount').textContent = count + ' 条';
+        }
+
+        // 6. 切换层显示 (顶层/底层)
+        function switchLayer(layer) {
+            document.getElementById('btnTopLayer').classList.toggle('active', layer === 'top');
+            document.getElementById('btnBottomLayer').classList.toggle('active', layer === 'bottom');
+            
+            const board = document.getElementById('pcbBoard');
+            const layerLabel = document.getElementById('currentLayerLabel');
+            
+            if(layer === 'bottom') {
+                board.style.opacity = '0.85';
+                layerLabel.textContent = 'Bottom Layer (底层)';
+                layerLabel.style.color = '#e63946';
+            } else {
+                board.style.opacity = '1';
+                layerLabel.textContent = 'Top Layer (顶层)';
+                layerLabel.style.color = 'var(--accent-primary)';
+            }
+        }
+
+        // 7. 保存修改提示
+        function exportDesign() {
+            alert("板卡配置与修改已成功保存！");
+        }
+
+        // 8. 放置器件示意
+        function placeComponent(type) {
+            alert(`已选择 ${type} 模块，请在画布点击确定放置位置。`);
+        }
+    </script>
+</body>
+</html>
