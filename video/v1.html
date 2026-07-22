@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pro Motion Studio</title>
+  <style>
+    :root {
+      --bg-color: #0b0c0e;
+      --panel-bg: #141519;
+      --panel-border: #23252b;
+      --accent: #6366f1;
+      --accent-hover: #4f46e5;
+      --accent-success: #10b981;
+      --text: #f3f4f6;
+      --text-muted: #8b8f9a;
+      --radius: 10px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; user-select: none; }
+    body { background-color: var(--bg-color); color: var(--text); min-height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+    /* Header */
+    header { height: 50px; padding: 0 1.5rem; border-bottom: 1px solid var(--panel-border); display: flex; justify-content: space-between; align-items: center; background: var(--panel-bg); }
+    header h1 { font-size: 1rem; font-weight: 600; letter-spacing: -0.01em; }
+
+    /* Layout */
+    .app-container { display: grid; grid-template-columns: 1fr 340px; height: calc(100vh - 50px); }
+
+    /* Viewport */
+    .viewport { display: flex; align-items: center; justify-content: center; padding: 1.5rem; background: radial-gradient(circle, #1a1b20 0%, var(--bg-color) 100%); }
+    .canvas-wrapper { position: relative; width: 100%; max-width: 960px; aspect-ratio: 16 / 9; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--panel-border); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.7); }
+    canvas { width: 100%; height: 100%; display: block; background: #000; }
+
+    /* Sidebar Controls */
+    .sidebar { background: var(--panel-bg); border-left: 1px solid var(--panel-border); padding: 1.25rem; display: flex; flex-direction: column; gap: 1.25rem; overflow-y: auto; }
+    .panel-section { display: flex; flex-direction: column; gap: 0.6rem; }
+    .panel-title { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); font-weight: 600; }
+
+    /* UI Components */
+    .btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+    button, label.btn-upload {
+      background: #202228; color: var(--text); border: 1px solid var(--panel-border);
+      padding: 0.55rem 0.8rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem;
+      font-weight: 500; text-align: center; transition: all 0.15s ease; display: inline-flex; justify-content: center; align-items: center;
+    }
+    button:hover, label.btn-upload:hover { background: #2c2e36; }
+    button.primary { background: var(--accent); border-color: var(--accent); }
+    button.primary:hover { background: var(--accent-hover); }
+    button.export-btn { background: var(--accent-success); border-color: var(--accent-success); color: #000; font-weight: 600; }
+    button.export-btn:hover { opacity: 0.9; }
+
+    input[type="file"] { display: none; }
+    .slider-group { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.8rem; color: var(--text-muted); }
+    .slider-group div { display: flex; justify-content: space-between; }
+    input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer; }
+
+    /* Responsive */
+    @media (max-width: 800px) {
+      .app-container { grid-template-columns: 1fr; grid-template-rows: auto 1fr; overflow-y: auto; }
+      body { overflow: auto; }
+      .sidebar { border-left: none; border-top: 1px solid var(--panel-border); }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Studio Motion Pro</h1>
+    <span style="font-size:0.8rem; color:var(--text-muted)">1080P / 60 FPS Engine</span>
+  </header>
+
+  <main class="app-container">
+    <!-- 播放与预览视口 -->
+    <section class="viewport">
+      <div class="canvas-wrapper">
+        <canvas id="canvas" width="1920" height="1080"></canvas>
+      </div>
+    </section>
+
+    <!-- 右侧控制侧边栏 -->
+    <aside class="sidebar">
+      <!-- 播放与时间轴 -->
+      <div class="panel-section">
+        <span class="panel-title">Playback & Timeline</span>
+        <div class="btn-grid">
+          <button id="playBtn" class="primary">▶ Play</button>
+          <button id="resetBtn">↺ Reset</button>
+        </div>
+        <div class="slider-group" style="margin-top: 0.5rem;">
+          <div><span>Timeline</span><span id="frameVal">0 / 300</span></div>
+          <input type="range" id="timeline" min="0" max="300" value="0">
+        </div>
+      </div>
+
+      <!-- 媒体导入 -->
+      <div class="panel-section">
+        <span class="panel-title">Media Assets</span>
+        <label class="btn-upload">
+          + Import Image / Video
+          <input type="file" id="mediaInput" accept="image/*,video/*">
+        </label>
+      </div>
+
+      <!-- 素材图层属性设置 -->
+      <div class="panel-section">
+        <span class="panel-title">Asset Controls</span>
+        <div class="slider-group">
+          <div><span>Position X</span><span id="posXVal">960</span></div>
+          <input type="range" id="posX" min="0" max="1920" value="960">
+        </div>
+        <div class="slider-group">
+          <div><span>Position Y</span><span id="posYVal">540</span></div>
+          <input type="range" id="posY" min="0" max="1080" value="540">
+        </div>
+        <div class="slider-group">
+          <div><span>Scale</span><span id="scaleVal">1.0x</span></div>
+          <input type="range" id="scale" min="0.1" max="3" step="0.1" value="1">
+        </div>
+      </div>
+
+      <!-- 视频导出导出 -->
+      <div class="panel-section" style="margin-top: auto;">
+        <span class="panel-title">Render</span>
+        <button id="exportBtn" class="export-btn">⬇ Export WebM Video</button>
+      </div>
+    </aside>
+  </main>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    // Controls DOM
+    const playBtn = document.getElementById('playBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const timeline = document.getElementById('timeline');
+    const frameVal = document.getElementById('frameVal');
+    const mediaInput = document.getElementById('mediaInput');
+    const posX = document.getElementById('posX');
+    const posY = document.getElementById('posY');
+    const scale = document.getElementById('scale');
+    const exportBtn = document.getElementById('exportBtn');
+
+    // State Variables
+    let isPlaying = false;
+    let currentFrame = 0;
+    const totalFrames = 300;
+    let animId = null;
+    let loadedMedia = null; // Image or Video element
+
+    // 1. 媒体导入处理 (图片 / 视频)
+    mediaInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const url = URL.createObjectURL(file);
+      if (file.type.startsWith('image/')) {
+        const img = new Image();
+        img.onload = () => { loadedMedia = { type: 'image', el: img }; render(); };
+        img.src = url;
+      } else if (file.type.startsWith('video/')) {
+        const video = document.createElement('video');
+        video.src = url;
+        video.muted = true;
+        video.loop = true;
+        video.onloadeddata = () => {
+          loadedMedia = { type: 'video', el: video };
+          video.play();
+          render();
+        };
+      }
+    });
+
+    // 专为 Transformer 教学设计的动画渲染逻辑
+function render() {
+  // 1. 清空画布 (深色科技风背景)
+  ctx.fillStyle = '#0b0c0e';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  const progress = currentFrame / totalFrames; // 0.0 -> 1.0
+
+  // 标题与阶段说明
+  ctx.save();
+  ctx.fillStyle = '#f3f4f6';
+  ctx.font = 'bold 44px -apple-system, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText("Transformer: Self-Attention (自注意力机制)", canvas.width / 2, 100);
+
+  ctx.font = '24px -apple-system, sans-serif';
+  ctx.fillStyle = '#9ca3af';
+  
+  // 阶段文字提示
+  let stageText = "1. 输入词向量 (Input Tokens)";
+  if (progress > 0.3 && progress <= 0.7) stageText = "2. 计算 Q, K, V 投影与相关性得分 (Scores)";
+  if (progress > 0.7) stageText = "3. 加权融合生成上下文表示 (Contextual Output)";
+  ctx.fillText(stageText, canvas.width / 2, 160);
+  ctx.restore();
+
+  // 节点数据：模拟输入 "Thinking", "Machines"
+  const tokens = ["Thinking", "Machines"];
+  const startX = [600, 1320];
+  const nodeY = 400;
+  const outputY = 800;
+
+  // 2. 绘制 Token 节点
+  tokens.forEach((token, index) => {
+    const x = startX[index];
+
+    // 绘制输入框
+    ctx.save();
+    ctx.fillStyle = '#1e1e24';
+    ctx.strokeStyle = '#6366f1';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.roundRect(x - 120, nodeY - 40, 240, 80, 12);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '600 28px -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(token, x, nodeY);
+    ctx.restore();
+  });
+
+  // 3. 动画阶段二：计算相关性 / 连线与注意力权重 (Progress 0.3 ~ 0.7)
+  if (progress > 0.2) {
+    const alpha = Math.min((progress - 0.2) * 3, 1); // 淡入效果
+    
+    // 绘制“Thinking”到“Machines”的注意力连接线
+    ctx.save();
+    ctx.globalAlpha = alpha;
+
+    // 自连接线 (Thinking -> Thinking)
+    ctx.strokeStyle = '#10b981'; // 绿线表示强关联
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.moveTo(startX[0], nodeY + 40);
+    ctx.lineTo(startX[0], outputY - 40);
+    ctx.stroke();
+
+    // 跨连接线 (Thinking -> Machines)
+    ctx.strokeStyle = 'rgba(99, 102, 241, 0.6)'; // 紫线表示跨词关联
+    ctx.lineWidth = 3;
+    ctx.setLineDash([8, 8]);
+    ctx.beginPath();
+    ctx.moveTo(startX[0], nodeY + 40);
+    ctx.lineTo(startX[1], outputY - 40);
+    ctx.stroke();
+
+    // 标签: Softmax 权重得分
+    ctx.fillStyle = '#10b981';
+    ctx.font = '22px -apple-system, sans-serif';
+    ctx.fillText("Score: 0.8", startX[0] - 80, 600);
+
+    ctx.fillStyle = '#818cf8';
+    ctx.fillText("Score: 0.2", startX[0] + 280, 600);
+    ctx.restore();
+  }
+
+  // 4. 动画阶段三：聚合输出 Context Vector (Progress 0.7 ~ 1.0)
+  if (progress > 0.6) {
+    const alpha = Math.min((progress - 0.6) * 2.5, 1);
+
+    tokens.forEach((token, index) => {
+      const x = startX[index];
+
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = '#10b981';
+      ctx.beginPath();
+      ctx.roundRect(x - 130, outputY - 40, 260, 80, 12);
+      ctx.fill();
+
+      ctx.fillStyle = '#000000';
+      ctx.font = 'bold 24px -apple-system, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`${token} (Context)`, x, outputY);
+      ctx.restore();
+    });
+  }
+
+  // 更新时间轴 UI 状态
+  timeline.value = currentFrame;
+  frameVal.textContent = `${currentFrame} / ${totalFrames}`;
+}
+    // 3. 播放逻辑
+    function loop() {
+      if (!isPlaying) return;
+      currentFrame = (currentFrame + 1) % totalFrames;
+      render();
+      animId = requestAnimationFrame(loop);
+    }
+
+    playBtn.addEventListener('click', () => {
+      isPlaying = !isPlaying;
+      playBtn.textContent = isPlaying ? '⏸ Pause' : '▶ Play';
+      if (isPlaying) loop();
+    });
+
+    resetBtn.addEventListener('click', () => {
+      isPlaying = false;
+      playBtn.textContent = '▶ Play';
+      cancelAnimationFrame(animId);
+      currentFrame = 0;
+      render();
+    });
+
+    // 4. 属性滑动条联动
+    [timeline, posX, posY, scale].forEach(el => {
+      el.addEventListener('input', () => {
+        currentFrame = parseInt(timeline.value);
+        document.getElementById('posXVal').textContent = posX.value;
+        document.getElementById('posYVal').textContent = posY.value;
+        document.getElementById('scaleVal').textContent = `${scale.value}x`;
+        render();
+      });
+    });
+
+    // 5. 核心：视频导出 (MediaRecorder WebM 格式)
+    exportBtn.addEventListener('click', () => {
+      isPlaying = false;
+      playBtn.textContent = '▶ Play';
+      cancelAnimationFrame(animId);
+      
+      currentFrame = 0;
+      exportBtn.textContent = '⏳ Recording...';
+      exportBtn.disabled = true;
+
+      // 捕获 Canvas 60 FPS 流
+      const stream = canvas.captureStream(60);
+      const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' });
+      const chunks = [];
+
+      recorder.ondataavailable = e => chunks.push(e.data);
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: 'video/webm' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `animation_${Date.now()}.webm`;
+        a.click();
+
+        exportBtn.textContent = '⬇ Export WebM Video';
+        exportBtn.disabled = false;
+      };
+
+      recorder.start();
+
+      // 自动逐帧录制完完整长度
+      const exportInterval = setInterval(() => {
+        render();
+        currentFrame++;
+        if (currentFrame > totalFrames) {
+          clearInterval(exportInterval);
+          recorder.stop();
+        }
+      }, 1000 / 60); // 60 FPS 模拟录制
+    });
+
+    // 初始渲染
+    render();
+  </script>
+</body>
+</html>

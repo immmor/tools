@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Transformer 终极交互实验室</title>
+  <style>
+    :root {
+      --bg-dark: #070a12;
+      --panel-bg: rgba(18, 24, 38, 0.85);
+      --panel-border: rgba(56, 189, 248, 0.2);
+      --primary-enc: #38bdf8;
+      --primary-dec: #34d399;
+      --accent-attn: #f43f5e;
+      --accent-gold: #fbbf24;
+      --text-bright: #f8fafc;
+      --text-dim: #94a3b8;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+
+    /* 全局 100vh 锁死大屏滚动 */
+    html, body {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background-color: var(--bg-dark);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: var(--text-bright);
+    }
+
+    /* 顶级 App 布局 */
+    .app-container {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: 100vh;
+      padding: 12px 16px;
+      gap: 10px;
+      background: radial-gradient(circle at 50% 20%, #1e1b4b 0%, #070a12 70%);
+    }
+
+    /* 顶部导航栏 (紧凑) */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      height: 42px;
+      padding: 0 16px;
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      backdrop-filter: blur(10px);
+      flex-shrink: 0;
+    }
+
+    .logo {
+      font-size: 1.1rem;
+      font-weight: 800;
+      letter-spacing: 1px;
+      background: linear-gradient(135deg, var(--primary-enc), var(--accent-attn), var(--primary-dec));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .top-tools {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .btn-tool {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: var(--text-bright);
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-tool:hover {
+      background: rgba(56, 189, 248, 0.2);
+      border-color: var(--primary-enc);
+    }
+
+    /* 主内容区：左右分栏，大屏完全占满高 */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1.5fr 1fr;
+      gap: 12px;
+      flex-grow: 1;
+      height: calc(100vh - 64px);
+      min-height: 0; /* 防止子项溢出 */
+    }
+
+    /* 左侧 Transformer 视口卡片 */
+    .viewport-card {
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 16px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    }
+
+    .svg-wrapper {
+      width: 100%;
+      flex-grow: 1;
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 0;
+    }
+
+    svg {
+      width: 100%;
+      height: 100%;
+      max-height: 100%;
+    }
+
+    /* 右侧控制与深度观察控制台 */
+    .dashboard-card {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      height: 100%;
+      min-height: 0;
+    }
+
+    /* 模块面板基础样式 */
+    .dash-panel {
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 14px;
+      padding: 12px;
+      backdrop-filter: blur(8px);
+    }
+
+    /* 1. 机器人导游面板 */
+    .bot-panel {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .bot-avatar {
+      font-size: 2.2rem;
+      background: rgba(56, 189, 248, 0.1);
+      border: 1px solid var(--primary-enc);
+      border-radius: 50%;
+      width: 52px;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      animation: float 3s ease-in-out infinite;
+    }
+
+    .bot-speech {
+      flex-grow: 1;
+    }
+
+    .bot-name {
+      font-size: 0.75rem;
+      color: var(--primary-enc);
+      font-weight: bold;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+
+    .bot-text {
+      font-size: 0.88rem;
+      line-height: 1.35;
+      color: #e2e8f0;
+    }
+
+    /* 2. 注意力矩阵观察器 (Attention Visualizer) */
+    .attn-panel {
+      flex-grow: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .panel-title {
+      font-size: 0.85rem;
+      font-weight: bold;
+      color: var(--accent-gold);
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .matrix-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 4px;
+      flex-grow: 1;
+      align-items: center;
+    }
+
+    .matrix-cell {
+      aspect-ratio: 1;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      transition: all 0.3s ease;
+    }
+
+    .matrix-cell.header {
+      background: transparent;
+      border: none;
+      font-weight: bold;
+      color: var(--primary-enc);
+    }
+
+    .matrix-cell.active {
+      background: rgba(244, 63, 94, 0.6);
+      border-color: var(--accent-attn);
+      color: white;
+      box-shadow: 0 0 10px rgba(244, 63, 94, 0.5);
+    }
+
+    /* 3. 底部演播控制台 */
+    .control-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .progress-bar-bg {
+      height: 4px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--primary-enc), var(--accent-attn));
+      transition: width 0.3s;
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+    }
+
+    .btn-main {
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: white;
+      border: none;
+      padding: 8px 20px;
+      border-radius: 20px;
+      font-weight: bold;
+      font-size: 0.9rem;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+      transition: all 0.2s;
+    }
+
+    .btn-main:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(37, 99, 235, 0.6);
+    }
+
+    .btn-sec {
+      background: rgba(255,255,255,0.08);
+      color: var(--text-bright);
+      border: 1px solid rgba(255,255,255,0.1);
+      padding: 8px 14px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-sec:hover {
+      background: rgba(255,255,255,0.18);
+    }
+
+    /* SVG 内元素交互与特效 */
+    .node-box {
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .node-box:hover rect {
+      filter: brightness(1.3);
+      stroke-width: 3px;
+    }
+
+    .glow-pulse {
+      animation: pulse-border 1.5s infinite alternate;
+    }
+
+    @keyframes pulse-border {
+      from { stroke-width: 2px; }
+      to { stroke-width: 5px; filter: drop-shadow(0 0 8px var(--primary-enc)); }
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-5px); }
+    }
+
+    /* 移动端/小屏幕响应式降级处理 (允许滚动) */
+    @media (max-width: 900px) {
+      html, body {
+        height: auto;
+        overflow-y: auto;
+      }
+      .app-container {
+        height: auto;
+      }
+      .main-grid {
+        grid-template-columns: 1fr;
+        height: auto;
+      }
+      .viewport-card {
+        height: 480px;
+      }
+      .dashboard-card {
+        height: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-container">
+    <!-- 顶部导航 -->
+    <header>
+      <div class="logo">
+        <span>⚡ Transformer 交互实验室</span>
+      </div>
+      <div class="top-tools">
+        <button class="btn-tool" onclick="toggleSound()">🔊 音效: <span id="sound-status">开</span></button>
+        <button class="btn-tool" onclick="showQuiz()">🎮 知识问答</button>
+      </div>
+    </header>
+
+    <!-- 主视口 (左右分栏，大屏完美一屏容纳) -->
+    <div class="main-grid">
+      
+      <!-- 左侧：SVG 画布 -->
+      <div class="viewport-card">
+        <div class="svg-wrapper">
+          <svg viewBox="0 0 800 560" preserveAspectRatio="xMidYMid meet">
+            <defs>
+              <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569" />
+              </marker>
+              <linearGradient id="grad-enc" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#0284c7" />
+                <stop offset="100%" stop-color="#0369a1" />
+              </linearGradient>
+              <linearGradient id="grad-dec" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#059669" />
+                <stop offset="100%" stop-color="#047857" />
+              </linearGradient>
+            </defs>
+
+            <!-- 连线路径 -->
+            <g stroke="#334155" stroke-width="2.5" marker-end="url(#arrow)">
+              <!-- Encoder 轴线 -->
+              <line x1="200" y1="490" x2="200" y2="430" />
+              <line x1="200" y1="370" x2="200" y2="310" />
+              <line x1="200" y1="170" x2="200" y2="110" />
+              <!-- Cross Attention 连线 (虚线) -->
+              <path id="cross-path" d="M 290 220 C 390 220, 410 270, 510 270" fill="none" stroke="#f43f5e" stroke-width="3" stroke-dasharray="6,6" />
+              <!-- Decoder 轴线 -->
+              <line x1="600" y1="490" x2="600" y2="430" />
+              <line x1="600" y1="370" x2="600" y2="330" />
+              <line x1="600" y1="210" x2="600" y2="150" />
+              <line x1="600" y1="90" x2="600" y2="45" />
+            </g>
+
+            <!-- 1. 输入 Module -->
+            <g class="node-box" onclick="inspectModule('input')">
+              <rect x="110" y="490" width="180" height="40" rx="8" fill="#1e293b" stroke="#475569" stroke-width="2" />
+              <text x="200" y="514" fill="#f8fafc" text-anchor="middle" font-size="13" font-weight="bold">输入: "I love AI"</text>
+            </g>
+
+            <!-- 2. Embedding + Positional -->
+            <g id="box-emb" class="node-box" onclick="inspectModule('emb')">
+              <rect x="110" y="370" width="180" height="60" rx="10" fill="#0f172a" stroke="#38bdf8" stroke-width="2" />
+              <text x="200" y="396" fill="#38bdf8" text-anchor="middle" font-size="13" font-weight="bold">词向量 + 位置编码</text>
+              <text x="200" y="415" fill="#94a3b8" text-anchor="middle" font-size="10">Embedding + Positional</text>
+            </g>
+
+            <!-- 3. Encoder 模块 -->
+            <g id="box-enc" class="node-box" onclick="inspectModule('enc')">
+              <rect x="90" y="120" width="220" height="190" rx="14" fill="url(#grad-enc)" fill-opacity="0.2" stroke="#38bdf8" stroke-width="2" />
+              <text x="200" y="148" fill="#38bdf8" text-anchor="middle" font-weight="bold" font-size="16">Encoder 编码器</text>
+
+              <rect x="110" y="165" width="180" height="50" rx="8" fill="#0f172a" stroke="#0284c7" />
+              <text x="200" y="195" fill="#e0f2fe" text-anchor="middle" font-size="12">多头自注意力 (Self-Attn)</text>
+
+              <rect x="110" y="235" width="180" height="50" rx="8" fill="#0f172a" stroke="#0284c7" />
+              <text x="200" y="265" fill="#e0f2fe" text-anchor="middle" font-size="12">前馈神经网络 (FFN)</text>
+            </g>
+
+            <!-- 4. Target Input -->
+            <g class="node-box" onclick="inspectModule('dec-in')">
+              <rect x="510" y="490" width="180" height="40" rx="8" fill="#1e293b" stroke="#475569" stroke-width="2" />
+              <text x="600" y="514" fill="#f8fafc" text-anchor="middle" font-size="13" font-weight="bold">目标已译: "我 爱"</text>
+            </g>
+
+            <!-- 5. Decoder 模块 -->
+            <g id="box-dec" class="node-box" onclick="inspectModule('dec')">
+              <rect x="490" y="120" width="220" height="250" rx="14" fill="url(#grad-dec)" fill-opacity="0.2" stroke="#34d399" stroke-width="2" />
+              <text x="600" y="148" fill="#34d399" text-anchor="middle" font-weight="bold" font-size="16">Decoder 解码器</text>
+
+              <rect x="510" y="165" width="180" height="45" rx="8" fill="#0f172a" stroke="#059669" />
+              <text x="600" y="192" fill="#ecfdf5" text-anchor="middle" font-size="11">掩码自注意力 (Masked Attn)</text>
+
+              <rect id="subbox-cross" x="510" y="225" width="180" height="45" rx="8" fill="#0f172a" stroke="#f43f5e" stroke-width="2" />
+              <text x="600" y="252" fill="#ffe4e6" text-anchor="middle" font-size="11" font-weight="bold">交叉注意力 (Cross Attn)</text>
+
+              <rect x="510" y="285" width="180" height="45" rx="8" fill="#0f172a" stroke="#059669" />
+              <text x="600" y="312" fill="#ecfdf5" text-anchor="middle" font-size="11">前馈神经网络 (FFN)</text>
+            </g>
+
+            <!-- 6. Linear & Softmax -->
+            <g id="box-out" class="node-box" onclick="inspectModule('out')">
+              <rect x="510" y="20" width="180" height="50" rx="10" fill="#312e81" stroke="#818cf8" stroke-width="2" />
+              <text x="600" y="42" fill="#c7d2fe" text-anchor="middle" font-size="12" font-weight="bold">Linear & Softmax</text>
+              <text x="600" y="58" fill="#fbbf24" text-anchor="middle" font-size="11" font-weight="bold">预测概率 ➔ "人工智能"</text>
+            </g>
+
+            <!-- 动态光球粒子 -->
+            <circle id="particle" r="8" cx="200" cy="510" fill="#fbbf24" opacity="0" filter="drop-shadow(0 0 8px #fbbf24)" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- 右侧：控制台与注意力阵列面板 -->
+      <div class="dashboard-card">
+        
+        <!-- 1. AI 导游对话框 -->
+        <div class="dash-panel bot-panel">
+          <div class="bot-avatar" id="bot-avatar">🤖</div>
+          <div class="bot-speech">
+            <div class="bot-name" id="bot-name">ENC-BOT (编码助手)</div>
+            <div class="bot-text" id="bot-text">点击“开始演播”，我将为您拆解 Transformer 是如何把 "I love AI" 翻译为 "我爱人工智能" 的！</div>
+          </div>
+        </div>
+
+        <!-- 2. 注意力矩阵实时观察器 (QK^T Matrix Visualizer) -->
+        <div class="dash-panel attn-panel">
+          <div class="panel-title">
+            <span>🔥 实时 Self-Attention 权重热力图</span>
+            <span style="font-size:0.75rem; color:var(--text-dim);" id="attn-status">空闲</span>
+          </div>
+          <div class="matrix-grid" id="matrix-grid">
+            <!-- 由 JS 动态生成 4x4 矩阵网格 -->
+          </div>
+        </div>
+
+        <!-- 3. 演播控制台 -->
+        <div class="dash-panel control-panel">
+          <div class="progress-bar-bg">
+            <div class="progress-fill" id="progress-fill"></div>
+          </div>
+          <div class="btn-group">
+            <button class="btn-main" id="btn-play" onclick="togglePlay()">开始演播 ▶</button>
+            <button class="btn-sec" onclick="nextStep()">单步前进 ➔</button>
+            <button class="btn-sec" onclick="resetAll()">重置 ↺</button>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    /* --- 音效系统 (Web Audio API 无外部依赖) --- */
+    let soundEnabled = true;
+    let audioCtx = null;
+
+    function initAudio() {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+
+    function playSound(type) {
+      if (!soundEnabled) return;
+      initAudio();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      if (type === 'beep') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(400, now);
+        osc.frequency.exponentialRampToValueAtTime(800, now + 0.1);
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.1);
+        osc.start(now); osc.stop(now + 0.1);
+      } else if (type === 'flow') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(220, now);
+        osc.frequency.exponentialRampToValueAtTime(880, now + 0.3);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
+        osc.start(now); osc.stop(now + 0.3);
+      } else if (type === 'win') {
+        [523.25, 659.25, 783.99].forEach((f, i) => {
+          const o = audioCtx.createOscillator();
+          const g = audioCtx.createGain();
+          o.connect(g); g.connect(audioCtx.destination);
+          o.frequency.setValueAtTime(f, now + i*0.08);
+          g.gain.setValueAtTime(0.1, now + i*0.08);
+          g.gain.linearRampToValueAtTime(0.01, now + i*0.08 + 0.25);
+          o.start(now + i*0.08); o.stop(now + i*0.08 + 0.25);
+        });
+      }
+    }
+
+    function toggleSound() {
+      soundEnabled = !soundEnabled;
+      document.getElementById('sound-status').innerText = soundEnabled ? '开' : '关';
+    }
+
+    /* --- 注意力矩阵初始化 --- */
+    const tokens = ["I", "love", "AI"];
+    const matrixGrid = document.getElementById('matrix-grid');
+
+    function buildMatrix(weights = null) {
+      matrixGrid.innerHTML = '';
+      
+      // 角落空格
+      const corner = document.createElement('div');
+      corner.className = 'matrix-cell header';
+      corner.innerText = 'Q\\K';
+      matrixGrid.appendChild(corner);
+
+      // 列头
+      tokens.forEach(t => {
+        const h = document.createElement('div');
+        h.className = 'matrix-cell header';
+        h.innerText = t;
+        matrixGrid.appendChild(h);
+      });
+
+      // 行与数据
+      tokens.forEach((rowToken, r) => {
+        const rowHeader = document.createElement('div');
+        rowHeader.className = 'matrix-cell header';
+        rowHeader.innerText = rowToken;
+        matrixGrid.appendChild(rowHeader);
+
+        tokens.forEach((colToken, c) => {
+          const cell = document.createElement('div');
+          cell.className = 'matrix-cell';
+          let val = weights ? weights[r][c] : 0;
+          cell.innerText = val > 0 ? (val * 100).toFixed(0) + '%' : '-';
+          
+          if (val > 0) {
+            cell.style.background = `rgba(244, 63, 94, ${val * 0.8})`;
+            cell.style.color = '#fff';
+            if(val > 0.5) cell.classList.add('active');
+          }
+          matrixGrid.appendChild(cell);
+        });
+      });
+    }
+    buildMatrix();
+
+    /* --- 演播步骤数据 --- */
+    const steps = [
+      {
+        botName: "ENC-BOT", avatar: "🤖",
+        text: "<b>步骤 1: 向量与位置打包</b><br>单词 'I love AI' 转换成数字向量，并注入 Positional Encoding，保留语序顺序。",
+        cx: 200, cy: 390, box: "box-emb",
+        weights: [[0.9, 0.1, 0.0], [0.1, 0.8, 0.1], [0.0, 0.1, 0.9]],
+        attnText: "词向量位置初始化"
+      },
+      {
+        botName: "ENC-BOT", avatar: "🧠",
+        text: "<b>步骤 2: 自注意力全局关联 (Self-Attention)</b><br>计算 $QK^T$！模型发现 'love' 和 'AI' 关联度高达 88%，深刻理解了句意。",
+        cx: 200, cy: 200, box: "box-enc",
+        weights: [[0.7, 0.2, 0.1], [0.05, 0.07, 0.88], [0.1, 0.2, 0.7]],
+        attnText: "Self-Attention 权重聚焦!"
+      },
+      {
+        botName: "DEC-BOT", avatar: "🤖",
+        text: "<b>步骤 3: 交叉注意力 (Cross-Attention) 调取记忆</b><br>解码器 Decoder 正在翻译下一个词，向 Encoder 索要特征暗号。",
+        cx: 510, cy: 245, box: "box-dec",
+        weights: [[0.1, 0.3, 0.6], [0.2, 0.7, 0.1], [0.1, 0.1, 0.8]],
+        attnText: "Cross-Attention 跨界链接"
+      },
+      {
+        botName: "DEC-BOT", avatar: "🎯",
+        text: "<b>步骤 4: 概率计算并输出</b><br>Linear + Softmax 算得概率最高的词为：<b>“人工智能”</b>！翻译圆满完成。",
+        cx: 600, cy: 45, box: "box-out",
+        weights: [[0.0, 0.0, 1.0], [0.0, 0.9, 0.1], [0.1, 0.1, 0.8]],
+        attnText: "预测概率收敛"
+      }
+    ];
+
+    let currentStep = -1;
+    let timer = null;
+
+    function renderStep(index) {
+      const step = steps[index];
+      
+      // 更新 Bot 文本
+      document.getElementById('bot-name').innerText = step.botName;
+      document.getElementById('bot-avatar').innerText = step.avatar;
+      document.getElementById('bot-text').innerHTML = step.text;
+      document.getElementById('attn-status').innerText = step.attnText;
+
+      // 更新进度条
+      document.getElementById('progress-fill').style.width = ((index + 1) / steps.length * 100) + '%';
+
+      // 移动粒子
+      const particle = document.getElementById('particle');
+      particle.setAttribute('opacity', '1');
+      particle.setAttribute('cx', step.cx);
+      particle.setAttribute('cy', step.cy);
+
+      // 高亮节点
+      document.querySelectorAll('.node-box rect').forEach(r => r.classList.remove('glow-pulse'));
+      if(step.box) {
+        document.getElementById(step.box).querySelector('rect').classList.add('glow-pulse');
+      }
+
+      // 刷新注意力热力图
+      buildMatrix(step.weights);
+
+      // 播放提示音
+      playSound('flow');
+    }
+
+    function togglePlay() {
+      const btn = document.getElementById('btn-play');
+      if (timer) {
+        stopPlay();
+      } else {
+        btn.innerText = "暂停 ⏸";
+        if (currentStep === -1 || currentStep >= steps.length - 1) currentStep = 0;
+        renderStep(currentStep);
+        timer = setInterval(() => {
+          currentStep++;
+          if (currentStep >= steps.length) {
+            stopPlay();
+            playSound('win');
+            document.getElementById('bot-text').innerHTML = "🎉 <b>翻译演播完成！</b>点击“重置”或再次点击演播。";
+          } else {
+            renderStep(currentStep);
+          }
+        }, 2800);
+      }
+    }
+
+    function stopPlay() {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+        document.getElementById('btn-play').innerText = "继续演播 ▶";
+      }
+    }
+
+    function nextStep() {
+      stopPlay();
+      currentStep = (currentStep + 1) % steps.length;
+      renderStep(currentStep);
+    }
+
+    function resetAll() {
+      stopPlay();
+      currentStep = -1;
+      document.getElementById('particle').setAttribute('opacity', '0');
+      document.querySelectorAll('.node-box rect').forEach(r => r.classList.remove('glow-pulse'));
+      document.getElementById('progress-fill').style.width = '0%';
+      document.getElementById('bot-name').innerText = "ENC-BOT (编码助手)";
+      document.getElementById('bot-avatar').innerText = "🤖";
+      document.getElementById('bot-text').innerHTML = "点击“开始演播”，我将为您拆解 Transformer 是如何把 \"I love AI\" 翻译为 \"我爱人工智能\" 的！";
+      document.getElementById('attn-status').innerText = "空闲";
+      document.getElementById('btn-play').innerText = "开始演播 ▶";
+      buildMatrix();
+      playSound('beep');
+    }
+
+    /* 模块直接点击探秘 */
+    const moduleDetails = {
+      input: { title: "输入层", text: "把人类语言拆分成 Token 序列。Transformer 支持一次性并行读入所有词汇！" },
+      emb: { title: " Embedding + 位置编码", text: "因为没有循环递归，Transformer 必须通过加在词向量上的正弦波形信号（Positional Encoding）来区分词的前后顺序。" },
+      enc: { title: "Encoder 编码器", text: "由多层 Self-Attention 和 FFN 组成，负责提取整句的深层语义矩阵。" },
+      dec: { title: "Decoder 解码器", text: "负责逐字生成目标语言，Masked Attention 阻挡模型‘偷看’未来的词，Cross Attention 实时抽取 Encoder 传递的信息。" },
+      out: { title: "Linear & Softmax", text: "把特征转化为全字典每个词的概率分布，选中概率最大的词进行输出。" }
+    };
+
+    function inspectModule(key) {
+      stopPlay();
+      const m = moduleDetails[key];
+      if (m) {
+        document.getElementById('bot-name').innerText = "模块百科探秘";
+        document.getElementById('bot-avatar').innerText = "🔍";
+        document.getElementById('bot-text').innerHTML = `<b>${m.title}</b><br>${m.text}`;
+        playSound('beep');
+      }
+    }
+
+    function showQuiz() {
+      playSound('win');
+      alert("🎮 小测试：为什么 Transformer 需要 Positional Encoding？\n\nA. 增加向量维度\nB. 因为 Self-Attention 是并行计算的，无法感知词的先后顺序\nC. 提高 Softmax 计算速度\n\n答案是：B！");
+    }
+  </script>
+</body>
+</html>
