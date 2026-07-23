@@ -2882,6 +2882,42 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
         }
       }
 
+      // ========== 广告点击统计接口（数据存于 user 表） ==========
+      if (path === '/api/ad-click') {
+        try { await DB.prepare('ALTER TABLE user ADD COLUMN ad_clicks TEXT').run(); } catch (e) {}
+        // 记录点击：POST /api/ad-click  body { ad_id, username, content? }
+        if (request.method === 'POST') {
+          try {
+            const { ad_id, username, content } = await request.json();
+            if (!ad_id) return resJson({ code: 400, msg: '缺少 ad_id' }, 400);
+            if (!username) return resJson({ code: 200, msg: '匿名点击不记录' });
+            const user = await DB.prepare('SELECT ad_clicks FROM user WHERE username = ?').bind(username).first();
+            if (!user) return resJson({ code: 404, msg: '用户不存在' }, 404);
+            const clicks = user.ad_clicks ? JSON.parse(user.ad_clicks) : {};
+            const cur = clicks[ad_id] || { count: 0 };
+            cur.count = (cur.count || 0) + 1;
+            if (content) cur.content = content;
+            clicks[ad_id] = cur;
+            await DB.prepare('UPDATE user SET ad_clicks = ? WHERE username = ?').bind(JSON.stringify(clicks), username).run();
+            return resJson({ code: 200, msg: '记录成功', count: cur.count });
+          } catch (err) {
+            return resJson({ code: 500, msg: '记录失败', error: err.message }, 500);
+          }
+        }
+        // 查询统计：汇总所有用户的广告点击
+        const rows = await DB.prepare('SELECT ad_clicks FROM user WHERE ad_clicks IS NOT NULL AND ad_clicks != "{}"').all();
+        const summary = {}, info = {};
+        rows.results.forEach(r => {
+          const c = JSON.parse(r.ad_clicks || '{}');
+          for (const [k, v] of Object.entries(c)) {
+            summary[k] = (summary[k] || 0) + (v.count || 0);
+            if (v.content) info[k] = v.content;
+          }
+        });
+        const total = Object.values(summary).reduce((a, b) => a + b, 0);
+        return resJson({ code: 200, data: summary, info, total });
+      }
+
       // ========== 默认接口提示 ==========
       return resJson({
         code: 200,
