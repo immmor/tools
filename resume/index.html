@@ -340,59 +340,57 @@
             if (savedTheme) selectTheme(savedTheme);
         } catch (e) {}
 
-        function generateCanvas(callback) {
+        let _h2cPromise = null;
+        function ensureHtml2Canvas() {
+            if (window.html2canvas) return Promise.resolve();
+            if (!_h2cPromise) {
+                _h2cPromise = new Promise(function(resolve, reject) {
+                    const s = document.createElement('script');
+                    s.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+                    s.onload = resolve; s.onerror = reject;
+                    document.head.appendChild(s);
+                });
+            }
+            return _h2cPromise;
+        }
+
+        async function generateCanvas(callback) {
             const paper = document.getElementById('resume-paper');
-            const currentTransform = paper.style.transform;
-            paper.style.transform = 'scale(1)';
 
-            const w = paper.offsetWidth;
-            const h = paper.offsetHeight;
-            const styles = document.getElementsByTagName('style')[0].innerHTML;
-            const content = paper.innerHTML;
-            const themeClass = paper.className ? ` class="${paper.className}"` : '';
-
-            paper.style.transform = currentTransform;
-
-            // 不做分页：纸张高度以实际内容为准（CSS 已设 min-height: 297mm，即至少一页 A4），
-            // 超出的内容自然向下延伸，主题背景随纸张铺满整张，无分页概念。
-            const dataUri = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(`
-                <svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
-                    <foreignObject width="100%" height="100%">
-                        <div xmlns="http://www.w3.org/1999/xhtml">
-                            <style>
-                                ${styles}
-                                #resume-paper { box-shadow: none !important; border: none !important; width: 100% !important; margin: 0 !important; -webkit-text-size-adjust: 100% !important; text-size-adjust: 100% !important; }
-                            </style>
-                            <div id="resume-paper"${themeClass}>
-                                ${content}
-                            </div>
-                        </div>
-                    </foreignObject>
-                </svg>
-            `);
-
-            const img = new Image();
-            img.crossOrigin = 'anonymous';
-            img.src = dataUri;
-            
-            img.onload = function() {
-                const canvas = document.createElement('canvas');
-                const scale = 2.5; 
-                canvas.width = w * scale;
-                canvas.height = h * scale;
-                const ctx = canvas.getContext('2d');
-                ctx.scale(scale, scale);
-                
-                ctx.fillStyle = '#ffffff';
-                ctx.fillRect(0, 0, w, h);
-                ctx.drawImage(img, 0, 0, w, h);
-                
+            // 不修改 live DOM 的 transform（避免预览闪屏），
+            // 在 onclone 中把克隆文档里的纸张复位为 scale(1) 以截取原始大小
+            try {
+                await ensureHtml2Canvas();
+                const canvas = await window.html2canvas(paper, {
+                    backgroundColor: null,
+                    scale: 2.5,
+                    useCORS: true,
+                    logging: false,
+                    onclone: function(doc) {
+                        const cp = doc.getElementById('resume-paper');
+                        cp.style.transform = 'scale(1)';
+                        cp.style.transformOrigin = 'top center';
+                        // 修正 html2canvas 对"渐变文字"的兼容，回落到主题强调色
+                        doc.querySelectorAll('#resume-paper *').forEach(function(el) {
+                            const cs = getComputedStyle(el);
+                            if (cs.webkitTextFillColor === 'transparent' || cs.webkitTextFillColor === 'rgba(0, 0, 0, 0)') {
+                                const accent = cs.getPropertyValue('--r-accent').trim() || cs.color || '#333';
+                                el.style.webkitTextFillColor = accent;
+                                el.style.backgroundClip = 'border-box';
+                                el.style.webkitBackgroundClip = 'border-box';
+                            }
+                        });
+                    }
+                });
                 callback(canvas);
-            };
+            } catch (e) {
+                callback(null);
+            }
         }
 
         function exportToPDF() {
             generateCanvas(function(canvas) {
+                if (!canvas) { alert('PDF 导出失败，请重试！'); return; }
                 try {
                     const imgData = canvas.toDataURL('image/jpeg', 0.95);
                     const base64Data = imgData.split(',')[1];
@@ -470,6 +468,7 @@
 
         function exportToPNG() {
             generateCanvas(function(canvas) {
+                if (!canvas) { alert('图片导出失败，请重试！'); return; }
                 try {
                     const a = document.createElement('a');
                     a.download = getExportFilename('.png');
@@ -831,7 +830,7 @@
                     break;
                 }
             }
-            if (nameLine) out.push('# ' + nameLine.replace(/^["“]|["”]$/g, '').trim());
+            if (nameLine) out.push('# ' + nameLine.replace(/^[""]|[""]$/g, '').trim());
 
             let prevWasDate = false;
             for (let i = (nameIdx >= 0 ? nameIdx + 1 : 0); i < lines.length; i++) {
