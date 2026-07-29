@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>3D 智能试衣间</title>
+    <!-- 引入样式与字体 -->
+    <style>
+        :root {
+            --bg-color: #f4f7f6;
+            --panel-bg: rgba(255, 255, 255, 0.85);
+            --primary-color: #7da89f;
+            --primary-hover: #69938a;
+            --text-main: #4a5568;
+            --text-sub: #8c9ba5;
+            --accent-border: #e2e8f0;
+            --shadow: 0 8px 24px rgba(149, 157, 165, 0.12);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+        }
+
+        /* 3D 渲染画布容器 */
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        /* 统一玻璃质感面板 */
+        .glass-panel {
+            background: var(--panel-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            border-radius: 20px;
+            box-shadow: var(--shadow);
+        }
+
+        /* 顶部标题栏 */
+        header {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 10;
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        header h1 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            letter-spacing: 1px;
+            color: var(--text-main);
+        }
+
+        header .subtitle {
+            font-size: 0.8rem;
+            color: var(--text-sub);
+            border-left: 1px solid #cbd5e1;
+            padding-left: 12px;
+        }
+
+        /* 控制面板（响应式核心） */
+        .control-panel {
+            position: absolute;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            padding: 24px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* 大屏桌面端样式 (默认) */
+        @media (min-width: 769px) {
+            .control-panel {
+                top: 20px;
+                right: 20px;
+                width: 320px;
+                max-height: calc(100vh - 40px);
+                overflow-y: auto;
+            }
+        }
+
+        /* 移动端/小屏样式 */
+        @media (max-width: 768px) {
+            header {
+                top: 12px;
+                left: 12px;
+                right: 12px;
+                justify-content: space-between;
+            }
+            header .subtitle { display: none; }
+
+            .control-panel {
+                bottom: 0;
+                left: 0;
+                right: 0;
+                width: 100%;
+                border-bottom-left-radius: 0;
+                border-bottom-right-radius: 0;
+                padding: 20px;
+                max-height: 50vh;
+                overflow-y: auto;
+            }
+        }
+
+        .section-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: var(--text-sub);
+            margin-bottom: 10px;
+        }
+
+        /* 网格选择按钮 */
+        .option-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+
+        .btn-option {
+            background: rgba(255, 255, 255, 0.7);
+            border: 1px solid var(--accent-border);
+            border-radius: 12px;
+            padding: 10px 8px;
+            font-size: 0.85rem;
+            color: var(--text-main);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            outline: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .btn-option:hover {
+            border-color: var(--primary-color);
+            background: #fff;
+        }
+
+        .btn-option.active {
+            background: var(--primary-color);
+            color: #fff;
+            border-color: var(--primary-color);
+            box-shadow: 0 4px 12px rgba(125, 168, 159, 0.3);
+        }
+
+        /* 颜色选择器 */
+        .color-group {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .color-dot {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid #fff;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+            transition: transform 0.2s ease;
+        }
+
+        .color-dot:hover, .color-dot.active {
+            transform: scale(1.15);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+
+        /* 加载指示器 */
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 20;
+            padding: 16px 28px;
+            font-size: 0.9rem;
+            color: var(--text-main);
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--accent-border);
+            border-top: 2px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+
+    <!-- Three.js 与 OrbitControls 插件（从 CDN 导入） -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+    <!-- 顶部 Branding -->
+    <header class="glass-panel">
+        <h1>FITTING ROOM</h1>
+        <span class="subtitle">3D 极简试衣</span>
+    </header>
+
+    <!-- 加载中提示 -->
+    <div id="loading" class="glass-panel">
+        <div class="spinner"></div>
+        <span>正在构建 3D 试衣空间...</span>
+    </div>
+
+    <!-- 3D 渲染画布 -->
+    <div id="canvas-container"></div>
+
+    <!-- 右侧/底部 试衣控制面板 -->
+    <div class="control-panel glass-panel">
+        <!-- 上衣选择 -->
+        <div>
+            <div class="section-title">选择上衣 (Tops)</div>
+            <div class="option-grid">
+                <button class="btn-option active" onclick="switchClothing('top', 'tshirt')">基础 T恤</button>
+                <button class="btn-option" onclick="switchClothing('top', 'shirt')">休闲衬衫</button>
+                <button class="btn-option" onclick="switchClothing('top', 'hoodie')">连帽卫衣</button>
+            </div>
+        </div>
+
+        <!-- 颜色切换 -->
+        <div>
+            <div class="section-title">衣服配色 (Color)</div>
+            <div class="color-group">
+                <div class="color-dot active" style="background: #ffffff;" onclick="changeClothColor('#ffffff', this)"></div>
+                <div class="color-dot" style="background: #2b2d42;" onclick="changeClothColor('#2b2d42', this)"></div>
+                <div class="color-dot" style="background: #e07a5f;" onclick="changeClothColor('#e07a5f', this)"></div>
+                <div class="color-dot" style="background: #81b29a;" onclick="changeClothColor('#81b29a', this)"></div>
+                <div class="color-dot" style="background: #f2cc8f;" onclick="changeClothColor('#f2cc8f', this)"></div>
+            </div>
+        </div>
+
+        <!-- 下装选择 -->
+        <div>
+            <div class="section-title">选择下装 (Bottoms)</div>
+            <div class="option-grid">
+                <button class="btn-option active" onclick="switchClothing('bottom', 'jeans')">牛仔裤</button>
+                <button class="btn-option" onclick="switchClothing('bottom', 'shorts')">休闲短裤</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3D 逻辑脚本 -->
+    <script>
+        let scene, camera, renderer, controls;
+        let mannequin, currentTop, currentBottom;
+        let clothMaterial;
+
+        // 初始化场景
+        function init() {
+            const container = document.getElementById('canvas-container');
+
+            // 1. 创建场景
+            scene = new THREE.Scene();
+            // 小清新浅灰/奶油色背景
+            scene.background = new THREE.Color(0xf4f7f6);
+
+            // 2. 相机设置
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 1.2, 3.2); // 居中视点
+
+            // 3. 渲染器设置
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // 优化高清屏性能
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            // 4. 灯光布局 (营造柔和高端摄影棚质感)
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            scene.add(ambientLight);
+
+            const mainLight = new THREE.DirectionalLight(0xffffff, 0.6);
+            mainLight.position.set(3, 5, 3);
+            mainLight.castShadow = true;
+            mainLight.shadow.mapSize.width = 1024;
+            mainLight.shadow.mapSize.height = 1024;
+            scene.add(mainLight);
+
+            const fillLight = new THREE.DirectionalLight(0xe8f0fe, 0.3); // 冷色补光
+            fillLight.position.set(-3, 2, -2);
+            scene.add(fillLight);
+
+            // 5. 轨道控制器 (支持触摸屏滑动旋转与缩放)
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.minDistance = 1.8;
+            controls.maxDistance = 5;
+            controls.maxPolarAngle = Math.PI / 2 + 0.1; // 阻止穿透地面
+            controls.target.set(0, 1.0, 0);
+
+            // 6. 添加柔和的地面影衬
+            const floorGeo = new THREE.PlaneGeometry(10, 10);
+            const floorMat = new THREE.ShadowMaterial({ opacity: 0.08 });
+            const floor = new THREE.Mesh(floorGeo, floorMat);
+            floor.rotation.x = -Math.PI / 2;
+            floor.receiveShadow = true;
+            scene.add(floor);
+
+            // 7. 动态生成 3D 模特与基础衣服 (使用几何体模拟，便于开箱即用预览)
+            createPlaceholderModel();
+
+            // 8. 响应窗口调整 (支持大屏与手机切换)
+            window.addEventListener('resize', onWindowResize);
+
+            // 隐藏加载动画
+            document.getElementById('loading').style.display = 'none';
+
+            // 开始渲染循环
+            animate();
+        }
+
+        // 创建程序化模拟模特与服装（无外部依赖，保证100%运行）
+        function createPlaceholderModel() {
+            const mannequinGroup = new THREE.Group();
+
+            // 基础材质 (木质/石膏灰色质感模特)
+            const bodyMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0xdde1e5, 
+                roughness: 0.5, 
+                metalness: 0.1 
+            });
+
+            // 服装材质 (支持动态换色)
+            clothMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0xffffff, 
+                roughness: 0.6 
+            });
+
+            // 1. 模特身体结构 (简化人形)
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.12, 32, 32), bodyMaterial);
+            head.position.y = 1.65;
+            head.castShadow = true;
+
+            const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.1), bodyMaterial);
+            neck.position.y = 1.52;
+
+            mannequinGroup.add(head, neck);
+
+            // 2. 上衣 (躯干模拟)
+            const torsoGeo = new THREE.CylinderGeometry(0.18, 0.15, 0.55, 32);
+            currentTop = new THREE.Mesh(torsoGeo, clothMaterial);
+            currentTop.position.y = 1.22;
+            currentTop.castShadow = true;
+            mannequinGroup.add(currentTop);
+
+            // 3. 下装 (腿部模拟)
+            const legLeft = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.05, 0.7, 32), bodyMaterial);
+            legLeft.position.set(-0.09, 0.6, 0);
+            legLeft.castShadow = true;
+
+            const legRight = legLeft.clone();
+            legRight.position.x = 0.09;
+
+            mannequinGroup.add(legLeft, legRight);
+            scene.add(mannequinGroup);
+        }
+
+        // 交互：切换颜色
+        function changeClothColor(hexColor, el) {
+            if (clothMaterial) {
+                clothMaterial.color.set(hexColor);
+            }
+            // 更新 UI 选中状态
+            document.querySelectorAll('.color-dot').forEach(dot => dot.classList.remove('active'));
+            if(el) el.classList.add('active');
+        }
+
+        // 交互：切换款式 (此处示范逻辑，加载实际 GLTF 模型时更换对应 mesh 即可)
+        function switchClothing(type, style) {
+            // 更新 UI 按钮激活状态
+            const parent = event.target.parentElement;
+            parent.querySelectorAll('.btn-option').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+
+            // 简单形态缩放效果模拟不同款式
+            if (type === 'top') {
+                if (style === 'tshirt') currentTop.scale.set(1, 1, 1);
+                if (style === 'shirt') currentTop.scale.set(1.05, 1.02, 1.05);
+                if (style === 'hoodie') currentTop.scale.set(1.15, 1.08, 1.15);
+            }
+        }
+
+        // 屏幕自适应
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // 逐帧渲染
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // 运行初始化
+        window.onload = init;
+    </script>
+</body>
+</html>
