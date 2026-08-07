@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>四季风物 - 动态视觉视频</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000;
+            font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+            color: #fff;
+        }
+
+        .video-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* 电影级文字排版与镜头动画 */
+        .text-stage {
+            position: relative;
+            z-index: 10;
+            text-align: center;
+            width: 90%;
+            max-width: 800px;
+            pointer-events: none;
+        }
+
+        /* 季节主标题：带镜头推近与渐变特效 */
+        .main-title {
+            font-size: clamp(3rem, 8vw, 6rem);
+            font-weight: 200;
+            letter-spacing: 16px;
+            margin-bottom: 24px;
+            background: linear-gradient(180deg, #ffffff 30%, rgba(255, 255, 255, 0.6) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            
+            /* 画面变焦动画 */
+            transform: scale(0.9);
+            opacity: 0;
+            filter: blur(10px);
+            transition: transform 1.2s cubic-bezier(0.16, 1, 0.3, 1),
+                        opacity 1.2s ease,
+                        filter 1.2s ease;
+        }
+
+        .main-title.show {
+            transform: scale(1);
+            opacity: 1;
+            filter: blur(0px);
+        }
+
+        /* 台词与风物字幕：按视频时间轴逐句出场 */
+        .subtitle-line {
+            font-size: clamp(1rem, 2.2vw, 1.35rem);
+            font-weight: 300;
+            line-height: 1.8;
+            letter-spacing: 3px;
+            color: rgba(255, 255, 255, 0.9);
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+            margin: 12px 0;
+            
+            transform: translateY(20px);
+            opacity: 0;
+            transition: transform 0.8s ease, opacity 0.8s ease;
+        }
+
+        .subtitle-line.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .highlight {
+            color: #ffe066;
+            font-weight: 400;
+            padding: 0 4px;
+        }
+
+        /* 极简视频播放控制条 */
+        .video-bar {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 20;
+            width: 80%;
+            max-width: 600px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .progress-track {
+            flex: 1;
+            height: 3px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+            overflow: hidden;
+            cursor: pointer;
+        }
+
+        .progress-fill {
+            width: 0%;
+            height: 100%;
+            background: #fff;
+            box-shadow: 0 0 8px #fff;
+            transition: width 0.1s linear;
+        }
+
+        .play-btn {
+            background: none;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            color: #fff;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            letter-spacing: 2px;
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s;
+        }
+
+        .play-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="video-container">
+        <!-- 视频画质 Canvas 渲染器 -->
+        <canvas id="videoCanvas"></canvas>
+
+        <!-- 动态字幕镜头舞台 -->
+        <div class="text-stage">
+            <div class="main-title" id="titleEl">春 · 踏青采鲜</div>
+            <div class="subtitle-line" id="sub1El">必吃 <span class="highlight">软糯青团、现剥春笋、明前龙井</span></div>
+            <div class="subtitle-line" id="sub2El">必玩 <span class="highlight">樱花树下野餐、踏青放风筝</span></div>
+        </div>
+
+        <!-- 极简播放进度条 -->
+        <div class="video-bar">
+            <button class="play-btn" id="playBtn">PAUSE</button>
+            <div class="progress-track">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <button class="play-btn" id="nextBtn">NEXT ➔</button>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. 视频分镜与时间轴数据 ---
+        const scenes = [
+            {
+                title: '春 · 踏青采鲜',
+                food: '软糯青团、现剥春笋、明前龙井',
+                play: '樱花树下野餐、踏青放风筝',
+                colors: ['#2af598', '#009efd'],
+                type: 'cherry'
+            },
+            {
+                title: '夏 · 冰爽夜游',
+                food: '冰镇西瓜、小龙虾、手摇冰淇淋',
+                play: '海边冲浪、溯溪玩水、暗夜追萤火虫',
+                colors: ['#00c6ff', '#0072ff'],
+                type: 'firefly'
+            },
+            {
+                title: '秋 · 丰收金黄',
+                food: '阳澄湖大闸蟹、糖炒栗子、烤红薯',
+                play: '枫叶林徒步、银杏大道摄影、围炉煮茶',
+                colors: ['#f7b733', '#fc4a1a'],
+                type: 'maple'
+            },
+            {
+                title: '冬 · 纯白围炉',
+                food: '铜锅涮羊肉、冰糖葫芦、热羊肉汤',
+                play: '户外滑雪、雪景温泉、打雪仗',
+                colors: ['#83a4d4', '#b6fbff'],
+                type: 'snow'
+            }
+        ];
+
+        // --- 2. 视频控制核心 ---
+        let sceneIndex = 0;
+        let isPlaying = true;
+        const SCENE_DURATION = 8; // 每幕 8 秒
+        let timer = 0;
+        let lastTime = performance.now();
+        let zoomScale = 1.0;
+
+        const canvas = document.getElementById('videoCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const titleEl = document.getElementById('titleEl');
+        const sub1El = document.getElementById('sub1El');
+        const sub2El = document.getElementById('sub2El');
+        const progressFill = document.getElementById('progressFill');
+        const playBtn = document.getElementById('playBtn');
+        const nextBtn = document.getElementById('nextBtn');
+
+        // --- 3. 画布自适应高清分辨率 ---
+        function resize() {
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = window.innerWidth * dpr;
+            canvas.height = window.innerHeight * dpr;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // --- 4. 景深粒子物理引擎 ---
+        class Particle {
+            constructor(type) {
+                this.init(type, true);
+            }
+
+            init(type, isFirst = false) {
+                const w = window.innerWidth;
+                const h = window.innerHeight;
+                this.type = type;
+                this.x = Math.random() * w;
+                this.y = isFirst ? Math.random() * h : -20;
+                
+                // 景深：越远（z越小），尺寸越小、速度越慢、越透明
+                this.z = Math.random() * 0.8 + 0.2;
+                this.size = (Math.random() * 8 + 4) * this.z;
+                this.speedY = (Math.random() * 1.5 + 0.6) * this.z;
+                this.speedX = (Math.random() * 0.8 - 0.4) * this.z;
+                this.opacity = (Math.random() * 0.7 + 0.3) * this.z;
+                this.rot = Math.random() * Math.PI * 2;
+                this.rotSpeed = (Math.random() - 0.5) * 0.02;
+            }
+
+            update() {
+                this.y += this.speedY;
+                this.x += Math.sin(this.y * 0.006) + this.speedX;
+                this.rot += this.rotSpeed;
+
+                if (this.y > window.innerHeight + 30) {
+                    this.init(this.type, false);
+                }
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.rot);
+
+                if (this.type === 'cherry') {
+                    ctx.fillStyle = `rgba(255, 192, 203, ${this.opacity})`;
+                    ctx.beginPath();
+                    ctx.ellipse(0, 0, this.size, this.size * 1.5, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (this.type === 'firefly') {
+                    const grad = ctx.createRadialGradient(0,0,0, 0,0, this.size * 2);
+                    grad.addColorStop(0, `rgba(255, 255, 180, ${this.opacity})`);
+                    grad.addColorStop(1, `rgba(255, 255, 180, 0)`);
+                    ctx.fillStyle = grad;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, this.size * 2, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (this.type === 'maple') {
+                    ctx.fillStyle = `rgba(235, 120, 50, ${this.opacity})`;
+                    ctx.fillRect(-this.size/2, -this.size/2, this.size, this.size);
+                } else if (this.type === 'snow') {
+                    ctx.fillStyle = `rgba(255, 255, 255, ${this.opacity})`;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, this.size * 0.8, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                ctx.restore();
+            }
+        }
+
+        let particles = [];
+        function createParticles(type) {
+            particles = [];
+            const count = window.innerWidth < 600 ? 30 : 65;
+            for (let i = 0; i < count; i++) {
+                particles.push(new Particle(type));
+            }
+        }
+        createParticles(scenes[0].type);
+
+        // --- 5. 动态长镜头背景渲染 (背景流体 + 缓慢推近) ---
+        let waveStep = 0;
+        function renderSceneBackground(scene, zoom) {
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            const dpr = window.devicePixelRatio || 1;
+
+            ctx.save();
+            ctx.scale(dpr, dpr);
+
+            // 镜头推近特效 (Ken Burns Effect)
+            ctx.translate(w / 2, h / 2);
+            ctx.scale(zoom, zoom);
+            ctx.translate(-w / 2, -h / 2);
+
+            // 动态线性渐变
+            waveStep += 0.003;
+            const grad = ctx.createLinearGradient(
+                Math.sin(waveStep) * w, 
+                0, 
+                w, 
+                Math.cos(waveStep) * h
+            );
+            grad.addColorStop(0, scene.colors[0]);
+            grad.addColorStop(1, scene.colors[1]);
+            ctx.fillStyle = grad;
+            ctx.fillRect(-40, -40, w + 80, h + 80);
+
+            // 流光波浪，增加柔和的视频层次感
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
+            ctx.beginPath();
+            ctx.moveTo(-50, h + 50);
+            for (let x = -50; x <= w + 50; x += 40) {
+                const y = Math.sin(x * 0.003 + waveStep * 2) * 40 + h * 0.6;
+                ctx.lineTo(x, y);
+            }
+            ctx.lineTo(w + 50, h + 50);
+            ctx.closePath();
+            ctx.fill();
+
+            // 绘制粒子
+            particles.forEach(p => {
+                if (isPlaying) p.update();
+                p.draw();
+            });
+
+            ctx.restore();
+        }
+
+        // --- 6. 视频镜头控制：台词与标题的按时进场 ---
+        function triggerSceneScript(index) {
+            const scene = scenes[index];
+
+            // 1. 全部淡出
+            titleEl.classList.remove('show');
+            sub1El.classList.remove('show');
+            sub2El.classList.remove('show');
+
+            // 2. 刷新文字并按时间打点进场
+            setTimeout(() => {
+                titleEl.innerText = scene.title;
+                sub1El.innerHTML = `必吃 <span class="highlight">${scene.food}</span>`;
+                sub2El.innerHTML = `必玩 <span class="highlight">${scene.play}</span>`;
+
+                createParticles(scene.type);
+
+                // 标题进场
+                titleEl.classList.add('show');
+
+                // 1.2 秒后字幕1进场
+                setTimeout(() => sub1El.classList.add('show'), 1200);
+
+                // 2.2 秒后字幕2进场
+                setTimeout(() => sub2El.classList.add('show'), 2200);
+
+            }, 600);
+        }
+
+        // --- 7. 主帧率循环 ---
+        function mainLoop(now) {
+            const delta = (now - lastTime) / 1000;
+            lastTime = now;
+
+            if (isPlaying) {
+                timer += delta;
+                zoomScale += 0.00025; // 画面极慢地推近
+
+                // 8秒展示完毕，自动切到下一个季节
+                if (timer >= SCENE_DURATION) {
+                    timer = 0;
+                    zoomScale = 1.0;
+                    sceneIndex = (sceneIndex + 1) % scenes.length;
+                    triggerSceneScript(sceneIndex);
+                }
+            }
+
+            // 更新进度条
+            const pct = (timer / SCENE_DURATION) * 100;
+            progressFill.style.width = `${pct}%`;
+
+            // 渲染背景与动态粒子
+            renderSceneBackground(scenes[sceneIndex], zoomScale);
+
+            requestAnimationFrame(mainLoop);
+        }
+
+        // --- 8. 事件交互 ---
+        playBtn.addEventListener('click', () => {
+            isPlaying = !isPlaying;
+            playBtn.innerText = isPlaying ? 'PAUSE' : 'PLAY';
+        });
+
+        nextBtn.addEventListener('click', () => {
+            timer = 0;
+            zoomScale = 1.0;
+            sceneIndex = (sceneIndex + 1) % scenes.length;
+            triggerSceneScript(sceneIndex);
+        });
+
+        // 启动第一幕
+        triggerSceneScript(0);
+        requestAnimationFrame(mainLoop);
+    </script>
+</body>
+</html>

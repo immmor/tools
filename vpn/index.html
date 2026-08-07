@@ -3,6 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <script>
+        if (location.hostname === 'phantom.immmor.com') {
+            location.replace(location.href.replace('phantom.immmor.com', 'phantom.funbua.uk'));
+        }
+    </script>
     <title data-i18n="page_title">PHANTOM - 安全稳定的 VPN 服务 | 支持 Clash V2Ray 协议</title>
     <meta name="description" data-i18n="page_description" content="PHANTOM VPN 提供安全、稳定、高速的 VPN 服务，支持 Clash 和 V2Ray 协议。海外团队运营，十年老品牌，提供 24/7 客户支持。立即注册享受限时优惠！">
     <meta name="keywords" content="VPN,科学上网，Clash,V2Ray，翻墙，加速器，代理，网络安全，隐私保护，PHANTOM">
@@ -472,6 +477,14 @@
             to { transform: translateX(0); opacity: 1; }
         }
 
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20% { transform: translateX(-6px); }
+            40% { transform: translateX(6px); }
+            60% { transform: translateX(-4px); }
+            80% { transform: translateX(4px); }
+        }
+        .animate-shake { animation: shake 0.4s ease-in-out; }
         .sales-pop::before {
             content: '🔥';
             position: absolute;
@@ -1244,10 +1257,10 @@
 
     <!-- 提现弹窗 -->
     <div id="withdraw-modal" class="fixed inset-0 bg-black/90 z-[80] hidden items-center justify-center p-4">
-        <div class="bg-zinc-900 border border-zinc-700 rounded-xl max-w-sm w-full h-[500px] flex flex-col overflow-hidden">
-            <div class="flex justify-between items-center p-6 pb-4 shrink-0">
+        <div class="bg-zinc-900 border border-zinc-700 rounded-xl max-w-sm w-full max-h-[85vh] flex flex-col overflow-hidden" id="withdraw-modal-inner">
+            <div class="flex justify-between items-center p-6 pb-4 shrink-0 relative z-20">
                 <h3 class="text-lg font-bold text-white" data-i18n="withdraw_title">提现</h3>
-                <button id="withdraw-close" class="text-zinc-400 hover:text-white p-2 -mr-2 -mt-2 relative z-10">
+                <button id="withdraw-close" class="text-zinc-400 hover:text-white p-2 -mr-2 -mt-2 relative z-30 cursor-pointer">
                     <i data-lucide="x" class="w-5 h-5"></i>
                 </button>
             </div>
@@ -1272,6 +1285,10 @@
                     <div class="flex items-center gap-2 text-xs" id="withdraw-check-qr">
                         <span class="w-4 h-4 rounded-full border border-zinc-600 flex items-center justify-center text-zinc-500">✗</span>
                         <span class="text-zinc-500">已上传收款码</span>
+                    </div>
+                    <div class="flex items-center gap-2 text-xs" id="withdraw-check-slider">
+                        <span class="w-4 h-4 rounded-full border border-zinc-600 flex items-center justify-center text-zinc-500">✗</span>
+                        <span class="text-zinc-500">请完成安全验证</span>
                     </div>
                 </div>
                 <div>
@@ -1334,6 +1351,23 @@
                            class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white text-sm focus:outline-none focus:border-[var(--neon-green)]"
                            data-i18n-placeholder="crypto_default_ph" placeholder="请输入 USDT / 数字货币收款地址">
                     <p class="text-xs text-zinc-500 mt-2" data-i18n="crypto_note">请仔细核对收款地址，链上转账不可逆，填错将无法找回。</p>
+                </div>
+                <div id="withdraw-slider-wrap" class="space-y-2">
+                    <div class="relative rounded-lg overflow-hidden border border-zinc-700 bg-zinc-800 w-full" style="aspect-ratio: 280/160;">
+                        <canvas id="withdraw-captcha-bg" width="280" height="160" class="block w-full h-full"></canvas>
+                        <canvas id="withdraw-captcha-piece" width="50" height="160" class="absolute top-0 left-0 pointer-events-none" style="height:100%; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));"></canvas>
+                        <button id="withdraw-captcha-refresh" type="button" class="absolute top-1 right-1 p-1 rounded bg-black/40 text-zinc-300 hover:text-white hover:bg-black/60 transition-colors z-10" title="刷新" data-i18n-title="withdraw_slider_refresh">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                        </button>
+                        <div id="withdraw-captcha-status" class="absolute bottom-1 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded text-[10px] hidden z-10"></div>
+                    </div>
+                    <div id="withdraw-slider-track" class="relative h-10 bg-zinc-800 border border-zinc-700 rounded-lg overflow-hidden select-none">
+                        <div id="withdraw-slider-fill" class="absolute left-0 top-0 h-full bg-[var(--neon-green)]/20 w-0"></div>
+                        <div id="withdraw-slider-text" class="absolute inset-0 flex items-center justify-center text-xs text-zinc-400 pointer-events-none" data-i18n="withdraw_slider_tip">拖动滑块完成验证</div>
+                        <div id="withdraw-slider-handle" class="absolute top-0 left-0 w-10 h-full bg-zinc-700 border-r border-zinc-600 rounded-lg flex items-center justify-center cursor-grab active:cursor-grabbing transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-zinc-400"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                        </div>
+                    </div>
                 </div>
                 <button id="withdraw-submit" type="button" class="w-full py-3 bg-[var(--neon-green)] text-black font-bold rounded-lg text-sm hover:opacity-90 transition-opacity" data-i18n="withdraw_submit">提交申请</button>
                 <div id="withdraw-msg" class="text-center text-xs hidden"></div>
@@ -2633,6 +2667,15 @@
             withdrawQrWrap: $('withdraw-qr-wrap'),
             withdrawCryptoWrap: $('withdraw-crypto-wrap'),
             withdrawAccount: $('withdraw-account'),
+            withdrawSliderTrack: $('withdraw-slider-track'),
+            withdrawSliderHandle: $('withdraw-slider-handle'),
+            withdrawSliderFill: $('withdraw-slider-fill'),
+            withdrawSliderText: $('withdraw-slider-text'),
+            withdrawSliderWrap: $('withdraw-slider-wrap'),
+            withdrawCaptchaBg: $('withdraw-captcha-bg'),
+            withdrawCaptchaPiece: $('withdraw-captcha-piece'),
+            withdrawCaptchaRefresh: $('withdraw-captcha-refresh'),
+            withdrawCaptchaStatus: $('withdraw-captcha-status'),
             withdrawHistory: $('withdraw-history'),
             forgotPwdBtn: $('forgot-pwd'),
             forgotPwdContainer: $('forgot-pwd-container'),
@@ -3341,6 +3384,7 @@
             let qrUploadedThisSession = false;
             let withdrawAccount = ''; // 数字货币收款账号
             let savedCryptoAccounts = {}; // 各数字货币方式已保存的收款账号
+            window.isWithdrawVerified = false; // 滑块验证状态
             const cryptoMap = {
                 crypto_usdt_trc20: { labelKey: 'crypto_usdt_trc20', placeholderKey: 'crypto_usdt_trc20_ph', label: 'USDT (TRC20)', placeholder: '请输入 USDT TRC20 收款地址' },
                 crypto_usdt_erc20: { labelKey: 'crypto_usdt_erc20', placeholderKey: 'crypto_usdt_erc20_ph', label: 'USDT (ERC20)', placeholder: '请输入 USDT ERC20 收款地址' },
@@ -3477,8 +3521,9 @@
                 setCheck('withdraw-check-game', gameOK, gameText);
                 setCheck('withdraw-check-method', hasMethod, t.withdraw_method_ok || '已选择收款方式');
                 setCheck('withdraw-check-qr', accountValid, isCrypto ? (accountValid ? (t.withdraw_account_ok || '收款地址规范') : (t.withdraw_account_invalid || '收款地址格式不正确')) : (t.withdraw_qr_ok || '已上传收款码'));
+                setCheck('withdraw-check-slider', window.isWithdrawVerified, window.isWithdrawVerified ? (t.withdraw_slider_ok || '验证完成') : (t.withdraw_slider_drag || '请完成安全验证'));
 
-                els.withdrawSubmit.disabled = !(amount >= 50 && gameOK && hasMethod && accountValid);
+                els.withdrawSubmit.disabled = !(amount >= 50 && gameOK && hasMethod && accountValid && window.isWithdrawVerified);
             };
 
             const openWithdrawModal = () => {
@@ -3503,6 +3548,7 @@
                 els.withdrawMsg.classList.add('hidden');
                 els.withdrawModal.classList.remove('hidden');
                 els.withdrawModal.classList.add('flex');
+                if (els.withdrawSliderReset) els.withdrawSliderReset();
                 updateWithdrawChecks();
                 loadSavedQrCodes();
                 loadWithdrawHistory();
@@ -3608,6 +3654,10 @@
                     }
                 } else if (!withdrawQrBase64) {
                     showWithdrawMsg(t.withdraw_err_qr || '请上传收款码', 'error');
+                    return;
+                }
+                if (!window.isWithdrawVerified) {
+                    showWithdrawMsg(t.withdraw_slider_err || '请完成安全验证', 'error');
                     return;
                 }
                 const available = parseFloat(userInfo.game_winnings || 0);
@@ -4362,8 +4412,29 @@
                 els.logout.addEventListener('click', logout);
                 els.recharge.addEventListener('click', handleRecharge);
                 els.withdraw.addEventListener('click', openWithdrawModal);
-                els.withdrawClose.addEventListener('click', closeWithdrawModal);
+                // 使用 pointerdown 替代 click，避免被其他元素拦截
+                if (els.withdrawClose) {
+                    els.withdrawClose.addEventListener('pointerdown', (e) => {
+                        e.preventDefault();
+                        closeWithdrawModal();
+                    });
+                    els.withdrawClose.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        closeWithdrawModal();
+                    });
+                }
                 els.withdrawSubmit.addEventListener('click', handleWithdraw);
+
+                // 点击遮罩关闭提现弹窗，点击内容区域阻止冒泡
+                if (els.withdrawModal) {
+                    els.withdrawModal.addEventListener('click', (e) => {
+                        if (e.target === els.withdrawModal) closeWithdrawModal();
+                    });
+                }
+                const withdrawInner = document.getElementById('withdraw-modal-inner');
+                if (withdrawInner) {
+                    withdrawInner.addEventListener('click', (e) => e.stopPropagation());
+                }
 
                 els.withdrawAmount.addEventListener('input', updateWithdrawChecks);
 
@@ -4415,6 +4486,316 @@
                         updateWithdrawChecks();
                     });
                 }
+
+                // 图片拼图滑块验证初始化
+                (() => {
+                    const track = els.withdrawSliderTrack;
+                    const handle = els.withdrawSliderHandle;
+                    const fill = els.withdrawSliderFill;
+                    const text = els.withdrawSliderText;
+                    const bgCanvas = els.withdrawCaptchaBg;
+                    const pieceCanvas = els.withdrawCaptchaPiece;
+                    const refreshBtn = els.withdrawCaptchaRefresh;
+                    const statusEl = els.withdrawCaptchaStatus;
+                    if (!track || !handle || !bgCanvas || !pieceCanvas) return;
+
+                    const bgCtx = bgCanvas.getContext('2d');
+                    const pieceCtx = pieceCanvas.getContext('2d');
+                    const CW = bgCanvas.width;   // 280
+                    const CH = bgCanvas.height;  // 160
+                    const PW = pieceCanvas.width;  // 50
+                    const PH = pieceCanvas.height; // 160
+                    const PIECE_H = 40;
+                    const PIECE_TOP = (CH - PIECE_H) / 2;
+                    const TOLERANCE = 6;
+
+                    let targetX = 0;
+                    let isDragging = false;
+                    let startX = 0;
+                    let startHandleLeft = 0;
+
+                    const getTrackWidth = () => track.clientWidth;
+                    const getHandleWidth = () => handle.offsetWidth;
+                    const getMaxLeft = () => Math.max(0, getTrackWidth() - getHandleWidth());
+
+                    // 生成随机彩色渐变 + 噪点背景
+                    const drawBackground = () => {
+                        const hue1 = Math.floor(Math.random() * 360);
+                        const hue2 = (hue1 + 60 + Math.floor(Math.random() * 180)) % 360;
+                        const grad = bgCtx.createLinearGradient(0, 0, CW, CH);
+                        grad.addColorStop(0, `hsl(${hue1}, 70%, 45%)`);
+                        grad.addColorStop(0.5, `hsl(${(hue1 + hue2) / 2}, 65%, 35%)`);
+                        grad.addColorStop(1, `hsl(${hue2}, 70%, 40%)`);
+                        bgCtx.fillStyle = grad;
+                        bgCtx.fillRect(0, 0, CW, CH);
+                        for (let i = 0; i < 8; i++) {
+                            bgCtx.fillStyle = `hsla(${Math.floor(Math.random() * 360)}, 70%, 60%, ${0.15 + Math.random() * 0.25})`;
+                            const sh = Math.floor(Math.random() * 3);
+                            const x = Math.random() * CW, y = Math.random() * CH, r = 15 + Math.random() * 35;
+                            bgCtx.beginPath();
+                            if (sh === 0) bgCtx.arc(x, y, r, 0, Math.PI * 2);
+                            else if (sh === 1) bgCtx.rect(x - r, y - r / 2, r * 2, r);
+                            else { bgCtx.moveTo(x, y - r); bgCtx.lineTo(x + r, y + r); bgCtx.lineTo(x - r, y + r); bgCtx.closePath(); }
+                            bgCtx.fill();
+                        }
+                        const imgData = bgCtx.getImageData(0, 0, CW, CH);
+                        for (let i = 0; i < imgData.data.length; i += 4) {
+                            const n = (Math.random() - 0.5) * 30;
+                            imgData.data[i] = Math.max(0, Math.min(255, imgData.data[i] + n));
+                            imgData.data[i + 1] = Math.max(0, Math.min(255, imgData.data[i + 1] + n));
+                            imgData.data[i + 2] = Math.max(0, Math.min(255, imgData.data[i + 2] + n));
+                        }
+                        bgCtx.putImageData(imgData, 0, 0);
+                    };
+
+                    // 多种形状路径
+                    const SHAPES = ['roundRect', 'circle', 'triangle', 'diamond', 'star', 'hexagon', 'pentagon'];
+                    const drawShapePath = (ctx, shape, x, y, w, h, rotation = 0) => {
+                        const cx = x + w / 2, cy = y + h / 2, r = Math.min(w, h) / 2;
+                        ctx.save();
+                        ctx.translate(cx, cy);
+                        ctx.rotate(rotation);
+                        ctx.translate(-cx, -cy);
+                        ctx.beginPath();
+                        switch (shape) {
+                            case 'roundRect': {
+                                const rr = Math.min(w, h) * 0.2;
+                                ctx.moveTo(x + rr, y);
+                                ctx.lineTo(x + w - rr, y);
+                                ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
+                                ctx.lineTo(x + w, y + h - rr);
+                                ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+                                ctx.lineTo(x + rr, y + h);
+                                ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
+                                ctx.lineTo(x, y + rr);
+                                ctx.quadraticCurveTo(x, y, x + rr, y);
+                                ctx.closePath();
+                                break;
+                            }
+                            case 'circle':
+                                ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                                break;
+                            case 'triangle':
+                                ctx.moveTo(cx, y); ctx.lineTo(x + w, y + h); ctx.lineTo(x, y + h); ctx.closePath();
+                                break;
+                            case 'diamond':
+                                ctx.moveTo(cx, y); ctx.lineTo(x + w, cy); ctx.lineTo(cx, y + h); ctx.lineTo(x, cy); ctx.closePath();
+                                break;
+                            case 'star': {
+                                const spikes = 5, oR = r, iR = r * 0.4;
+                                let rot = -Math.PI / 2;
+                                for (let i = 0; i < spikes * 2; i++) {
+                                    const rr2 = i % 2 === 0 ? oR : iR;
+                                    const px = cx + Math.cos(rot) * rr2, py = cy + Math.sin(rot) * rr2;
+                                    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+                                    rot += Math.PI / spikes;
+                                }
+                                ctx.closePath();
+                                break;
+                            }
+                            case 'hexagon':
+                                for (let i = 0; i < 6; i++) {
+                                    const a = Math.PI / 3 * i - Math.PI / 2;
+                                    const px = cx + Math.cos(a) * r, py = cy + Math.sin(a) * r;
+                                    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+                                }
+                                ctx.closePath();
+                                break;
+                            case 'pentagon':
+                                for (let i = 0; i < 5; i++) {
+                                    const a = Math.PI * 2 / 5 * i - Math.PI / 2;
+                                    const px = cx + Math.cos(a) * r, py = cy + Math.sin(a) * r;
+                                    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+                                }
+                                ctx.closePath();
+                                break;
+                        }
+                        ctx.restore();
+                    };
+
+                    // 生成验证码：先拷贝拼图块，再挖凹槽 + 误导凹槽
+                    const generateCaptcha = () => {
+                        drawBackground();
+                        targetX = PW + 10 + Math.floor(Math.random() * (CW - PW * 3));
+                        const targetY = PIECE_TOP;
+                        const realShape = SHAPES[Math.floor(Math.random() * SHAPES.length)];
+
+                        // 1) 拷贝拼图块到 pieceCanvas
+                        pieceCtx.clearRect(0, 0, PW, PH);
+                        pieceCtx.save();
+                        drawShapePath(pieceCtx, realShape, 0, targetY, PW, PIECE_H);
+                        pieceCtx.clip();
+                        pieceCtx.drawImage(bgCanvas, -targetX, 0);
+                        pieceCtx.restore();
+                        // 拼图块边框
+                        pieceCtx.save();
+                        drawShapePath(pieceCtx, realShape, 0, targetY, PW, PIECE_H);
+                        pieceCtx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+                        pieceCtx.lineWidth = 1.5;
+                        pieceCtx.stroke();
+                        pieceCtx.restore();
+
+                        // 2) 挖真实凹槽
+                        bgCtx.save();
+                        drawShapePath(bgCtx, realShape, targetX, targetY, PW, PIECE_H);
+                        bgCtx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+                        bgCtx.fill();
+                        bgCtx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+                        bgCtx.lineWidth = 1;
+                        bgCtx.stroke();
+                        bgCtx.restore();
+
+                        // 3) 画 1-2 个误导凹槽（相同形状、不同位置、随机旋转角度）
+                        const decoyCount = 1 + Math.floor(Math.random() * 2);
+                        const usedX = [targetX];
+                        for (let i = 0; i < decoyCount; i++) {
+                            let dx, tries = 0;
+                            do {
+                                dx = PW + 10 + Math.floor(Math.random() * (CW - PW * 3));
+                                tries++;
+                            } while (usedX.some(ux => Math.abs(ux - dx) < PW + 10) && tries < 20);
+                            if (tries >= 20) continue;
+                            usedX.push(dx);
+                            const dRot = (Math.random() - 0.5) * Math.PI; // -90° ~ 90° 随机旋转
+                            bgCtx.save();
+                            drawShapePath(bgCtx, realShape, dx, targetY, PW, PIECE_H, dRot);
+                            bgCtx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+                            bgCtx.fill();
+                            bgCtx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+                            bgCtx.lineWidth = 1;
+                            bgCtx.stroke();
+                            bgCtx.restore();
+                        }
+
+                        // 重置拼图块和滑块位置
+                        pieceCanvas.style.opacity = '1';
+                        setSliderPosition(0);
+                    };
+
+                    // 设置滑块位置（用百分比定位 piece canvas，适配响应式宽度）
+                    const setSliderPosition = (left) => {
+                        const max = getMaxLeft();
+                        left = Math.max(0, Math.min(left, max));
+                        handle.style.left = left + 'px';
+                        fill.style.width = (left + getHandleWidth()) + 'px';
+                        // piece 用百分比定位：pieceLeft% = (left / max) * (pieceMax / CW) * 100
+                        const pieceMax = CW - PW;
+                        const pieceLeftRatio = max > 0 ? (left / max) * pieceMax / CW : 0;
+                        pieceCanvas.style.left = (pieceLeftRatio * 100) + '%';
+                        // piece canvas 显示宽度也用百分比
+                        pieceCanvas.style.width = (PW / CW * 100) + '%';
+                    };
+
+                    const showStatus = (msg, type) => {
+                        if (!statusEl) return;
+                        statusEl.textContent = msg;
+                        statusEl.className = `absolute bottom-1 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded text-[10px] z-10 ${type === 'error' ? 'bg-red-500/80 text-white' : 'bg-[var(--neon-green)]/80 text-black'}`;
+                        statusEl.classList.remove('hidden');
+                        if (type === 'error') {
+                            setTimeout(() => statusEl.classList.add('hidden'), 1500);
+                        }
+                    };
+
+                    const completeSlider = () => {
+                        window.isWithdrawVerified = true;
+                        // 验证成功后滑块退回起点，隐藏拼图块，只保留文字状态
+                        setSliderPosition(0);
+                        pieceCanvas.style.opacity = '0';
+                        handle.classList.remove('bg-zinc-700', 'border-zinc-600');
+                        handle.classList.add('bg-[var(--neon-green)]', 'border-[var(--neon-green)]');
+                        handle.querySelector('svg').innerHTML = '<polyline points="20 6 9 17 4 12"></polyline>';
+                        handle.querySelector('svg').classList.remove('text-zinc-400');
+                        handle.querySelector('svg').classList.add('text-black');
+                        const t = translations[currentLang] || {};
+                        text.textContent = t.withdraw_slider_ok || '验证完成';
+                        text.classList.remove('text-zinc-400');
+                        text.classList.add('text-[var(--neon-green)]', 'font-medium');
+                        showStatus(t.withdraw_slider_ok || '验证完成', 'success');
+                        updateWithdrawChecks();
+                    };
+
+                    const failSlider = () => {
+                        window.isWithdrawVerified = false;
+                        const t = translations[currentLang] || {};
+                        showStatus(t.withdraw_slider_fail || '验证失败，请重试', 'error');
+                        track.classList.add('animate-shake');
+                        setTimeout(() => {
+                            track.classList.remove('animate-shake');
+                            handle.classList.add('bg-zinc-700', 'border-zinc-600');
+                            handle.classList.remove('bg-[var(--neon-green)]', 'border-[var(--neon-green)]');
+                            handle.querySelector('svg').innerHTML = '<polyline points="9 18 15 12 9 6"></polyline>';
+                            handle.querySelector('svg').classList.remove('text-black');
+                            handle.querySelector('svg').classList.add('text-zinc-400');
+                            text.textContent = t.withdraw_slider_tip || '拖动滑块完成验证';
+                            text.classList.add('text-zinc-400');
+                            text.classList.remove('text-[var(--neon-green)]', 'font-medium');
+                            generateCaptcha();
+                            updateWithdrawChecks();
+                        }, 500);
+                    };
+
+                    const resetSlider = () => {
+                        window.isWithdrawVerified = false;
+                        handle.classList.add('bg-zinc-700', 'border-zinc-600');
+                        handle.classList.remove('bg-[var(--neon-green)]', 'border-[var(--neon-green)]');
+                        handle.querySelector('svg').innerHTML = '<polyline points="9 18 15 12 9 6"></polyline>';
+                        handle.querySelector('svg').classList.remove('text-black');
+                        handle.querySelector('svg').classList.add('text-zinc-400');
+                        const t = translations[currentLang] || {};
+                        text.textContent = t.withdraw_slider_tip || '拖动滑块完成验证';
+                        text.classList.add('text-zinc-400');
+                        text.classList.remove('text-[var(--neon-green)]', 'font-medium');
+                        if (statusEl) statusEl.classList.add('hidden');
+                        generateCaptcha();
+                        updateWithdrawChecks();
+                    };
+
+                    handle.addEventListener('pointerdown', (e) => {
+                        if (window.isWithdrawVerified) return;
+                        isDragging = true;
+                        startX = e.clientX;
+                        const rect = handle.getBoundingClientRect();
+                        const trackRect = track.getBoundingClientRect();
+                        startHandleLeft = rect.left - trackRect.left;
+                        handle.setPointerCapture(e.pointerId);
+                        if (statusEl) statusEl.classList.add('hidden');
+                    });
+
+                    handle.addEventListener('pointermove', (e) => {
+                        if (!isDragging) return;
+                        const deltaX = e.clientX - startX;
+                        setSliderPosition(startHandleLeft + deltaX);
+                    });
+
+                    const handleEnd = (e) => {
+                        if (!isDragging) return;
+                        isDragging = false;
+                        const currentLeft = parseFloat(handle.style.left) || 0;
+                        const max = getMaxLeft();
+                        const pieceMax = CW - PW;
+                        const currentPieceX = max > 0 ? (currentLeft / max) * pieceMax : 0;
+                        if (Math.abs(currentPieceX - targetX) <= TOLERANCE) {
+                            completeSlider();
+                        } else {
+                            failSlider();
+                        }
+                        try { if (e && e.pointerId !== undefined) handle.releasePointerCapture(e.pointerId); } catch {}
+                    };
+
+                    handle.addEventListener('pointerup', handleEnd);
+                    handle.addEventListener('pointercancel', handleEnd);
+
+                    if (refreshBtn) {
+                        refreshBtn.addEventListener('click', () => {
+                            if (isDragging) return;
+                            window.isWithdrawVerified = false;
+                            resetSlider();
+                        });
+                    }
+
+                    els.withdrawSliderReset = resetSlider;
+                })();
+
                 const togglePasswordVisibility = (btnId, inputId) => {
                     const p = document.getElementById(inputId);
                     const eyeOpen = document.querySelector(`#${btnId} .eye-open`);
@@ -4797,6 +5178,18 @@
                     element.innerHTML = dict[key];
                 }
             });
+
+            // Re-apply slider verification state after language change
+            try {
+                if (window.isWithdrawVerified) {
+                    const sliderText = document.getElementById('withdraw-slider-text');
+                    if (sliderText) {
+                        sliderText.textContent = dict.withdraw_slider_ok || '验证完成';
+                        sliderText.classList.remove('text-zinc-400');
+                        sliderText.classList.add('text-[var(--neon-green)]', 'font-medium');
+                    }
+                }
+            } catch (e) {}
 
             document.querySelectorAll('[data-i18n-placeholder]').forEach(element => {
                 const key = element.getAttribute('data-i18n-placeholder');
