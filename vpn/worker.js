@@ -515,7 +515,7 @@ export default {
 
         if (user) {
           const now = new Date(new Date().getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
-          const loginInfoEntry = { type: 'login', time: now, ip: request.headers.get('CF-Connecting-IP') || 'unknown', device: request.headers.get('User-Agent') || 'unknown', acceptLanguage: request.headers.get('Accept-Language') || 'unknown', country: request.headers.get('CF-IPCountry') || 'unknown' };
+          const loginInfoEntry = { type: 'login', time: now, ip: request.headers.get('CF-Connecting-IP') || 'unknown', device: request.headers.get('User-Agent') || 'unknown', acceptLanguage: request.headers.get('Accept-Language') || 'unknown', country: request.headers.get('CF-IPCountry') || 'unknown', referer: request.headers.get('Referer') || 'unknown' };
 
           const loginInfo = await DB.prepare('SELECT login_info FROM user WHERE username = ?').bind(username).first();
           let updatedLoginInfo = JSON.stringify([loginInfoEntry]);
@@ -555,7 +555,7 @@ export default {
 
         if (user) {
           const now = new Date(new Date().getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
-          const loginInfoEntry = { type: 'login', time: now, ip: request.headers.get('CF-Connecting-IP') || 'unknown', device: request.headers.get('User-Agent') || 'unknown', acceptLanguage: request.headers.get('Accept-Language') || 'unknown', country: request.headers.get('CF-IPCountry') || 'unknown' };
+          const loginInfoEntry = { type: 'login', time: now, ip: request.headers.get('CF-Connecting-IP') || 'unknown', device: request.headers.get('User-Agent') || 'unknown', acceptLanguage: request.headers.get('Accept-Language') || 'unknown', country: request.headers.get('CF-IPCountry') || 'unknown', referer: request.headers.get('Referer') || 'unknown' };
 
           const loginInfo = await DB.prepare('SELECT login_info FROM user WHERE rowid = ?').bind(user.rowid).first();
           let updatedLoginInfo = JSON.stringify([loginInfoEntry]);
@@ -610,7 +610,7 @@ export default {
 
           if (user) {
             const now = new Date(new Date().getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
-            const loginInfoEntry = { type: 'login', time: now, ip: request.headers.get('CF-Connecting-IP') || 'unknown', device: request.headers.get('User-Agent') || 'unknown', acceptLanguage: request.headers.get('Accept-Language') || 'unknown', country: request.headers.get('CF-IPCountry') || 'unknown' };
+            const loginInfoEntry = { type: 'login', time: now, ip: request.headers.get('CF-Connecting-IP') || 'unknown', device: request.headers.get('User-Agent') || 'unknown', acceptLanguage: request.headers.get('Accept-Language') || 'unknown', country: request.headers.get('CF-IPCountry') || 'unknown', referer: request.headers.get('Referer') || 'unknown' };
 
             const loginInfo = await DB.prepare('SELECT login_info FROM user WHERE username = ?').bind(email).first();
             let updatedLoginInfo = JSON.stringify([loginInfoEntry]);
@@ -707,7 +707,7 @@ export default {
 
           if (user) {
             const now = new Date(new Date().getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
-            const loginInfoEntry = { type: 'login', time: now, ip: request.headers.get('CF-Connecting-IP') || 'unknown', device: request.headers.get('User-Agent') || 'unknown', acceptLanguage: request.headers.get('Accept-Language') || 'unknown', country: request.headers.get('CF-IPCountry') || 'unknown' };
+            const loginInfoEntry = { type: 'login', time: now, ip: request.headers.get('CF-Connecting-IP') || 'unknown', device: request.headers.get('User-Agent') || 'unknown', acceptLanguage: request.headers.get('Accept-Language') || 'unknown', country: request.headers.get('CF-IPCountry') || 'unknown', referer: request.headers.get('Referer') || 'unknown' };
 
             const loginInfo = await DB.prepare('SELECT login_info FROM user WHERE username = ?').bind(email).first();
             let updatedLoginInfo = JSON.stringify([loginInfoEntry]);
@@ -1432,7 +1432,7 @@ rules:
           // 记录用户调用
           const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
           const fetchLink = user.fetch_link ? JSON.parse(user.fetch_link) : [];
-          fetchLink.unshift({ type: 'vip', protocol: 'clash', fetchTime: beijingTime });
+          fetchLink.unshift({ type: 'vip', protocol: 'clash', fetchTime: beijingTime, domain: new URL(request.url).hostname });
           if (fetchLink.length > 50) fetchLink.pop();
           await DB.prepare('UPDATE user SET fetch_link = ? WHERE username = ?').bind(JSON.stringify(fetchLink), user.username).run();
           
@@ -1510,7 +1510,7 @@ rules:
           // 记录用户调用
           const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
           const fetchLink = user.fetch_link ? JSON.parse(user.fetch_link) : [];
-          fetchLink.unshift({ type: 'vip', protocol: 'v2ray', fetchTime: beijingTime });
+          fetchLink.unshift({ type: 'vip', protocol: 'v2ray', fetchTime: beijingTime, domain: new URL(request.url).hostname });
           if (fetchLink.length > 50) fetchLink.pop();
           await DB.prepare('UPDATE user SET fetch_link = ? WHERE username = ?').bind(JSON.stringify(fetchLink), user.username).run();
           
@@ -1638,7 +1638,7 @@ rules:
           // 记录用户调用
           const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
           const fetchLink = user.fetch_link ? JSON.parse(user.fetch_link) : [];
-          fetchLink.unshift({ type: 'free', protocol: 'clash', fetchTime: beijingTime });
+          fetchLink.unshift({ type: 'free', protocol: 'clash', fetchTime: beijingTime, domain: new URL(request.url).hostname });
           if (fetchLink.length > 50) fetchLink.pop();
           await DB.prepare('UPDATE user SET fetch_link = ? WHERE username = ?').bind(JSON.stringify(fetchLink), username).run();
           
@@ -1721,7 +1721,7 @@ rules:
           // 记录用户调用
           const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
           const fetchLink = user.fetch_link ? JSON.parse(user.fetch_link) : [];
-          fetchLink.unshift({ type: 'free', protocol: 'v2ray', fetchTime: beijingTime });
+          fetchLink.unshift({ type: 'free', protocol: 'v2ray', fetchTime: beijingTime, domain: new URL(request.url).hostname });
           if (fetchLink.length > 50) fetchLink.pop();
           await DB.prepare('UPDATE user SET fetch_link = ? WHERE username = ?').bind(JSON.stringify(fetchLink), username).run();
           
