@@ -2891,6 +2891,33 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
         }
       }
 
+      // ========== 提现：用户主动取消 ==========
+      if (path === '/api/withdraw/cancel' && request.method === 'POST') {
+        try {
+          const { id, username } = await request.json();
+          if (!id || !username) return resJson({ success: false, message: '参数错误' }, 400);
+
+          const record = await DB.prepare('SELECT * FROM withdraw WHERE id = ?').bind(id).first();
+          if (!record) return resJson({ success: false, message: '提现记录不存在' }, 404);
+          if (record.username !== username) return resJson({ success: false, message: '无权操作此申请' }, 403);
+          if (record.status !== 'pending') return resJson({ success: false, message: '仅待处理申请可取消' }, 400);
+
+          const now = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+          const msgNow = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+          await DB.prepare('UPDATE withdraw SET status = ?, reviewed_at = ?, reviewer = ?, reject_reason = ? WHERE id = ?')
+            .bind('cancelled', now, username, '用户主动取消', id).run();
+          await DB.prepare('UPDATE user SET balance = balance + ?, game_winnings = game_winnings + ? WHERE username = ?')
+            .bind(record.amount, record.amount, record.username).run();
+          await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
+            .bind(record.username, `↩️ 您已取消提现申请 ¥${parseFloat(record.amount).toFixed(2)}，金额已退回账户`, msgNow).run();
+
+          return resJson({ success: true, message: '已取消' });
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
+        }
+      }
+
       // ========== 广告点击统计接口（数据存于 user 表） ==========
       if (path === '/api/ad-click') {
         try { await DB.prepare('ALTER TABLE user ADD COLUMN ad_clicks TEXT').run(); } catch (e) {}

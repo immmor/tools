@@ -3614,8 +3614,8 @@
                     }
                     autoFillWithdrawQr();
                     const t = translations[currentLang] || {};
-                    const statusMap = { pending: t.withdraw_status_pending || '待处理', approved: t.withdraw_status_approved || '已通过', rejected: t.withdraw_status_rejected || '已拒绝' };
-                    const statusColor = { pending: 'text-[var(--neon-orange)]', approved: 'text-[var(--neon-green)]', rejected: 'text-[var(--neon-red)]' };
+                    const statusMap = { pending: t.withdraw_status_pending || '待处理', approved: t.withdraw_status_approved || '已通过', rejected: t.withdraw_status_rejected || '已拒绝', cancelled: t.withdraw_status_cancelled || '已取消' };
+                    const statusColor = { pending: 'text-[var(--neon-orange)]', approved: 'text-[var(--neon-green)]', rejected: 'text-[var(--neon-red)]', cancelled: 'text-zinc-400' };
                     const methodMap = { wechat: t.withdraw_wechat || '微信', alipay: t.withdraw_alipay || '支付宝' };
                     for (const k in cryptoMap) methodMap[k] = t[cryptoMap[k].labelKey] || cryptoMap[k].label;
                     els.withdrawHistory.innerHTML = `
@@ -3627,11 +3627,18 @@
                                 : (r.qr_code ? `<img src="${r.qr_code}" class="w-16 h-16 object-contain rounded shrink-0" alt="收款码">` : '');
                             const accountLine = (isCrypto && r.qr_code) ? `<div class="text-zinc-500 break-all"><span class="text-zinc-400">${(t.withdraw_address_label || '收款地址')}：</span>${r.qr_code}</div>` : '';
                             const reasonLine = (r.status === 'rejected' && r.reject_reason) ? `<div class="text-[var(--neon-red)]"><span class="text-zinc-400">${(t.withdraw_reject_reason || '拒绝原因')}：</span>${r.reject_reason}</div>` : '';
+                            const rightCol = (() => {
+                                const statusEl = `<span class="${statusColor[r.status] || 'text-zinc-400'}">${statusMap[r.status] || r.status}</span>`;
+                                if (r.status === 'pending') {
+                                    return `<div class="flex flex-col items-end gap-2 shrink-0">${statusEl}<button class="cancel-withdraw-btn text-[var(--neon-red)] text-xs px-2 py-1 rounded border border-zinc-700 hover:border-[var(--neon-red)] transition-colors" data-id="${r.id}">${(t.withdraw_cancel || '取消')}</button></div>`;
+                                }
+                                return statusEl;
+                            })();
                             return `
-                            <div class="flex gap-3 p-3 bg-zinc-800/50 rounded-lg">
+                            <div class="flex gap-3 p-3 bg-zinc-800/50 rounded-lg items-start">
                                 ${thumb}
                                 <div class="flex-1 text-xs space-y-1">
-                                    <div class="flex justify-between"><span class="text-zinc-400">¥${parseFloat(r.amount).toFixed(2)}</span><span class="${statusColor[r.status] || 'text-zinc-400'}">${statusMap[r.status] || r.status}</span></div>
+                                    <div class="flex justify-between items-start"><span class="text-zinc-400">¥${parseFloat(r.amount).toFixed(2)}</span>${rightCol}</div>
                                     <div class="text-zinc-500">${methodMap[r.method] || r.method} · ${formatBeijingTime(r.created_at)}</div>
                                     ${accountLine}
                                     ${reasonLine}
@@ -3639,6 +3646,33 @@
                             </div>`;
                         }).join('')}
                     `;
+
+                    els.withdrawHistory.querySelectorAll('.cancel-withdraw-btn').forEach(btn => {
+                        btn.onclick = (e) => {
+                            e.stopPropagation();
+                            const id = btn.dataset.id;
+                            if (!confirm((t.withdraw_cancel_confirm || '确认取消此提现申请？金额将退回账户'))) return;
+                            btn.disabled = true;
+                            btn.textContent = (t.withdraw_cancelling || '取消中...');
+                            fetch(`${API}/api/withdraw/cancel`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ id, username: userInfo?.username })
+                            }).then(r => r.json()).then(res => {
+                                if (res.success) {
+                                    loadWithdrawInfo();
+                                } else {
+                                    alert(res.message || '取消失败');
+                                    btn.disabled = false;
+                                    btn.textContent = (t.withdraw_cancel || '取消申请');
+                                }
+                            }).catch(() => {
+                                alert('网络错误');
+                                btn.disabled = false;
+                                btn.textContent = (t.withdraw_cancel || '取消申请');
+                            });
+                        };
+                    });
                 } catch {}
             };
 
