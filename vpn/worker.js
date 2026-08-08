@@ -2795,6 +2795,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           if (withdrawAmount > maxWithdrawable) return resJson({ success: false, key: 'withdraw_err_balance', maxAmount: maxWithdrawable.toFixed(2), message: `可提现金额不足，最多可提现 ¥${maxWithdrawable.toFixed(2)}` }, 400);
 
           const now = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+          const msgNow = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
           await DB.prepare('UPDATE user SET game_winnings = game_winnings - ?, balance = balance - ? WHERE username = ?')
             .bind(withdrawAmount, withdrawAmount, username).run();
@@ -2805,7 +2806,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           const cryptoLabelMap = { crypto_usdt_trc20: 'USDT(TRC20)', crypto_usdt_erc20: 'USDT(ERC20)', crypto_btc: 'BTC', crypto_eth: 'ETH', crypto_sol: 'SOL', crypto_usdc: 'USDC' };
           const methodLabel = method === 'wechat' ? '微信' : (method === 'alipay' ? '支付宝' : (cryptoLabelMap[method] || '数字货币'));
           await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
-            .bind('immmor', `💰 新的提现申请！用户 ${username} 申请提现 ¥${withdrawAmount.toFixed(2)}（${methodLabel}）`, now).run();
+            .bind('immmor', `💰 新的提现申请！用户 ${username} 申请提现 ¥${withdrawAmount.toFixed(2)}（${methodLabel}）`, msgNow).run();
 
           // 持久化收款码/账号，供下次提现自动填充（避免每次都要重新上传）
           try {
@@ -2866,12 +2867,13 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           if (record.status !== 'pending') return resJson({ success: false, message: '该申请已处理' }, 400);
 
           const now = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+          const msgNow = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
           if (action === 'approve') {
             await DB.prepare('UPDATE withdraw SET status = ?, reviewed_at = ?, reviewer = ? WHERE id = ?')
               .bind('approved', now, operator || 'admin', id).run();
             await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
-              .bind(record.username, `✅ 您的提现申请 ¥${parseFloat(record.amount).toFixed(2)} 已通过审核，请注意查收`, now).run();
+              .bind(record.username, `✅ 您的提现申请 ¥${parseFloat(record.amount).toFixed(2)} 已通过审核，请注意查收`, msgNow).run();
           } else {
             const reason = (reject_reason || '').toString().trim();
             await DB.prepare('UPDATE withdraw SET status = ?, reviewed_at = ?, reviewer = ?, reject_reason = ? WHERE id = ?')
@@ -2880,7 +2882,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
               .bind(record.amount, record.amount, record.username).run();
             const reasonLine = reason ? `（原因：${reason}）` : '';
             await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
-              .bind(record.username, `❌ 您的提现申请 ¥${parseFloat(record.amount).toFixed(2)} 已被拒绝，金额已退回${reasonLine}`, now).run();
+              .bind(record.username, `❌ 您的提现申请 ¥${parseFloat(record.amount).toFixed(2)} 已被拒绝，金额已退回${reasonLine}`, msgNow).run();
           }
 
           return resJson({ success: true, message: action === 'approve' ? '已通过' : '已拒绝' });
