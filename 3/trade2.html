@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>无庄家足球下注模拟系统 (Parimutuel Engine)</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --accent: #10b981;
+            --accent-hover: #059669;
+            --text-main: #f8fafc;
+            --text-sub: #94a3b8;
+            --border: #334155;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .app-container {
+            width: 100%;
+            max-width: 600px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+
+        .header h1 {
+            font-size: 22px;
+            margin: 0 0 8px 0;
+            color: var(--text-main);
+        }
+
+        .badge {
+            background-color: rgba(16, 185, 129, 0.1);
+            color: var(--accent);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            border: 1px solid var(--accent);
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .match-title {
+            font-size: 18px;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 16px;
+        }
+
+        /* 资金池分布条 */
+        .pool-stats {
+            margin-bottom: 20px;
+        }
+
+        .pool-info-text {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            color: var(--text-sub);
+            margin-bottom: 8px;
+        }
+
+        .bar-container {
+            height: 12px;
+            background-color: #0f172a;
+            border-radius: 6px;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .bar-segment {
+            height: 100%;
+            transition: width 0.4s ease;
+        }
+
+        .bar-a { background-color: #3b82f6; }
+        .bar-draw { background-color: #f59e0b; }
+        .bar-b { background-color: #ef4444; }
+
+        /* 下注选项列表 */
+        .options-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .option-card {
+            background-color: rgba(15, 23, 42, 0.6);
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            padding: 12px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .option-card:hover {
+            border-color: var(--accent);
+        }
+
+        .option-card.selected {
+            border-color: var(--accent);
+            background-color: rgba(16, 185, 129, 0.1);
+        }
+
+        .opt-name { font-size: 13px; color: var(--text-sub); }
+        .opt-odds { font-size: 18px; font-weight: bold; color: var(--accent); margin-top: 4px; }
+        .opt-amount { font-size: 11px; color: var(--text-sub); margin-top: 4px; }
+
+        /* 操作区域 */
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        input[type="number"], select {
+            flex: 1;
+            background-color: var(--bg-color);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 10px;
+            color: white;
+            font-size: 14px;
+        }
+
+        .btn {
+            background-color: var(--accent);
+            color: #000;
+            font-weight: bold;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn:hover { background-color: var(--accent-hover); }
+
+        .btn-danger {
+            background-color: #ef4444;
+            color: white;
+        }
+
+        .btn-danger:hover { background-color: #dc2626; }
+
+        .return-preview {
+            font-size: 12px;
+            color: var(--text-sub);
+            margin-top: 8px;
+        }
+
+        /* 结算面板与记录 */
+        .settlement-panel {
+            border-top: 1px dashed var(--border);
+            padding-top: 16px;
+            margin-top: 16px;
+        }
+
+        .logs-box {
+            background-color: var(--bg-color);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 11px;
+            height: 120px;
+            overflow-y: auto;
+            color: #a7f3d0;
+        }
+
+        .log-item { margin-bottom: 4px; }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <div class="header">
+        <h1>⚽ 动态彩池模拟系统</h1>
+        <span class="badge">零平台做市资金 / 无庄家对赌模型</span>
+    </div>
+
+    <!-- 主面板 -->
+    <div class="card">
+        <div class="match-title">皇马 vs 巴萨 (英超第28轮)</div>
+
+        <!-- 资金池状态可视化 -->
+        <div class="pool-stats">
+            <div class="pool-info-text">
+                <span>总下注彩池: <b id="totalPoolText" style="color:white;">0 RMB</b></span>
+                <span>抽成后奖金池 (95%): <b id="netPoolText" style="color:var(--accent);">0 RMB</b></span>
+            </div>
+            <div class="bar-container">
+                <div class="bar-segment bar-a" id="barA" style="width: 33.3%;"></div>
+                <div class="bar-segment bar-draw" id="barDraw" style="width: 33.3%;"></div>
+                <div class="bar-segment bar-b" id="barB" style="width: 33.3%;"></div>
+            </div>
+        </div>
+
+        <!-- 三选一卡片（显示实时计算的赔率） -->
+        <div class="options-grid">
+            <div class="option-card" id="card-A" onclick="selectOption('A')">
+                <div class="opt-name">皇马 胜 (A)</div>
+                <div class="opt-odds" id="oddsA">0.00x</div>
+                <div class="opt-amount" id="poolA">池: 0 元</div>
+            </div>
+            <div class="option-card" id="card-Draw" onclick="selectOption('Draw')">
+                <div class="opt-name">平局 (Draw)</div>
+                <div class="opt-odds" id="oddsDraw">0.00x</div>
+                <div class="opt-amount" id="poolDraw">池: 0 元</div>
+            </div>
+            <div class="option-card" id="card-B" onclick="selectOption('B')">
+                <div class="opt-name">巴萨 胜 (B)</div>
+                <div class="opt-odds" id="oddsB">0.00x</div>
+                <div class="opt-amount" id="poolB">池: 0 元</div>
+            </div>
+        </div>
+
+        <!-- 模拟玩家模拟下注操作 -->
+        <div class="input-group">
+            <input type="text" id="username" placeholder="玩家名称" value="玩家A">
+            <input type="number" id="betAmount" placeholder="下注金额" value="100" oninput="calculatePreview()">
+            <button class="btn" onclick="placeBet()">提交下注</button>
+        </div>
+        <div class="return-preview" id="previewText">预估收益: 0 RMB</div>
+
+        <!-- 模拟比赛结束结算 -->
+        <div class="settlement-panel">
+            <div style="font-size: 13px; font-weight: bold; margin-bottom: 8px;">裁判/管理员控制台 (比赛结束结算)</div>
+            <div class="input-group">
+                <select id="matchResult">
+                    <option value="A">比赛结果：皇马 胜 (A)</option>
+                    <option value="Draw">比赛结果：平局 (Draw)</option>
+                    <option value="B">比赛结果：巴萨 胜 (B)</option>
+                </select>
+                <button class="btn btn-danger" onclick="settleMatch()">公布结果并分钱</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 模拟日志面板 -->
+    <div class="card">
+        <div style="font-size: 13px; font-weight: bold; margin-bottom: 8px;">系统实时日志 (观察赔率如何被资金改变)</div>
+        <div class="logs-box" id="logBox"></div>
+    </div>
+</div>
+
+<script>
+    // -------------------------------------------------------------
+    // 全局数据状态 (完全不需要后端/数据库，全部在浏览器内存中运作)
+    // -------------------------------------------------------------
+    const PLATFORM_FEE_RATE = 0.05; // 5% 平台运营抽成，开发者净利润
+
+    // 初始彩池资金（可以全为 0，为了避免除以0，这里设置轻量测试数据）
+    let pools = {
+        A: 500,     // 皇马池
+        Draw: 200,  // 平局池
+        B: 300      // 巴萨池
+    };
+
+    let userBets = []; // 存储所有玩家的记录: [{user, option, amount}]
+    let selectedOption = 'A';
+    let isSettled = false;
+
+    // 页面初始化
+    window.onload = function() {
+        selectOption('A');
+        addLog("系统初始化完成。当前彩池模式：无庄家，动态计算赔率。");
+        updateEngine();
+    };
+
+    // 核心算法：基于彩池比例实时计算“动态赔率”
+    function calculateEngineData() {
+        const totalPool = pools.A + pools.Draw + pools.B;
+        const netPool = totalPool * (1 - PLATFORM_FEE_RATE); // 扣除平台抽成后可被全场赢家瓜分的总金额
+
+        // 赔率 = 扣除抽成后的总可瓜分池 / 该选项下的总金额
+        const odds = {
+            A: pools.A > 0 ? (netPool / pools.A).toFixed(2) : "1.00",
+            Draw: pools.Draw > 0 ? (netPool / pools.Draw).toFixed(2) : "1.00",
+            B: pools.B > 0 ? (netPool / pools.B).toFixed(2) : "1.00"
+        };
+
+        return { totalPool, netPool, odds };
+    }
+
+    // 选中下注选项
+    function selectOption(opt) {
+        selectedOption = opt;
+        document.querySelectorAll('.option-card').forEach(el => el.classList.remove('selected'));
+        document.getElementById(`card-${opt}`).classList.add('selected');
+        calculatePreview();
+    }
+
+    // 预估下注收益
+    function calculatePreview() {
+        if (isSettled) return;
+        const engine = calculateEngineData();
+        const amount = parseFloat(document.getElementById('betAmount').value) || 0;
+        const currentOdds = engine.odds[selectedOption];
+        const estReturn = (amount * currentOdds).toFixed(2);
+        
+        document.getElementById('previewText').innerText = 
+            `如果现在下注 ${amount} 元押 [${getOptName(selectedOption)}]，若命中预估可得: ${estReturn} 元 (含本金)`;
+    }
+
+    // 玩家下注逻辑
+    function placeBet() {
+        if (isSettled) return alert("比赛已结算，无法继续下注！");
+
+        const username = document.getElementById('username').value.trim() || "匿名玩家";
+        const amount = parseFloat(document.getElementById('betAmount').value);
+
+        if (!amount || amount <= 0) return alert("请输入有效下注金额！");
+
+        // 资金打入对应的子彩池 (平台开发者无需付出任何资金做市)
+        pools[selectedOption] += amount;
+        userBets.push({ user: username, option: selectedOption, amount: amount });
+
+        addLog(`[下注] ${username} 注入 ${amount} 元 到 [${getOptName(selectedOption)}] 池。`);
+
+        // 重新计算并刷新界面
+        updateEngine();
+    }
+
+    // 结算逻辑（把输家的钱分给赢家，开发者提取抽成）
+    function settleMatch() {
+        if (isSettled) return alert("已经结算过了！");
+        if (userBets.length === 0 && (pools.A + pools.Draw + pools.B === 0)) return alert("当前彩池无资金，无法结算！");
+
+        const winnerOpt = document.getElementById('matchResult').value;
+        const engine = calculateEngineData();
+        
+        const platformEarnings = (engine.totalPool * PLATFORM_FEE_RATE).toFixed(2); // 开发者赚取的纯利润
+        const winningPoolAmount = pools[winnerOpt];
+
+        addLog(`----------------------------------------`);
+        addLog(`🏆 比赛结束！赛果为：[${getOptName(winnerOpt)}]`);
+        addLog(`💰 全场总下注: ${engine.totalPool} 元 | 开发者抽取 5% 服务费: ${platformEarnings} 元`);
+        addLog(`🎁 可分配奖金池: ${engine.netPool} 元 (由押中 [${getOptName(winnerOpt)}] 的玩家按比例瓜分)`);
+
+        if (winningPoolAmount === 0) {
+            addLog(`⚠️ 没有玩家押中结果！所有资金留存或归平台所有。`);
+        } else {
+            // 遍历所有玩家分配奖金
+            userBets.forEach(bet => {
+                if (bet.option === winnerOpt) {
+                    // 赢家按自己投入资金在赢家池中的占比瓜分净彩池
+                    const share = bet.amount / winningPoolAmount;
+                    const payout = (share * engine.netPool).toFixed(2);
+                    addLog(`🎉 赢家 [${bet.user}] 获得分红: ${payout} 元 (下注 ${bet.amount} 元, 占比 ${(share*100).toFixed(1)}%)`);
+                } else {
+                    addLog(`❌ 玩家 [${bet.user}] 下注失败 (损失 ${bet.amount} 元)`);
+                }
+            });
+        }
+
+        isSettled = true;
+        document.getElementById('previewText').innerText = "比赛已结算，停止预估收益。";
+    }
+
+    // 刷新界面与赔率
+    function updateEngine() {
+        const engine = calculateEngineData();
+
+        // 1. 更新顶部总资金显示
+        document.getElementById('totalPoolText').innerText = `${engine.totalPool.toLocaleString()} RMB`;
+        document.getElementById('netPoolText').innerText = `${engine.netPool.toLocaleString()} RMB`;
+
+        // 2. 更新三个选项的实时赔率和累积池额
+        document.getElementById('oddsA').innerText = `${engine.odds.A}x`;
+        document.getElementById('oddsDraw').innerText = `${engine.odds.Draw}x`;
+        document.getElementById('oddsB').innerText = `${engine.odds.B}x`;
+
+        document.getElementById('poolA').innerText = `池: ${pools.A} 元`;
+        document.getElementById('poolDraw').innerText = `池: ${pools.Draw} 元`;
+        document.getElementById('poolB').innerText = `池: ${pools.B} 元`;
+
+        // 3. 更新资金比例可视化条
+        const total = engine.totalPool || 1;
+        document.getElementById('barA').style.width = `${((pools.A / total) * 100).toFixed(1)}%`;
+        document.getElementById('barDraw').style.width = `${((pools.Draw / total) * 100).toFixed(1)}%`;
+        document.getElementById('barB').style.width = `${((pools.B / total) * 100).toFixed(1)}%`;
+
+        calculatePreview();
+    }
+
+    // 工具函数
+    function getOptName(opt) {
+        if (opt === 'A') return "皇马胜";
+        if (opt === 'Draw') return "平局";
+        if (opt === 'B') return "巴萨胜";
+    }
+
+    function addLog(msg) {
+        const logBox = document.getElementById('logBox');
+        const item = document.createElement('div');
+        item.className = 'log-item';
+        item.innerText = `> ${msg}`;
+        logBox.appendChild(item);
+        logBox.scrollTop = logBox.scrollHeight;
+    }
+</script>
+
+</body>
+</html>

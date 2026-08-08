@@ -3481,12 +3481,12 @@
 
             const updateWithdrawChecks = () => {
                 const amount = parseFloat(els.withdrawAmount.value);
-                const gameWinnings = parseFloat(userInfo.game_winnings || 0);
+                const maxWithdrawable = getWithdrawable();
                 const hasMethod = getSelectedWithdrawMethod() !== '';
                 const isCrypto = getSelectedWithdrawMethod().startsWith('crypto_');
                 const accountValid = isCrypto ? isValidCryptoAddress(getSelectedWithdrawMethod(), withdrawAccount) : (withdrawQrBase64 !== '');
                 const minOK = amount >= 50;
-                const gameOK = amount <= gameWinnings;
+                const gameOK = amount <= maxWithdrawable;
 
                 const setCheck = (id, ok, text) => {
                     const el = document.getElementById(id);
@@ -3509,8 +3509,8 @@
                 const minText = amount > 0 && amount < 50 
                     ? (t.withdraw_min_insufficient || `金额不足50元（还差¥${(50 - amount).toFixed(2)}）`)
                     : (t.withdraw_min_ok || '金额不低于50元');
-                const gameText = amount > gameWinnings 
-                    ? (t.withdraw_game_insufficient || `超出可提现余额（¥${gameWinnings.toFixed(2)}）`)
+                const gameText = amount > maxWithdrawable 
+                    ? (t.withdraw_game_insufficient || `超出可提现余额（¥${maxWithdrawable.toFixed(2)}）`)
                     : (t.withdraw_game_ok || '金额不超过可提现余额');
 
                 setCheck('withdraw-check-min', minOK, minText);
@@ -3522,10 +3522,16 @@
                 els.withdrawSubmit.disabled = !(amount >= 50 && gameOK && hasMethod && accountValid && window.isWithdrawVerified);
             };
 
+            const getWithdrawable = () => {
+                const b = parseFloat(userInfo?.balance || 0);
+                const g = parseFloat(userInfo?.game_winnings || 0);
+                return Math.min(b, g);
+            };
+
             const openWithdrawModal = () => {
                 if (!userInfo || !userInfo.username) return;
                 closeDropdown();
-                const available = parseFloat(userInfo.game_winnings || 0);
+                const available = getWithdrawable();
                 els.withdrawAvailable.textContent = `¥${available.toFixed(2)}`;
                 els.withdrawAmount.value = '';
                 withdrawMethod = '';
@@ -3656,7 +3662,7 @@
                     showWithdrawMsg(t.withdraw_slider_err || '请完成安全验证', 'error');
                     return;
                 }
-                const available = parseFloat(userInfo.game_winnings || 0);
+                const available = getWithdrawable();
                 if (amount > available) {
                     const tpl = t.withdraw_err_balance;
                     showWithdrawMsg(tpl ? tpl.replace('{amount}', available.toFixed(2)) : `可提现金额不足，最多可提现 ¥${available.toFixed(2)}`, 'error');
@@ -3690,10 +3696,10 @@
                     if (data.success) {
                         showWithdrawMsg(serverMsg(data), 'success');
                         userInfo.balance = (parseFloat(userInfo.balance) - amount).toFixed(2);
-                        userInfo.game_winnings = (available - amount).toFixed(2);
+                        userInfo.game_winnings = (parseFloat(userInfo.game_winnings) - amount).toFixed(2);
                         localStorage.setItem('userInfo', JSON.stringify(userInfo));
                         els.balance.textContent = `¥${userInfo.balance}`;
-                        els.withdrawAvailable.textContent = `¥${(available - amount).toFixed(2)}`;
+                        els.withdrawAvailable.textContent = `¥${getWithdrawable().toFixed(2)}`;
                         els.withdrawAmount.value = '';
                         loadWithdrawHistory();
                         setTimeout(() => closeWithdrawModal(), 2000);

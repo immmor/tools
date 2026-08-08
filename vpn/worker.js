@@ -2601,7 +2601,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           if (user.balance < cost) return resJson({ success: false, message: '余额不足' }, 400);
 
           const prizes = [3, 5, 5, 10, 10, 20, 50, 200];
-          const weights = [0.25, 0.25, 0.18, 0.15, 0.08, 0.05, 0.03, 0.01];
+          const weights = [0.35, 0.22, 0.18, 0.10, 0.08, 0.04, 0.02, 0.01];
           let r = Math.random();
           let prizeIndex = 0;
           for (let i = 0; i < weights.length; i++) {
@@ -2609,7 +2609,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
             if (r <= 0) { prizeIndex = i; break; }
           }
           const prize = prizes[prizeIndex];
-          const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+          const now = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
 
           await DB.prepare('UPDATE user SET balance = balance - ? + ?, game_winnings = COALESCE(game_winnings, 0) + ? WHERE username = ?').bind(cost, prize, prize, username).run();
           await DB.prepare('INSERT INTO game_bet (username, game_type, cost, prize, result, created_at) VALUES (?, ?, ?, ?, ?, ?)')
@@ -2653,7 +2653,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           }
 
           const resultStr = (s1 === s2 && s2 === s3) ? `${s1}${s2}${s3}` : `${s1} ${s2} ${s3}`;
-          const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+          const now = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
 
           await DB.prepare('UPDATE user SET balance = balance - ? + ?, game_winnings = COALESCE(game_winnings, 0) + ? WHERE username = ?').bind(cost, prize, prize, username).run();
           await DB.prepare('INSERT INTO game_bet (username, game_type, cost, prize, result, created_at) VALUES (?, ?, ?, ?, ?, ?)')
@@ -2678,7 +2678,8 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           if (user.balance < cost) return resJson({ success: false, message: '余额不足' }, 400);
 
           const prizes = [5, 10, 20, 50, 100, 200];
-          const weights = [0.3, 0.25, 0.2, 0.15, 0.08, 0.02];
+          // 50/100/200 权重进一步大幅压低，剩余概率补给 5/10/20
+          const weights = [0.60, 0.26, 0.12, 0.018, 0.0018, 0.0002];
           let random = Math.random();
           let prize = 0;
           for (let i = 0; i < prizes.length; i++) {
@@ -2686,7 +2687,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
             if (random <= 0) { prize = prizes[i]; break; }
           }
 
-          const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+          const now = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
 
           await DB.prepare('UPDATE user SET balance = balance - ? + ?, game_winnings = COALESCE(game_winnings, 0) + ? WHERE username = ?').bind(cost, prize, prize, username).run();
           await DB.prepare('INSERT INTO game_bet (username, game_type, cost, prize, result, created_at) VALUES (?, ?, ?, ?, ?, ?)')
@@ -2786,12 +2787,14 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           if (!user) return resJson({ success: false, key: 'withdraw_err_user', message: '用户不存在' }, 404);
 
           const withdrawAmount = parseFloat(amount);
+          const balance = parseFloat(user.balance || 0);
           const gameWinnings = parseFloat(user.game_winnings || 0);
+          const maxWithdrawable = Math.min(balance, gameWinnings);
 
           if (withdrawAmount < 50) return resJson({ success: false, key: 'withdraw_err_min', message: '最低提现金额为50元' }, 400);
-          if (withdrawAmount > gameWinnings) return resJson({ success: false, key: 'withdraw_err_balance', maxAmount: gameWinnings.toFixed(2), message: `可提现金额不足，最多可提现 ¥${gameWinnings.toFixed(2)}` }, 400);
+          if (withdrawAmount > maxWithdrawable) return resJson({ success: false, key: 'withdraw_err_balance', maxAmount: maxWithdrawable.toFixed(2), message: `可提现金额不足，最多可提现 ¥${maxWithdrawable.toFixed(2)}` }, 400);
 
-          const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+          const now = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
 
           await DB.prepare('UPDATE user SET game_winnings = game_winnings - ?, balance = balance - ? WHERE username = ?')
             .bind(withdrawAmount, withdrawAmount, username).run();
@@ -2862,7 +2865,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           if (!record) return resJson({ success: false, message: '提现记录不存在' }, 404);
           if (record.status !== 'pending') return resJson({ success: false, message: '该申请已处理' }, 400);
 
-          const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+          const now = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
 
           if (action === 'approve') {
             await DB.prepare('UPDATE withdraw SET status = ?, reviewed_at = ?, reviewer = ? WHERE id = ?')
