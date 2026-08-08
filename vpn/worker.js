@@ -2858,7 +2858,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
       // ========== 提现：后台审核（通过/拒绝） ==========
       if (path === '/api/withdraw/review' && request.method === 'POST') {
         try {
-          const { id, action, operator } = await request.json();
+          const { id, action, operator, reject_reason } = await request.json();
           if (!id || !['approve', 'reject'].includes(action)) return resJson({ success: false, message: '参数错误' }, 400);
 
           const record = await DB.prepare('SELECT * FROM withdraw WHERE id = ?').bind(id).first();
@@ -2873,12 +2873,14 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
             await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
               .bind(record.username, `✅ 您的提现申请 ¥${parseFloat(record.amount).toFixed(2)} 已通过审核，请注意查收`, now).run();
           } else {
-            await DB.prepare('UPDATE withdraw SET status = ?, reviewed_at = ?, reviewer = ? WHERE id = ?')
-              .bind('rejected', now, operator || 'admin', id).run();
+            const reason = (reject_reason || '').toString().trim();
+            await DB.prepare('UPDATE withdraw SET status = ?, reviewed_at = ?, reviewer = ?, reject_reason = ? WHERE id = ?')
+              .bind('rejected', now, operator || 'admin', reason, id).run();
             await DB.prepare('UPDATE user SET balance = balance + ?, game_winnings = game_winnings + ? WHERE username = ?')
               .bind(record.amount, record.amount, record.username).run();
+            const reasonLine = reason ? `（原因：${reason}）` : '';
             await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
-              .bind(record.username, `❌ 您的提现申请 ¥${parseFloat(record.amount).toFixed(2)} 已被拒绝，金额已退回`, now).run();
+              .bind(record.username, `❌ 您的提现申请 ¥${parseFloat(record.amount).toFixed(2)} 已被拒绝，金额已退回${reasonLine}`, now).run();
           }
 
           return resJson({ success: true, message: action === 'approve' ? '已通过' : '已拒绝' });

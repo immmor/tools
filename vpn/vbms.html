@@ -1177,6 +1177,7 @@
                                     <th>状态</th>
                                     <th>申请时间</th>
                                     <th>审核时间</th>
+                                    <th>拒绝原因</th>
                                     <th>操作</th>
                                 </tr>
                             </thead>
@@ -3802,14 +3803,14 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
         // ========== 提现管理 ==========
         async function loadWithdrawals() {
             const tbody = document.getElementById('withdrawTableBody');
-            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">加载中...</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;">加载中...</td></tr>';
             const status = document.getElementById('withdrawStatusFilter')?.value || '';
             const url = `/api/withdraw/list${status ? '?status=' + status : ''}`;
             const res = await newApiRequest(url, 'GET');
             if (res.success && res.data) {
                 renderWithdrawals(res.data);
             } else {
-                tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:red;">加载失败: ${res.message || '未知错误'}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:red;">加载失败: ${res.message || '未知错误'}</td></tr>`;
             }
         }
 
@@ -3864,7 +3865,7 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
         function renderWithdrawals(list) {
             const tbody = document.getElementById('withdrawTableBody');
             if (!list.length) {
-                tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#999;">暂无提现申请</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#999;">暂无提现申请</td></tr>';
                 return;
             }
             const statusMap = { pending: '待处理', approved: '已通过', rejected: '已拒绝' };
@@ -3877,6 +3878,7 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
                         ? `<div style="max-width:240px;word-break:break-all;font-family:monospace;font-size:12px;background:#f5f6f8;padding:6px 8px;border-radius:6px;color:#222;border:1px solid #e2e8f0;">${escHtml(r.qr_code)}</div><button style="margin-top:4px;padding:2px 8px;font-size:12px;cursor:pointer;border:1px solid #cbd5e0;background:#fff;border-radius:4px;" data-addr="${escHtml(r.qr_code)}" onclick="copyAddrBtn(this)">复制地址</button>`
                         : `<img src="${r.qr_code}" style="width:120px;height:120px;object-fit:contain;" alt="收款码">`)
                     : '-';
+                const reasonCell = (r.status === 'rejected' && r.reject_reason) ? `<span style="color:#e53e3e;">${escHtml(r.reject_reason)}</span>` : '-';
                 return `
                 <tr>
                     <td>${r.id}</td>
@@ -3887,6 +3889,7 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
                     <td style="color:${statusColor[r.status] || '#000'}">${statusMap[r.status] || r.status}</td>
                     <td>${r.created_at || ''}</td>
                     <td>${r.reviewed_at || '-'}</td>
+                    <td style="max-width:180px;word-break:break-all;font-size:12px;">${reasonCell}</td>
                     <td>${r.status === 'pending' ? `<button class="add-btn" style="background:#48bb78;" onclick="reviewWithdraw(${r.id},'approve')">通过</button> <button class="delete-btn" onclick="reviewWithdraw(${r.id},'reject')">拒绝</button>` : '-'}</td>
                 </tr>
             `;
@@ -3902,10 +3905,24 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
         }
 
         async function reviewWithdraw(id, action) {
-            if (!confirm(action === 'approve' ? '确认通过此提现申请？' : '确认拒绝此提现申请？金额将退回用户')) return;
-            const res = await newApiRequest('/api/withdraw/review', 'POST', {
+            if (action === 'approve') {
+                if (!confirm('确认通过此提现申请？')) return;
+            } else {
+                const reason = prompt('请输入拒绝原因（将展示给用户）：', '');
+                if (reason === null) return;
+                const trimmed = reason.trim();
+                if (!trimmed) { alert('请填写拒绝原因'); return; }
+                if (!confirm(`确认拒绝此提现申请？金额将退回用户\n原因：${trimmed}`)) return;
+                window._withdrawRejectReason = trimmed;
+            }
+            const body = {
                 id, action, operator: currentUserInfo?.username || 'admin'
-            });
+            };
+            if (action === 'reject' && window._withdrawRejectReason) {
+                body.reject_reason = window._withdrawRejectReason;
+            }
+            const res = await newApiRequest('/api/withdraw/review', 'POST', body);
+            window._withdrawRejectReason = null;
             if (res.success) {
                 alert(res.message);
                 loadWithdrawals();
