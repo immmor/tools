@@ -2918,6 +2918,69 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
         }
       }
 
+      // ========== 赠送抽奖（管理员指定结果） ==========
+      if (path === '/api/admin/gift-bet' && request.method === 'POST') {
+        try {
+          const { username, game_type, prize, operator } = await request.json();
+          if (!username || !['wheel', 'slot', 'scratch'].includes(game_type) || prize == null) {
+            return resJson({ success: false, message: '参数错误' }, 400);
+          }
+          const prizeVal = parseFloat(prize);
+          if (isNaN(prizeVal) || prizeVal < 0) return resJson({ success: false, message: '金额无效' }, 400);
+
+          const user = await DB.prepare('SELECT username FROM user WHERE username = ?').bind(username).first();
+          if (!user) return resJson({ success: false, message: '用户不存在' }, 404);
+
+          try { await DB.prepare('CREATE TABLE IF NOT EXISTS gift_bet (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, game_type TEXT, prize REAL, status TEXT DEFAULT "pending", created_at TEXT)').run(); } catch(e) {}
+
+          const now = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+          const msgNow = new Date().toISOString().slice(0, 19).replace('T', ' ');
+          const gameNames = { wheel: '幸运转盘', slot: '老虎机', scratch: '刮刮乐' };
+
+          await DB.prepare('INSERT INTO gift_bet (username, game_type, prize, status, created_at) VALUES (?, ?, ?, "pending", ?)')
+            .bind(username, game_type, prizeVal, now).run();
+          await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
+            .bind(username, `🎁 管理员赠送您一次${gameNames[game_type]}，请进入游戏领取|${game_type}`, msgNow).run();
+
+          return resJson({ success: true, message: `已赠送 ${username} ${gameNames[game_type]} ¥${prizeVal.toFixed(2)}，等待用户领取` });
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
+        }
+      }
+
+      // ========== 领取赠送抽奖 ==========
+      if (path === '/api/game/claim-gift' && request.method === 'POST') {
+        try {
+          const { username, game_type } = await request.json();
+          if (!username || !['wheel', 'slot', 'scratch'].includes(game_type)) {
+            return resJson({ success: false, message: '参数错误' }, 400);
+          }
+          const gift = await DB.prepare('SELECT * FROM gift_bet WHERE username = ? AND game_type = ? AND status = "pending" ORDER BY id ASC LIMIT 1').bind(username, game_type).first();
+          if (!gift) return resJson({ success: false, gift: false });
+
+          await DB.prepare('UPDATE gift_bet SET status = "claimed" WHERE id = ?').bind(gift.id).run();
+
+          const now = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+          await DB.prepare('INSERT INTO game_bet (username, game_type, cost, prize, result, created_at) VALUES (?, ?, 0, ?, ?, ?)')
+            .bind(username, game_type, gift.prize, '🎁 赠送', now).run();
+          if (gift.prize > 0) {
+            await DB.prepare('UPDATE user SET balance = balance + ? WHERE username = ?')
+              .bind(gift.prize, username).run();
+          }
+          const user = await DB.prepare('SELECT balance FROM user WHERE username = ?').bind(username).first();
+          const resp = { success: true, gift: true, prize: gift.prize, balance: user.balance };
+          if (game_type === 'slot') {
+            const symMap = { 200: '7️⃣', 100: '💎', 50: '⭐', 30: '🍒', 25: '⭐', 15: '🍒' };
+            const s = symMap[gift.prize] || '🍒';
+            resp.symbols = (gift.prize >= 30 && [200,100,50,30].includes(gift.prize)) ? [s, s, s] : [s, s, '🍋'];
+            await DB.prepare('UPDATE game_bet SET result = ? WHERE id = last_insert_rowid()').bind(resp.symbols.join(' ')).run();
+          }
+          return resJson(resp);
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
+        }
+      }
+
       // ========== 广告点击统计接口（数据存于 user 表） ==========
       if (path === '/api/ad-click') {
         try { await DB.prepare('ALTER TABLE user ADD COLUMN ad_clicks TEXT').run(); } catch (e) {}

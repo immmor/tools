@@ -1043,8 +1043,25 @@
                 </div>
 
                 <div id="footballPage" class="page-section" style="display: none;">
-                    <!-- 幸运转盘记录 -->
+                    <!-- 赠送抽奖 -->
                     <div class="data-table">
+                        <div class="table-header">
+                            <h3>🎁 赠送抽奖</h3>
+                        </div>
+                        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 1rem;">
+                            <input type="text" id="giftUsername" placeholder="用户名" class="form-input" style="width: 150px;">
+                            <select id="giftGameType" class="form-input" style="width: 120px;" onchange="updateGiftPrizeOptions()">
+                                <option value="wheel">幸运转盘</option>
+                                <option value="slot">老虎机</option>
+                                <option value="scratch">刮刮乐</option>
+                            </select>
+                            <select id="giftPrize" class="form-input" style="width: 120px;"></select>
+                            <button class="add-btn" onclick="sendGiftBet()" style="background-color: #667eea;">赠送</button>
+                        </div>
+                    </div>
+
+                    <!-- 幸运转盘记录 -->
+                    <div class="data-table" style="margin-top: 1.5rem;">
                         <div class="table-header">
                             <h3>幸运转盘记录</h3>
                             <button class="add-btn" onclick="loadWheelBets()" style="background-color: #667eea;">刷新</button>
@@ -3929,6 +3946,36 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
                 loadWithdrawals();
             } else {
                 alert(res.message || '操作失败');
+            }
+        }
+
+        // 各游戏可中奖金额选项（与后端游戏逻辑保持一致）
+        const GIFT_PRIZES = {
+            wheel: [3, 5, 10, 20, 50, 200],
+            slot: [15, 25, 30, 50, 100, 200],
+            scratch: [5, 10, 20, 50, 100, 200]
+        };
+
+        function updateGiftPrizeOptions() {
+            const gameType = document.getElementById('giftGameType').value;
+            const prizeSel = document.getElementById('giftPrize');
+            prizeSel.innerHTML = GIFT_PRIZES[gameType].map(p => `<option value="${p}">¥${p}</option>`).join('');
+        }
+        updateGiftPrizeOptions();
+
+        async function sendGiftBet() {
+            const username = document.getElementById('giftUsername').value.trim();
+            const game_type = document.getElementById('giftGameType').value;
+            const prize = document.getElementById('giftPrize').value;
+            if (!username) { alert('请输入用户名'); return; }
+            if (prize === '' || isNaN(prize)) { alert('请选择中奖金额'); return; }
+            if (!confirm(`确认赠送 ${username} 一次${document.getElementById('giftGameType').selectedOptions[0].text}，中奖 ¥${parseFloat(prize).toFixed(2)}？`)) return;
+            const res = await newApiRequest('/api/admin/gift-bet', 'POST', { username, game_type, prize: parseFloat(prize), operator: currentUserInfo?.username || 'admin' });
+            if (res.success) {
+                alert(res.message);
+                document.getElementById('giftUsername').value = '';
+            } else {
+                alert(res.message || '赠送失败');
             }
         }
 

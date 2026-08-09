@@ -196,6 +196,7 @@
         container.classList.remove('hidden');
         const dict = window.translations?.[window.currentLang] || {};
         list.innerHTML = history.map(item => {
+            const isGift = parseFloat(item.cost) === 0;
             const isWin = item.prize > item.cost;
             const net = item.prize - item.cost;
             const timeStr = item.created_at ? item.created_at.slice(11, 16) : '--:--';
@@ -206,7 +207,7 @@
                         <div class="text-zinc-500 text-[10px] mt-0.5">${timeStr}</div>
                     </div>
                     <div class="text-right">
-                        <div class="font-mono ${isWin ? 'text-[var(--neon-green)]' : 'text-zinc-500'}">${net >= 0 ? '+' : ''}${net}</div>
+                        <div class="font-mono ${isWin ? 'text-[var(--neon-green)]' : 'text-zinc-500'}">${(net >= 0 ? '+' : '')}${net}</div>
                         <div class="text-[10px] text-zinc-500">¥${item.cost}</div>
                     </div>
                 </div>
@@ -312,6 +313,48 @@
             }
 
             const dict = window.translations?.[window.currentLang] || {};
+
+            // 先尝试领取赠送
+            try {
+                const giftResp = await fetch(`${GAME_API}/api/game/claim-gift`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: userInfo.username, game_type: 'wheel' })
+                });
+                const giftData = await giftResp.json();
+                if (window.pendingGift) { window.pendingGift.wheel = false; window.updateGameCostText && window.updateGameCostText('wheel'); }
+                if (giftData.success && giftData.gift) {
+                    isWheelSpinning = true;
+                    spinBtn.disabled = true;
+                    wheelResult.textContent = '';
+                    const targetIndex = WHEEL_PRIZES.indexOf(giftData.prize);
+                    const step = getWheelStep();
+                    const segmentCenter = targetIndex * step + step / 2;
+                    const targetMod = normalizeDeg(360 - segmentCenter);
+                    const currentMod = normalizeDeg(wheelRotation);
+                    let delta = targetMod - currentMod;
+                    if (delta <= 0) delta += 360;
+                    const extraSpins = 4 + Math.floor(Math.random() * 2);
+                    wheelRotation += delta + extraSpins * 360;
+                    const WHEEL_SPIN_MS = 4000;
+                    playGameTone(280, 0.06, 'sine', 0.05);
+                    startWheelSpinSound(wheelFace, WHEEL_SPIN_MS, step);
+                    wheelFace.style.transition = `transform ${WHEEL_SPIN_MS}ms cubic-bezier(0.17, 0.67, 0.12, 0.99)`;
+                    wheelFace.style.transform = `rotate(${wheelRotation}deg)`;
+                    setTimeout(() => {
+                        playWheelStopSound();
+                        stopWheelSpinSound();
+                        playSlotWinSound();
+                        updateBalanceDisplay(giftData.balance);
+                        renderGameHistory('wheel');
+                        showGameResult(giftData.prize > 0, giftData.prize, '🎁');
+                        isWheelSpinning = false;
+                        spinBtn.disabled = false;
+                    }, WHEEL_SPIN_MS);
+                    return;
+                }
+            } catch(e) {}
+
             if (!confirm(dict.alert_bet10 ||'本次游戏需要花费 ¥10，是否继续？')) return;
 
             // 先调用后端，获取实际结果
@@ -404,6 +447,56 @@
             }
 
             const dict = window.translations?.[window.currentLang] || {};
+
+            // 先尝试领取赠送
+            try {
+                const giftResp = await fetch(`${GAME_API}/api/game/claim-gift`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: userInfo.username, game_type: 'slot' })
+                });
+                const giftData = await giftResp.json();
+                if (window.pendingGift) { window.pendingGift.slot = false; window.updateGameCostText && window.updateGameCostText('slot'); }
+                if (giftData.success && giftData.gift) {
+                    isSlotSpinning = true;
+                    slotBtn.disabled = true;
+                    slotResult.textContent = '';
+                    const reel1 = document.getElementById('slot-reel-1');
+                    const reel2 = document.getElementById('slot-reel-2');
+                    const reel3 = document.getElementById('slot-reel-3');
+                    const symbolHeight = parseInt(getComputedStyle(document.querySelector('.slot-reel') || document.body).height, 10) || 120;
+                    const stopIndex1 = symbols.indexOf(giftData.symbols[0]);
+                    const stopIndex2 = symbols.indexOf(giftData.symbols[1]);
+                    const stopIndex3 = symbols.indexOf(giftData.symbols[2]);
+                    const totalSpin1 = (7 + stopIndex1) * symbolHeight;
+                    const totalSpin2 = (14 + stopIndex2) * symbolHeight;
+                    const totalSpin3 = (14 + stopIndex3) * symbolHeight;
+                    reel1.style.transition = 'none'; reel2.style.transition = 'none'; reel3.style.transition = 'none';
+                    reel1.style.transform = 'translateY(0)'; reel2.style.transform = 'translateY(0)'; reel3.style.transform = 'translateY(0)';
+                    void reel1.offsetWidth; void reel2.offsetWidth; void reel3.offsetWidth;
+                    const spinDuration1 = 2000, spinDuration2 = 2500, spinDuration3 = 3000;
+                    startSlotSpinSound(reel3, symbolHeight, spinDuration3);
+                    setTimeout(playSlotReelStop, spinDuration1);
+                    setTimeout(playSlotReelStop, spinDuration2);
+                    setTimeout(() => { playSlotReelStop(); stopSlotSpinSound(); }, spinDuration3);
+                    reel1.style.transition = `transform ${spinDuration1}ms cubic-bezier(0.175, 0.885, 0.32, 1.275)`;
+                    reel2.style.transition = `transform ${spinDuration2}ms cubic-bezier(0.175, 0.885, 0.32, 1.275)`;
+                    reel3.style.transition = `transform ${spinDuration3}ms cubic-bezier(0.175, 0.885, 0.32, 1.275)`;
+                    reel1.style.transform = `translateY(-${totalSpin1}px)`;
+                    reel2.style.transform = `translateY(-${totalSpin2}px)`;
+                    reel3.style.transform = `translateY(-${totalSpin3}px)`;
+                    setTimeout(() => {
+                        if (giftData.prize > 0) { playSlotWinSound(); showGameResult(true, giftData.prize, '🎁'); }
+                        else { showGameResult(false, 0, '🎁'); }
+                        updateBalanceDisplay(giftData.balance);
+                        renderGameHistory('slot');
+                        isSlotSpinning = false;
+                        slotBtn.disabled = false;
+                    }, 3500);
+                    return;
+                }
+            } catch(e) {}
+
             if (!confirm(dict.alert_bet20 ||'本次游戏需要花费 ¥20，是否继续？')) return;
 
             // 先调用后端获取结果
@@ -640,6 +733,28 @@
             }
 
             const dict = window.translations?.[window.currentLang] || {};
+
+            // 先尝试领取赠送
+            try {
+                const giftResp = await fetch(`${GAME_API}/api/game/claim-gift`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: userInfo.username, game_type: 'scratch' })
+                });
+                const giftData = await giftResp.json();
+                if (window.pendingGift) { window.pendingGift.scratch = false; window.updateGameCostText && window.updateGameCostText('scratch'); }
+                if (giftData.success && giftData.gift) {
+                    updateBalanceDisplay(giftData.balance);
+                    hasValidCard = true;
+                    scratchPrizeAmount = giftData.prize;
+                    scratchPrize.textContent = (dict.scratch_win || '🎁 恭喜获得') + ` ¥${giftData.prize}`;
+                    scratchResult.textContent = '';
+                    isPrizeAdded = false;
+                    initScratchCard();
+                    return;
+                }
+            } catch(e) {}
+
             if (!confirm(dict.alert_bet15 ||'本次游戏需要花费 ¥15，是否继续？')) return;
 
             // 先调用后端购买刮刮卡
