@@ -3660,16 +3660,25 @@
                                 body: JSON.stringify({ id, username: userInfo?.username })
                             }).then(r => r.json()).then(res => {
                                 if (res.success) {
-                                    loadWithdrawInfo();
+                                    const cancelTarget = data.history.find(x => String(x.id) === String(id));
+                                    const cancelAmount = parseFloat(cancelTarget?.amount || 0);
+                                    if (cancelAmount > 0) {
+                                        userInfo.balance = (parseFloat(userInfo.balance || 0) + cancelAmount).toFixed(2);
+                                        userInfo.game_winnings = (parseFloat(userInfo.game_winnings || 0) + cancelAmount).toFixed(2);
+                                        localStorage.setItem('userInfo', JSON.stringify(userInfo));
+                                        if (els.balance) els.balance.textContent = `¥${userInfo.balance}`;
+                                    }
+                                    if (els.withdrawAvailable) els.withdrawAvailable.textContent = `¥${getWithdrawable().toFixed(2)}`;
+                                    loadWithdrawHistory();
                                 } else {
                                     alert(res.message || '取消失败');
                                     btn.disabled = false;
-                                    btn.textContent = (t.withdraw_cancel || '取消申请');
+                                    btn.textContent = (t.withdraw_cancel || '取消');
                                 }
-                            }).catch(() => {
-                                alert('网络错误');
+                            }).catch((err) => {
+                                alert('网络错误：' + (err?.message || ''));
                                 btn.disabled = false;
-                                btn.textContent = (t.withdraw_cancel || '取消申请');
+                                btn.textContent = (t.withdraw_cancel || '取消');
                             });
                         };
                     });
