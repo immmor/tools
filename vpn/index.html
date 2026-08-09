@@ -1286,6 +1286,10 @@
                         <span class="w-4 h-4 rounded-full border border-zinc-600 flex items-center justify-center text-zinc-500">✗</span>
                         <span class="text-zinc-500">请完成安全验证</span>
                     </div>
+                    <div class="flex items-center gap-2 text-xs" id="withdraw-check-pending">
+                        <span class="w-4 h-4 rounded-full border border-zinc-600 flex items-center justify-center text-zinc-500">✗</span>
+                        <span class="text-zinc-500">无正在处理的提现申请</span>
+                    </div>
                 </div>
                 <div>
                     <label class="text-xs text-zinc-400 block mb-2" data-i18n="withdraw_amount">提现金额</label>
@@ -1448,6 +1452,10 @@
                 <div id="dropdown-menu" class="dropdown-menu absolute right-0 top-full mt-2 w-39 hidden z-[100] max-h-[60vh] overflow-y-auto">
                     <div class="px-4 py-3 border-b border-zinc-800 text-center">
                     <div id="user-balance" class="text-xl font-black text-[var(--neon-green)]">¥0</div>
+                    <div id="user-pending-withdraw" class="text-xs text-[var(--neon-orange)] mt-1 hidden text-center">
+                        <div id="user-pending-withdraw-text">正在提现: ¥0</div>
+                        <button id="user-pending-withdraw-cancel" class="mt-1 text-[var(--neon-red)] hover:text-white border border-zinc-600 hover:border-[var(--neon-red)] rounded px-2 py-0.5 transition-colors cursor-pointer" style="background:transparent;">取消</button>
+                    </div>
                 </div>
                 <!--
                 <div class="px-4 py-4 border-b border-zinc-800 text-center">
@@ -2646,6 +2654,7 @@
             msg: $('auth-message'),
             dropdown: $('dropdown-menu'),
             balance: $('user-balance'),
+            pendingWithdraw: $('user-pending-withdraw'),
             logout: $('logout-btn'),
             recharge: $('recharge-btn'),
             withdraw: $('withdraw-btn'),
@@ -2923,9 +2932,11 @@
                         if (userData.source !== undefined) userInfo.source = userData.source;
                         if (userData.free_expire_date) userInfo.free_expire_date = userData.free_expire_date;
                         if (userData.last_checkin) userInfo.last_checkin = userData.last_checkin;
-                        
+
                         localStorage.setItem('userInfo', JSON.stringify(userInfo));
                     }
+                    // 同步加载提现记录，用于更新"正在提现"显示
+                    if (typeof loadWithdrawHistory === 'function') loadWithdrawHistory();
                 } catch (err) {
                     console.error('更新用户信息失败:', err);
                 }
@@ -3526,8 +3537,10 @@
                 setCheck('withdraw-check-method', hasMethod, t.withdraw_method_ok || '已选择收款方式');
                 setCheck('withdraw-check-qr', accountValid, isCrypto ? (accountValid ? (t.withdraw_account_ok || '收款地址规范') : (t.withdraw_account_invalid || '收款地址格式不正确')) : (t.withdraw_qr_ok || '已上传收款码'));
                 setCheck('withdraw-check-slider', window.isWithdrawVerified, window.isWithdrawVerified ? (t.withdraw_slider_ok || '验证完成') : (t.withdraw_slider_drag || '请完成安全验证'));
+                const pendingOK = !hasPendingWithdraw;
+                setCheck('withdraw-check-pending', pendingOK, pendingOK ? (t.withdraw_no_pending_ok || '无正在处理的提现申请') : (t.withdraw_has_pending || '已有正在处理的提现申请，请先取消'));
 
-                els.withdrawSubmit.disabled = !(amount >= 50 && gameOK && hasMethod && accountValid && window.isWithdrawVerified);
+                els.withdrawSubmit.disabled = !(amount >= 50 && gameOK && hasMethod && accountValid && window.isWithdrawVerified && pendingOK);
             };
 
             const getWithdrawable = () => {
@@ -3535,6 +3548,71 @@
                 const g = parseFloat(userInfo?.game_winnings || 0);
                 return Math.min(b, g);
             };
+
+            // 更新"正在提现"显示：汇总所有 pending 提现申请金额，缓存最近一条 pending 的 id/amount
+            let lastPendingWithdrawId = null;
+            let lastPendingWithdrawAmount = 0;
+            let hasPendingWithdraw = false;
+            const updatePendingWithdraw = (history) => {
+                if (!els.pendingWithdraw) return;
+                const pendingList = Array.isArray(history) ? history.filter(r => r.status === 'pending') : [];
+                const pendingSum = pendingList.reduce((s, r) => s + parseFloat(r.amount || 0), 0);
+                // history 按 id DESC 排序，第一条 pending 即最新一条
+                lastPendingWithdrawId = pendingList.length ? pendingList[0].id : null;
+                lastPendingWithdrawAmount = pendingList.length ? parseFloat(pendingList[0].amount || 0) : 0;
+                hasPendingWithdraw = pendingList.length > 0;
+                const textEl = document.getElementById('user-pending-withdraw-text');
+                const cancelBtn = document.getElementById('user-pending-withdraw-cancel');
+                if (pendingSum > 0) {
+                    if (textEl) textEl.textContent = `${(translations[currentLang]?.pending_withdraw_label || '正在提现')}: ¥${pendingSum.toFixed(2)}`;
+                    if (cancelBtn) cancelBtn.style.display = lastPendingWithdrawId ? '' : 'none';
+                    els.pendingWithdraw.classList.remove('hidden');
+                } else {
+                    els.pendingWithdraw.classList.add('hidden');
+                }
+                // 同步刷新提现弹窗里的 pending 校验项
+                if (typeof updateWithdrawChecks === 'function') updateWithdrawChecks();
+            };
+
+            // 余额下方"正在提现"取消按钮：取消最近一条 pending 申请
+            (() => {
+                const cancelBtn = document.getElementById('user-pending-withdraw-cancel');
+                if (!cancelBtn) return;
+                cancelBtn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    if (!lastPendingWithdrawId || !userInfo?.username) return;
+                    const t = translations[currentLang] || {};
+                    if (!confirm(t.withdraw_cancel_confirm || '确认取消此提现申请？金额将退回账户')) return;
+                    cancelBtn.disabled = true;
+                    const originalText = cancelBtn.textContent;
+                    cancelBtn.textContent = t.withdraw_cancelling || '取消中...';
+                    try {
+                        const r = await fetch(`${API}/api/withdraw/cancel`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: lastPendingWithdrawId, username: userInfo.username })
+                        });
+                        const res = await r.json();
+                        if (res.success) {
+                            if (lastPendingWithdrawAmount > 0) {
+                                userInfo.balance = (parseFloat(userInfo.balance || 0) + lastPendingWithdrawAmount).toFixed(2);
+                                userInfo.game_winnings = (parseFloat(userInfo.game_winnings || 0) + lastPendingWithdrawAmount).toFixed(2);
+                                localStorage.setItem('userInfo', JSON.stringify(userInfo));
+                                if (els.balance) els.balance.textContent = `¥${userInfo.balance}`;
+                            }
+                            if (els.withdrawAvailable) els.withdrawAvailable.textContent = `¥${getWithdrawable().toFixed(2)}`;
+                            if (typeof loadWithdrawHistory === 'function') loadWithdrawHistory();
+                        } else {
+                            alert(res.message || '取消失败');
+                        }
+                    } catch (err) {
+                        alert('网络错误：' + (err?.message || ''));
+                    } finally {
+                        cancelBtn.disabled = false;
+                        cancelBtn.textContent = originalText;
+                    }
+                });
+            })();
 
             const openWithdrawModal = () => {
                 if (!userInfo || !userInfo.username) return;
@@ -3601,6 +3679,7 @@
                         body: JSON.stringify({ username: userInfo.username })
                     });
                     const data = await res.json();
+                    updatePendingWithdraw(data.history);
                     if (!data.success || !data.history?.length) {
                         els.withdrawHistory.innerHTML = '';
                         return;
