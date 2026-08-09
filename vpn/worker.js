@@ -2940,7 +2940,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           await DB.prepare('INSERT INTO gift_bet (username, game_type, prize, status, created_at) VALUES (?, ?, ?, "pending", ?)')
             .bind(username, game_type, prizeVal, now).run();
           await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
-            .bind(username, `🎁 管理员赠送您一次${gameNames[game_type]}，请进入游戏领取|${game_type}`, msgNow).run();
+            .bind(username, `🎁 Phantom赠送您一次${gameNames[game_type]}，请进入游戏领取|${game_type}`, msgNow).run();
 
           return resJson({ success: true, message: `已赠送 ${username} ${gameNames[game_type]} ¥${prizeVal.toFixed(2)}，等待用户领取` });
         } catch (err) {
