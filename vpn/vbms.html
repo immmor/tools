@@ -703,6 +703,39 @@
                             <canvas id="revenueChart"></canvas>
                         </div>
                     </div>
+
+                    <div class="dashboard-grid" style="grid-template-columns: 2fr 1fr;">
+                        <div class="stat-card">
+                            <h3 style="margin-bottom: 1rem; color: #4a5568;">🎮 游戏下注 / 派奖趋势（近7天）</h3>
+                            <canvas id="gameChart"></canvas>
+                        </div>
+                        <div class="stat-card">
+                            <h3 style="margin-bottom: 1rem; color: #4a5568;">📦 价格套餐分布</h3>
+                            <canvas id="planChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-grid" style="grid-template-columns: 1fr 1fr;">
+                        <div class="stat-card">
+                            <h3 style="margin-bottom: 1rem; color: #4a5568;">💸 提现审核漏斗</h3>
+                            <canvas id="withdrawChart"></canvas>
+                        </div>
+                        <div class="stat-card">
+                            <h3 style="margin-bottom: 1rem; color: #4a5568;">⚽ 竞猜下注分布</h3>
+                            <canvas id="footballChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-grid" style="grid-template-columns: 2fr 1fr;">
+                        <div class="stat-card">
+                            <h3 style="margin-bottom: 1rem; color: #4a5568;">📅 签到活跃（近7天）</h3>
+                            <canvas id="checkinChart"></canvas>
+                        </div>
+                        <div class="stat-card">
+                            <h3 style="margin-bottom: 1rem; color: #4a5568;">💰 余额概览</h3>
+                            <div id="balanceOverview" style="display:flex; flex-direction:column; gap:12px; padding-top:8px;"></div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- 智能运营页面 -->
@@ -1048,15 +1081,35 @@
                         <div class="table-header">
                             <h3>🎁 赠送抽奖</h3>
                         </div>
-                        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 1rem;">
-                            <input type="text" id="giftUsername" placeholder="用户名" class="form-input" style="width: 150px;">
-                            <select id="giftGameType" class="form-input" style="width: 120px;" onchange="updateGiftPrizeOptions()">
-                                <option value="wheel">幸运转盘</option>
-                                <option value="slot">老虎机</option>
-                                <option value="scratch">刮刮乐</option>
-                            </select>
-                            <select id="giftPrize" class="form-input" style="width: 120px;"></select>
-                            <button class="add-btn" onclick="sendGiftBet()" style="background-color: #667eea;">赠送</button>
+                        <div style="padding: 1.5rem;">
+                            <div class="form-group">
+                                <label for="giftTarget">接收对象</label>
+                                <select id="giftTarget" style="width: 100%; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 4px;" onchange="toggleGiftUsernames()">
+                                    <option value="single">指定用户（可多人）</option>
+                                    <option value="all">所有用户</option>
+                                    <option value="vip">VIP 会员</option>
+                                    <option value="nonvip">非会员</option>
+                                    <option value="trusted">已信任用户</option>
+                                    <option value="untrusted">未信任用户</option>
+                                </select>
+                            </div>
+                            <div class="form-group" id="giftUsernamesGroup" style="display: none;">
+                                <label for="giftUsernames">用户名（多个用逗号、空格或换行分隔）</label>
+                                <textarea id="giftUsernames" rows="2" placeholder="例如：alice, bob, charlie" style="width: 100%; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 4px; resize: vertical;"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label for="giftGameType">抽奖类型</label>
+                                <select id="giftGameType" style="width: 100%; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 4px;" onchange="updateGiftPrizeOptions()">
+                                    <option value="wheel">幸运转盘</option>
+                                    <option value="slot">老虎机</option>
+                                    <option value="scratch">刮刮乐</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="giftPrize">中奖金额 (¥)</label>
+                                <select id="giftPrize" style="width: 100%; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 4px;"></select>
+                            </div>
+                            <button type="button" class="btn" onclick="sendGiftBet()" style="width: auto;">确认赠送</button>
                         </div>
                     </div>
 
@@ -1568,10 +1621,14 @@
         
         // 加载仪表盘数据
         async function loadDashboardData() {
-            const result = await apiRequest('/api/stats', 'GET');
+            // 同时调用两个统计接口（核心指标来自 API_BASE，业务聚合来自 NEW_API_BASE）
+            const [mainRes, dashRes] = await Promise.all([
+                apiRequest('/api/stats', 'GET'),
+                newApiRequest('/api/stats/dashboard', 'GET').catch(err => ({ code: 500, msg: String(err) }))
+            ]);
             
-            if (result.code === 200) {
-                const data = result.data;
+            if (mainRes.code === 200) {
+                const data = mainRes.data;
                 document.getElementById('totalUsers').textContent = data.totalUsers || 0;
                 document.getElementById('totalOrders').textContent = data.totalOrders || 0;
                 document.getElementById('pendingOrders').textContent = data.pendingOrders || 0;
@@ -1582,7 +1639,16 @@
                     renderCharts(data);
                 }, 100);
             } else {
-                console.error('加载统计数据失败:', result.msg);
+                console.error('加载统计数据失败:', mainRes.msg);
+            }
+            
+            if (dashRes.code === 200) {
+                dashData = dashRes.data || {};
+                setTimeout(() => {
+                    renderDashboardCharts(dashData);
+                }, 120);
+            } else {
+                console.error('加载聚合统计数据失败:', dashRes.msg, dashRes.error || '');
             }
         }
         
@@ -1660,9 +1726,112 @@
             });
         }
 
+        // 渲染首页业务聚合图表（来自 /api/stats/dashboard）
+        function renderDashboardCharts(d) {
+            const COLORS = ['#667eea', '#48bb78', '#ed8936', '#f6ad55', '#68d391', '#4fd1c5', '#90cdf4', '#fc8181', '#9f7aea', '#38b2ac'];
+
+            // ---- 游戏下注 / 派奖趋势（折线）----
+            const gctx = document.getElementById('gameChart');
+            if (gctx) {
+                if (charts.game) charts.game.destroy();
+                charts.game = new Chart(gctx.getContext('2d'), {
+                    type: 'line',
+                    data: {
+                        labels: d.gameLabels || [],
+                        datasets: [
+                            { label: '下注金额', data: d.gameBetData || [], borderColor: '#667eea', backgroundColor: 'rgba(102,126,234,0.1)', tension: 0.4, fill: true },
+                            { label: '派奖金额', data: d.gameWinData || [], borderColor: '#48bb78', backgroundColor: 'rgba(72,187,120,0.1)', tension: 0.4, fill: true }
+                        ]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true } }, scales: { y: { beginAtZero: true } } }
+                });
+            }
+
+            // ---- 价格套餐分布（环形）----
+            const pctx = document.getElementById('planChart');
+            if (pctx) {
+                if (charts.plan) charts.plan.destroy();
+                charts.plan = new Chart(pctx.getContext('2d'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: d.planLabels || [],
+                        datasets: [{ data: d.planData || [], backgroundColor: COLORS }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false }
+                });
+            }
+
+            // ---- 提现审核漏斗（柱状）----
+            const wctx = document.getElementById('withdrawChart');
+            if (wctx) {
+                if (charts.withdraw) charts.withdraw.destroy();
+                charts.withdraw = new Chart(wctx.getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: ['待审核', '已通过', '已拒绝'],
+                        datasets: [{
+                            label: '笔数',
+                            data: [d.withdrawPending || 0, d.withdrawApproved || 0, d.withdrawRejected || 0],
+                            backgroundColor: ['#ed8936', '#48bb78', '#fc8181']
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+                });
+            }
+
+            // ---- 竞猜下注分布（环形）----
+            const fctx = document.getElementById('footballChart');
+            if (fctx) {
+                if (charts.football) charts.football.destroy();
+                charts.football = new Chart(fctx.getContext('2d'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: d.fbLabels || [],
+                        datasets: [{ data: d.fbData || [], backgroundColor: COLORS }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false }
+                });
+            }
+
+            // ---- 签到活跃趋势（折线）----
+            const cctx = document.getElementById('checkinChart');
+            if (cctx) {
+                if (charts.checkin) charts.checkin.destroy();
+                charts.checkin = new Chart(cctx.getContext('2d'), {
+                    type: 'line',
+                    data: {
+                        labels: d.checkinLabels || [],
+                        datasets: [{ label: '签到人数', data: d.checkinData || [], borderColor: '#9f7aea', backgroundColor: 'rgba(159,122,234,0.1)', tension: 0.4, fill: true }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+                });
+            }
+
+            // ---- 余额概览（文字卡片）----
+            const box = document.getElementById('balanceOverview');
+            if (box) {
+                const rows = [
+                    { label: '平台总余额', value: '¥' + (d.totalBalance || 0), color: '#667eea' },
+                    { label: 'VIP 人数', value: d.vipUsers || 0, color: '#48bb78' },
+                    { label: '代理人数', value: d.agentUsers || 0, color: '#ed8936' },
+                    { label: '游戏总下注', value: '¥' + (d.gameTotalBet || 0), color: '#f6ad55' },
+                    { label: '游戏总派奖', value: '¥' + (d.gameTotalWin || 0), color: '#68d391' },
+                    { label: '提现总额', value: '¥' + (d.withdrawTotal || 0), color: '#fc8181' }
+                ];
+                box.innerHTML = rows.map(r =>
+                    `<div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid #edf2f7;">
+                        <span style="color:#718096; font-size:0.9rem;">${r.label}</span>
+                        <span style="font-weight:600; color:${r.color}; font-size:1.05rem;">${r.value}</span>
+                    </div>`
+                ).join('');
+            }
+        }
+
         // ==================== 智能运营分析 ====================
+        let dashData = null;           // /api/stats/dashboard 聚合数据（含游戏按用户聚合）
         let insightData = null;        // 分析结果缓存
         let insightActiveSeg = 'potential';
+        let insightGameOverview = null; // 游戏整体概览（来自 /api/stats/dashboard）
         const DAY_MS = 24 * 60 * 60 * 1000;
 
         // 安全解析日期为时间戳（无效返回 null）
@@ -1679,7 +1848,7 @@
             return Math.floor((Date.now() - t) / DAY_MS);
         }
 
-        // 加载并分析（复用已有 /api/users 与 /api/orders 数据，不新增接口）
+        // 加载并分析（复用已有 /api/users、/api/orders 与游戏聚合数据）
         async function loadInsights() {
             document.getElementById('insightAdvice').innerHTML = '正在分析用户数据...';
             // 确保用户与订单数据已加载
@@ -1691,7 +1860,20 @@
                 const or = await apiRequest('/api/orders?page=1&limit=9999', 'GET');
                 if (or.code === 200) ordersData = or.data.orders || [];
             }
-            insightData = analyzeUsers();
+            // 复用 /api/stats/dashboard 已聚合的游戏按用户数据，无需独立接口
+            let gameByUser = (dashData && dashData.gameByUser) || {};
+            if (dashData && dashData.gameOverview) insightGameOverview = dashData.gameOverview;
+            if (!gameByUser || Object.keys(gameByUser).length === 0) {
+                try {
+                    const dr = await newApiRequest('/api/stats/dashboard', 'GET');
+                    if (dr.code === 200 && dr.data) {
+                        dashData = dr.data;
+                        gameByUser = dashData.gameByUser || {};
+                        if (dashData.gameOverview) insightGameOverview = dashData.gameOverview;
+                    }
+                } catch (e) { console.error('游戏运营数据加载失败:', e); }
+            }
+            insightData = analyzeUsers(gameByUser);
             renderInsightMetrics(insightData);
             renderInsightAdvice(insightData);
             renderInsightTabs(insightData);
@@ -1699,7 +1881,7 @@
         }
 
         // 核心：对每个用户打标签、评分、分群
-        function analyzeUsers() {
+        function analyzeUsers(gameByUser = {}) {
             const now = Date.now();
             // 预聚合每个用户的付费订单
             const paidByUser = {};
@@ -1719,6 +1901,7 @@
 
             let payingUsers = 0, repurchaseUsers = 0, vipActive = 0, autoOn = 0;
             let totalPaidAmount = 0, totalPaidOrders = 0;
+            let gamePlayers = 0, gameTotalBet = 0, gameTotalWin = 0;
 
             usersData.forEach(user => {
                 const paid = paidByUser[user.username] || [];
@@ -1737,6 +1920,18 @@
                 const balance = parseFloat(user.balance) || 0;
                 const autoRenew = (user.auto_rewn === 1 || user.auto_rewn === '1' || user.auto_rewn === true);
 
+                // ---- 游戏维度 ----
+                const g = gameByUser[user.username];
+                const game = g ? {
+                    plays: g.plays, bet: g.bet, win: g.win, net: g.net,
+                    lastPlayTs: g.lastPlay ? _ts(g.lastPlay) : null,
+                    favType: g.favType
+                } : { plays: 0, bet: 0, win: 0, net: 0, lastPlayTs: null, favType: '-' };
+                if (game.plays > 0) { gamePlayers++; gameTotalBet += game.bet; gameTotalWin += game.win; }
+                const gameDays = game.lastPlayTs === null ? Infinity : Math.floor((now - game.lastPlayTs) / DAY_MS);
+                const gameActive = game.plays > 0 && gameDays <= 7;       // 近7天玩过
+                const gameLapsed = game.plays > 0 && gameDays > 14;       // 老玩家但近期没玩
+
                 if (successCount >= 1) payingUsers++;
                 if (successCount >= 2) repurchaseUsers++;
                 if (isVIP) vipActive++;
@@ -1748,19 +1943,22 @@
                     username: user.username, isVIP, successCount, successAmount,
                     daysToExpire, daysSinceExpire, checkinDays, freeActive,
                     hasSurvey, balance, autoRenew, source: user.source || '-',
-                    vExpireStr: vExpTs ? new Date(vExpTs).toLocaleDateString() : '-'
+                    vExpireStr: vExpTs ? new Date(vExpTs).toLocaleDateString() : '-',
+                    game, gameActive, gameLapsed
                 };
 
                 // 1) 潜在用户：从未付费，评估转化意向分（0-100）
                 if (successCount === 0) {
                     let score = 0;
                     const reasons = [];
-                    if (checkinDays <= 7) { score += 30; reasons.push('近7天有签到'); }
-                    else if (checkinDays <= 30) { score += 15; reasons.push('近30天有签到'); }
-                    if (freeActive) { score += 25; reasons.push('正在使用免费节点'); }
-                    if (balance > 0) { score += 20; reasons.push('账户有余额¥' + balance); }
-                    if (hasSurvey) { score += 15; reasons.push('已填写问卷'); }
-                    if (user.source && user.source !== '-') { score += 10; reasons.push('渠道:' + user.source); }
+                    if (game.plays > 0) { score += 35; reasons.push(`游戏活跃(玩${game.plays}次/${game.favType})`); }
+                    if (gameActive) { score += 10; reasons.push('近7天在玩游戏'); }
+                    if (checkinDays <= 7) { score += 20; reasons.push('近7天有签到'); }
+                    else if (checkinDays <= 30) { score += 10; reasons.push('近30天有签到'); }
+                    if (freeActive) { score += 15; reasons.push('正在使用免费节点'); }
+                    if (balance > 0) { score += 15; reasons.push('账户有余额¥' + balance); }
+                    if (hasSurvey) { score += 10; reasons.push('已填写问卷'); }
+                    if (user.source && user.source !== '-') { score += 5; reasons.push('渠道:' + user.source); }
                     if (score > 100) score = 100;
                     if (score >= 25) { // 有一定意向才纳入潜在池
                         segments.potential.push({ ...base, score, reasons,
@@ -1768,30 +1966,31 @@
                     }
                 }
 
-                // 2) 即将到期：VIP 且 7 天内到期
+                // 2) 即将到期：VIP 且 7 天内到期（叠加游戏黏性）
                 if (isVIP && daysToExpire !== null && daysToExpire <= 7) {
-                    segments.expiring.push({ ...base,
-                        urgency: daysToExpire <= 3 ? '紧急' : '提醒',
-                        reasons: [`VIP将在${daysToExpire}天后到期`, autoRenew ? '已开启自动续费' : '未开启自动续费，需主动触达'] });
+                    const reasons = [`VIP将在${daysToExpire}天后到期`, autoRenew ? '已开启自动续费' : '未开启自动续费，需主动触达'];
+                    if (game.plays > 0) reasons.push(`游戏黏性高(累计玩${game.plays}次)`);
+                    segments.expiring.push({ ...base, urgency: daysToExpire <= 3 ? '紧急' : '提醒', reasons });
                 }
 
-                // 3) 可召回流失：曾付费但当前已过期
+                // 3) 可召回流失：曾付费但当前已过期（叠加游戏召回）
                 if (successCount >= 1 && !isVIP && daysSinceExpire !== null) {
                     let stage, stageScore;
                     if (daysSinceExpire <= 15) { stage = '黄金召回期'; stageScore = 3; }
                     else if (daysSinceExpire <= 60) { stage = '沉睡期'; stageScore = 2; }
                     else { stage = '深度流失'; stageScore = 1; }
-                    // 召回优先级 = 历史价值 + 时效
-                    const priority = successAmount + stageScore * 50;
-                    segments.winback.push({ ...base, stage, priority,
-                        reasons: [`已过期${daysSinceExpire}天`, `历史付费${successCount}次/¥${successAmount.toFixed(0)}`, stage] });
+                    const priority = successAmount + stageScore * 50 + game.plays * 2; // 游戏越活跃越值得召回
+                    const reasons = [`已过期${daysSinceExpire}天`, `历史付费${successCount}次/¥${successAmount.toFixed(0)}`, stage];
+                    if (game.plays > 0) reasons.push(`曾玩${game.plays}次游戏(偏好${game.favType})`);
+                    segments.winback.push({ ...base, stage, priority, reasons });
                 }
 
-                // 4) 高价值 VIP：当前有效且复购或高消费
-                if (isVIP && (successCount >= 2 || successAmount >= 100)) {
-                    segments.highvalue.push({ ...base,
-                        reasons: [`付费${successCount}次/¥${successAmount.toFixed(0)}`,
-                            autoRenew ? '已自动续费' : '未开启自动续费', `${daysToExpire !== null ? '距到期' + daysToExpire + '天' : ''}`] });
+                // 4) 高价值 VIP：当前有效且复购或高消费（叠加游戏消费）
+                if (isVIP && (successCount >= 2 || successAmount >= 100 || game.bet >= 100)) {
+                    const reasons = [`付费${successCount}次/¥${successAmount.toFixed(0)}`,
+                        autoRenew ? '已自动续费' : '未开启自动续费', `${daysToExpire !== null ? '距到期' + daysToExpire + '天' : ''}`];
+                    if (game.plays > 0) reasons.push(`游戏下注¥${game.bet.toFixed(0)}/派奖¥${game.win.toFixed(0)}`);
+                    segments.highvalue.push({ ...base, reasons });
                 }
             });
 
@@ -1802,6 +2001,7 @@
             segments.highvalue.sort((a, b) => b.successAmount - a.successAmount);
 
             const totalUsers = usersData.length;
+            const gameConvUsers = usersData.filter(u => (gameByUser[u.username] && gameByUser[u.username].plays > 0) && !paidByUser[u.username]).length;
             const metrics = {
                 totalUsers,
                 payingUsers,
@@ -1810,7 +2010,12 @@
                 vipActive,
                 autoRate: payingUsers ? (autoOn / payingUsers * 100) : 0,
                 avgOrder: totalPaidOrders ? (totalPaidAmount / totalPaidOrders) : 0,
-                arpu: payingUsers ? (totalPaidAmount / payingUsers) : 0
+                arpu: payingUsers ? (totalPaidAmount / payingUsers) : 0,
+                gamePlayers,
+                gameTotalBet,
+                gameTotalWin,
+                gameHouseEdge: gameTotalBet - gameTotalWin,
+                gameConvUsers
             };
 
             return { segments, metrics };
@@ -1827,7 +2032,11 @@
                 { icon: '💹', label: '付费转化率', value: m.convRate.toFixed(1) + '%', color: '#4fd1c5' },
                 { icon: '🔂', label: '复购率', value: m.repurchaseRate.toFixed(1) + '%', color: '#9f7aea' },
                 { icon: '🔄', label: '自动续费开启率', value: m.autoRate.toFixed(1) + '%', color: '#38b2ac' },
-                { icon: '💰', label: '付费用户人均(ARPU)', value: '¥' + m.arpu.toFixed(0), color: '#f6ad55' }
+                { icon: '💰', label: '付费用户人均(ARPU)', value: '¥' + m.arpu.toFixed(0), color: '#f6ad55' },
+                { icon: '🎮', label: '游戏活跃玩家', value: m.gamePlayers, color: '#4299e1' },
+                { icon: '🎰', label: '游戏总下注', value: '¥' + m.gameTotalBet.toFixed(0), color: '#f6ad55' },
+                { icon: '🏦', label: '平台抽水(净收)', value: '¥' + m.gameHouseEdge.toFixed(0), color: '#48bb78' },
+                { icon: '🎯', label: '游戏高活未付费', value: m.gameConvUsers, color: '#e53e3e' }
             ];
             document.getElementById('insightMetrics').innerHTML = cards.map(c => `
                 <div class="stat-card" style="border-left:4px solid ${c.color};">
@@ -1888,6 +2097,20 @@
                 ]
             });
 
+            // ⑤ 游戏运营：把高活玩家转化为付费会员
+            const gameConv = m.gameConvUsers;
+            const gameLapsed = (data.segments.potential.concat(data.segments.winback)).filter(u => u.game && u.game.plays > 0 && u.gameLapsed).length;
+            advices.push({
+                t: '⑤ 游戏运营 · 把玩家变成会员',
+                d: `游戏活跃玩家 <b>${m.gamePlayers}</b> 位，累计下注 <b>¥${m.gameTotalBet.toFixed(0)}</b>、平台净抽水 <b>¥${m.gameHouseEdge.toFixed(0)}</b>。其中 <b style="color:#e53e3e;">${gameConv}</b> 位"高活但未付费"是首单转化黄金人群${gameLapsed ? `，另有 <b>${gameLapsed}</b> 位老玩家近期未登录游戏待唤醒` : ''}。`,
+                a: [
+                    '对"游戏高活未付费"用户推送<b>首充送游戏币/抽奖机会</b>：用"再玩一次就回本"的心理触发首单转化',
+                    '设计<b>游戏段位/连胜奖励</b>与 VIP 挂钩：达到条件免费解锁 VIP 体验，先体验后付费',
+                    '对近期未玩的老玩家，触发<b>限时返场活动</b>(如"回归送免费抽")唤醒游戏行为，间接拉升留存',
+                    '用平台抽水做<b>反哺运营</b>：周期性举办有奖游戏赛事，提升活跃与口碑，降低纯广告获客成本'
+                ]
+            });
+
             document.getElementById('insightAdvice').innerHTML = advices.map(a => `
                 <div style="margin-bottom:1.25rem; padding:1rem 1.25rem; background:#f7fafc; border-radius:8px; border-left:4px solid #667eea;">
                     <div style="font-weight:600; color:#2d3748; margin-bottom:.5rem;">${a.t}</div>
@@ -1942,10 +2165,10 @@
                 </div>`;
 
             const cols = {
-                potential: ['用户名', '意向', '意向分', '判断依据', '操作'],
-                expiring:  ['用户名', '紧急度', '到期日', '自动续费', '判断依据', '操作'],
-                winback:   ['用户名', '召回阶段', '历史付费', '判断依据', '操作'],
-                highvalue: ['用户名', '付费次数', '累计金额', '自动续费', '判断依据', '操作']
+                potential: ['用户名', '意向', '意向分', '游戏', '判断依据', '操作'],
+                expiring:  ['用户名', '紧急度', '到期日', '自动续费', '游戏', '判断依据', '操作'],
+                winback:   ['用户名', '召回阶段', '历史付费', '游戏', '判断依据', '操作'],
+                highvalue: ['用户名', '付费次数', '累计金额', '自动续费', '游戏', '判断依据', '操作']
             };
             thead.innerHTML = '<tr>' + cols[key].map(c => `<th>${c}</th>`).join('') + '</tr>';
 
@@ -3963,17 +4186,46 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
         }
         updateGiftPrizeOptions();
 
+        // 切换接收对象分类时，显隐“用户名”输入框
+        function toggleGiftUsernames() {
+            const target = document.getElementById('giftTarget').value;
+            const group = document.getElementById('giftUsernamesGroup');
+            const ta = document.getElementById('giftUsernames');
+            if (target === 'single') {
+                group.style.display = '';
+                ta.required = true;
+            } else {
+                group.style.display = 'none';
+                ta.required = false;
+            }
+        }
+        toggleGiftUsernames();
+
         async function sendGiftBet() {
-            const username = document.getElementById('giftUsername').value.trim();
+            const target = document.getElementById('giftTarget').value;
+            const usernamesRaw = document.getElementById('giftUsernames').value.trim();
             const game_type = document.getElementById('giftGameType').value;
             const prize = document.getElementById('giftPrize').value;
-            if (!username) { alert('请输入用户名'); return; }
             if (prize === '' || isNaN(prize)) { alert('请选择中奖金额'); return; }
-            if (!confirm(`确认赠送 ${username} 一次${document.getElementById('giftGameType').selectedOptions[0].text}，中奖 ¥${parseFloat(prize).toFixed(2)}？`)) return;
-            const res = await newApiRequest('/api/admin/gift-bet', 'POST', { username, game_type, prize: parseFloat(prize), operator: currentUserInfo?.username || 'admin' });
+
+            if (target === 'single') {
+                if (!usernamesRaw) { alert('请输入至少一个用户名'); return; }
+            }
+
+            const body = { game_type, prize: parseFloat(prize), operator: currentUserInfo?.username || 'admin' };
+            if (target === 'single') {
+                body.usernames = usernamesRaw;
+            } else {
+                body.target = target;
+            }
+
+            const label = target === 'single' ? usernamesRaw : document.getElementById('giftTarget').selectedOptions[0].text;
+            if (!confirm(`确认赠送「${label}」一次${document.getElementById('giftGameType').selectedOptions[0].text}，中奖 ¥${parseFloat(prize).toFixed(2)}？`)) return;
+
+            const res = await newApiRequest('/api/admin/gift-bet', 'POST', body);
             if (res.success) {
                 alert(res.message);
-                document.getElementById('giftUsername').value = '';
+                document.getElementById('giftUsernames').value = '';
             } else {
                 alert(res.message || '赠送失败');
             }
