@@ -1224,6 +1224,45 @@
             transform: scale(1.05);
             box-shadow: 0 4px 20px rgba(0, 243, 255, 0.5);
         }
+
+        /* 系统礼物浮层 */
+        #gift-overlay {
+            position: fixed; inset: 0; z-index: 9999;
+            display: none; align-items: center; justify-content: center;
+            background: rgba(0,0,0,0.55); backdrop-filter: blur(2px);
+        }
+        #gift-overlay.show { display: flex; animation: gift-fade 0.25s ease; }
+        @keyframes gift-fade { from { opacity: 0; } to { opacity: 1; } }
+        .gift-wrap { position: relative; display: flex; flex-direction: column; align-items: center; }
+        .gift-fab {
+            width: 120px; height: 120px; border-radius: 50%;
+            background: radial-gradient(circle at 30% 30%, #ff5fa2, #ff2d78 60%, #c81e5b);
+            border: 3px solid #ffd1e8;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 56px; cursor: pointer; user-select: none;
+            box-shadow: 0 0 30px rgba(255,45,120,0.8);
+            animation: gift-bounce 1.1s ease-in-out infinite;
+            transition: transform 0.15s;
+        }
+        .gift-fab:hover { transform: scale(1.08); }
+        .gift-fab:active { transform: scale(0.94); }
+        @keyframes gift-bounce {
+            0%, 100% { transform: translateY(0) rotate(-6deg); }
+            25% { transform: translateY(-14px) rotate(6deg); }
+            50% { transform: translateY(0) rotate(-6deg); }
+            75% { transform: translateY(-7px) rotate(3deg); }
+        }
+        .gift-tip {
+            margin-top: 18px; white-space: nowrap; color: #fff; font-size: 14px; font-weight: 600;
+            text-shadow: 0 0 8px rgba(255,45,120,0.9);
+        }
+        .gift-close {
+            position: absolute; top: -14px; right: -14px; z-index: 1;
+            width: 30px; height: 30px; border-radius: 50%;
+            background: #fff; color: #111; border: none; cursor: pointer;
+            font-size: 15px; line-height: 1; display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+        }
     </style>
     <link rel="stylesheet" href="src/initLoading.css">
     <link rel="stylesheet" href="src/qa.css">
@@ -2953,9 +2992,11 @@
 
                         localStorage.setItem('userInfo', JSON.stringify(userInfo));
                     }
-                    // 余额更新后立即同步显示（含可提现 ¥0.00），不依赖网络
-                    if (typeof updatePendingWithdraw === 'function') updatePendingWithdraw([]);
-                    // 同步加载提现记录，用于更新"正在提现"显示
+                    // 若已有缓存记录，同步即时显示（用真实状态，不闪烁）；首次无缓存则不显示，等异步一次渲染
+                    if (typeof updatePendingWithdraw === 'function' && lastWithdrawHistory !== null) {
+                        updatePendingWithdraw(lastWithdrawHistory);
+                    }
+                    // 异步加载提现记录，更新缓存并在 finally 统一刷新"正在提现/可提现"（含 ¥0.00）
                     if (typeof loadWithdrawHistory === 'function') loadWithdrawHistory();
                 } catch (err) {
                     console.error('更新用户信息失败:', err);
@@ -3051,6 +3092,52 @@
                 return content.replace(/\|(wheel|slot|scratch)$/, '');
             };
 
+            // 跳转到指定游戏的赠送（免费玩）
+            const goToGiftGame = (gType) => {
+                const gameNames = { wheel: '幸运转盘', slot: '老虎机', scratch: '刮刮乐' };
+                // 标记有免费券待用，进入游戏即显示"本次消耗 ¥0（赠送）"
+                if (window.pendingGift) window.pendingGift[gType] = true;
+                setTimeout(() => {
+                    const gameTab = document.querySelector(`.game-tab[data-tab="${gType}"]`);
+                    if (gameTab) {
+                        gameTab.click();
+                        const gs = document.getElementById('game-section');
+                        if (gs) gs.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                    window.updateGameCostText && window.updateGameCostText(gType);
+                    setTimeout(() => {
+                        alert(`🎁 您有一次${gameNames[gType]}赠送，请点击开始按钮领取！`);
+                    }, 600);
+                }, 100);
+            };
+
+            // 礼物浮层：显示未领取的系统礼物
+            window.__giftShown = window.__giftShown || new Set();
+            const showGiftOverlay = (notif) => {
+                const overlay = document.getElementById('gift-overlay');
+                const fab = document.getElementById('gift-fab');
+                const close = document.getElementById('gift-close');
+                if (!overlay || !fab) return;
+                if (!overlay.dataset.bound) {
+                    overlay.dataset.bound = '1';
+                    fab.addEventListener('click', () => {
+                        const gType = overlay.dataset.gtype;
+                        const id = overlay.dataset.id;
+                        overlay.classList.remove('show');
+                        const n = notifications.find(x => String(x.id) === String(id));
+                        if (n && !n.is_read) { markAsRead(id); n.is_read = true; checkUnread(notifications); renderNotifications(notifications); }
+                        goToGiftGame(gType);
+                    });
+                    if (close) close.addEventListener('click', () => overlay.classList.remove('show'));
+                }
+                const m = (notif.content || '').match(/\|(wheel|slot|scratch)$/);
+                const gType = m ? m[1] : 'wheel';
+                overlay.dataset.gtype = gType;
+                overlay.dataset.id = notif.id;
+                overlay.classList.add('show');
+                window.__giftShown.add(notif.id);
+            };
+
             const renderNotifications = (dataNotifications = []) => {
                 const list = document.getElementById('notification-list');
                 notifications = dataNotifications;
@@ -3090,21 +3177,7 @@
                         const giftMatch = content.match(/\|(wheel|slot|scratch)$/);
                         if (giftMatch) {
                             notificationDropdown.classList.add('hidden');
-                            const gameNames = { wheel: '幸运转盘', slot: '老虎机', scratch: '刮刮乐' };
-                            const gType = giftMatch[1];
-                            window.pendingGift[gType] = true;
-                            setTimeout(() => {
-                                const gameTab = document.querySelector(`.game-tab[data-tab="${gType}"]`);
-                                if (gameTab) {
-                                    gameTab.click();
-                                    const gs = document.getElementById('game-section');
-                                    if (gs) gs.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                }
-                                window.updateGameCostText && window.updateGameCostText(gType);
-                                setTimeout(() => {
-                                    alert(`🎁 您有一次${gameNames[gType]}赠送，请点击开始按钮领取！`);
-                                }, 600);
-                            }, 100);
+                            goToGiftGame(giftMatch[1]);
                         }
                     };
                     div.querySelector('.notif-reply-btn').onclick = (e) => {
@@ -3125,6 +3198,12 @@
                     };
                     list.appendChild(div);
                 });
+
+                // 自动弹出未领取的礼物浮层（每个礼物只弹一次）
+                const giftNotif = notifications.find(n => !n.is_read && /\|(wheel|slot|scratch)$/.test(n.content || ''));
+                if (giftNotif && !window.__giftShown.has(giftNotif.id)) {
+                    showGiftOverlay(giftNotif);
+                }
             };
 
             window.__rerenderNotifications = () => renderNotifications(notifications);
@@ -3633,7 +3712,6 @@
                     e.stopPropagation();
                     if (!lastPendingWithdrawId || !userInfo?.username) return;
                     const t = translations[currentLang] || {};
-                    if (!confirm(t.withdraw_cancel_confirm || '确认取消此提现申请？金额将退回账户')) return;
                     try {
                         const r = await fetch(`${API}/api/withdraw/cancel`, {
                             method: 'POST',
@@ -3727,6 +3805,8 @@
                 }
             };
 
+            // 缓存最近一次提现记录，供 updateBalance 同步即时显示（避免网络延迟导致看不到 / 闪烁）
+            let lastWithdrawHistory = null;
             const loadWithdrawHistory = async () => {
                 let history = [];
                 try {
@@ -3737,6 +3817,7 @@
                     });
                     const data = await res.json();
                     history = data.history || [];
+                    lastWithdrawHistory = history;
                     if (!data.success || !data.history?.length) {
                         els.withdrawHistory.innerHTML = '';
                         return;
@@ -3766,7 +3847,7 @@
                             const rightCol = (() => {
                                 const statusEl = `<span class="text-xs ${statusColor[r.status] || 'text-zinc-400'}">${statusMap[r.status] || r.status}</span>`;
                                 if (r.status === 'pending') {
-                                    return `<div class="flex flex-col items-end gap-2 shrink-0">${statusEl}<button class="cancel-withdraw-btn text-[var(--neon-red)] text-xs px-2 py-1 rounded border border-zinc-700 hover:border-[var(--neon-red)] transition-colors" data-id="${r.id}">${(t.withdraw_cancel || '取消')}</button></div>`;
+                                    return `<div class="flex flex-col items-end gap-2 shrink-0">${statusEl}<button class="cancel-withdraw-btn text-[var(--neon-red)] text-xs px-2 py-1 rounded transition-colors hover:text-white hover:bg-[var(--neon-red)]/15" data-id="${r.id}">${(t.withdraw_cancel || '取消')}</button></div>`;
                                 }
                                 return statusEl;
                             })();
@@ -3788,7 +3869,7 @@
                         btn.onclick = (e) => {
                             e.stopPropagation();
                             const id = btn.dataset.id;
-                            if (!confirm((t.withdraw_cancel_confirm || '确认取消此提现申请？金额将退回账户'))) return;
+                            if (!id || !userInfo?.username) return;
                             fetch(`${API}/api/withdraw/cancel`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
@@ -5702,5 +5783,14 @@
         })();
     </script> -->
     <script src="src/qa.js"></script>
+
+    <!-- 系统礼物浮层 -->
+    <div id="gift-overlay">
+        <div class="gift-wrap">
+            <button class="gift-close" id="gift-close" aria-label="关闭">✕</button>
+            <div class="gift-fab" id="gift-fab" title="点击领取免费游戏">🎁</div>
+            <div class="gift-tip" id="gift-tip">您有一份免费游戏礼物，点击领取！</div>
+        </div>
+    </div>
 </body>
 </html>

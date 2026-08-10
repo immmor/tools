@@ -322,7 +322,6 @@
                     body: JSON.stringify({ username: userInfo.username, game_type: 'wheel' })
                 });
                 const giftData = await giftResp.json();
-                if (window.pendingGift) { window.pendingGift.wheel = false; window.updateGameCostText && window.updateGameCostText('wheel'); }
                 if (giftData.success && giftData.gift) {
                     isWheelSpinning = true;
                     spinBtn.disabled = true;
@@ -348,6 +347,7 @@
                         updateBalanceDisplay(giftData.balance);
                         renderGameHistory('wheel');
                         showGameResult(giftData.prize > 0, giftData.prize, '🎁');
+                        if (window.pendingGift) { window.pendingGift.wheel = false; window.updateGameCostText && window.updateGameCostText('wheel'); }
                         isWheelSpinning = false;
                         spinBtn.disabled = false;
                     }, WHEEL_SPIN_MS);
@@ -456,7 +456,6 @@
                     body: JSON.stringify({ username: userInfo.username, game_type: 'slot' })
                 });
                 const giftData = await giftResp.json();
-                if (window.pendingGift) { window.pendingGift.slot = false; window.updateGameCostText && window.updateGameCostText('slot'); }
                 if (giftData.success && giftData.gift) {
                     isSlotSpinning = true;
                     slotBtn.disabled = true;
@@ -490,6 +489,7 @@
                         else { showGameResult(false, 0, '🎁'); }
                         updateBalanceDisplay(giftData.balance);
                         renderGameHistory('slot');
+                        if (window.pendingGift) { window.pendingGift.slot = false; window.updateGameCostText && window.updateGameCostText('slot'); }
                         isSlotSpinning = false;
                         slotBtn.disabled = false;
                     }, 3500);
@@ -717,6 +717,7 @@
             updateBalanceDisplay(parseFloat(JSON.parse(localStorage.getItem('userInfo') || '{}').balance || 0) + scratchPrizeAmount);
             renderGameHistory('scratch');
             showGameResult(true, scratchPrizeAmount, '🎁');
+            if (window.pendingGift) { window.pendingGift.scratch = false; window.updateGameCostText && window.updateGameCostText('scratch'); }
         };
 
         const newScratchBtn = document.getElementById('new-scratch');
@@ -742,7 +743,6 @@
                     body: JSON.stringify({ username: userInfo.username, game_type: 'scratch' })
                 });
                 const giftData = await giftResp.json();
-                if (window.pendingGift) { window.pendingGift.scratch = false; window.updateGameCostText && window.updateGameCostText('scratch'); }
                 if (giftData.success && giftData.gift) {
                     updateBalanceDisplay(giftData.balance);
                     hasValidCard = true;
