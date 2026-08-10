@@ -1255,6 +1255,37 @@
                             <tbody id="withdrawTableBody"></tbody>
                         </table>
                     </div>
+
+                    <!-- 邀请返现审核 -->
+                    <div class="data-table" style="margin-top: 1.5rem;">
+                        <div class="table-header">
+                            <h3>邀请返现审核</h3>
+                            <div style="display: flex; gap: 10px;">
+                                <select id="rebateStatusFilter" onchange="loadRebates()" style="padding: 0.5rem; border: 1px solid #e2e8f0; border-radius: 4px;">
+                                    <option value="">全部</option>
+                                    <option value="pending">待审核</option>
+                                    <option value="approved">已通过</option>
+                                    <option value="rejected">已驳回</option>
+                                </select>
+                                <button class="add-btn" onclick="loadRebates()" style="background-color: #667eea;">刷新</button>
+                            </div>
+                        </div>
+                        <table id="rebateTable">
+                            <thead>
+                                <tr>
+                                    <th>邀请人</th>
+                                    <th>被邀请人</th>
+                                    <th>订单金额</th>
+                                    <th>返现金额</th>
+                                    <th>状态</th>
+                                    <th>申请时间</th>
+                                    <th>审核时间</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="rebateTableBody"></tbody>
+                        </table>
+                    </div>
                 </div>
             </main>
         </div>
@@ -2310,6 +2341,7 @@
                     await loadScratchBets();
                 } else if (pageName === 'withdraw') {
                     await loadWithdrawals();
+                    await loadRebates();
                 }
         }
 
@@ -4167,6 +4199,58 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
             if (res.success) {
                 alert(res.message);
                 loadWithdrawals();
+            } else {
+                alert(res.message || '操作失败');
+            }
+        }
+
+        // ========== 邀请返现审核 ==========
+        async function loadRebates() {
+            const tbody = document.getElementById('rebateTableBody');
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">加载中...</td></tr>';
+            const status = document.getElementById('rebateStatusFilter')?.value || '';
+            const url = `/api/rebates${status ? '?status=' + status : ''}`;
+            const res = await newApiRequest(url, 'GET');
+            if (res.success && res.list) {
+                renderRebates(res.list);
+            } else {
+                tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:red;">加载失败: ${res.message || '未知错误'}</td></tr>`;
+            }
+        }
+
+        function renderRebates(list) {
+            const tbody = document.getElementById('rebateTableBody');
+            if (!list.length) {
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#999;">暂无返现记录</td></tr>';
+                return;
+            }
+            const statusMap = { pending: '待审核', approved: '已通过', rejected: '已驳回' };
+            const statusColor = { pending: '#e53e3e', approved: '#48bb78', rejected: '#a0aec0' };
+            tbody.innerHTML = list.map(r => `
+                <tr>
+                    <td>${escHtml(r.inviter)}</td>
+                    <td>${escHtml(r.invitee)}</td>
+                    <td>¥${parseFloat(r.order_price || 0).toFixed(2)}</td>
+                    <td style="color:#48bb78;font-weight:bold;">¥${parseFloat(r.rebate || 0).toFixed(2)}</td>
+                    <td style="color:${statusColor[r.status] || '#000'}">${statusMap[r.status] || r.status}</td>
+                    <td>${r.created_at || ''}</td>
+                    <td>${r.reviewed_at || '-'}</td>
+                    <td>${r.status === 'pending' ? `<button class="add-btn" style="background:#48bb78;" onclick="reviewRebate('${escHtml(r.inviter)}','${escHtml(r.invitee)}','approve')">通过</button> <button class="delete-btn" onclick="reviewRebate('${escHtml(r.inviter)}','${escHtml(r.invitee)}','reject')">驳回</button>` : '-'}</td>
+                </tr>
+            `).join('');
+        }
+
+        async function reviewRebate(inviter, invitee, action) {
+            if (action === 'approve') {
+                if (!confirm(`确认通过 ${invitee} 给 ${inviter} 的返现？将发放到邀请人余额。`)) return;
+            } else {
+                if (!confirm(`确认驳回 ${invitee} 给 ${inviter} 的返现？`)) return;
+            }
+            const body = { inviter, invitee, action, operator: currentUserInfo?.username || 'admin' };
+            const res = await newApiRequest('/api/rebates', 'POST', body);
+            if (res.success) {
+                alert(res.message);
+                loadRebates();
             } else {
                 alert(res.message || '操作失败');
             }
