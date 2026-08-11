@@ -959,8 +959,7 @@
         carousel.id = 'winner-carousel';
         const label = document.createElement('span');
         label.className = 'winner-carousel-label';
-        label.setAttribute('data-i18n', 'winner_latest');
-        label.textContent = tr('winner_latest');
+        label.textContent = '🏆';
         carousel.appendChild(label);
         const view = document.createElement('div');
         view.className = 'winner-carousel-view';
