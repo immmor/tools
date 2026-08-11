@@ -630,6 +630,21 @@
             display: none;
         }
 
+        .loading-dots::after {
+            content: '';
+            display: inline-block;
+            width: 1em;
+            text-align: left;
+            animation: loading-dots 1.2s steps(4, end) infinite;
+        }
+        @keyframes loading-dots {
+            0% { content: ''; }
+            25% { content: '.'; }
+            50% { content: '..'; }
+            75% { content: '...'; }
+            100% { content: ''; }
+        }
+
         @keyframes pulse-dot {
             0%, 100% { transform: scale(1); box-shadow: 0 0 5px var(--neon-red); }
             50% { transform: scale(1.2); box-shadow: 0 0 10px var(--neon-red); }
@@ -1485,7 +1500,7 @@
                 </button>
                 <div id="notification-dropdown" class="dropdown-menu fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-[70%] z-[100] flex flex-col">
                     <div class="px-4 py-3 border-b border-zinc-800 text-center shrink-0">
-                        <h3 class="text-sm font-bold text-white" data-i18n="nav_notifications">通知</h3>
+                        <h3 id="notification-title" class="text-sm font-bold text-white cursor-pointer hover:text-[var(--neon-blue)] transition-colors" data-i18n="nav_notifications" title="点击刷新通知">通知</h3>
                     </div>
                     <div id="notification-list" class="flex-1 overflow-y-auto">
                         <div class="px-4 py-3 text-sm text-zinc-400 text-center" data-i18n="no_notifications">暂无通知</div>
@@ -3575,6 +3590,24 @@
                     console.error('消息加载失败:', error);
                 }
             };
+
+            const notificationTitle = document.getElementById('notification-title');
+            if (notificationTitle) {
+                notificationTitle.addEventListener('click', async () => {
+                    if (notificationTitle.classList.contains('loading')) return;
+                    notificationTitle.classList.add('loading');
+                    const dots = document.createElement('span');
+                    dots.className = 'loading-dots';
+                    notificationTitle.appendChild(dots);
+                    const minDelay = new Promise(res => setTimeout(res, 1200));
+                    try {
+                        await Promise.all([loadMessages(), minDelay]);
+                    } finally {
+                        dots.remove();
+                        notificationTitle.classList.remove('loading');
+                    }
+                });
+            }
             
             if (userInfo) {
                 loadMessages();
