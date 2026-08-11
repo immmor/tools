@@ -845,7 +845,7 @@
                     overflow: hidden;
                     border-radius: 0.9rem;
                     margin-bottom: 1.5rem;
-                    padding: 0.55rem 0.9rem;
+                    padding: 0.3rem 0.9rem;
                     background: linear-gradient(135deg, rgba(20,24,40,0.85), rgba(30,20,48,0.85));
                     border: 1px solid rgba(255,200,80,0.35);
                     box-shadow: 0 0 18px rgba(255,170,0,0.18), inset 0 0 12px rgba(0,243,255,0.08);
@@ -853,10 +853,13 @@
                 }
                 .winner-carousel-label {
                     flex-shrink: 0;
+                    width: 2.4rem;
+                    height: 2.4rem;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
                     font-weight: 800;
-                    font-size: 0.85rem;
-                    letter-spacing: 0.05em;
-                    padding: 0.25rem 0.6rem;
+                    font-size: 1.1rem;
                     border-radius: 0.5rem;
                     color: #1a1206;
                     background: linear-gradient(90deg, #ffd34d, #ff9d2f);
@@ -889,8 +892,6 @@
                     border-radius: 0.6rem;
                     white-space: nowrap;
                     font-size: 0.88rem;
-                    background: rgba(255,255,255,0.04);
-                    border: 1px solid rgba(255,255,255,0.08);
                 }
                 .winner-slide .winner-icon {
                     font-size: 1rem;
@@ -957,10 +958,6 @@
         const carousel = document.createElement('div');
         carousel.className = 'winner-carousel';
         carousel.id = 'winner-carousel';
-        const label = document.createElement('span');
-        label.className = 'winner-carousel-label';
-        label.textContent = '🏆';
-        carousel.appendChild(label);
         const view = document.createElement('div');
         view.className = 'winner-carousel-view';
         const track = document.createElement('div');
