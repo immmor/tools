@@ -230,6 +230,9 @@
     };
 
     const initGameCenter = () => {
+        // 中奖信息轮播（纯前端模拟）
+        initWinnerCarousel();
+
         // Tab切换功能
         const gameTabs = document.querySelectorAll('.game-tab');
         const gameContents = document.querySelectorAll('.game-tab-content');
@@ -822,5 +825,151 @@
 
         // 暴露给外部（登录 / 登出时主动刷新幸运转盘数据）
         window.GameCenterModule = { renderGameHistory, updateBalanceDisplay };
+    };
+
+    // ===== 中奖信息轮播（纯前端模拟） =====
+    const initWinnerCarousel = () => {
+        const tabsEl = document.querySelector('.game-tabs');
+        if (!tabsEl || document.getElementById('winner-carousel')) return;
+
+        // 注入样式（跑马灯 + 玻璃拟态卡片）
+        if (!document.getElementById('winner-carousel-style')) {
+            const style = document.createElement('style');
+            style.id = 'winner-carousel-style';
+            style.textContent = `
+                .winner-carousel {
+                    position: relative;
+                    display: flex;
+                    align-items: center;
+                    gap: 0.75rem;
+                    overflow: hidden;
+                    border-radius: 0.9rem;
+                    margin-bottom: 1.5rem;
+                    padding: 0.55rem 0.9rem;
+                    background: linear-gradient(135deg, rgba(20,24,40,0.85), rgba(30,20,48,0.85));
+                    border: 1px solid rgba(255,200,80,0.35);
+                    box-shadow: 0 0 18px rgba(255,170,0,0.18), inset 0 0 12px rgba(0,243,255,0.08);
+                    backdrop-filter: blur(6px);
+                }
+                .winner-carousel-label {
+                    flex-shrink: 0;
+                    font-weight: 800;
+                    font-size: 0.85rem;
+                    letter-spacing: 0.05em;
+                    padding: 0.25rem 0.6rem;
+                    border-radius: 0.5rem;
+                    color: #1a1206;
+                    background: linear-gradient(90deg, #ffd34d, #ff9d2f);
+                    box-shadow: 0 0 10px rgba(255,180,40,0.55);
+                    white-space: nowrap;
+                }
+                .winner-carousel-view {
+                    position: relative;
+                    flex: 1;
+                    overflow: hidden;
+                }
+                .winner-carousel-track {
+                    display: flex;
+                    width: max-content;
+                    gap: 1.2rem;
+                    animation: winnerMarquee 45s linear infinite;
+                }
+                .winner-carousel:hover .winner-carousel-track {
+                    animation-play-state: paused;
+                }
+                @keyframes winnerMarquee {
+                    0%   { transform: translateX(0); }
+                    100% { transform: translateX(-50%); }
+                }
+                .winner-slide {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.45rem;
+                    padding: 0.3rem 0.8rem;
+                    border-radius: 0.6rem;
+                    white-space: nowrap;
+                    font-size: 0.88rem;
+                    background: rgba(255,255,255,0.04);
+                    border: 1px solid rgba(255,255,255,0.08);
+                }
+                .winner-slide .winner-icon {
+                    font-size: 1rem;
+                    animation: winnerBlink 1.4s ease-in-out infinite;
+                }
+                @keyframes winnerBlink {
+                    0%, 100% { opacity: 1; }
+                    50% { opacity: 0.4; }
+                }
+                .winner-slide .winner-name {
+                    font-weight: 700;
+                    color: #ffb347;
+                    font-family: ui-monospace, monospace;
+                }
+                .winner-slide .winner-game {
+                    color: #7fd8ff;
+                }
+                .winner-slide .winner-amount {
+                    font-weight: 800;
+                    color: #ffe25a;
+                    font-family: ui-monospace, monospace;
+                    text-shadow: 0 0 8px rgba(255,210,60,0.5);
+                }
+                .winner-slide .winner-amount::before {
+                    content: '🪙 ';
+                }
+            `;
+            document.head.appendChild(style);
+        }
+
+        // 模拟数据
+        const tr = (k) => (window.translations && window.translations[currentLang] && window.translations[currentLang][k]) || k;
+        const mailPrefix = ['a', 'b', 'c', 'm', 'x', 'k', 't', 'z', 'user', 'vip', '2386'];
+        const mailDomains = ['qq.com', '163.com', 'gmail.com', 'outlook.com', 'foxmail.com'];
+        const gameKeys = ['game_wheel', 'game_slot', 'game_scratch'];
+        const prizes = [200, 100, 50, 20];
+        const buildName = () => {
+            const p = mailPrefix[Math.floor(Math.random() * mailPrefix.length)];
+            const d = mailDomains[Math.floor(Math.random() * mailDomains.length)];
+            return p + '***@' + d;
+        };
+        const mockWinners = [];
+        for (let i = 0; i < 10; i++) {
+            const name = buildName();
+            const gameKey = gameKeys[Math.floor(Math.random() * gameKeys.length)];
+            const amount = prizes[Math.floor(Math.random() * prizes.length)];
+            mockWinners.push({ name, gameKey, game: tr(gameKey), amount });
+        }
+
+        const buildSlide = (w) => {
+            const slide = document.createElement('div');
+            slide.className = 'winner-slide';
+            slide.innerHTML =
+                '<span class="winner-icon">🎉</span>' +
+                '<span class="winner-name">' + w.name + '</span>' +
+                '<span data-i18n="winner_at">' + tr('winner_at') + '</span>' +
+                '<span class="winner-game" data-i18n="' + w.gameKey + '">' + w.game + '</span>' +
+                '<span data-i18n="winner_won">' + tr('winner_won') + '</span>' +
+                '<span class="winner-amount">' + w.amount + '</span>';
+            return slide;
+        };
+
+        // 创建 DOM（放在 Tab 上方）
+        const carousel = document.createElement('div');
+        carousel.className = 'winner-carousel';
+        carousel.id = 'winner-carousel';
+        const label = document.createElement('span');
+        label.className = 'winner-carousel-label';
+        label.setAttribute('data-i18n', 'winner_latest');
+        label.textContent = tr('winner_latest');
+        carousel.appendChild(label);
+        const view = document.createElement('div');
+        view.className = 'winner-carousel-view';
+        const track = document.createElement('div');
+        track.className = 'winner-carousel-track';
+        // 复制一份数据实现无缝循环
+        [...mockWinners, ...mockWinners].forEach(w => track.appendChild(buildSlide(w)));
+        view.appendChild(track);
+        carousel.appendChild(view);
+        tabsEl.insertAdjacentElement('beforebegin', carousel);
     };
 })();
