@@ -1108,7 +1108,7 @@
                             <span class="predict-pool-amount">${formatMoney(totalPool)}</span>
                         </div>
                         <div class="predict-pool-bar">${barSegments}</div>
-                        <div class="grid gap-1 mt-2" style="display:flex; flex-wrap:wrap; gap:6px;">${optionsHTML}</div>
+                        <div class="grid gap-1 mt-2" style="display:flex; flex-direction:column; gap:6px;">${optionsHTML}</div>
                         ${t.winner !== null && t.winner !== undefined ? `<p class="text-[10px] mt-2" style="color:var(--neon-green);">结果: ${t.options[t.winner]}</p>` : ''}
                     </div>`;
             }).join('');
