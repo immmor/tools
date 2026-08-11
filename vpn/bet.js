@@ -176,12 +176,14 @@
         const containerMap = {
             'wheel': 'wheel-my-bets',
             'slot': 'slot-my-bets',
-            'scratch': 'scratch-my-bets'
+            'scratch': 'scratch-my-bets',
+            'predict': 'predict-my-bets'
         };
         const listMap = {
             'wheel': 'wheel-bet-list',
             'slot': 'slot-bet-list',
-            'scratch': 'scratch-bet-list'
+            'scratch': 'scratch-bet-list',
+            'predict': 'predict-bet-list'
         };
         const container = document.getElementById(containerMap[gameType]);
         const list = document.getElementById(listMap[gameType]);
@@ -246,11 +248,11 @@
                 const activeContent = document.getElementById(`tab-${tabId}`);
                 if (activeContent) {
                     activeContent.classList.remove('hidden');
-                    if (['wheel', 'slot', 'scratch', 'football'].includes(tabId)) {
+                    if (['wheel', 'slot', 'scratch'].includes(tabId)) {
                         renderGameHistory(tabId);
                     }
-                    if (tabId === 'football' && typeof window.FootballModule?.loadMatches === 'function') {
-                        window.FootballModule.loadMatches();
+                    if (tabId === 'predict') {
+                        PredictModule.loadTopics();
                     }
                     if (tabId === 'scratch') {
                         if (isPrizeAdded) {
@@ -968,4 +970,240 @@
         carousel.appendChild(view);
         tabsEl.insertAdjacentElement('beforebegin', carousel);
     };
+    // ===== 预测未来 — 无庄家彩池模式 =====
+    const PredictModule = (() => {
+        const API_BASE = 'https://api.immmor.com';
+        let allTopics = [];
+        let myPredictBets = {}; // { topicId: { optionIndex, amount } } 本地追踪
+
+        const $ = (id) => document.getElementById(id);
+
+        function getUserInfo() {
+            try { return JSON.parse(localStorage.getItem('userInfo') || 'null'); } catch (e) { return null; }
+        }
+
+        function formatMoney(v) {
+            if (v == null) return '¥0';
+            return '¥' + Number(v).toFixed(2);
+        }
+
+        function toLocalTime(isoStr) {
+            if (!isoStr) return '';
+            try {
+                const d = new Date(isoStr + 'Z');
+                if (isNaN(d.getTime())) return isoStr;
+                return d.toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+            } catch (e) { return isoStr; }
+        }
+
+        function getRemaining(isoStr) {
+            if (!isoStr) return '';
+            const diff = new Date(isoStr + 'Z') - new Date();
+            if (diff <= 0) return '已结束';
+            const dh = Math.floor(diff / 3600000);
+            const dm = Math.floor((diff % 3600000) / 60000);
+            if (dh >= 24) return `${Math.floor(dh / 24)}天${dh % 24}h`;
+            if (dh > 0) return `${dh}h${dm}m`;
+            return `${dm}分钟`;
+        }
+
+        function isExpired(isoStr) {
+            return isoStr && new Date(isoStr + 'Z') <= new Date();
+        }
+
+        function getColor(idx) {
+            const colors = ['#00f3ff', '#ea00ff', '#ff5e00', '#00ff41', '#ffe600', '#ff3b3b'];
+            return colors[idx % colors.length];
+        }
+
+        function generateTopics() {
+            // 兜底数据，正常情况由后端返回
+            return [];
+        }
+
+        async function loadTopics() {
+            if (!$('predict-topics')) return;
+            try {
+                const res = await fetch(`${API_BASE}/api/predict/list`);
+                const data = await res.json();
+                if (data.success && data.topics) {
+                    // 统一数据格式
+                    allTopics = data.topics.map(t => ({
+                        ...t,
+                        question: t.question || t.title,
+                        options: t.options || [],
+                        option_pools: t.option_pools || t.options.map(() => 0),
+                        pool: Array.isArray(t.option_pools) ? t.option_pools.reduce((a, b) => a + b, 0) : Number(t.pool) || 0,
+                        option_bettors: t.option_bettors || t.options.map(() => 0),
+                        winner: t.winner == null || Number(t.winner) < 0 ? null : t.winner
+                    }));
+                    console.log('预测话题已从后端加载:', allTopics.length, '个');
+                } else {
+                    allTopics = [];
+                }
+            } catch (e) {
+                console.warn('加载预测话题失败', e);
+                allTopics = [];
+            }
+            renderTopics();
+            loadMyBets();
+        }
+
+        function renderTopics() {
+            const container = $('predict-topics');
+            if (!container) return;
+            if (!allTopics.length) {
+                container.innerHTML = '<p class="text-xs text-center text-zinc-500 py-8">暂无预测话题</p>';
+                return;
+            }
+            container.innerHTML = allTopics.map((t) => {
+                const active = t.status === 'active';
+                const expired = active && isExpired(t.end_time);
+                const displayStatus = !active ? 'resolved' : expired ? 'ended' : 'active';
+                const totalPool = t.pool || 0;
+
+                const barHTML = t.options.map((_, i) => {
+                    const amt = (t.option_pools && t.option_pools[i]) || 0;
+                    const pct = totalPool > 0 ? (amt / totalPool * 100) : (1 / t.options.length * 100);
+                    const isWinner = !active && t.winner === i;
+                    const odds = amt > 0 ? (totalPool / amt).toFixed(2) : '--';
+                    return { pct, isWinner, odds, color: getColor(i) };
+                });
+
+                const myBet = myPredictBets[t.id];
+                const optionsHTML = t.options.map((opt, i) => {
+                    const b = barHTML[i];
+                    let cls = 'predict-opt-btn';
+                    if (myBet && myBet.optionIndex === i) cls += ' selected';
+                    if (b.isWinner) cls += ' resolved-winner';
+                    return `
+                        <button class="${cls}" data-topic="${t.id}" data-opt="${i}" ${!active ? 'disabled' : ''}>
+                            <span class="text-xs flex items-center gap-2">
+                                <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${b.color};flex-shrink:0;"></span>
+                                ${b.isWinner ? '🏆 ' : ''}${opt}
+                            </span>
+                            <span class="text-[10px] font-mono" style="color:#999;">
+                                赔率 ${b.odds} | ${Number(b.pct).toFixed(1)}%
+                            </span>
+                        </button>`;
+                }).join('');
+
+                const barSegments = barHTML.map(b =>
+                    `<div class="predict-pool-segment" style="width:${b.pct}%;background:${b.color};${b.isWinner ? 'box-shadow:0 0 8px var(--neon-green);' : ''}"></div>`
+                ).join('');
+
+                return `
+                    <div class="predict-topic-card ${!active ? 'resolved' : ''}">
+                        <div class="flex justify-between items-start mb-1">
+                            <p class="text-xs font-bold leading-relaxed flex-1 mr-2">${t.question}</p>
+                            <div class="flex items-center gap-2 shrink-0">
+                                <span class="predict-badge ${displayStatus}">${
+                                    displayStatus === 'active' ? '进行中' :
+                                    displayStatus === 'resolved' ? '已结算' : '已截止'
+                                }</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="predict-time">${displayStatus === 'active' ? '截止: ' + toLocalTime(t.end_time) + ' (' + getRemaining(t.end_time) + ')' : '已结束'}</span>
+                            <span class="predict-pool-amount">${formatMoney(totalPool)}</span>
+                        </div>
+                        <div class="predict-pool-bar">${barSegments}</div>
+                        <div class="grid gap-1 mt-2" style="display:flex; flex-wrap:wrap; gap:6px;">${optionsHTML}</div>
+                        ${t.winner !== null && t.winner !== undefined ? `<p class="text-[10px] mt-2" style="color:var(--neon-green);">结果: ${t.options[t.winner]}</p>` : ''}
+                    </div>`;
+            }).join('');
+
+            container.querySelectorAll('.predict-opt-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    placeBet(parseInt(btn.dataset.topic), parseInt(btn.dataset.opt));
+                });
+            });
+        }
+
+        async function placeBet(topicId, optIndex) {
+            const user = getUserInfo();
+            if (!user?.username) {
+                alert('请先登录');
+                document.getElementById('auth-toggle')?.click();
+                return;
+            }
+            const topic = allTopics.find(t => String(t.id) === String(topicId));
+            if (!topic || topic.status !== 'active') return;
+            const optName = topic.options[optIndex];
+            const amount = prompt(`你对「${topic.question}」\n投注: ${optName}\n请输入投注金额（¥）：`, '10');
+            if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) return;
+            const betAmount = parseFloat(Number(amount).toFixed(2));
+
+            try {
+                const res = await fetch(`${API_BASE}/api/predict/bet`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: user.username, topicId, optionIndex: optIndex, optionName: optName, amount: betAmount })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    myPredictBets[topicId] = { optionIndex: optIndex, amount: betAmount };
+                    if (typeof updateBalanceDisplay === 'function') updateBalanceDisplay(data.balance);
+                    await loadTopics();
+                    renderTopics();
+                    loadMyBets();
+                } else {
+                    alert(data.message || '投注失败');
+                }
+            } catch (e) {
+                console.warn('投注API失败', e);
+                alert('网络错误，请重试');
+            }
+        }
+
+        async function loadMyBets() {
+            const container = $('predict-my-bets');
+            const listEl = $('predict-bet-list');
+            if (!container || !listEl) return;
+            const user = getUserInfo();
+            if (!user?.username) { container.classList.add('hidden'); return; }
+
+            try {
+                const res = await fetch(`${API_BASE}/api/game/history`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: user.username, gameType: 'predict' })
+                });
+                const data = await res.json();
+                const records = (data.history || []).map(r => {
+                    let parsed;
+                    try { parsed = JSON.parse(r.result || '{}'); } catch (e) { parsed = {}; }
+                    return { ...r, parsed };
+                });
+                if (records.length) renderMyBets(records);
+                else container.classList.add('hidden');
+            } catch (e) {
+                container.classList.add('hidden');
+            }
+        }
+
+        function renderMyBets(bets) {
+            const container = $('predict-my-bets');
+            const listEl = $('predict-bet-list');
+            if (!container || !listEl) return;
+
+            listEl.innerHTML = bets.map(b => {
+                const topic = allTopics.find(t => String(t.id) === String(b.parsed.topic_id));
+                const optName = b.parsed.option_name || `选项${(b.parsed.option_index || 0) + 1}`;
+                const amount = parseFloat(b.cost) || 0;
+                return `
+                    <div class="flex items-center justify-between text-[11px] py-1 px-2 rounded" style="background: rgba(255,255,255,0.03);">
+                        <div class="flex items-center gap-2 min-w-0 flex-1">
+                            <span class="truncate" style="max-width:140px;">${topic?.question || '未知话题'}</span>
+                            <span class="text-[10px] shrink-0" style="color:#999;">→ ${optName}</span>
+                        </div>
+                        <span class="font-mono shrink-0" style="color:var(--neon-blue); font-weight:700;">${formatMoney(amount)}</span>
+                    </div>`;
+            }).join('');
+            container.classList.remove('hidden');
+        }
+
+        return { loadTopics, loadMyBets };
+    })();
+
 })();

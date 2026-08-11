@@ -2757,6 +2757,236 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
         }
       }
 
+      // ========== 游戏中心：预测未来（无庄家彩池）==========
+
+      // 获取话题列表（前端用）
+      if (path === '/api/predict/list' && request.method === 'GET') {
+        try {
+          const row = await DB.prepare('SELECT value FROM link WHERE key = ?').bind('predict_topics').first();
+          const topics = row?.value ? JSON.parse(row.value) : [];
+          // 从 game_bet 实时聚合各选项奖池与人数
+          const bets = await DB.prepare("SELECT result, cost FROM game_bet WHERE game_type='predict'").all();
+          const poolMap = {};
+          const bettorMap = {};
+          for (const b of (bets.results || [])) {
+            let parsed;
+            try { parsed = JSON.parse(b.result || '{}'); } catch (e) { continue; }
+            const tid = String(parsed.topic_id);
+            const oi = parsed.option_index;
+            const cost = b.cost || 0;
+            if (!poolMap[tid]) poolMap[tid] = {};
+            if (!bettorMap[tid]) bettorMap[tid] = {};
+            poolMap[tid][oi] = (poolMap[tid][oi] || 0) + cost;
+            bettorMap[tid][oi] = (bettorMap[tid][oi] || 0) + 1;
+          }
+          for (const t of topics) {
+            const optionNames = t.options || t.option_pools || [];
+            const optLen = optionNames.length;
+            t.options = optionNames;
+            t.option_pools = Array.from({ length: optLen }, (_, i) => poolMap[String(t.id)]?.[i] || 0);
+            t.option_bettors = Array.from({ length: optLen }, (_, i) => bettorMap[String(t.id)]?.[i] || 0);
+            t.pool = t.option_pools.reduce((a, b) => a + b, 0);
+          }
+          return resJson({ success: true, topics });
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
+        }
+      }
+
+      // 下注
+      if (path === '/api/predict/bet' && request.method === 'POST') {
+        try {
+          const { username, topicId, optionIndex, optionName, amount } = await request.json();
+          if (!username) return resJson({ success: false, message: '请先登录' }, 401);
+          if (amount == null || amount <= 0) return resJson({ success: false, message: '金额无效' }, 400);
+
+          const user = await DB.prepare('SELECT rowid, username, balance FROM user WHERE username = ?').bind(username).first();
+          if (!user) return resJson({ success: false, message: '用户不存在' }, 404);
+          if (user.balance < amount) return resJson({ success: false, message: '余额不足' }, 400);
+
+          // 检查话题是否存在且有效
+          const topicRow = await DB.prepare('SELECT value FROM link WHERE key = ?').bind('predict_topics').first();
+          const topics = topicRow?.value ? JSON.parse(topicRow.value) : [];
+          const topic = topics.find(t => t.id == topicId);
+          if (!topic) return resJson({ success: false, message: '话题不存在' }, 404);
+          if (topic.status !== 'active') return resJson({ success: false, message: '该话题已截止' }, 400);
+
+          const result = JSON.stringify({ topic_id: topicId, option_index: optionIndex, option_name: optionName || '' });
+          const now = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+
+          await DB.prepare('UPDATE user SET balance = balance - ? WHERE username = ?').bind(amount, username).run();
+          await DB.prepare('INSERT INTO game_bet (username, game_type, cost, prize, result, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+            .bind(username, 'predict', amount, 0, result, now).run();
+
+          return resJson({ success: true, balance: user.balance - amount });
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
+        }
+      }
+
+      // ========== 预测管理 API ==========
+
+      // 管理端获取话题列表
+      if (path === '/api/predict/admin/list' && request.method === 'POST') {
+        try {
+          const row = await DB.prepare('SELECT value FROM link WHERE key = ?').bind('predict_topics').first();
+          const topics = row?.value ? JSON.parse(row.value) : [];
+          // 统计每个话题的下注人数
+          for (const t of topics) {
+            const bets = await DB.prepare("SELECT username, SUM(cost) as total FROM game_bet WHERE game_type='predict' AND json_extract(result, '$.topic_id') = ? GROUP BY username")
+              .bind(String(t.id)).all();
+            t.bettor_count = bets.results?.length || 0;
+            t.total_pool = t.pools ? t.pools.reduce((a, b) => a + b, 0) : 0;
+          }
+          return resJson({ success: true, topics });
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
+        }
+      }
+
+      // 管理端获取预测投注记录
+      if (path === '/api/predict/admin/bets' && request.method === 'POST') {
+        try {
+          const { topicId } = await request.json();
+          let bets;
+          if (topicId != null) {
+            bets = await DB.prepare("SELECT rowid, username, cost, prize, result, created_at FROM game_bet WHERE game_type='predict' AND json_extract(result, '$.topic_id') = ? ORDER BY created_at DESC")
+              .bind(String(topicId)).all();
+          } else {
+            bets = await DB.prepare("SELECT rowid, username, cost, prize, result, created_at FROM game_bet WHERE game_type='predict' ORDER BY created_at DESC LIMIT 200")
+              .all();
+          }
+          return resJson({ success: true, bets: bets.results || [] });
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
+        }
+      }
+
+      // 创建话题
+      if (path === '/api/predict/admin/create' && request.method === 'POST') {
+        try {
+          const { question, options, end_time } = await request.json();
+          if (!question || !options || !options.length || !end_time) {
+            return resJson({ success: false, message: '缺少必要参数' }, 400);
+          }
+          const row = await DB.prepare('SELECT value FROM link WHERE key = ?').bind('predict_topics').first();
+          const topics = row?.value ? JSON.parse(row.value) : [];
+          const maxId = topics.reduce((max, t) => Math.max(max, t.id || 0), 0);
+          const now = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+          const topic = {
+            id: maxId + 1,
+            question,
+            options,
+            pools: options.map(() => 0),
+            end_time: new Date(end_time).toISOString(),
+            status: 'active',
+            winner: -1,
+            created_at: new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString()
+          };
+          topics.push(topic);
+          await DB.prepare('UPDATE link SET value = ?, updated_at = ? WHERE key = ?')
+            .bind(JSON.stringify(topics), now, 'predict_topics').run();
+          return resJson({ success: true, topic });
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
+        }
+      }
+
+      // 更新话题
+      if (path === '/api/predict/admin/update' && request.method === 'POST') {
+        try {
+          const { id, question, options, end_time, status } = await request.json();
+          if (!id) return resJson({ success: false, message: '缺少话题ID' }, 400);
+          const row = await DB.prepare('SELECT value FROM link WHERE key = ?').bind('predict_topics').first();
+          const topics = row?.value ? JSON.parse(row.value) : [];
+          const idx = topics.findIndex(t => t.id == id);
+          if (idx < 0) return resJson({ success: false, message: '话题不存在' }, 404);
+          if (question !== undefined) topics[idx].question = question;
+          if (options !== undefined) {
+            if (topics[idx].options.length !== options.length) {
+              topics[idx].pools = options.map(() => 0);
+            }
+            topics[idx].options = options;
+          }
+          if (end_time !== undefined) topics[idx].end_time = new Date(end_time).toISOString();
+          if (status !== undefined) topics[idx].status = status;
+          const now = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+          await DB.prepare('UPDATE link SET value = ?, updated_at = ? WHERE key = ?')
+            .bind(JSON.stringify(topics), now, 'predict_topics').run();
+          return resJson({ success: true, topic: topics[idx] });
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
+        }
+      }
+
+      // 删除话题
+      if (path === '/api/predict/admin/delete' && request.method === 'POST') {
+        try {
+          const { id } = await request.json();
+          if (!id) return resJson({ success: false, message: '缺少话题ID' }, 400);
+          const row = await DB.prepare('SELECT value FROM link WHERE key = ?').bind('predict_topics').first();
+          let topics = row?.value ? JSON.parse(row.value) : [];
+          topics = topics.filter(t => t.id != id);
+          const now = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+          await DB.prepare('UPDATE link SET value = ?, updated_at = ? WHERE key = ?')
+            .bind(JSON.stringify(topics), now, 'predict_topics').run();
+          return resJson({ success: true });
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
+        }
+      }
+
+      // 结算话题
+      if (path === '/api/predict/admin/resolve' && request.method === 'POST') {
+        try {
+          const { id, winner } = await request.json();
+          if (id == null || winner == null) return resJson({ success: false, message: '缺少参数' }, 400);
+
+          const row = await DB.prepare('SELECT value FROM link WHERE key = ?').bind('predict_topics').first();
+          const topics = row?.value ? JSON.parse(row.value) : [];
+          const idx = topics.findIndex(t => t.id == id);
+          if (idx < 0) return resJson({ success: false, message: '话题不存在' }, 404);
+          if (topics[idx].status === 'resolved') return resJson({ success: false, message: '该话题已结算' }, 400);
+
+          // 计算总奖池和中奖选项奖池
+          const allBets = await DB.prepare("SELECT rowid, username, cost, result FROM game_bet WHERE game_type='predict' AND json_extract(result, '$.topic_id') = ?")
+            .bind(String(id)).all();
+          const bets = allBets.results || [];
+          const totalPool = bets.reduce((s, b) => s + Number(b.cost), 0);
+          const winBets = bets.filter(b => {
+            try { return JSON.parse(b.result).option_index == winner; } catch { return false; }
+          });
+          const winPool = winBets.reduce((s, b) => s + Number(b.cost), 0);
+
+          // 抽水 3%，赢家瓜分剩余 97%
+          const FEE_RATE = 0.03;
+          const fee = Math.floor(totalPool * FEE_RATE);
+          const payoutPool = totalPool - fee;
+
+          const now = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+
+          // 派奖
+          for (const b of winBets) {
+            const prize = winPool > 0 ? Math.floor((Number(b.cost) / winPool) * payoutPool) : 0;
+            if (prize > 0) {
+              await DB.prepare('UPDATE user SET balance = balance + ? WHERE username = ?').bind(prize, b.username).run();
+              await DB.prepare('UPDATE game_bet SET prize = ? WHERE rowid = ?').bind(prize, b.rowid).run();
+            }
+          }
+
+          // 更新话题状态
+          topics[idx].status = 'resolved';
+          topics[idx].winner = winner;
+          topics[idx].fee = fee;
+          await DB.prepare('UPDATE link SET value = ?, updated_at = ? WHERE key = ?')
+            .bind(JSON.stringify(topics), now, 'predict_topics').run();
+
+          return resJson({ success: true, totalPool, fee, payoutPool, winPool, winCount: winBets.length });
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
+        }
+      }
+
       // ========== 提现：保存收款码 ==========
       // ========== 提现：获取已保存的收款码 ==========
       if (path === '/api/withdraw/get-qr' && request.method === 'POST') {
