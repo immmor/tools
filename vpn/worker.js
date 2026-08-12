@@ -10,6 +10,12 @@ function fbChoiceLabel(_match, choice) {
   return map[choice] || choice;
 }
 
+// SHA-256 十六进制哈希工具（用于签名校验）
+async function sha256hex(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 // 自动续费单个用户的函数
 async function autoRenewUser(DB, user) {
   const now = new Date();
@@ -577,6 +583,56 @@ export default {
           return resJson({ success: true, message: '登录成功！', userInfo: { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates }, pricePlan });
         } else {
           return resJson({ success: true, needRegister: true, address: address, message: '该钱包地址未注册，请完成注册！' });
+        }
+      }
+
+      // ========== 独立免密快捷登录接口（凭 用户名 + 签名 登录，不依赖 web3-login） ==========
+      if (path === '/api/quick-login' && request.method === 'POST') {
+        const params = await request.json();
+        const { username, sign, ts } = params;
+
+        if (!username || !sign || !ts) {
+          return resJson({ success: false, message: '参数不完整！' }, 400);
+        }
+
+        // 防重放：签名时间戳须在 5 分钟内
+        const nowTs = Date.now();
+        if (Math.abs(nowTs - Number(ts)) > 5 * 60 * 1000) {
+          return resJson({ success: false, message: '登录链接已过期，请重新操作！' }, 401);
+        }
+
+        const user = await DB
+          .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders, invite_code, invited_user, rebates FROM user WHERE username = ?')
+          .bind(username)
+          .first();
+
+        if (user) {
+          // 签名校验：sign = sha256(username + '|' + v_token + '|' + ts)
+          // 只有持有该用户 v_token 的已登录会话才能生成有效签名，外人无法伪造
+          const expected = await sha256hex(`${username}|${user.v_token || ''}|${ts}`);
+          if (expected !== sign) {
+            return resJson({ success: false, message: '签名校验失败！' }, 401);
+          }
+
+          const now = new Date(new Date().getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+          const loginInfoEntry = { type: 'quick-login', time: now, ip: request.headers.get('CF-Connecting-IP') || 'unknown', location: [request.headers.get('CF-IPCountry'), request.headers.get('CF-IPRegion'), request.headers.get('CF-IPCity')].filter(Boolean).join(' ') || 'unknown', domain: request.url, device: request.headers.get('User-Agent') || 'unknown', acceptLanguage: request.headers.get('Accept-Language') || 'unknown', country: request.headers.get('CF-IPCountry') || 'unknown', referer: request.headers.get('Referer') || 'unknown' };
+
+          const loginInfo = await DB.prepare('SELECT login_info FROM user WHERE rowid = ?').bind(user.rowid).first();
+          let updatedLoginInfo = JSON.stringify([loginInfoEntry]);
+          if (loginInfo?.login_info) {
+            try {
+              const existingInfo = JSON.parse(loginInfo.login_info);
+              existingInfo.unshift(loginInfoEntry);
+              updatedLoginInfo = JSON.stringify(existingInfo.slice(0, 10));
+            } catch (e) {}
+          }
+          await DB.prepare('UPDATE user SET login_info = ? WHERE rowid = ?').bind(updatedLoginInfo, user.rowid).run();
+
+          const pricePlan = user.price_plan ? JSON.parse(user.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
+
+          return resJson({ success: true, message: '登录成功！', userInfo: { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates }, pricePlan });
+        } else {
+          return resJson({ success: false, message: '用户不存在' }, 401);
         }
       }
 

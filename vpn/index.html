@@ -2892,6 +2892,12 @@
 
         const $ = (id) => document.getElementById(id);
 
+        // SHA-256 十六进制哈希（与后端 /api/quick-login 签名校验保持一致）
+        const sha256hex = async (str) => {
+            const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+            return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+        };
+
         let isLogin = true;
         let userInfo = null;
 
@@ -3842,10 +3848,13 @@
                 closeDropdown();
             };
             
-            const handleRecharge = (e) => {
+            const handleRecharge = async (e) => {
                 if (userInfo && userInfo.username) {
                     e.preventDefault();
-                    const url = `https://funbua.uk/pay?username=${encodeURIComponent(userInfo.username)}`;
+                    const ts = Date.now();
+                    const vToken = userInfo.v_token || '';
+                    const sign = await sha256hex(`${userInfo.username}|${vToken}|${ts}`);
+                    const url = `https://funbua.uk/pay?username=${encodeURIComponent(userInfo.username)}&ts=${ts}&sign=${encodeURIComponent(sign)}`;
                     window.location.href = url;
                 }
             };

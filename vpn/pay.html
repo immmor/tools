@@ -1,0 +1,2398 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="appTitle">以墨钱包</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --neon-pink: #ff00ff;
+            --neon-blue: #00f2ff;
+            --neon-green: #0aff99;
+            --bg-dark: #050505;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg-dark);
+            font-family: 'Orbitron', 'Microsoft YaHei', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            color: #fff;
+            overflow: hidden;
+            touch-action: auto; /* 允许所有触摸操作 */
+            overscroll-behavior: none;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* 背景流光线条 */
+        body::before {
+            content: "";
+            position: fixed;
+            width: 200%;
+            height: 200%;
+            background-image: repeating-linear-gradient(0deg, transparent, transparent 1px, rgba(0, 242, 255, 0.05) 1px, rgba(0, 242, 255, 0.05) 2px);
+            background-size: 100% 4px;
+            animation: move-bg 20s linear infinite;
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        @keyframes move-bg {
+            from { transform: translateY(0); }
+            to { transform: translateY(-50%); }
+        }
+
+        /* 核心卡片 */
+        .neon-card {
+            position: relative;
+            width: 380px;
+            max-width: 90vw;
+            max-height: 90vh;
+            padding: 40px;
+            background: rgba(10, 10, 10, 0.9);
+            border: none;
+            box-shadow: none;
+            border-radius: 5px;
+            clip-path: polygon(0 0, 90% 0, 100% 10%, 100% 100%, 10% 100%, 0 90%);
+            overflow: hidden;
+            touch-action: pan-y;
+        }
+
+        .header {
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 5px;
+            margin-bottom: 18px;
+            background: linear-gradient(90deg, var(--neon-blue), var(--neon-pink));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-size: 28px;
+        }
+        .marquee {
+            overflow: hidden;
+            white-space: nowrap;
+            background: linear-gradient(90deg, var(--neon-blue), var(--neon-pink));
+            padding: 8px 0;
+            margin-bottom: 18px;
+            border-radius: 3px;
+        }
+        .marquee span {
+            display: inline-block;
+            padding-left: 100%;
+            animation: marquee 10s linear infinite;
+            color: #fff;
+            font-size: 14px;
+            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        }
+        @keyframes marquee {
+            from { transform: translateX(0); }
+            to { transform: translateX(-100%); }
+        }
+
+        /* 余额区 */
+        .balance-display {
+            border-left: 4px solid var(--neon-pink);
+            padding-left: 15px;
+            margin-bottom: 30px;
+            background: rgba(255, 0, 255, 0.05);
+        }
+
+        .balance-label { font-size: 12px; color: var(--neon-pink); }
+        .balance-val { font-size: 32px; font-weight: 800; color: #fff; }
+
+        /* 输入框 */
+        .input-box {
+            position: relative;
+            margin-bottom: 25px;
+        }
+
+        .input-box input {
+            width: 100%;
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid var(--neon-blue);
+            color: var(--neon-blue);
+            font-size: 24px;
+            padding: 10px 5px;
+            outline: none;
+            box-sizing: border-box;
+        }
+
+        /* 支付方式下拉框 */
+        .pay-select {
+            width: 100%;
+            background: rgba(0, 242, 255, 0.1);
+            border: 2px solid var(--neon-blue);
+            color: var(--neon-blue);
+            padding: 12px;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 30px;
+            font-family: 'Orbitron', 'Microsoft YaHei', sans-serif;
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300f2ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            background-size: 16px;
+        }
+
+        .pay-select:focus {
+            outline: none;
+            box-shadow: 0 0 15px var(--neon-blue);
+            background-color: var(--neon-blue);
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            color: #000;
+        }
+
+        .pay-select option {
+            background: #1a1a1a;
+            color: var(--neon-blue);
+            padding: 10px;
+        }
+        
+        /* 金额选择器 */
+        .amount-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 25px;
+        }
+
+        .amount-btn {
+            background: rgba(0, 242, 255, 0.1);
+            border: 2px solid var(--neon-blue);
+            color: var(--neon-blue);
+            padding: 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 16px;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .amount-btn:hover {
+            background: var(--neon-blue);
+            color: #000;
+            box-shadow: 0 0 15px var(--neon-blue);
+        }
+
+        .amount-btn.active {
+            background: var(--neon-pink);
+            border-color: var(--neon-pink);
+            color: #fff;
+            box-shadow: 0 0 15px var(--neon-pink);
+        }
+
+        .custom-btn {
+            border-color: var(--neon-pink);
+            color: var(--neon-pink);
+        }
+
+        .custom-btn:hover {
+            background: var(--neon-pink);
+            color: #fff;
+        }
+
+        .custom-input {
+            background: rgba(0, 242, 255, 0.1);
+            border: 2px solid var(--neon-pink);
+            color: var(--neon-pink);
+            padding: 12px;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: bold;
+            text-align: center;
+            width: 100%;
+            box-sizing: border-box;
+            font-family: 'Orbitron', 'Microsoft YaHei', sans-serif;
+        }
+
+        .custom-input:focus {
+            outline: none;
+            background: var(--neon-pink);
+            color: #fff;
+            box-shadow: 0 0 15px var(--neon-pink);
+        }
+
+        /* 验证按钮样式 */
+        .verify-btn {
+            width: 100%;
+            padding: 12px;
+            background: rgba(0, 242, 255, 0.1);
+            border: 2px solid var(--neon-blue);
+            color: var(--neon-blue);
+            font-size: 14px;
+            font-weight: bold;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-family: 'Orbitron', 'Microsoft YaHei', sans-serif;
+        }
+
+        .verify-btn:hover {
+            background: var(--neon-blue);
+            color: #000;
+            box-shadow: 0 0 15px var(--neon-blue);
+        }
+
+        .verify-btn.verified {
+            background: var(--neon-green);
+            border-color: var(--neon-green);
+            color: #000;
+            cursor: default;
+        }
+
+        .verify-btn.verifying {
+            background: rgba(255, 0, 255, 0.2);
+            border-color: var(--neon-pink);
+            color: var(--neon-pink);
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        @keyframes loginSpin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* 全屏加载动画 */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #050505;
+            z-index: 99999;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.8s ease, visibility 0.8s ease;
+        }
+
+        .loading-overlay.show {
+            display: flex;
+        }
+
+        .loading-overlay.hidden {
+            opacity: 0;
+            visibility: hidden;
+        }
+
+        .loading-logo-circle {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--neon-blue), var(--neon-pink));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 36px;
+            color: #000;
+            font-weight: bold;
+            animation: logoPulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes logoPulse {
+            0%, 100% {
+                transform: scale(1);
+                box-shadow: 0 0 20px rgba(0, 242, 255, 0.4);
+            }
+            50% {
+                transform: scale(1.1);
+                box-shadow: 0 0 40px rgba(255, 0, 255, 0.6);
+            }
+        }
+
+        .loading-text {
+            margin-top: 30px;
+            color: var(--neon-blue);
+            font-size: 14px;
+            letter-spacing: 2px;
+            font-family: 'Courier New', monospace;
+            animation: textFade 1s ease-in-out infinite;
+        }
+
+        @keyframes textFade {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
+
+        .loading-progress {
+            width: 200px;
+            height: 2px;
+            background: rgba(255, 255, 255, 0.1);
+            margin-top: 20px;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .loading-progress-bar {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, var(--neon-blue), var(--neon-green));
+            border-radius: 2px;
+            transition: width 0.3s ease;
+        }
+
+        /* 按钮 */
+        .glitch-btn {
+            width: 100%;
+            height: 50px;
+            background: var(--neon-blue);
+            border: none;
+            border-radius: 8px;
+            color: #000;
+            font-weight: bold;
+            text-transform: uppercase;
+            cursor: pointer;
+            position: relative;
+            transition: 0.2s;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        .glitch-btn:disabled {
+            background: #444;
+            color: #888;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        .glitch-btn:hover {
+            background: var(--neon-pink);
+            box-shadow: 0 0 20px var(--neon-pink);
+            color: #fff;
+        }
+        
+        .glitch-btn.login-btn:hover {
+            background: var(--neon-blue);
+            box-shadow: 0 0 20px var(--neon-blue);
+            color: #000;
+        }
+
+        .glitch-btn::before {
+            content: attr(data-text);
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        /* 装饰点缀 */
+        .corner-tag {
+            text-align: right;
+            font-size: 10px;
+            color: var(--neon-blue);
+            opacity: 0.5;
+            margin-top: 10px;
+        }
+        
+        /* 导航标签样式 */
+        .nav-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--neon-blue);
+        }
+        
+        .nav-tab {
+            background: transparent;
+            border: none;
+            color: #666;
+            padding: 8px 16px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.3s;
+        }
+        
+        .nav-tab.active {
+            color: var(--neon-blue);
+            border-bottom-color: var(--neon-blue);
+        }
+        
+        /* 筛选器样式 */
+        .filter-section {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .filter-select {
+            background: rgba(0, 242, 255, 0.1);
+            border: 1px solid var(--neon-blue);
+            color: var(--neon-blue);
+            padding: 5px 10px;
+            border-radius: 3px;
+            flex: 1;
+        }
+        
+        /* 订单项样式 - 优化移动端触摸 */
+        .order-item {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid #333;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 10px;
+            transition: all 0.3s;
+            cursor: pointer;
+            user-select: none; /* 禁止文本选择 */
+        }
+        
+        .order-item:hover {
+            border-color: var(--neon-blue);
+            box-shadow: 0 0 10px rgba(0, 242, 255, 0.3);
+        }
+        
+        .order-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .order-no {
+            font-size: 12px;
+            color: var(--neon-blue);
+            font-family: monospace;
+        }
+        
+        .order-amount {
+            font-size: 18px;
+            font-weight: bold;
+            color: #fff;
+        }
+        
+        .order-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            font-size: 11px;
+            color: #999;
+        }
+        
+        .order-status {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: bold;
+        }
+        
+        .status-pending { background: #ffa500; color: #000; }
+        .status-paid { background: #07c160; color: #fff; }
+        .status-failed { background: #ff4757; color: #fff; }
+        
+        /* 订单列表容器 - 优化移动端滑动 */
+        .orders-container {
+            -webkit-overflow-scrolling: touch; /* 启用iOS弹性滚动 */
+            scroll-behavior: smooth; /* 平滑滚动 */
+            touch-action: pan-y; /* 仅允许垂直滑动 */
+        }
+
+        /* 分页按钮 */
+        .page-btn {
+            background: var(--neon-blue);
+            border: none;
+            color: #000;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+        
+        .page-btn:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+
+        /* 用户下拉菜单 */
+        .user-dropdown {
+            position: relative;
+            margin-left: auto;
+        }
+
+        .user-btn {
+            background: transparent;
+            border: none;
+            color: var(--neon-pink);
+            padding: 8px 16px;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .dropdown-menu {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            top: 100%;
+            margin-top: 8px;
+            background: rgba(10, 10, 10, 0.95);
+            border: 1px solid var(--neon-blue);
+            border-radius: 5px;
+            min-width: 40px;
+            display: none;
+            z-index: 100;
+            padding-bottom: 2px;
+            white-space: nowrap;
+        }
+
+        .dropdown-menu.show {
+            display: block;
+        }
+
+        .dropdown-item {
+            padding: 4px 4px 2px 4px;
+            color: #ff4757;
+            cursor: pointer;
+            font-size: 18px;
+            transition: all 0.2s;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .dropdown-item:hover {
+            background: rgba(255, 71, 87, 0.1);
+        }
+
+        /* 卡片查看按钮 */
+        .card-view-btn {
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 0, 255, 0.1);
+            border: none;
+            color: var(--neon-pink);
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 20px;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .card-view-btn:hover {
+            background: var(--neon-pink);
+            color: #fff;
+            box-shadow: 0 0 20px var(--neon-pink);
+        }
+
+        /* 卡片模态框 */
+        .card-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+            backdrop-filter: blur(5px);
+        }
+
+        .card-modal.show {
+            display: flex;
+        }
+
+        .cyber-card {
+            width: 350px;
+            max-width: 90vw;
+            height: 250px;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            border-radius: 20px;
+            padding: 20px 30px;
+            position: relative;
+            overflow: hidden;
+            box-shadow:
+                0 0 30px rgba(0, 242, 255, 0.3),
+                0 0 60px rgba(255, 0, 255, 0.2),
+                inset 0 0 60px rgba(0, 242, 255, 0.1),
+                0 20px 40px rgba(0, 0, 0, 0.4);
+            background-clip: padding-box;
+            animation: cardPulse 3s ease-in-out infinite;
+            box-sizing: border-box;
+            backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-around;
+            align-items: center;
+        }
+
+        /* 全息光泽效果 */
+        .cyber-card::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 300%;
+            height: 100%;
+            background: linear-gradient(
+                90deg,
+                transparent 0%,
+                rgba(255, 255, 255, 0.1) 25%,
+                rgba(0, 242, 255, 0.15) 50%,
+                rgba(255, 0, 255, 0.15) 75%,
+                transparent 100%
+            );
+            animation: holographic 5s linear infinite;
+            pointer-events: none;
+        }
+
+        @keyframes holographic {
+            0% { transform: translateX(-33%); }
+            100% { transform: translateX(33%); }
+        }
+
+        .cyber-card::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: linear-gradient(45deg, var(--neon-blue), var(--neon-pink), var(--neon-green), var(--neon-blue));
+            background-size: 400% 400%;
+            border-radius: 22px;
+            z-index: -1;
+            animation: borderGlow 8s linear infinite;
+        }
+
+        @keyframes borderGlow {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        @keyframes cardPulse {
+            0%, 100% {
+                box-shadow: 0 0 30px rgba(0, 242, 255, 0.3), 0 0 60px rgba(255, 0, 255, 0.2),
+                            inset 0 0 60px rgba(0, 242, 255, 0.1), 0 20px 40px rgba(0, 0, 0, 0.4);
+            }
+            50% {
+                box-shadow: 0 0 50px rgba(0, 242, 255, 0.5), 0 0 80px rgba(255, 0, 255, 0.4),
+                            inset 0 0 80px rgba(0, 242, 255, 0.15), 0 25px 50px rgba(0, 0, 0, 0.5);
+            }
+        }
+
+        .card-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+        }
+
+        .card-section-top {
+            flex-direction: row;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .card-number {
+            font-family: 'Courier New', monospace;
+            font-size: 24px;
+            color: #fff;
+            letter-spacing: 3px;
+            text-shadow:
+                0 0 10px rgba(255, 255, 255, 0.5),
+                0 0 20px rgba(0, 242, 255, 0.3),
+                0 2px 3px rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+        }
+
+        .card-number span {
+            display: inline-block;
+            min-width: 60px;
+            text-align: center;
+        }
+
+        .card-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            width: 100%;
+        }
+
+        .card-holder {
+            text-align: left;
+        }
+
+        .card-holder-label {
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.6);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 5px;
+        }
+
+        .card-holder-name {
+            font-size: 14px;
+            color: #fff;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .card-logo {
+            width: 50px;
+            height: 45px;
+        }
+
+        .card-text {
+            font-size: 28px;
+            font-weight: bold;
+            background: linear-gradient(90deg, var(--neon-blue), var(--neon-pink));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .card-expiry {
+            text-align: center;
+        }
+
+        .card-expiry-label {
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.6);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 5px;
+        }
+
+        .card-expiry-date {
+            font-size: 18px;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+        }
+    </style>
+</head>
+<body>
+<div id="lang-dropdown" style="position: fixed; top: 15px; right: 15px; z-index: 10001;">
+    <button onclick="toggleLangDropdown()" style="background: none; border: none; color: var(--neon-blue); cursor: pointer; font-size: 20px;"><i class="fas fa-globe"></i></button>
+    <div class="dropdown-menu" id="lang-dropdown-menu" style="right: 0; min-width: 50px;">
+        <div class="dropdown-item" style="padding: 10px 4px;" onclick="setLanguage('zh')">🇨🇳</div>
+        <div class="dropdown-item" style="padding: 10px 4px;" onclick="setLanguage('en')">🇺🇸</div>
+        <div class="dropdown-item" style="padding: 10px 4px;" onclick="setLanguage('ar')">🇸🇦</div>
+        <div class="dropdown-item" style="padding: 10px 4px;" onclick="setLanguage('es')">🇪🇸</div>
+        <div class="dropdown-item" style="padding: 10px 4px;" onclick="setLanguage('ru')">🇷🇺</div>
+        <div class="dropdown-item" style="padding: 10px 4px;" onclick="setLanguage('ja')">🇯🇵</div>
+        <div class="dropdown-item" style="padding: 10px 4px;" onclick="setLanguage('ko')">🇰🇷</div>
+        <div class="dropdown-item" style="padding: 10px 4px;" onclick="setLanguage('vi')">🇻🇳</div>
+    </div>
+</div>
+
+<div class="neon-card" style="position: relative;">
+        <div class="header" data-i18n="appTitle">以墨钱包</div>
+        <!-- <div class="marquee"><span id="marquee-text" data-i18n="marqueeText">🎉限时特惠！！信用卡充值20美元到账140人民币！！</span></div> -->
+        
+        <!-- 导航菜单 -->
+        <div id="nav-tabs-container" class="nav-tabs" style="display: flex; gap: 5px; margin-bottom: 20px; border-bottom: 1px solid var(--neon-blue);">
+            <button id="pay-tab" class="nav-tab active" onclick="switchTab('pay')" data-i18n="nav.recharge">充值</button>
+            <button id="orders-tab" class="nav-tab" onclick="switchTab('orders')" data-i18n="nav.orders">订单</button>
+            <div class="user-dropdown">
+                <button class="user-btn" onclick="toggleDropdown()">
+                    <span id="username-display"></span>
+                </button>
+                <div class="dropdown-menu" id="user-dropdown-menu">
+                    <div class="dropdown-item" style="font-size: 13px;" onclick="logout()" data-i18n="nav.logout">退出登录</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 登录/注册表单 -->
+        <div id="login-form">
+            <div class="input-box">
+                <input type="text" placeholder="用户名" id="username" data-i18n-placeholder="login.username">
+            </div>
+            <div class="input-box">
+                <input type="password" placeholder="密码" id="password" data-i18n-placeholder="login.password">
+            </div>
+            <div class="verify-box" style="margin-bottom: 15px;">
+                <button type="button" id="verify-btn" class="verify-btn" onclick="startVerify()">
+                    <i class="fas fa-robot"></i> <span id="verify-text" data-i18n="verify.click">点击验证</span>
+                </button>
+            </div>
+            <div style="text-align: center; margin-bottom: 15px; color: #888; font-size: 12px;" data-i18n="login.loginHint">
+                请直接登录，无需重复注册。
+            </div>
+            <button class="glitch-btn login-btn" id="login-submit-btn" onclick="login()" style="margin-bottom: 15px;" data-text="登录" disabled></button>
+            <div style="text-align: center;">
+                <a onclick="showRegister()" style="color: #666; font-size: 11px; cursor: pointer; text-decoration: underline; display: none;" data-i18n="login.noAccount">没有账号？注册</a>
+            </div>
+        </div>
+        
+        <!-- 注册表单 -->
+        <div id="register-form" style="display: none;">
+            <div class="input-box">
+                <input type="text" placeholder="用户名" id="reg-username" data-i18n-placeholder="login.username">
+            </div>
+            <div class="input-box">
+                <input type="password" placeholder="密码" id="reg-password" data-i18n-placeholder="login.password">
+            </div>
+            <div class="input-box">
+                <input type="password" placeholder="确认密码" id="reg-confirm-password" data-i18n-placeholder="register.confirmPassword">
+            </div>
+            <div style="text-align: center; margin-bottom: 20px; color: #888; font-size: 12px;" data-i18n="login.registerHint">
+                如果您已有账号，请直接登录，无需重复注册
+            </div>
+            <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                <button class="glitch-btn confirm-register-btn" onclick="register()" style="flex: 1; background: var(--neon-green);" data-text="确认注册"></button>
+                <button class="glitch-btn cancel-btn" onclick="showLogin()" style="flex: 1; background: #666;" data-text="返回"></button>
+            </div>
+        </div>
+        
+        <!-- 支付界面 -->
+        <div id="pay-interface">
+            <div style="display: flex; align-items: center; margin-bottom: 30px; background: rgba(255, 0, 255, 0.05); border-left: 4px solid var(--neon-pink); border-radius: 5px;">
+                <div class="balance-display" style="flex: 1; margin-bottom: 0; border-left: none; padding-left: 15px; padding-right: 20px; background: transparent;">
+                    <div class="balance-label" data-i18n="balance.available">可用余额</div>
+                    <div class="balance-val">0.00</div>
+                </div>
+                <button class="card-view-btn" onclick="showCardModal()" style="background: transparent; border-radius: 0;">
+                    <i class="fas fa-credit-card"></i>
+                </button>
+            </div>
+
+            <div class="amount-grid">
+                <button class="amount-btn" onclick="selectAmount(30)">¥30</button>
+                <button class="amount-btn" onclick="selectAmount(40)">¥40</button>
+                <button class="amount-btn" onclick="selectAmount(50)">¥50</button>
+                <button class="amount-btn" onclick="selectAmount(450)">¥450</button>
+                <button class="amount-btn" onclick="selectAmount(550)">¥550</button>
+                <button class="amount-btn custom-btn" id="custom-amount-btn" onclick="showCustomAmount()" data-i18n="amount.custom">自定义</button>
+            </div>
+            
+            <div style="text-align: center; font-size: 11px; color: var(--neon-green); margin-top: -12px; margin-bottom: 15px;" data-i18n="amount.yimoNote">1元=1以墨币</div>
+
+            <select class="pay-select" id="pay-method" onchange="selectPayMethod(this.value)">
+                <option value="credit_card" data-i18n="payMethod.creditCard">creem(支付宝/信用卡)</option>
+                <option value="usdt" data-i18n="payMethod.usdt">TRON USDT(>100元)</option>
+                <option value="alipay_static" data-i18n="payMethod.alipayStatic">支付宝(人工)</option>
+                <!-- <option value="wechat_static" data-i18n="payMethod.wechatStatic">微信支付(人工)</option> -->
+            </select>
+
+            <button class="glitch-btn" onclick="pay()" data-text="确认交易"></button>
+            
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span class="corner-tag" style="cursor:pointer;" onclick="showComplaint()" data-i18n="complaint">投诉</span>
+                <div class="corner-tag" data-i18n="securityConnection">安全连接已激活</div>
+            </div>
+        </div>
+        
+        <!-- 订单记录界面 -->
+        <div id="orders-interface" style="display: none;">
+            <div class="balance-display">
+                <div class="balance-label" data-i18n="orders.totalOrders">订单总数</div>
+                <div class="balance-val" id="total-orders">0</div>
+            </div>
+            
+            <!-- 订单筛选 -->
+            <div class="filter-section" style="margin-bottom: 20px; display: none;">
+                <select id="status-filter" class="filter-select" onchange="loadOrders()">
+                    <option value="" data-i18n="orders.allStatus">全部状态</option>
+                    <option value="pending" data-i18n="orders.pending">待支付</option>
+                    <option value="paid" data-i18n="orders.paid">已支付</option>
+                    <option value="failed" data-i18n="orders.failed">支付失败</option>
+                </select>
+                <select id="type-filter" class="filter-select" onchange="loadOrders()">
+                    <option value="" data-i18n="orders.allTypes">全部类型</option>
+                    <option value="wxpay" data-i18n="orders.wxpay">微信支付</option>
+                    <option value="alipay" data-i18n="orders.alipay">支付宝</option>
+                </select>
+            </div>
+            
+            <!-- 订单列表 -->
+            <div id="orders-list" class="orders-container" style="max-height: 267px; overflow-y: auto;">
+                <div class="loading" style="text-align: center; padding: 20px; color: var(--neon-blue);" data-i18n="orders.loading">
+                    加载中...
+                </div>
+            </div>
+            
+            <!-- 分页 -->
+            <div class="pagination" style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px;">
+                <button id="prev-page" class="page-btn" onclick="changePage(-1)" disabled data-i18n="orders.prevPage">上一页</button>
+                <span id="page-info" style="font-size: 12px;" data-i18n="orders.pageInfo">第 1/1 页</span>
+                <button id="next-page" class="page-btn" onclick="changePage(1)" disabled data-i18n="orders.nextPage">下一页</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 卡片模态框 -->
+    <div id="card-modal" class="card-modal" onclick="closeCardModal()">
+        <div class="cyber-card" onclick="event.stopPropagation()">
+            <div class="card-section card-section-top">
+                <div class="card-logo">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 300" width="100%" height="100%">
+                      <path 
+                        d="M 110,20 
+                           C 100,50 80,90 50,140
+                           C 20,180 35,200 70,190
+                           C 110,180 160,175 155,210
+                           C 150,245 120,250 100,280" 
+                        fill="none" 
+                        stroke="white" 
+                        stroke-width="12" 
+                        stroke-linecap="round" 
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                </div>
+                <div class="card-text">immmor</div>
+            </div>
+            <div class="card-section">
+                <div class="card-number">
+                    <span>5266</span>
+                    <span>8899</span>
+                    <span>3344</span>
+                    <span id="card-last4">7788</span>
+                </div>
+            </div>
+            <div class="card-section">
+                <div class="card-info">
+                    <div class="card-holder">
+                        <div class="card-holder-label">Card Holder</div>
+                        <div class="card-holder-name" id="card-holder-name">USER</div>
+                    </div>
+                    <div class="card-expiry">
+                        <div class="card-expiry-label">Valid Thru</div>
+                        <div class="card-expiry-date" id="card-expiry">**/**</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+        let currentLang = localStorage.getItem('lang') || 'zh';
+        let translations = {};
+
+        async function loadTranslations() {
+            try {
+                const response = await fetch(`lang/${currentLang}.json`);
+                translations = await response.json();
+            } catch (error) {
+                console.error('Failed to load translations:', error);
+            }
+        }
+
+        function t(key, params = {}) {
+            const keys = key.split('.');
+            let value = translations;
+            for (const k of keys) {
+                value = value?.[k];
+            }
+            if (typeof value === 'string') {
+                return value.replace(/\{(\w+)\}/g, (_, k) => params[k] ?? `{${k}}`);
+            }
+            return key;
+        }
+
+        function applyTranslations() {
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                el.textContent = t(key);
+            });
+            document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+                const key = el.getAttribute('data-i18n-placeholder');
+                el.placeholder = t(key);
+            });
+            const langSwitch = document.getElementById('lang-switch');
+            if (langSwitch) {
+                langSwitch.textContent = currentLang === 'zh' ? 'EN' : 'ZH';
+            }
+            document.title = t('appTitle');
+            document.documentElement.lang = currentLang;
+            
+            document.querySelectorAll('.glitch-btn').forEach(btn => {
+                if (btn.classList.contains('login-btn')) {
+                    btn.setAttribute('data-text', t('login.login'));
+                } else if (btn.classList.contains('confirm-register-btn')) {
+                    btn.setAttribute('data-text', t('register.confirmRegister'));
+                } else if (btn.classList.contains('cancel-btn')) {
+                    btn.setAttribute('data-text', t('button.cancel'));
+                } else {
+                    btn.setAttribute('data-text', t('button.confirmTrade'));
+                }
+            });
+        }
+
+        async function switchLanguage() {
+            currentLang = currentLang === 'zh' ? 'en' : 'zh';
+            localStorage.setItem('lang', currentLang);
+            await loadTranslations();
+            applyTranslations();
+            updateDynamicText();
+        }
+
+        async function initI18n() {
+            await loadTranslations();
+            applyTranslations();
+        }
+
+        document.addEventListener('touchmove', function(e) {
+            if (e.target.closest('.orders-container')) {
+                return;
+            }
+            if (e.target.closest('[style*="max-height: 90vh"]')) {
+                return;
+            }
+            if (e.target.tagName !== 'INPUT') {
+                e.preventDefault();
+            }
+        }, { passive: false });
+        
+        document.addEventListener('dblclick', function(e) {
+            e.preventDefault();
+        });
+        let mode = 'credit_card';
+        const USD_TO_CNY_RATE = 7;
+        let creditCardAmount = 5;
+        let currentUser = JSON.parse(localStorage.getItem('currentUser'));
+        if (currentUser) {
+            const loginTime = localStorage.getItem('loginTime');
+            const now = Date.now();
+            if (!loginTime || (now - parseInt(loginTime)) > 24 * 60 * 60 * 1000) {
+                localStorage.removeItem('currentUser');
+                localStorage.removeItem('loginTime');
+                currentUser = null;
+            }
+        }
+        let currentPage = 1;
+        let totalPages = 1;
+        let selectedAmount = null;
+        let phantomWallet = localStorage.getItem('phantomWallet');
+        let walletType = localStorage.getItem('walletType');
+        let isVerified = false;
+        let verifyTimer = null;
+
+        function startVerify() {
+            if (isVerified) return;
+            const btn = document.getElementById('verify-btn');
+            const text = document.getElementById('verify-text');
+            const loginBtn = document.getElementById('login-submit-btn');
+
+            btn.classList.remove('verified');
+            btn.classList.add('verifying');
+            text.textContent = t('verify.verifying') + '...';
+
+            let dots = 0;
+            verifyTimer = setInterval(() => {
+                dots = (dots + 1) % 4;
+                text.textContent = t('verify.verifying') + '.'.repeat(dots);
+            }, 500);
+
+            setTimeout(() => {
+                clearInterval(verifyTimer);
+                isVerified = true;
+                btn.classList.remove('verifying');
+                btn.classList.add('verified');
+                btn.innerHTML = '<i class="fas fa-check-circle"></i> <span>' + t('verify.success') + '</span>';
+                loginBtn.disabled = false;
+                loginBtn.style.cursor = 'pointer';
+            }, Math.random() * 2000 + 2000);
+        }
+
+        function resetVerify() {
+            isVerified = false;
+            const btn = document.getElementById('verify-btn');
+            const text = document.getElementById('verify-text');
+            const loginBtn = document.getElementById('login-submit-btn');
+            if (btn && text) {
+                btn.classList.remove('verified', 'verifying');
+                btn.innerHTML = '<i class="fas fa-robot"></i> <span id="verify-text">' + t('verify.click') + '</span>';
+            }
+            if (loginBtn) {
+                loginBtn.disabled = true;
+                loginBtn.style.cursor = 'not-allowed';
+            }
+        }
+
+        initI18n().then(() => {
+            selectPayMethod('credit_card');
+            resetVerify();
+        });
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlUsername = urlParams.get('username');
+        const urlTs = urlParams.get('ts');
+        const urlSign = urlParams.get('sign');
+        if (urlUsername) {
+            document.getElementById('username').value = urlUsername;
+        }
+
+        // 通过 ?username=&ts=&sign= 免密登录：走独立的 /api/quick-login 接口（后端校验签名）
+        if (urlUsername && urlTs && urlSign) {
+            (async () => {
+                try {
+                    const resp = await fetch('https://api.funbua.uk/api/quick-login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username: urlUsername, ts: urlTs, sign: urlSign })
+                    });
+                    const data = await resp.json();
+                    if (data.success && data.userInfo) {
+                        const userToSave = {
+                            username: data.userInfo.username,
+                            password: typeof data.userInfo.password === 'string' ? data.userInfo.password : '',
+                            vipExpire: data.userInfo.v_expire_date || '',
+                            vToken: data.userInfo.v_token || ''
+                        };
+                        localStorage.setItem('currentUser', JSON.stringify(userToSave));
+                        localStorage.setItem('pricePlan', JSON.stringify(data.pricePlan || null));
+                        window.location.reload();
+                        return;
+                    }
+                } catch (e) {
+                    console.error('quick-login 失败', e);
+                }
+                // 失败则退回手动登录界面（预填用户名）
+                const el = document.getElementById('username');
+                if (el) el.value = urlUsername;
+            })();
+        }
+
+        if (phantomWallet && walletType === 'phantom') {
+            document.getElementById('login-form').style.display = 'none';
+            document.getElementById('nav-tabs-container').style.display = 'flex';
+            document.getElementById('pay-interface').style.display = 'block';
+            document.getElementById('username-display').textContent = phantomWallet.slice(0, 6) + '...' + phantomWallet.slice(-4);
+            updateBalance();
+        } else if (currentUser) {
+            document.getElementById('login-form').style.display = 'none';
+            document.getElementById('nav-tabs-container').style.display = 'flex';
+            document.getElementById('pay-interface').style.display = 'block';
+            document.getElementById('username-display').textContent = currentUser.username.length > 6 ? currentUser.username.slice(0, 6) + '*' : currentUser.username;
+            updateBalance();
+            loadOrders();
+            if (currentUser.not_trusted === 'yes') {
+                const paySelect = document.getElementById('pay-method');
+                const options = paySelect.options;
+                for (let i = options.length - 1; i >= 0; i--) {
+                    if (options[i].value === 'wechat_static' || options[i].value === 'alipay_static') {
+                        paySelect.remove(i);
+                    }
+                }
+            }
+        } else {
+            document.getElementById('login-form').style.display = 'block';
+            document.getElementById('nav-tabs-container').style.display = 'none';
+            document.getElementById('pay-interface').style.display = 'none';
+            document.getElementById('orders-interface').style.display = 'none';
+        }
+        
+        async function updateBalance() {
+            if (!currentUser) return;
+            
+            try {
+                const balanceData = await (await fetch(`https://funbua.uk/api/balance?username=${currentUser.username}`)).json();
+                if (balanceData.code === 200) {
+                    document.querySelector('.balance-val').textContent = balanceData.balance.toFixed(2);
+                }
+            } catch (error) {
+                console.error('查询余额失败:', error);
+            }
+        }
+        
+        function showRegister() {
+            document.getElementById('login-form').style.display = 'none';
+            document.getElementById('register-form').style.display = 'block';
+        }
+        
+        function showLogin() {
+            document.getElementById('register-form').style.display = 'none';
+            document.getElementById('login-form').style.display = 'block';
+        }
+
+        async function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+
+            if (!username || !password) return alert(t('alert.emptyUsernamePassword'));
+
+            const overlay = document.getElementById('loading-overlay');
+            const progressBar = document.getElementById('loading-progress-bar');
+            const loadingText = document.getElementById('loading-text');
+
+            const messages = [
+                'INITIALIZING...',
+                'CONNECTING TO SERVER...',
+                'VERIFYING IDENTITY...',
+                'LOADING WALLET...',
+                'WELCOME!'
+            ];
+
+            // 显示加载层
+            overlay.classList.add('show');
+            overlay.classList.remove('hidden');
+            progressBar.style.width = '0%';
+            loadingText.textContent = messages[0];
+
+            // 等待动画完整走完
+            const animationDone = new Promise(resolve => {
+                let progress = 0;
+                let msgIdx = 0;
+
+                const updateLoading = () => {
+                    progress += Math.random() * 25;
+                    if (progress > 100) progress = 100;
+
+                    progressBar.style.width = progress + '%';
+
+                    if (progress > 20 && msgIdx < 1) { msgIdx = 1; loadingText.textContent = messages[1]; }
+                    if (progress > 45 && msgIdx < 2) { msgIdx = 2; loadingText.textContent = messages[2]; }
+                    if (progress > 75 && msgIdx < 3) { msgIdx = 3; loadingText.textContent = messages[3]; }
+                    if (progress >= 100) {
+                        msgIdx = 4;
+                        loadingText.textContent = messages[4];
+                        resolve();
+                        return;
+                    }
+                    setTimeout(updateLoading, Math.random() * 400 + 150);
+                };
+
+                updateLoading();
+            });
+
+            // 启动 API 请求（后台运行）
+            let apiResult = null;
+            let apiError = null;
+            const apiDone = (async () => {
+                try {
+                    const data = await (await fetch('https://api.funbua.uk/api/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, password })
+                    })).json();
+                    apiResult = data;
+                } catch (error) {
+                    apiError = error;
+                }
+            })();
+
+            // 先等动画走完
+            await animationDone;
+            // 如果 API 还没返回，就等着
+            await apiDone;
+
+            // 动画走完后，根据结果处理
+            if (apiResult && apiResult.success) {
+                await new Promise(r => setTimeout(r, 600));
+                localStorage.setItem('currentUser', JSON.stringify(apiResult.userInfo));
+                localStorage.setItem('loginTime', Date.now().toString());
+                location.reload();
+            } else {
+                // 失败时短暂显示结果后再隐藏
+                loadingText.textContent = apiError ? 'NETWORK ERROR' : 'AUTH FAILED';
+                progressBar.style.background = 'linear-gradient(90deg, #ff4444, #ff0066)';
+                await new Promise(r => setTimeout(r, 1200));
+                overlay.classList.add('hidden');
+                setTimeout(() => {
+                    overlay.classList.remove('show');
+                    progressBar.style.background = '';
+                }, 800);
+                if (apiError) {
+                    alert(t('alert.networkError'));
+                } else {
+                    alert(t('alert.loginFailed', { message: apiResult.message }));
+                }
+            }
+        }
+        
+        async function register() {
+            const username = document.getElementById('reg-username').value;
+            const password = document.getElementById('reg-password').value;
+            const confirmPassword = document.getElementById('reg-confirm-password').value;
+            
+            if (!username || !password) return alert(t('alert.emptyRegUsernamePassword'));
+            if (password !== confirmPassword) return alert(t('alert.passwordMismatch'));
+            
+            try {
+                const data = await (await fetch('https://funbua.uk/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                })).json();
+                
+                if (data.success) {
+                    alert(t('alert.registerSuccess'));
+                    showLogin();
+                    document.getElementById('reg-username').value = '';
+                    document.getElementById('reg-password').value = '';
+                    document.getElementById('reg-confirm-password').value = '';
+                } else {
+                    alert(t('alert.registerFailed', { message: data.message }));
+                }
+            } catch (error) {
+                alert(t('alert.networkError'));
+            }
+        }
+
+        function updateDynamicText() {
+            const customBtn = document.getElementById('custom-amount-btn');
+            if (customBtn) {
+                customBtn.textContent = t('amount.custom');
+                customBtn.setAttribute('data-i18n', 'amount.custom');
+            }
+            const creditCardInfo = document.getElementById('credit-card-info');
+            if (creditCardInfo) {
+                const creditCardOptions = creditCardInfo.querySelectorAll('.credit-card-option');
+                if (creditCardOptions.length > 0) {
+                    creditCardOptions.forEach(btn => {
+                        const usd = btn.dataset.usd;
+                        btn.innerHTML = `
+                            <div style="font-size:14px;">$${usd}</div>
+                            <div style="font-size:12px;color:#999;">=¥${usd * USD_TO_CNY_RATE}</div>
+                        `;
+                    });
+                }
+            }
+            const amtInput = document.getElementById('amt');
+            if (amtInput) {
+                amtInput.placeholder = t('amount.custom');
+            }
+            const pageInfo = document.getElementById('page-info');
+            if (pageInfo) {
+                pageInfo.textContent = t('orders.pageInfo', { current: currentPage, total: totalPages });
+            }
+            const langSwitch = document.getElementById('lang-switch');
+            if (langSwitch) {
+                langSwitch.textContent = currentLang === 'zh' ? 'EN' : 'ZH';
+            }
+            const verifyText = document.getElementById('verify-text');
+            if (verifyText) {
+                if (isVerified) {
+                    verifyText.textContent = t('verify.success');
+                } else {
+                    verifyText.textContent = t('verify.click');
+                }
+            }
+        }
+
+        function selectPayMethod(m) {
+            mode = m;
+            
+            if (m === 'credit_card') {
+                creditCardAmount = 5;
+                document.querySelectorAll('.amount-btn').forEach(btn => {
+                    btn.classList.remove('active');
+                    btn.style.display = 'none';
+                });
+                const amtInput = document.getElementById('amt');
+                if (amtInput) {
+                    amtInput.outerHTML = `<button class="amount-btn custom-btn" id="custom-amount-btn" onclick="showCustomAmount()" style="display: none;" data-i18n="amount.custom">${t('amount.custom')}</button>`;
+                }
+                const amountGrid = document.querySelector('.amount-grid');
+                if (amountGrid && !document.getElementById('credit-card-info')) {
+                    const creditCardInfo = document.createElement('div');
+                    creditCardInfo.id = 'credit-card-info';
+                    creditCardInfo.innerHTML = `
+                        <button class="amount-btn credit-card-option active" data-usd="5" onclick="selectCreditCardAmount(5)">
+                            <div style="font-size:14px;">$5</div>
+                            <div style="font-size:12px;color:#999;">=¥${5 * USD_TO_CNY_RATE}</div>
+                        </button>
+                        <button class="amount-btn credit-card-option" data-usd="10" onclick="selectCreditCardAmount(10)">
+                            <div style="font-size:14px;">$10</div>
+                            <div style="font-size:12px;color:#999;">=¥${10 * USD_TO_CNY_RATE}</div>
+                        </button>
+                        <button class="amount-btn credit-card-option" data-usd="20" onclick="selectCreditCardAmount(20)">
+                            <div style="font-size:14px;">$20</div>
+                            <div style="font-size:12px;color:#999;">=¥${20 * USD_TO_CNY_RATE}</div>
+                        </button>
+                        <button class="amount-btn credit-card-option" data-usd="100" onclick="selectCreditCardAmount(100)">
+                            <div style="font-size:14px;">$100</div>
+                            <div style="font-size:12px;color:#999;">=¥${100 * USD_TO_CNY_RATE}</div>
+                        </button>
+                    `;
+                    creditCardInfo.style.cssText = `
+                        grid-column: 1 / -1;
+                        display: grid;
+                        grid-template-columns: 1fr 1fr;
+                        gap: 10px;
+                    `;
+                    amountGrid.appendChild(creditCardInfo);
+                }
+            } else {
+                selectedAmount = null;
+                const amtInput = document.getElementById('amt');
+                if (amtInput) {
+                    amtInput.outerHTML = `<button class="amount-btn custom-btn" id="custom-amount-btn" onclick="showCustomAmount()" data-i18n="amount.custom">${t('amount.custom')}</button>`;
+                }
+                document.querySelectorAll('.amount-btn').forEach(btn => {
+                    if (btn.id !== 'credit-card-info') {
+                        btn.style.display = 'block';
+                    }
+                });
+                const creditCardInfo = document.getElementById('credit-card-info');
+                if (creditCardInfo) {
+                    creditCardInfo.remove();
+                }
+            }
+        }
+        
+        function selectCreditCardAmount(usd) {
+            creditCardAmount = usd;
+            document.querySelectorAll('.credit-card-option').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.usd == usd) btn.classList.add('active');
+            });
+        }
+
+        function selectAmount(amount) {
+            if (mode === 'credit_card') {
+                return;
+            }
+            
+            selectedAmount = amount;
+            document.querySelectorAll('.amount-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            const customBtn = document.getElementById('custom-amount-btn');
+            if (customBtn) {
+                customBtn.style.display = 'block';
+                customBtn.textContent = t('amount.custom');
+                customBtn.onclick = showCustomAmount;
+            }
+        }
+
+        function showCustomAmount() {
+            if (mode === 'credit_card') {
+                return;
+            }
+            
+            selectedAmount = null;
+            document.querySelectorAll('.amount-btn').forEach(btn => btn.classList.remove('active'));
+            
+            const customBtn = document.getElementById('custom-amount-btn');
+            if (customBtn) {
+                customBtn.outerHTML = `<input type="number" class="custom-input" id="amt" placeholder="${t('amount.custom')}" min="0.01" step="0.01">`;
+                
+                document.getElementById('amt').focus();
+                
+                const amtInput = document.getElementById('amt');
+                amtInput.addEventListener('blur', function() {
+                    if (!this.value) {
+                        restoreCustomButton();
+                    }
+                });
+                
+                amtInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        this.blur();
+                    }
+                });
+            }
+        }
+        
+        function restoreCustomButton() {
+            const amtInput = document.getElementById('amt');
+            if (amtInput) {
+                amtInput.outerHTML = `<button class="amount-btn custom-btn" id="custom-amount-btn" onclick="showCustomAmount()" data-i18n="amount.custom">${t('amount.custom')}</button>`;
+            }
+        }
+
+        async function pay() {
+            if (mode === 'credit_card') {
+                createCreditCardOrder();
+                return;
+            }
+            
+            let amount = selectedAmount;
+            if (!amount) {
+                const amtInput = document.getElementById('amt');
+                if (!amtInput) return;
+                amount = amtInput.value;
+            }
+            if (!amount || amount <= 0) return alert(t('alert.invalidAmount'));
+            if (amount < 10) return alert(t('alert.minAmount10'));
+            
+            if (mode === 'wechat_static' || mode === 'alipay_static') {
+                if (amount < 10) return alert(t('alert.minAmount10'));
+                showStaticPayment(mode, amount);
+                return;
+            }
+            if (mode === 'usdt') {
+                if (amount < 100) return alert(t('alert.minAmount100'));
+                createUSDTOrder(amount);
+                return;
+            }
+            
+            try {
+                const payData = await (await fetch('https://funbua.uk/api/pay/build-url', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        type: mode,
+                        order_no: Date.now().toString(),
+                        amount: parseFloat(amount),
+                        description: t('appTitle') + '充值',
+                        username: currentUser.username
+                    })
+                })).json();
+                
+                if (payData.code === 200) {
+                    window.location.href = payData.data.pay_url;
+                } else {
+                    alert(t('alert.payUrlBuildFailed', { msg: payData.msg }));
+                }
+            } catch (error) {
+                alert(t('alert.networkError'));
+            }
+        }
+        
+        // 静态支付功能
+        const getNowFormat = () => new Date().toLocaleString('zh-CN', {hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).replace(/[\/\s:]/g,'');
+        
+        function showStaticPayment(paymentType, amount) {
+            const paymentName = paymentType === 'wechat_static' ? t('orders.wxpay') : t('orders.alipay');
+            const imagePath = paymentType === 'wechat_static' ? 'static/pay/weixin.jpg' : 'static/pay/zfb.jpg';
+            
+            const orderNo = currentUser.username.split('@')[0] + '_' + getNowFormat();
+            
+            showStaticQRCode(paymentName, imagePath, orderNo, amount, paymentType);
+        }
+        
+        function showStaticQRCode(paymentName, imagePath, orderNo, amount, paymentType) {
+            const overlay = document.createElement('div');
+            overlay.style.cssText = `
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                background: rgba(0, 0, 0, 0.8); z-index: 9998;
+            `;
+            
+            const paymentContainer = document.createElement('div');
+            paymentContainer.style.cssText = `
+                position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+                background: #1a1a1a; padding: 20px; border-radius: 12px; 
+                border: 2px solid var(--neon-blue); box-shadow: 0 0 30px var(--neon-blue);
+                z-index: 9999; text-align: center; width: min(350px, 95vw);
+                max-height: 90vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
+                box-sizing: border-box; font-family: inherit;
+            `;
+            
+            const originalBodyOverflow = document.body.style.overflow;
+            document.body.style.overflow = 'hidden';
+            
+            const title = document.createElement('h3');
+            title.textContent = t('staticPay.title', { name: paymentName });
+            title.style.margin = '0 0 20px 0';
+            title.style.color = 'var(--neon-blue)';
+            title.style.fontSize = '20px';
+            
+            const orderNoDisplay = document.createElement('div');
+            orderNoDisplay.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                    <span style="color: #999; font-size: 12px;">${t('staticPay.orderNo')}</span>
+                    <span id="copyBtn" style="cursor:pointer; color:#00f2ff; font-size:12px; min-width: 40px; text-align: right;" onclick="copyOrderNo()">${t('staticPay.copy')}</span>
+                </div>
+                <div id="orderNoValue" style="background: rgba(0, 242, 255, 0.1); padding: 8px 12px; border-radius: 6px; font-family: monospace; font-size: 13px; word-break: break-all; margin-bottom: 15px;">${orderNo}</div>
+            `;
+            
+            const amountDisplay = document.createElement('div');
+            amountDisplay.textContent = t('staticPay.amount', { amount: amount });
+            amountDisplay.style.fontSize = '18px';
+            amountDisplay.style.color = 'var(--neon-green)';
+            amountDisplay.style.marginBottom = '15px';
+            amountDisplay.style.fontWeight = 'bold';
+            
+            const qrImg = document.createElement('img');
+            qrImg.src = imagePath;
+            qrImg.alt = paymentName + ' QR Code';
+            qrImg.style.width = '200px';
+            qrImg.style.height = '200px';
+            qrImg.style.borderRadius = '8px';
+            qrImg.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+            qrImg.style.margin = '0 auto 20px auto';
+            qrImg.style.display = 'block';
+            
+            const instruction = document.createElement('div');
+            instruction.innerHTML = `
+                <div style="color: #999; font-size: 12px; line-height: 1.5; margin: 0px 50px 20px 50px; text-align: left;">
+                    <strong>${t('staticPay.instruction')}</strong><br>
+                    1. ${t('staticPay.instruction1', { name: paymentName })}<br>
+                    2. ${t('staticPay.instruction2', { amount: amount })}<br>
+                    3. ${t('staticPay.instruction3')}<br>
+                    4. ${t('staticPay.instruction4')}
+                </div>
+            `;
+            
+            const buttonContainer = document.createElement('div');
+            buttonContainer.style.display = 'flex';
+            buttonContainer.style.gap = '10px';
+            
+            const openAppBtn = document.createElement('button');
+            openAppBtn.textContent = t('staticPay.openApp');
+            openAppBtn.style.cssText = `
+                flex: 3; padding: 12px; background: var(--neon-green); color: #000;
+                border: none; border-radius: 8px; cursor: pointer; font-size: 14px;
+                font-weight: 600; word-break: break-word;
+            `;
+            openAppBtn.onclick = () => {
+                const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+                if (paymentType === 'alipay_static') {
+                    const qrContent = encodeURIComponent('https://qr.alipay.com/fkx15464aezwcqfyl4aiga0');
+                    if (isIOS) {
+                        window.location.href = `alipayqr://platformapi/startapp?saId=10000007&clientVersion=3.7.0.0718&qrcode=${qrContent}`;
+                    } else {
+                        window.location.href = `alipays://platformapi/startapp?saId=10000007&clientVersion=3.7.0.0718&qrcode=${qrContent}`;
+                    }
+                } else if (paymentType === 'wechat_static') {
+                    if (isIOS) {
+                        window.location.href = 'weixin://';
+                    } else {
+                        window.location.href = 'weixin://';
+                    }
+                }
+            };
+            
+            const confirmBtn = document.createElement('button');
+            confirmBtn.id = 'confirm-recharge-btn';
+            confirmBtn.style.cssText = `
+                flex: 6; padding: 12px; background: #666; color: white;
+                border: none; border-radius: 8px; cursor: not-allowed; font-size: 14px;
+                font-weight: 600; opacity: 0.5; word-break: break-word;
+            `;
+            confirmBtn.disabled = true;
+            
+            const closeBtn = document.createElement('button');
+            closeBtn.textContent = t('staticPay.close');
+            closeBtn.style.cssText = `
+                flex: 2; padding: 12px; background: #666; color: white;
+                border: none; border-radius: 8px; cursor: pointer; font-size: 14px;
+                font-weight: 600; word-break: break-word;
+            `;
+            closeBtn.onclick = () => {
+                document.body.removeChild(overlay);
+                document.body.removeChild(paymentContainer);
+                document.body.style.overflow = originalBodyOverflow;
+            };
+            
+            buttonContainer.appendChild(confirmBtn);
+            buttonContainer.appendChild(openAppBtn);
+            buttonContainer.appendChild(closeBtn);
+            
+            startRechargeTimer(confirmBtn, orderNo, amount, paymentType);
+            
+            paymentContainer.appendChild(title);
+            paymentContainer.appendChild(orderNoDisplay);
+            paymentContainer.appendChild(amountDisplay);
+            paymentContainer.appendChild(qrImg);
+            paymentContainer.appendChild(instruction);
+            paymentContainer.appendChild(buttonContainer);
+            
+            document.body.appendChild(overlay);
+            document.body.appendChild(paymentContainer);
+            
+            createStaticOrderRecord(paymentType, amount, orderNo);
+        }
+        
+        // 创建静态支付订单记录
+        async function createStaticOrderRecord(paymentType, amount, orderNo) {
+            const orderData = {
+                order_no: orderNo,
+                username: currentUser.username,
+                amount: amount,
+                payment_type: paymentType,
+                status: 'pending',
+                description: 'Wallet Top-up (Manual Review)'
+            };
+            
+            try {
+                const response = await fetch('https://funbua.uk/api/order/create-static', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(orderData)
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.warn('Static order save failed:', response.status, errorText);
+                } else {
+                    console.log('Static order saved successfully');
+                }
+            } catch (error) {
+                console.warn('Network error, static order save failed:', error);
+            }
+            
+            console.log('Static payment order created:', orderData);
+        }
+        
+        function startRechargeTimer(confirmBtn, orderNo, amount, paymentType) {
+            const lastRechargeTime = localStorage.getItem('lastRechargeTime');
+            const now = Date.now();
+            const COOLDOWN_TIME = 86400000;
+
+            if (lastRechargeTime && (now - parseInt(lastRechargeTime)) < COOLDOWN_TIME) {
+                const remainingTime = COOLDOWN_TIME - (now - parseInt(lastRechargeTime));
+                startCooldownTimer(confirmBtn, remainingTime, t('staticPay.cooldownNext'));
+                return;
+            }
+            
+            let countdown = 30;
+            const countdownInterval = setInterval(() => {
+                confirmBtn.textContent = t('staticPay.wait', { countdown: countdown });
+                countdown--;
+                
+                if (countdown < 0) {
+                    clearInterval(countdownInterval);
+                    confirmBtn.style.cssText = `
+                        flex: 6; padding: 12px; background: var(--neon-pink); color: #000;
+                        border: none; border-radius: 8px; cursor: pointer; font-size: 14px;
+                        font-weight: 600;
+                    `;
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = t('staticPay.confirmRecharge');
+                    confirmBtn.onclick = () => {
+                        confirmRecharge(orderNo, amount, paymentType, confirmBtn);
+                    };
+                }
+            }, 1000);
+        }
+        
+        function startCooldownTimer(confirmBtn, remainingTime, label) {
+            const interval = setInterval(() => {
+                const hours = Math.floor(remainingTime / 3600000);
+                const minutes = Math.floor((remainingTime % 3600000) / 60000);
+                const seconds = Math.floor((remainingTime % 60000) / 1000);
+
+                if (hours > 0) {
+                    confirmBtn.textContent = t('staticPay.cooldown', { time: t('staticPay.hours', { hours: hours }) });
+                } else {
+                    confirmBtn.textContent = t('staticPay.cooldown', { time: `${minutes}:${seconds.toString().padStart(2, '0')}` });
+                }
+
+                remainingTime -= 1000;
+
+                if (remainingTime < 0) {
+                    clearInterval(interval);
+                    confirmBtn.style.cssText = `
+                        flex: 6; padding: 12px; background: var(--neon-pink); color: #000;
+                        border: none; border-radius: 8px; cursor: pointer; font-size: 14px;
+                        font-weight: 600;
+                    `;
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = t('staticPay.confirmRecharge');
+                    confirmBtn.onclick = () => {
+                        confirmRecharge(orderNo, amount, paymentType, confirmBtn);
+                    };
+                }
+            }, 1000);
+        }
+        
+        // 确认充值
+        async function confirmRecharge(orderNo, amount, paymentType, confirmBtn) {
+            try {
+                const requestBody = {
+                    username: currentUser.username,
+                    order_no: orderNo,
+                    amount: parseFloat(amount),
+                    payment_type: paymentType
+                };
+                
+                console.log('确认充值请求参数:', requestBody);
+                
+                const response = await fetch('https://funbua.uk/api/recharge/confirm', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    // 记录最后一次充值时间
+                    localStorage.setItem('lastRechargeTime', Date.now().toString());
+                    
+                    // 更新本地订单状态
+                    updateLocalOrderStatus(orderNo, 'paid');
+                    
+                    await updateBalance();
+                    
+                    alert(t('alert.rechargeSuccess'));
+                    
+                    confirmBtn.style.cssText = `
+                        flex: 6; padding: 12px; background: #666; color: white;
+                        border: none; border-radius: 8px; cursor: not-allowed; font-size: 14px;
+                        font-weight: 600; opacity: 0.5;
+                    `;
+                    confirmBtn.disabled = true;
+                    confirmBtn.onclick = null;
+
+                    startCooldownTimer(confirmBtn, 86400000, t('staticPay.cooldownNext'));
+                } else {
+                    alert(t('alert.rechargeFailed') + ': ' + result.message);
+                    console.error('Recharge failed:', result);
+                }
+            } catch (error) {
+                alert(t('alert.networkError') + ': ' + error.message);
+                console.error('Recharge error:', error);
+            }
+        }
+        
+        // 更新本地订单状态
+        function updateLocalOrderStatus(orderNo, status) {
+            let staticOrders = JSON.parse(localStorage.getItem('staticOrders') || '[]');
+            const orderIndex = staticOrders.findIndex(order => order.order_no === orderNo);
+            if (orderIndex !== -1) {
+                staticOrders[orderIndex].status = status;
+                staticOrders[orderIndex].paid_at = new Date().toISOString();
+                localStorage.setItem('staticOrders', JSON.stringify(staticOrders));
+            }
+        }
+        
+        // USDT汇率：1 USDT = 7 RMB
+        const USDT_RATE = 7;
+        
+        // USDT支付功能
+        async function createUSDTOrder(rmbAmount) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
+            
+            // RMB转USDT
+            const usdtAmount = (rmbAmount / USDT_RATE).toFixed(2);
+            
+            try {
+                // 使用TRON钱包地址作为name参数，与energy.js保持一致
+                const tronAddress = 'TKxnwudYzov8ztHchjE6VZCCGAuDft8jQV';
+                const response = await fetch("https://tronusdt.xyz/?way=pay&jump=-&product=wallet_recharge&name=" + tronAddress + "&type=usdt&value=" + usdtAmount, {
+                    method: 'GET',
+                    signal: controller.signal
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                
+                const data = await response.json();
+                clearTimeout(timeoutId);
+                console.log('创建USDT订单结果:', data);
+                
+                if (data.oid) {
+                    const orderNo = data.oid;
+                    
+                    // 保存订单信息到本地存储
+                    localStorage.setItem('usdtOrder_' + data.oid, JSON.stringify({
+                        username: currentUser.username,
+                        rmbAmount: rmbAmount,
+                        usdtAmount: usdtAmount,
+                        order_no: orderNo
+                    }));
+                    
+                    // 立即创建订单记录到后端
+                    try {
+                        await fetch('https://funbua.uk/api/order/create-static', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                order_no: orderNo,
+                                username: currentUser.username,
+                                amount: parseFloat(rmbAmount),
+                                payment_type: 'usdt',
+                                status: 'pending',
+                                description: 'USDT充值 '
+                            })
+                        });
+                    } catch (e) {
+                        console.error('创建订单记录失败:', e);
+                    }
+                    
+                    showUSDTQRCode(data, usdtAmount, rmbAmount, orderNo);
+                } else {
+                    alert(t('usdt.createFailed') + ": " + (data.msg || 'Unknown error'));
+                }
+            } catch (error) {
+                clearTimeout(timeoutId);
+                console.error('USDT order error:', error);
+                if (error.name === 'AbortError') {
+                    alert(t('usdt.timeout'));
+                } else {
+                    alert(t('usdt.networkError'));
+                }
+            }
+        }
+        
+        // 信用卡支付功能
+        async function createCreditCardOrder() {
+            const orderNo = currentUser.username + '_' + Date.now();
+            const usdAmount = creditCardAmount || 20;
+            
+            try {
+                const response = await fetch('https://funbua.uk/api/pay/creem-checkout', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: currentUser.username,
+                        order_no: orderNo,
+                        amount: usdAmount
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.code === 200) {
+                    localStorage.setItem('creditCardOrder_' + orderNo, JSON.stringify({
+                        username: currentUser.username,
+                        amount: usdAmount * 7,
+                        order_no: orderNo
+                    }));
+                    
+                    window.location.href = data.data.checkout_url;
+                } else {
+                    alert(t('creditCard.createFailed') + ': ' + data.msg);
+                }
+            } catch (error) {
+                console.error('Credit card payment creation failed:', error);
+                alert(t('alert.networkError'));
+            }
+        }
+        
+        function showUSDTQRCode(data, usdtAmount, rmbAmount, orderNo) {
+            const overlay = document.createElement('div');
+            overlay.style.cssText = `
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                background: rgba(0, 0, 0, 0.8); z-index: 9998;
+            `;
+            
+            // 创建二维码展示容器
+            const qrContainer = document.createElement('div');
+            qrContainer.style.cssText = `
+                position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+                background: #1a1a1a; padding: 20px; border-radius: 12px; 
+                border: 2px solid var(--neon-blue); box-shadow: 0 0 30px var(--neon-blue);
+                z-index: 9999; text-align: center; width: min(350px, 95vw);
+                max-height: 90vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
+                box-sizing: border-box; font-family: inherit;
+            `;
+            
+            // 保存当前body的overflow属性并禁止背景滚动
+            const originalBodyOverflow = document.body.style.overflow;
+            document.body.style.overflow = 'hidden';
+            
+            // 标题
+            const title = document.createElement('h3');
+            title.textContent = t('usdt.qrTitle');
+            title.style.margin = '0 0 20px 0';
+            title.style.color = 'var(--neon-blue)';
+            title.style.fontSize = '20px';
+            
+            // 生成二维码
+            const qrImg = document.createElement('img');
+            const address = data.address || 'TKxnwudYzov8ztHchjE6VZCCGAuDft8jQV';
+            qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`tron:${address}?amount=${usdtAmount}`)}`;
+            qrImg.alt = t('usdt.qrAlt');
+            qrImg.style.width = '200px';
+            qrImg.style.height = '200px';
+            qrImg.style.borderRadius = '8px';
+            qrImg.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+            qrImg.style.margin = '0 auto 20px auto';
+            qrImg.style.display = 'block';
+            
+            // 订单ID
+            const oidDiv = document.createElement('div');
+            oidDiv.style.margin = '10px 0';
+            oidDiv.innerHTML = `
+                <div style="color: #999; font-size: 12px; margin-bottom: 4px;">${t('usdt.orderNo')}</div>
+                <div style="background: rgba(0, 242, 255, 0.1); padding: 8px 12px; border-radius: 6px; font-family: monospace; font-size: 12px; word-break: break-all;">${orderNo}</div>
+            `;
+            
+            // 收款地址
+            const addressDiv = document.createElement('div');
+            addressDiv.style.margin = '10px 0';
+            addressDiv.innerHTML = `
+                <div style="color: #999; font-size: 12px; margin-bottom: 4px;">${t('usdt.receiveAddress')}</div>
+                <div style="background: rgba(0, 242, 255, 0.1); padding: 8px 12px; border-radius: 6px; font-family: monospace; font-size: 12px; word-break: break-all;">${address}</div>
+            `;
+            
+            // 金额（显示RMB和USDT）
+            const amountDiv = document.createElement('div');
+            amountDiv.style.margin = '10px 0';
+            amountDiv.innerHTML = `
+                <div style="color: #999; font-size: 12px; margin-bottom: 4px;">${t('usdt.payAmount')}</div>
+                <div style="background: rgba(10, 255, 153, 0.1); padding: 8px 12px; border-radius: 6px; font-weight: 600; color: var(--neon-green);">
+                    ${usdtAmount} USDT
+                    <span style="color: #999; font-size: 12px; font-weight: normal;">(≈ ¥${rmbAmount})</span>
+                </div>
+                <div style="color: #666; font-size: 11px; margin-top: 4px;">${t('usdt.exchangeRate', { rate: USDT_RATE })}</div>
+            `;
+            
+            // 支付信息容器
+            const infoContainer = document.createElement('div');
+            infoContainer.style.margin = '20px 0';
+            infoContainer.style.textAlign = 'left';
+            infoContainer.style.fontSize = '14px';
+            
+            // 按钮容器
+            const buttonContainer = document.createElement('div');
+            buttonContainer.style.display = 'flex';
+            buttonContainer.style.gap = '10px';
+            buttonContainer.style.marginTop = '20px';
+            
+            // 添加支付确认按钮
+            const checkPaymentBtn = document.createElement('button');
+            checkPaymentBtn.textContent = t('usdt.confirmPayDone');
+            checkPaymentBtn.style.cssText = `
+                flex: 1; padding: 12px; background: var(--neon-green); color: #000;
+                border: none; border-radius: 8px; cursor: pointer; font-size: 14px;
+                font-weight: 600;
+            `;
+            checkPaymentBtn.onclick = () => {
+                checkUSDTOrder(data.oid);
+            };
+            
+            // 添加关闭按钮
+            const closeBtn = document.createElement('button');
+            closeBtn.textContent = t('usdt.close');
+            closeBtn.style.cssText = `
+                flex: 1; padding: 12px; background: #666; color: white;
+                border: none; border-radius: 8px; cursor: pointer; font-size: 14px;
+                font-weight: 600;
+            `;
+            closeBtn.onclick = () => {
+                document.body.removeChild(overlay);
+                document.body.removeChild(qrContainer);
+                document.body.style.overflow = originalBodyOverflow;
+            };
+            
+            // 组装容器
+            infoContainer.appendChild(oidDiv);
+            infoContainer.appendChild(addressDiv);
+            infoContainer.appendChild(amountDiv);
+            
+            buttonContainer.appendChild(checkPaymentBtn);
+            buttonContainer.appendChild(closeBtn);
+            
+            qrContainer.appendChild(title);
+            qrContainer.appendChild(qrImg);
+            qrContainer.appendChild(infoContainer);
+            qrContainer.appendChild(buttonContainer);
+            
+            document.body.appendChild(overlay);
+            document.body.appendChild(qrContainer);
+        }
+        
+        async function checkUSDTOrder(orderId) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
+            
+            try {
+                const response = await fetch(`https://tronusdt.xyz/?way=paycheck&oid=${orderId}`, {
+                    method: 'GET',
+                    signal: controller.signal
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                
+                const data = await response.json();
+                clearTimeout(timeoutId);
+                console.log('Payment check result:', data);
+                
+                if (data.code === 1) {
+                    const orderInfo = localStorage.getItem('usdtOrder_' + orderId);
+                    if (orderInfo) {
+                        const { username, rmbAmount, order_no } = JSON.parse(orderInfo);
+                        await confirmUSDTRecharge(orderId, username, rmbAmount, order_no);
+                    } else {
+                        alert(t('usdt.paySuccessNoOrder'));
+                    }
+                    
+                    const qrContainer = document.querySelector('[style*="z-index: 9999"]');
+                    if (qrContainer) {
+                        document.body.removeChild(qrContainer.previousElementSibling);
+                        document.body.removeChild(qrContainer);
+                        document.body.style.overflow = '';
+                    }
+                    
+                    localStorage.removeItem('usdtOrder_' + orderId);
+                } else {
+                    alert(t('usdt.payPending'));
+                }
+            } catch (error) {
+                clearTimeout(timeoutId);
+                if (error.name === 'AbortError') {
+                    alert(t('usdt.timeout'));
+                } else {
+                    alert(t('usdt.networkError'));
+                }
+            }
+        }
+        
+        async function confirmUSDTRecharge(orderId, username, rmbAmount, orderNo) {
+            try {
+                const response = await fetch('https://funbua.uk/api/recharge/confirm', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: username,
+                        order_no: orderNo,
+                        amount: parseFloat(rmbAmount),
+                        payment_type: 'usdt'
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    alert(t('usdt.paySuccess'));
+                    await updateBalance();
+                } else {
+                    alert(t('usdt.confirmFailed', { message: result.message }));
+                }
+            } catch (error) {
+                console.error('Confirm recharge failed:', error);
+                alert(t('usdt.confirmFailedContact'));
+            }
+        }
+        
+        // 订单簿功能
+        function switchTab(tab) {
+            document.querySelectorAll('.nav-tab').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('pay-interface').style.display = 'none';
+            document.getElementById('orders-interface').style.display = 'none';
+            
+            if (tab === 'pay') {
+                document.getElementById('pay-tab').classList.add('active');
+                document.getElementById('pay-interface').style.display = 'block';
+            } else {
+                document.getElementById('orders-tab').classList.add('active');
+                document.getElementById('orders-interface').style.display = 'block';
+                loadOrders();
+            }
+        }
+        
+        async function loadOrders() {
+            if (!currentUser) return;
+            
+            const statusFilter = document.getElementById('status-filter').value;
+            const typeFilter = document.getElementById('type-filter').value;
+            
+            try {
+                const ordersData = await (await fetch(`https://funbua.uk/api/orders?username=${currentUser.username}&page=${currentPage}&limit=5`)).json();
+                
+                if (ordersData.code === 200) {
+                    displayOrders(ordersData.data.orders, ordersData.data.pagination);
+                } else {
+                    alert(t('usdt.loadOrdersFailed', { message: ordersData.msg }));
+                }
+            } catch (error) {
+                console.error('Load orders failed:', error);
+                document.getElementById('orders-list').innerHTML = `<div style="text-align: center; padding: 20px; color: #ff4757;">${t('usdt.loadOrdersFailedRetry')}</div>`;
+            }
+        }
+        
+        function displayOrders(orders, pagination) {
+            const ordersList = document.getElementById('orders-list');
+            const totalOrders = document.getElementById('total-orders');
+            
+            totalOrders.textContent = pagination.total;
+            totalPages = pagination.pages;
+            if (orders.length === 0) {
+                ordersList.innerHTML = `<div style="text-align: center; padding: 20px; color: #666;">${t('usdt.noOrders')}</div>`;
+                updatePagination();
+                return;
+            }
+            
+            let html = '';
+            orders.forEach(order => {
+                const statusClass = `status-${order.status}`;
+                const statusText = {
+                    'pending': t('orders.pending'),
+                    'paid': t('orders.paid'),
+                    'failed': t('orders.failed')
+                }[order.status] || order.status;
+                
+                const typeText = {
+                    'alipay': t('orders.alipay'),
+                    'wxpay': t('orders.wxpay'),
+                    'usdt': 'USDT',
+                    'wechat_static': t('orders.wxpay') + '(Manual)',
+                    'alipay_static': t('orders.alipay') + '(Manual)'
+                }[order.payment_type] || order.payment_type;
+                
+                html += `
+                    <div class="order-item" onclick="prompt('Order No:', '${order.order_no}')">
+                        <div class="order-header">
+                            <div class="order-no">${order.order_no.slice(0, 15)}${order.order_no.length > 15 ? '*' : ''}</div>
+                            <div class="order-amount">¥${parseFloat(order.amount).toFixed(2)}</div>
+                        </div>
+                        <div class="order-details">
+                            <div><strong>${t('orders.payMethod') || 'Pay Method'}:</strong> ${typeText}</div>
+                            <div><strong>${t('orders.status') || 'Status'}:</strong> <span class="order-status ${statusClass}">${statusText}</span></div>
+                            <div><strong>${t('orders.createdAt') || 'Created'}:</strong> ${formatDate(order.created_at)}</div>
+                            <div><strong>${t('orders.paidAt') || 'Paid At'}:</strong> ${order.paid_at ? formatDate(order.paid_at) : '-'}</div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            ordersList.innerHTML = html;
+            updatePagination();
+        }
+        
+        function updatePagination() {
+            document.getElementById('page-info').textContent = t('orders.pageInfo', { current: currentPage, total: totalPages });
+            document.getElementById('prev-page').disabled = currentPage <= 1;
+            document.getElementById('next-page').disabled = currentPage >= totalPages;
+        }
+        
+        function changePage(delta) {
+            const newPage = currentPage + delta;
+            if (newPage >= 1 && newPage <= totalPages) {
+                currentPage = newPage;
+                loadOrders();
+            }
+        }
+        
+        function formatDate(dateString) {
+            if (!dateString) return '-';
+            const date = new Date(new Date(dateString).getTime() + 8 * 60 * 60 * 1000);
+            return date.toLocaleString('zh-CN');
+        }
+        
+        function toggleDropdown() {
+            document.getElementById('user-dropdown-menu').classList.toggle('show');
+        }
+
+        function toggleLangDropdown() {
+            document.getElementById('lang-dropdown-menu').classList.toggle('show');
+        }
+
+        function setLanguage(lang) {
+            currentLang = lang;
+            localStorage.setItem('lang', currentLang);
+            loadTranslations().then(() => {
+                applyTranslations();
+                updateDynamicText();
+            });
+            document.getElementById('lang-dropdown-menu').classList.remove('show');
+        }
+
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.user-dropdown')) {
+                document.getElementById('user-dropdown-menu').classList.remove('show');
+            }
+            if (!e.target.closest('#lang-dropdown')) {
+                document.getElementById('lang-dropdown-menu').classList.remove('show');
+            }
+        });
+
+        function copyOrderNo() {
+            const btn = document.getElementById('copyBtn');
+            navigator.clipboard.writeText(document.getElementById('orderNoValue').textContent).then(() => {
+                btn.textContent = t('staticPay.copied');
+                setTimeout(() => btn.textContent = t('staticPay.copy'), 2000);
+            });
+        }
+
+        async function showComplaint() {
+            const content = prompt(t('usdt.complaintPrompt'));
+            if (!content) return;
+            try {
+                const res = await fetch('https://api.funbua.uk/api/send-message', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({content, target: 'single', username: 'immmor'})
+                });
+                const data = await res.json();
+                alert(data.code === 200 ? t('usdt.complaintSubmit') : t('usdt.complaintFailed', { msg: data.msg }));
+            } catch {
+                alert(t('usdt.networkError'));
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('currentUser');
+            localStorage.removeItem('phantomWallet');
+            localStorage.removeItem('walletType');
+            location.reload();
+        }
+        
+        // 自动刷新订单列表（每30秒）
+        setInterval(() => {
+            if (document.getElementById('orders-interface').style.display !== 'none') {
+                loadOrders();
+            }
+        }, 30000);
+
+        // 显示卡片模态框
+        function showCardModal() {
+            const modal = document.getElementById('card-modal');
+            modal.classList.add('show');
+            document.body.style.overflow = 'hidden';
+
+            // 动态生成卡片信息
+            generateCardInfo();
+        }
+
+        // 关闭卡片模态框
+        function closeCardModal() {
+            const modal = document.getElementById('card-modal');
+            modal.classList.remove('show');
+            document.body.style.overflow = '';
+        }
+
+        // 生成卡片信息
+        function generateCardInfo() {
+            // 生成随机卡号后四位
+            const last4 = Math.floor(1000 + Math.random() * 9000);
+            document.getElementById('card-last4').textContent = last4;
+
+            // 获取用户名
+            const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+            let username = currentUser.username || 'USER';
+            // 如果是邮箱，只取@前面的部分
+            if (username.includes('@')) {
+                username = username.split('@')[0];
+            }
+            username = username.toUpperCase();
+            // 最多显示9位，超出用*表示
+            if (username.length > 9) {
+                username = username.slice(0, 9) + '*';
+            }
+            document.getElementById('card-holder-name').textContent = username;
+
+            // 生成有效期（当前月份 + 3-5年）
+            const now = new Date();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const year = String(now.getFullYear() + Math.floor(Math.random() * 3) + 3).slice(-2);
+            document.getElementById('card-expiry').textContent = `${month}/${year}`;
+        }
+    </script>
+
+    <!-- 全屏加载动画 -->
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="loading-logo-circle">¥</div>
+        <div id="loading-text" class="loading-text">INITIALIZING...</div>
+        <div class="loading-progress">
+            <div id="loading-progress-bar" class="loading-progress-bar"></div>
+        </div>
+    </div>
+
+</body>
+</html>
