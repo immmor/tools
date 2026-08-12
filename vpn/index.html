@@ -1624,7 +1624,7 @@
                     <div id="user-balance" class="text-xl font-black text-[var(--neon-green)]">¥0</div>
                     <div id="user-pending-withdraw" class="text-xs text-[var(--neon-orange)] mt-1 hidden text-center">
                         <div id="user-pending-withdraw-text" class="break-words leading-snug">正在提现: ¥0</div>
-                        <button id="user-pending-withdraw-cancel" class="mt-1 text-[var(--neon-red)] hover:text-white border border-zinc-600 hover:border-[var(--neon-red)] rounded px-2 py-0.5 transition-colors cursor-pointer" style="background:transparent;"  data-i18n="withdraw_cancel">取消</button>
+                        <button id="user-pending-withdraw-cancel" class="mt-1 text-[var(--neon-red)] hover:text-white px-2 transition-colors cursor-pointer" style="background:transparent;"  data-i18n="withdraw_cancel">取消</button>
                     </div>
                 </div>
                 <!--
@@ -4037,7 +4037,7 @@
                 if (typeof updateWithdrawChecks === 'function') updateWithdrawChecks();
             };
 
-            // 余额下方"正在提现"取消按钮：取消最近一条 pending 申请
+            // 余额下方"正在提现"取消按钮：取消最近一条 pending 申请（循环重试直到成功）
             (() => {
                 const cancelBtn = document.getElementById('user-pending-withdraw-cancel');
                 if (!cancelBtn) return;
@@ -4048,39 +4048,51 @@
                     const original = cancelBtn.textContent;
                     cancelBtn.classList.add('loading');
                     cancelBtn.disabled = true;
-                    const dots = document.createElement('span');
-                    dots.className = 'loading-dots';
-                    cancelBtn.appendChild(dots);
-                    const minDelay = new Promise(res => setTimeout(res, 1200));
-                    const t = translations[currentLang] || {};
-                    try {
-                        const r = await fetch(`${API}/api/withdraw/cancel`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ id: lastPendingWithdrawId, username: userInfo.username })
-                        });
-                        const res = await r.json();
-                        if (res.success) {
-                            if (lastPendingWithdrawAmount > 0) {
-                                userInfo.balance = (parseFloat(userInfo.balance || 0) + lastPendingWithdrawAmount).toFixed(2);
-                                userInfo.game_winnings = (parseFloat(userInfo.game_winnings || 0) + lastPendingWithdrawAmount).toFixed(2);
-                                localStorage.setItem('userInfo', JSON.stringify(userInfo));
-                                if (els.balance) els.balance.textContent = `¥${userInfo.balance}`;
-                            }
-                            if (els.withdrawAvailable) els.withdrawAvailable.textContent = `¥${getWithdrawable().toFixed(2)}`;
-                            if (typeof loadWithdrawHistory === 'function') loadWithdrawHistory();
-                        } else {
-                            alert(res.message || '取消失败');
-                        }
-                    } catch (err) {
-                        alert('网络错误：' + (err?.message || ''));
-                    } finally {
-                        await minDelay;
-                        cancelBtn.classList.remove('loading');
-                        cancelBtn.disabled = false;
+                    const minDelay = () => new Promise(res => setTimeout(res, 1200));
+                    let done = false;
+                    let firstAttempt = true;
+                    while (!done) {
+                        // 显示三个点动画（每次循环都重新跑一遍），保留"取消"文字
                         cancelBtn.textContent = original;
-                        loadWithdrawHistory();
+                        const dots = document.createElement('span');
+                        dots.className = 'loading-dots';
+                        cancelBtn.appendChild(dots);
+                        const t = translations[currentLang] || {};
+                        try {
+                            await minDelay();
+                            const r = await fetch(`${API}/api/withdraw/cancel`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ id: lastPendingWithdrawId, username: userInfo.username })
+                            });
+                            const res = await r.json();
+                            if (!res.success && firstAttempt) {
+                                alert(res.message || '取消失败');
+                            }
+                            if (res.success) {
+                                if (lastPendingWithdrawAmount > 0) {
+                                    userInfo.balance = (parseFloat(userInfo.balance || 0) + lastPendingWithdrawAmount).toFixed(2);
+                                    userInfo.game_winnings = (parseFloat(userInfo.game_winnings || 0) + lastPendingWithdrawAmount).toFixed(2);
+                                    localStorage.setItem('userInfo', JSON.stringify(userInfo));
+                                    if (els.balance) els.balance.textContent = `¥${userInfo.balance}`;
+                                }
+                                if (els.withdrawAvailable) els.withdrawAvailable.textContent = `¥${getWithdrawable().toFixed(2)}`;
+                                if (typeof loadWithdrawHistory === 'function') loadWithdrawHistory();
+                                done = true;
+                            }
+                        } catch (err) {
+                            if (firstAttempt) alert('网络错误：' + (err?.message || ''));
+                        } finally {
+                            firstAttempt = false;
+                            if (!done) {
+                                // 取消未完成，移除当前动画，准备下一轮循环（保留"取消"文字）
+                                cancelBtn.textContent = original;
+                            }
+                        }
                     }
+                    cancelBtn.classList.remove('loading');
+                    cancelBtn.disabled = false;
+                    cancelBtn.textContent = original;
                 });
             })();
 
