@@ -3851,11 +3851,23 @@
             const handleRecharge = async (e) => {
                 if (userInfo && userInfo.username) {
                     e.preventDefault();
-                    const ts = Date.now();
-                    const vToken = userInfo.v_token || '';
-                    const sign = await sha256hex(`${userInfo.username}|${vToken}|${ts}`);
-                    const url = `https://funbua.uk/pay?username=${encodeURIComponent(userInfo.username)}&ts=${ts}&sign=${encodeURIComponent(sign)}`;
-                    window.location.href = url;
+                    try {
+                        const resp = await fetch('https://api.funbua.uk/api/quick-login-ticket', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username: userInfo.username })
+                        });
+                        const data = await resp.json();
+                        if (data.success && data.ticket) {
+                            const url = `https://funbua.uk/pay?ticket=${encodeURIComponent(data.ticket)}`;
+                            window.location.href = url;
+                            return;
+                        }
+                    } catch (err) {
+                        console.error('获取授权码失败', err);
+                    }
+                    // 失败则退回直接打开充值页（手动登录）
+                    window.location.href = 'https://funbua.uk/pay';
                 }
             };
 

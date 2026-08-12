@@ -10,12 +10,6 @@ function fbChoiceLabel(_match, choice) {
   return map[choice] || choice;
 }
 
-// SHA-256 十六进制哈希工具（用于签名校验）
-async function sha256hex(str) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
-  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
 // 自动续费单个用户的函数
 async function autoRenewUser(DB, user) {
   const now = new Date();
@@ -586,33 +580,53 @@ export default {
         }
       }
 
-      // ========== 独立免密快捷登录接口（凭 用户名 + 签名 登录，不依赖 web3-login） ==========
+      // ========== 生成一次性免密授权码（Authorization Code） ==========
+      if (path === '/api/quick-login-ticket' && request.method === 'POST') {
+        const params = await request.json();
+        const { username } = params;
+        if (!username) {
+          return resJson({ success: false, message: '请提供用户名！' }, 400);
+        }
+        const user = await DB
+          .prepare('SELECT rowid FROM user WHERE username = ?')
+          .bind(username)
+          .first();
+        if (!user) {
+          return resJson({ success: false, message: '用户不存在' }, 401);
+        }
+        // 生成随机一次性授权码，5 分钟过期
+        const ticket = crypto.randomUUID();
+        const expire = Date.now() + 5 * 60 * 1000;
+        await DB
+          .prepare('UPDATE user SET login_ticket = ?, ticket_expire = ? WHERE rowid = ?')
+          .bind(ticket, expire, user.rowid)
+          .run();
+        return resJson({ success: true, ticket });
+      }
+
+      // ========== 凭一次性授权码免密登录（不依赖 web3-login） ==========
       if (path === '/api/quick-login' && request.method === 'POST') {
         const params = await request.json();
-        const { username, sign, ts } = params;
+        const { ticket } = params;
 
-        if (!username || !sign || !ts) {
-          return resJson({ success: false, message: '参数不完整！' }, 400);
-        }
-
-        // 防重放：签名时间戳须在 5 分钟内
-        const nowTs = Date.now();
-        if (Math.abs(nowTs - Number(ts)) > 5 * 60 * 1000) {
-          return resJson({ success: false, message: '登录链接已过期，请重新操作！' }, 401);
+        if (!ticket) {
+          return resJson({ success: false, message: '缺少授权码！' }, 400);
         }
 
         const user = await DB
-          .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders, invite_code, invited_user, rebates FROM user WHERE username = ?')
-          .bind(username)
+          .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders, invite_code, invited_user, rebates, login_ticket, ticket_expire FROM user WHERE login_ticket = ?')
+          .bind(ticket)
           .first();
 
         if (user) {
-          // 签名校验：sign = sha256(username + '|' + v_token + '|' + ts)
-          // 只有持有该用户 v_token 的已登录会话才能生成有效签名，外人无法伪造
-          const expected = await sha256hex(`${username}|${user.v_token || ''}|${ts}`);
-          if (expected !== sign) {
-            return resJson({ success: false, message: '签名校验失败！' }, 401);
+          // 校验过期
+          if (!user.ticket_expire || Date.now() > Number(user.ticket_expire)) {
+            // 清理过期 ticket
+            await DB.prepare('UPDATE user SET login_ticket = NULL, ticket_expire = NULL WHERE rowid = ?').bind(user.rowid).run();
+            return resJson({ success: false, message: '授权码已过期，请重新操作！' }, 401);
           }
+          // 一次性：立即作废，防止重放
+          await DB.prepare('UPDATE user SET login_ticket = NULL, ticket_expire = NULL WHERE rowid = ?').bind(user.rowid).run();
 
           const now = new Date(new Date().getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
           const loginInfoEntry = { type: 'quick-login', time: now, ip: request.headers.get('CF-Connecting-IP') || 'unknown', location: [request.headers.get('CF-IPCountry'), request.headers.get('CF-IPRegion'), request.headers.get('CF-IPCity')].filter(Boolean).join(' ') || 'unknown', domain: request.url, device: request.headers.get('User-Agent') || 'unknown', acceptLanguage: request.headers.get('Accept-Language') || 'unknown', country: request.headers.get('CF-IPCountry') || 'unknown', referer: request.headers.get('Referer') || 'unknown' };

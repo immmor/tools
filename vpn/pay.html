@@ -1136,21 +1136,16 @@
         });
 
         const urlParams = new URLSearchParams(window.location.search);
-        const urlUsername = urlParams.get('username');
-        const urlTs = urlParams.get('ts');
-        const urlSign = urlParams.get('sign');
-        if (urlUsername) {
-            document.getElementById('username').value = urlUsername;
-        }
+        const urlTicket = urlParams.get('ticket');
 
-        // 通过 ?username=&ts=&sign= 免密登录：走独立的 /api/quick-login 接口（后端校验签名）
-        if (urlUsername && urlTs && urlSign) {
+        // 通过 ?ticket=<一次性授权码> 免密登录：走独立的 /api/quick-login 接口
+        if (urlTicket) {
             (async () => {
                 try {
                     const resp = await fetch('https://api.funbua.uk/api/quick-login', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ username: urlUsername, ts: urlTs, sign: urlSign })
+                        body: JSON.stringify({ ticket: urlTicket })
                     });
                     const data = await resp.json();
                     if (data.success && data.userInfo) {
@@ -1162,15 +1157,16 @@
                         };
                         localStorage.setItem('currentUser', JSON.stringify(userToSave));
                         localStorage.setItem('pricePlan', JSON.stringify(data.pricePlan || null));
+                        // 清除地址栏里的免密参数，避免 reload 后再次触发 quick-login 造成死循环
+                        const cleanUrl = window.location.pathname;
+                        window.history.replaceState({}, document.title, cleanUrl);
                         window.location.reload();
                         return;
                     }
                 } catch (e) {
                     console.error('quick-login 失败', e);
                 }
-                // 失败则退回手动登录界面（预填用户名）
-                const el = document.getElementById('username');
-                if (el) el.value = urlUsername;
+                // 失败则退回手动登录界面
             })();
         }
 
