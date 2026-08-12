@@ -198,15 +198,28 @@
         container.classList.remove('hidden');
         const dict = window.translations?.[window.currentLang] || {};
         list.innerHTML = history.map(item => {
+            // 预测未来：result 存的是 JSON，需解析为可读文本，与其他游戏保持同一渲染样式
+            let resultText = item.result;
+            if (gameType === 'predict') {
+                try {
+                    const parsed = JSON.parse(item.result || '{}');
+                    const topicQ = typeof PredictModule?.getTopicQuestion === 'function'
+                        ? PredictModule.getTopicQuestion(parsed.topic_id)
+                        : '';
+                    resultText = `${topicQ || ('话题#' + (parsed.topic_id ?? '?'))} → ${parsed.option_name || '选项'}`;
+                } catch (e) {
+                    resultText = item.result || '预测记录';
+                }
+            }
             const isGift = parseFloat(item.cost) === 0;
             const isWin = item.prize > item.cost;
             const net = item.prize - item.cost;
-            const timeStr = item.created_at ? item.created_at.slice(11, 16) : '--:--';
+            const timeStr = item.created_at ? item.created_at.slice(0, 16).replace('T', ' ') : '--';
             return `
                 <div class="bet-item ${isWin ? 'win' : 'lose'}">
                     <div>
-                        <div class="text-zinc-300 font-mono">${item.result}</div>
-                        <div class="text-zinc-500 text-[10px] mt-0.5">${timeStr}</div>
+                        <div class="text-zinc-300 font-mono">${resultText}</div>
+                        <div class="text-zinc-500 text-[11px] mt-0.5 whitespace-nowrap">${timeStr}</div>
                     </div>
                     <div class="text-right">
                         <div class="font-mono ${isWin ? 'text-[var(--neon-green)]' : 'text-zinc-500'}">${(net >= 0 ? '+' : '')}${net}</div>
@@ -1157,53 +1170,21 @@
         }
 
         async function loadMyBets() {
-            const container = $('predict-my-bets');
-            const listEl = $('predict-bet-list');
-            if (!container || !listEl) return;
-            const user = getUserInfo();
-            if (!user?.username) { container.classList.add('hidden'); return; }
-
+            // 直接复用统一的 renderGameHistory，使预测记录样式与转盘/老虎机/刮刮乐完全一致
             try {
-                const res = await fetch(`${API_BASE}/api/game/history`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username: user.username, gameType: 'predict' })
-                });
-                const data = await res.json();
-                const records = (data.history || []).map(r => {
-                    let parsed;
-                    try { parsed = JSON.parse(r.result || '{}'); } catch (e) { parsed = {}; }
-                    return { ...r, parsed };
-                });
-                if (records.length) renderMyBets(records);
-                else container.classList.add('hidden');
+                await GameCenterModule.renderGameHistory('predict');
             } catch (e) {
-                container.classList.add('hidden');
+                const container = $('predict-my-bets');
+                if (container) container.classList.add('hidden');
             }
         }
 
-        function renderMyBets(bets) {
-            const container = $('predict-my-bets');
-            const listEl = $('predict-bet-list');
-            if (!container || !listEl) return;
-
-            listEl.innerHTML = bets.map(b => {
-                const topic = allTopics.find(t => String(t.id) === String(b.parsed.topic_id));
-                const optName = b.parsed.option_name || `选项${(b.parsed.option_index || 0) + 1}`;
-                const amount = parseFloat(b.cost) || 0;
-                return `
-                    <div class="flex items-center justify-between text-[11px] py-1 px-2 rounded" style="background: rgba(255,255,255,0.03);">
-                        <div class="flex items-center gap-2 min-w-0 flex-1">
-                            <span class="truncate" style="max-width:140px;">${topic?.question || '未知话题'}</span>
-                            <span class="text-[10px] shrink-0" style="color:#999;">→ ${optName}</span>
-                        </div>
-                        <span class="font-mono shrink-0" style="color:var(--neon-blue); font-weight:700;">${formatMoney(amount)}</span>
-                    </div>`;
-            }).join('');
-            container.classList.remove('hidden');
+        function getTopicQuestion(id) {
+            const t = allTopics.find(x => String(x.id) === String(id));
+            return t?.question || '';
         }
 
-        return { loadTopics, loadMyBets };
+        return { loadTopics, loadMyBets, getTopicQuestion };
     })();
 
 })();

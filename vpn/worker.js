@@ -580,8 +580,26 @@ export default {
         }
       }
 
+      // 校验请求来源域名是否在白名单内（优先取 Origin，兜底取 Referer 的 host）
+      const ALLOWED_ORIGINS = ['phantom.immmor.com', 'phantom.funbua.uk'];
+      const isAllowedOrigin = (request) => {
+        const origin = request.headers.get('Origin');
+        if (origin) {
+          try { return ALLOWED_ORIGINS.includes(new URL(origin).host); } catch (e) {}
+        }
+        const referer = request.headers.get('Referer');
+        if (referer) {
+          try { return ALLOWED_ORIGINS.includes(new URL(referer).host); } catch (e) {}
+        }
+        return false;
+      };
+
       // ========== 生成一次性免密授权码（Authorization Code） ==========
       if (path === '/api/quick-login-ticket' && request.method === 'POST') {
+        // 仅允许来自指定站点（index 页所在域名）的请求，防止 ticket 端点被任意调用
+        if (!isAllowedOrigin(request)) {
+          return resJson({ success: false, message: '来源不被允许！' }, 403);
+        }
         const params = await request.json();
         const { username } = params;
         if (!username) {
@@ -606,6 +624,16 @@ export default {
 
       // ========== 凭一次性授权码免密登录（不依赖 web3-login） ==========
       if (path === '/api/quick-login' && request.method === 'POST') {
+        // 允许 index 页所在域名 + pay 页自身域名（funbua.uk）调用
+        const quickLoginAllowed = ['phantom.immmor.com', 'phantom.funbua.uk', 'funbua.uk'];
+        const origin = request.headers.get('Origin');
+        const referer = request.headers.get('Referer');
+        const host = (() => {
+          try { return new URL(origin || referer || '').host; } catch (e) { return ''; }
+        })();
+        if (!quickLoginAllowed.includes(host)) {
+          return resJson({ success: false, message: '来源不被允许！' }, 403);
+        }
         const params = await request.json();
         const { ticket } = params;
 
