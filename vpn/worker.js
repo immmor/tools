@@ -129,6 +129,18 @@ export default {
         }, 500);
       }
 
+      // ========== 数据库索引初始化（幂等，避免 messages 全表扫描） ==========
+      if (!globalThis.__msgIdxInited) {
+        globalThis.__msgIdxInited = true;
+        ctx.waitUntil((async () => {
+          try {
+            await DB.prepare('CREATE INDEX IF NOT EXISTS idx_messages_user_created ON messages(username, created_at DESC)').run();
+            await DB.prepare('CREATE INDEX IF NOT EXISTS idx_messages_user_read ON messages(username, is_read)').run();
+            await DB.prepare('CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at)').run();
+          } catch (e) { /* 表尚未创建或被禁用时静默忽略 */ }
+        })());
+      }
+
       // ========== 发送邮箱验证码接口 ==========
       if (path === '/api/send-verify-code' && request.method === 'POST') {
         const params = await request.json();
@@ -399,7 +411,12 @@ export default {
           't': { monthly_original: 25, monthly_discount: 20, annual_original: 300, annual_discount: 200, annual_savings: 100 },
           't3': { monthly_original: 37.5, monthly_discount: 30, annual_original: 450, annual_discount: 350, annual_savings: 100 },
           'f4': { monthly_original: 50, monthly_discount: 40, annual_original: 600, annual_discount: 450, annual_savings: 150 },
-          'f': { monthly_original: 62.5, monthly_discount: 50, annual_original: 750, annual_discount: 550, annual_savings: 200 }
+          'f': { monthly_original: 62.5, monthly_discount: 50, annual_original: 750, annual_discount: 550, annual_savings: 200 },
+          's': { monthly_original: 75, monthly_discount: 60, annual_original: 900, annual_discount: 650, annual_savings: 250 },
+          's7': { monthly_original: 87.5, monthly_discount: 70, annual_original: 1050, annual_discount: 750, annual_savings: 300 },
+          'e': { monthly_original: 100, monthly_discount: 80, annual_original: 1200, annual_discount: 850, annual_savings: 350 },
+          'n': { monthly_original: 112.5, monthly_discount: 90, annual_original: 1350, annual_discount: 950, annual_savings: 400 },
+          't10': { monthly_original: 125, monthly_discount: 100, annual_original: 1500, annual_discount: 1050, annual_savings: 450 }
         };
 
         let pricePlanStr;
@@ -2241,36 +2258,24 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           }
           
           let messages;
-          let unreadCount = 0;
           
           if (all === 'true') {
             const targetUser = url.searchParams.get('targetUser');
             if (targetUser) {
               messages = await DB
-                .prepare('SELECT * FROM messages WHERE username = ? ORDER BY created_at DESC LIMIT 100')
+                .prepare('SELECT id, username, content, created_at, is_read FROM messages WHERE username = ? ORDER BY created_at DESC LIMIT 100')
                 .bind(targetUser)
                 .all();
-              const unread = await DB
-                .prepare('SELECT COUNT(*) as count FROM messages WHERE username = ? AND is_read = 0')
-                .bind(targetUser)
-                .first();
-              unreadCount = unread?.count || 0;
             } else {
               messages = await DB
-                .prepare('SELECT * FROM messages ORDER BY created_at DESC LIMIT 100')
+                .prepare('SELECT id, username, content, created_at, is_read FROM messages ORDER BY created_at DESC LIMIT 100')
                 .all();
             }
           } else {
             messages = await DB
-              .prepare('SELECT * FROM messages WHERE username = ? ORDER BY created_at DESC LIMIT 50')
+              .prepare('SELECT id, username, content, created_at, is_read FROM messages WHERE username = ? ORDER BY created_at DESC LIMIT 50')
               .bind(username)
               .all();
-            
-            const unread = await DB
-              .prepare('SELECT COUNT(*) as count FROM messages WHERE username = ? AND is_read = 0')
-              .bind(username)
-              .first();
-            unreadCount = unread?.count || 0;
           }
           
           return resJson({
@@ -2278,7 +2283,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
             msg: '查询成功',
             data: {
               messages: messages.results || [],
-              unreadCount: unreadCount
+              unreadCount: 0
             }
           });
         } catch (err) {
@@ -2312,23 +2317,36 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
         }
       }
 
-      // ========== 标记消息为已读接口 ==========
+      // ========== 标记消息为已读接口（单条/全部合并） ==========
+      // messageId 存在 → 标记单条；缺省 → 标记该用户全部未读
       if (path === '/api/messages/read' && request.method === 'POST') {
         try {
           const params = await request.json();
           const { messageId, username } = params;
-          
-          if (!messageId || !username) {
+
+          if (!username) {
             return resJson({ code: 400, msg: '缺少必要参数' }, 400);
           }
-          
-          const result = await DB
-            .prepare('UPDATE messages SET is_read = 1 WHERE id = ? AND username = ?')
-            .bind(messageId, username)
-            .run();
-          
+
+          let result;
+          if (messageId) {
+            result = await DB
+              .prepare('UPDATE messages SET is_read = 1 WHERE id = ? AND username = ?')
+              .bind(messageId, username)
+              .run();
+          } else {
+            result = await DB
+              .prepare('UPDATE messages SET is_read = 1 WHERE username = ? AND is_read = 0')
+              .bind(username)
+              .run();
+          }
+
           if (result.success) {
-            return resJson({ code: 200, msg: '标记成功' });
+            return resJson({
+              code: 200,
+              msg: messageId ? '标记成功' : '已全部标记为已读',
+              data: { changed: result.meta?.changes || 0 }
+            });
           } else {
             return resJson({ code: 500, msg: '标记失败' }, 500);
           }

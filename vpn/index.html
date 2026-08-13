@@ -1614,8 +1614,9 @@
                     <span id="notification-dot" class="notification-dot hidden"></span>
                 </button>
                 <div id="notification-dropdown" class="dropdown-menu fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-[70%] z-[100] flex flex-col">
-                    <div class="px-4 py-3 border-b border-zinc-800 text-center shrink-0">
+                    <div class="px-4 py-3 border-b border-zinc-800 flex items-center justify-between shrink-0">
                         <h3 id="notification-title" class="text-sm font-bold text-white cursor-pointer hover:text-[var(--neon-blue)] transition-colors" data-i18n="nav_notifications" title="点击刷新通知">通知</h3>
+                        <button id="mark-all-read-btn" class="text-xs text-[var(--neon-blue)] hover:text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed">全部已读</button>
                     </div>
                     <div id="notification-list" class="flex-1 overflow-y-auto">
                         <div class="px-4 py-3 text-sm text-zinc-400 text-center" data-i18n="no_notifications">暂无通知</div>
@@ -3558,6 +3559,26 @@
 
             window.__rerenderNotifications = () => renderNotifications(notifications);
 
+            const markAllAsRead = async () => {
+                if (!userInfo) return;
+                const btn = document.getElementById('mark-all-read-btn');
+                try {
+                    btn.disabled = true;
+                    await fetch(`${API}/api/messages/read`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username: userInfo.username })
+                    });
+                    notifications = notifications.map(n => ({ ...n, is_read: 1 }));
+                    renderNotifications(notifications);
+                    checkUnread(notifications);
+                } catch (error) {
+                    console.error('全部标记已读失败:', error);
+                } finally {
+                    btn.disabled = false;
+                }
+            };
+
             const checkUnread = (dataNotifications = []) => {
                 const dot = document.getElementById('notification-dot');
                 dot.classList.toggle('hidden', dataNotifications.filter(n => !n.is_read).length === 0);
@@ -3621,6 +3642,14 @@
                         notificationDropdown.classList.add('hidden');
                     }
                 });
+
+                const markAllReadBtn = document.getElementById('mark-all-read-btn');
+                if (markAllReadBtn) {
+                    markAllReadBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        markAllAsRead();
+                    });
+                }
             }
 
             const vordersBtn = document.getElementById('vorders-btn');
