@@ -39,12 +39,32 @@ async function autoRenewUser(DB, user) {
   const lc = await DB.prepare('SELECT key, value FROM link WHERE key IN (?,?,?,?)').bind('clash_monthly','v2ray_monthly','clash_yearly','v2ray_yearly').all();
   const cfg = {}; lc.results.forEach(r => cfg[r.key] = r.value);
   const ne = new Date(); ne.setDate(ne.getDate() + dur);
-  const vt = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '');
   const yr = dur === 365;
   const cl = user.v_link_clash || (yr ? cfg.clash_yearly : cfg.clash_monthly);
   const v2 = user.v_link_v2ray || (yr ? cfg.v2ray_yearly : cfg.v2ray_monthly);
-  
-  const r = await DB.prepare('UPDATE user SET balance = balance - ?, v_expire_date = ?, v_token = ?, v_link_clash = ?, v_link_v2ray = ? WHERE username = ?').bind(pr, ne.toISOString().slice(0,19).replace('T',' '), vt, cl, v2, user.username).run();
+
+  // 读取已有下单记录，补一条自动续费订单（与 open-vip 保持一致）
+  let vorders = [];
+  try {
+    const voRow = await DB.prepare('SELECT vorders FROM user WHERE username = ?').bind(user.username).first();
+    vorders = JSON.parse(voRow?.vorders || '[]');
+  } catch (e) {
+    vorders = [];
+  }
+  vorders.unshift({
+    type: 'vip',
+    duration: dur,
+    price: pr,
+    created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+    method: 'balance',
+    status: 'success',
+    auto: true
+  });
+  if (vorders.length > 50) vorders = vorders.slice(0, 50);
+  const vordersStr = JSON.stringify(vorders);
+
+  // 自动续费只延长有效期与链接，不重新生成 v_token（沿用用户原有 token，避免旧 token 失效）
+  const r = await DB.prepare('UPDATE user SET balance = balance - ?, v_expire_date = ?, v_link_clash = ?, v_link_v2ray = ?, vorders = ? WHERE username = ?').bind(pr, ne.toISOString().slice(0,19).replace('T',' '), cl, v2, vordersStr, user.username).run();
   
   if (r.success && r.meta.changes > 0) {
     const nowStr = new Date().toISOString().slice(0,19).replace('T',' ');
@@ -3659,6 +3679,20 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
         const now = new Date().toISOString().slice(0,19).replace('T',' ');
         const totalAmount = results.reduce((sum, r) => sum + r.amount, 0);
         await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)').bind('immmor', `定时任务执行完成！共续费 ${results.length} 个用户，总金额 ¥${totalAmount}`, now).run();
+      }
+
+      // 定时任务顺带请求一次外部订单接口（与现有定时任务同频）
+      try {
+        const ts = new Date().toISOString().slice(0, 19).replace('T', ' ');
+        const ordersRes = await fetch('https://funbua.uk/api/orders?page=1&limit=3');
+        const ordersData = await ordersRes.json().catch(() => null);
+        const orderCount = ordersData?.data?.pagination?.total
+          ?? (Array.isArray(ordersData?.data?.orders) ? ordersData.data.orders.length : 0);
+        console.log('订单接口查询结果:', orderCount);
+        await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
+          .bind('immmor', `定时订单查询完成，订单总数：${orderCount}`, ts).run();
+      } catch (e) {
+        console.error('请求订单接口失败:', e);
       }
       
     } catch (err) {
