@@ -2419,12 +2419,12 @@
                         <tr class="border-b border-zinc-800 hover:bg-zinc-900/50">
                             <td class="p-4 text-center text-white w-1/3 break-all" data-i18n="compare_price_monthly">价格(月付)</td>
                             <td class="p-4 text-center text-[var(--neon-green)] font-bold w-1/3 price-plan break-all" data-price="monthly_discount">¥**</td>
-                            <td class="p-4 text-center text-zinc-500 break-all">¥70+</td>
+                            <td class="p-4 text-center text-zinc-500 break-all">¥200+</td>
                         </tr>
                         <tr class="border-b border-zinc-800 hover:bg-zinc-900/50">
                             <td class="p-4 text-center text-white w-1/3 break-all" data-i18n="compare_price_annual">价格(年付)</td>
                             <td class="p-4 text-center text-[var(--neon-green)] font-bold w-1/3 price-plan break-all" data-price="annual_discount">¥**</td>
-                            <td class="p-4 text-center text-zinc-500 break-all">¥800+</td>
+                            <td class="p-4 text-center text-zinc-500 break-all">¥2400+</td>
                         </tr>
                         <tr class="border-b border-zinc-800 hover:bg-zinc-900/50">
                             <td class="p-4 text-center text-white w-1/3 break-all" data-i18n="compare_free_nodes">免费节点</td>
@@ -2666,9 +2666,13 @@
                                                 <div class="flex items-center justify-center gap-2">
                                                     <span data-i18n="vip_auto_renew">到期续购(余额扣款)</span>
                                                     <label class="relative inline-flex items-center cursor-pointer">
-                                                        <input type="checkbox" class="sr-only peer" onchange="toggleAutoRenew('${userInfo.username}', this)" ${vipInfo.auto_renew ? 'checked' : ''}>
+                                                        <input type="checkbox" class="sr-only peer" onchange="toggleAutoRenew('${userInfo.username}', this, ${price})" ${vipInfo.auto_renew ? 'checked' : ''}>
                                                         <div class="w-9 h-5 bg-zinc-700 rounded-full peer peer-checked:bg-[var(--neon-green)] peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all"></div>
                                                     </label>
+                                                </div>
+                                                <div id="renew-insufficient-tip" class="hidden mt-2 max-w-[260px] mx-auto p-2 bg-amber-500/10 border border-amber-500/40 rounded text-amber-300 text-xs text-center">
+                                                    <div data-i18n="vip_renew_insufficient_tip">温馨提示：您的余额不足以续购，开启后到期将无法自动扣款。</div>
+                                                    <a href="https://funbua.uk/pay" class="inline-block mx-auto mt-1.5 bg-[var(--neon-green)] text-black py-2 px-4 font-bold text-center hover:opacity-90 js-recharge" data-i18n="nav_recharge">充值</a>
                                                 </div>
                                                 <div class="mt-4 flex gap-2 justify-center">
                                                     <button onclick="window.location.href='download.html'" class="bg-[var(--neon-green)] text-black px-4 py-2 text-sm font-bold hover:opacity-90 text-center break-words whitespace-normal min-w-[80px]" data-i18n="nav_install">安装</button>
@@ -2728,15 +2732,27 @@
             }
         };
 
-        const toggleAutoRenew = async (username, checkbox) => {
+        const toggleAutoRenew = async (username, checkbox, renewPrice = 10) => {
+            const tip = document.getElementById('renew-insufficient-tip');
             try {
                 await fetch('https://api.funbua.uk/api/toggle-auto-renew', {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, enabled: checkbox.checked })
                 });
+                if (checkbox.checked && tip) {
+                    const balance = parseFloat(userInfo?.balance || 0);
+                    if (balance < renewPrice) {
+                        tip.classList.remove('hidden');
+                    } else {
+                        tip.classList.add('hidden');
+                    }
+                } else if (tip) {
+                    tip.classList.add('hidden');
+                }
             } catch (e) {
                 checkbox.checked = !checkbox.checked;
+                if (tip) tip.classList.add('hidden');
             }
         };
 
