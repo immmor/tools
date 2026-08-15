@@ -1497,6 +1497,34 @@
         </div>
     </div>
 
+    <!-- 替换所有使用该链接的用户模态框 -->
+    <div id="replaceLinkModal" class="modal">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3>替换所有使用该链接的用户</h3>
+                <button class="close-btn" onclick="closeReplaceLinkModal()">&times;</button>
+            </div>
+            <div style="margin-bottom: 1rem;">
+                <label style="display:block; margin-bottom:0.4rem; font-weight:500; color:#4a5568;">源链接（users 表中所有使用此链接的用户都将被替换）</label>
+                <div id="replaceLinkSourceText" style="word-break: break-all; font-size:0.8rem; background:#f7fafc; padding:0.5rem; border-radius:4px; color:#718096;"></div>
+                <div id="replaceLinkCount" style="margin-top:0.5rem; font-weight:600; color:#9f7aea;"></div>
+                <div id="replaceLinkUsers" style="margin-top:0.5rem; line-height:1.8;"></div>
+            </div>
+            <div class="form-group">
+                <label>新的 Clash 链接</label>
+                <input type="text" id="newReplaceClash" required>
+            </div>
+            <div class="form-group">
+                <label>新的 V2Ray 链接</label>
+                <input type="text" id="newReplaceV2ray" required>
+            </div>
+            <div style="display:flex; gap:10px; align-items:center; margin-top:15px;">
+                <button class="btn" onclick="confirmReplaceLinkUsers()" style="background-color:#9f7aea;">执行替换</button>
+                <span id="replaceLinkHint" style="color:#718096; font-size:0.85rem;"></span>
+            </div>
+        </div>
+    </div>
+
     <!-- 预测话题编辑模态框 -->
     <div id="predictTopicModal" class="modal">
         <div class="modal-content" style="max-width: 600px;">
@@ -3489,10 +3517,94 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
             await saveLinkConfig();
         }
 
+        // 打开"替换所有使用该链接的用户"弹窗
+        // 源链接来自当前行（node 表），但"使用该链接的用户"要去 users 表里找
+        async function openReplaceLinkUsers(nodeId) {
+            if (!window.currentNodeList || !window.currentNodeList.length) {
+                alert('请先点击"刷新"加载节点数据');
+                return;
+            }
+            const node = window.currentNodeList.find(n => n.id === nodeId);
+            if (!node) {
+                alert('未找到该节点，请刷新后重试');
+                return;
+            }
+            const sourceClash = (node.clash_link || '').trim();
+            const sourceV2ray = (node.v2ray_link || '').trim();
+            if (!sourceClash && !sourceV2ray) {
+                alert('该节点链接为空，无法作为替换来源');
+                return;
+            }
+            window.replaceLinkSource = { clash: sourceClash, v2ray: sourceV2ray };
+
+            // 去 users 表找出所有 v_link_clash / v_link_v2ray 等于源链接的用户
+            const usersResult = await apiRequest('/api/users?page=1&limit=9999', 'GET');
+            let matchedUsernames = [];
+            if (usersResult.code === 200 && usersResult.data?.users) {
+                matchedUsernames = usersResult.data.users
+                    .filter(u =>
+                        (sourceClash && (u.v_link_clash || '').trim() === sourceClash) ||
+                        (sourceV2ray && (u.v_link_v2ray || '').trim() === sourceV2ray)
+                    )
+                    .map(u => u.username);
+            }
+            window.replaceLinkMatchedUsers = matchedUsernames;
+
+            document.getElementById('replaceLinkSourceText').textContent =
+                sourceClash || sourceV2ray || '(空)';
+            document.getElementById('replaceLinkCount').textContent =
+                `当前将影响 ${matchedUsernames.length} 个使用该链接的用户`;
+            document.getElementById('replaceLinkUsers').innerHTML = matchedUsernames.length
+                ? matchedUsernames.map(name => `<span style="display:inline-block; background:#edf2f7; color:#2d3748; font-size:0.78rem; padding:0.2rem 0.5rem; border-radius:4px; margin:0.2rem;">${name}</span>`).join('')
+                : '<span style="color:#e53e3e;">未匹配到任何用户</span>';
+            document.getElementById('newReplaceClash').value = '';
+            document.getElementById('newReplaceV2ray').value = '';
+            document.getElementById('replaceLinkHint').textContent = '';
+            document.getElementById('replaceLinkModal').style.display = 'flex';
+        }
+
+        function closeReplaceLinkModal() {
+            document.getElementById('replaceLinkModal').style.display = 'none';
+        }
+
+        async function confirmReplaceLinkUsers() {
+            const usernames = window.replaceLinkMatchedUsers || [];
+            if (usernames.length === 0) {
+                alert('没有匹配到使用该链接的用户');
+                return;
+            }
+            const newClash = document.getElementById('newReplaceClash').value.trim();
+            const newV2ray = document.getElementById('newReplaceV2ray').value.trim();
+            if (!newClash || !newV2ray) {
+                alert('新的 Clash 链接和 V2Ray 链接都必须填写');
+                return;
+            }
+            if (!confirm(`确定要将 ${usernames.length} 个使用该链接的用户替换为新链接吗？`)) {
+                return;
+            }
+            const hint = document.getElementById('replaceLinkHint');
+            let done = 0, failed = 0;
+            for (const username of usernames) {
+                hint.textContent = `替换中... ${done + failed}/${usernames.length}`;
+                // 参考检查链接里的替换逻辑：POST /api/user/edit 更新用户链接
+                const result = await newApiRequest('/api/user/edit', 'POST', {
+                    username: username,
+                    v_link_clash: newClash,
+                    v_link_v2ray: newV2ray
+                });
+                if (result.code === 200) done++;
+                else failed++;
+            }
+            hint.textContent = `完成：成功 ${done} 个，失败 ${failed} 个`;
+            alert(`批量替换完成：成功 ${done} 个，失败 ${failed} 个`);
+            closeReplaceLinkModal();
+        }
+
         async function loadLinks() {
             const result = await newApiRequest('/api/node', 'GET');
             const tbody = document.getElementById('linksTableBody');
             if (result.code === 200 && result.data.length > 0) {
+                window.currentNodeList = result.data;
                 tbody.innerHTML = result.data.map(node => `
                     <tr>
                         <td>${node.id}</td>
@@ -3507,10 +3619,12 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
                             <button class="action-btn delete-btn" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;" onclick="deleteNode(${node.id})">删除</button>
                             <button class="action-btn" style="background-color:#ed8936;color:white;font-size:0.75rem;padding:0.25rem 0.5rem;" onclick="replaceDefaultLink('${node.clash_link || ''}', '${node.v2ray_link || ''}', 'month')">替换月链接</button>
                             <button class="action-btn" style="background-color:#ed8936;color:white;font-size:0.75rem;padding:0.25rem 0.5rem;" onclick="replaceDefaultLink('${node.clash_link || ''}', '${node.v2ray_link || ''}', 'year')">替换年链接</button>
+                            <button class="action-btn" style="background-color:#9f7aea;color:white;font-size:0.75rem;padding:0.25rem 0.5rem;" onclick="openReplaceLinkUsers(${node.id})">替换所有使用该链接的用户</button>
                         </td>
                     </tr>
                 `).join('');
             } else {
+                window.currentNodeList = [];
                 tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">暂无节点数据</td></tr>';
             }
         }
@@ -4167,27 +4281,38 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
         async function loadPredictTopics() {
             const tbody = document.getElementById('predictTopicBody');
             try {
-                const data = await newApiRequest('/api/predict/admin/list', 'POST', {});
+                const data = await fetch('https://api.funbua.uk/api/predict/admin/list', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                }).then(r => r.json());
                 if (!data.success) throw new Error(data.message);
                 const topics = data.topics || [];
                 tbody.innerHTML = topics.length === 0
                     ? '<tr><td colspan="8" style="text-align:center;color:#999;">暂无预测话题，请新增</td></tr>'
                     : topics.map(t => {
-                        const optionNames = t.options.join(' / ');
+                        const question = t.question || t.title || t.topic || '-';
+                        const rawOpts = t.options || t.choices || t.option_list;
+                        const opts = Array.isArray(rawOpts)
+                            ? rawOpts
+                            : (typeof rawOpts === 'string' && rawOpts
+                                ? rawOpts.split(/[,\n]/).map(s => s.trim()).filter(Boolean)
+                                : []);
+                        const optionNames = opts.length ? opts.join(' / ') : '-';
                         const statusBadge = t.status === 'active'
                             ? '<span style="color:#27ae60;font-weight:bold;">进行中</span>'
                             : '<span style="color:#e74c3c;font-weight:bold;">已结算</span>';
                         const pool = (t.total_pool || 0).toLocaleString();
-                        const winnerText = t.winner != null && t.winner >= 0 ? t.options[t.winner] || '未知' : '-';
+                        const winnerText = t.winner != null && t.winner >= 0 ? opts[t.winner] || '未知' : '-';
                         const btns = t.status === 'active'
-                            ? `<button class="btn" onclick="editPredictTopic(${t.id})">编辑</button>
-                               <button class="btn" style="background:#e74c3c;" onclick="openPredictResolve(${t.id})">结算</button>
-                               <button class="btn" style="background:#999;" onclick="deletePredictTopic(${t.id})">删除</button>`
-                            : `<span style="color:#999;">已结束</span>`;
+                            ? `<button class="action-btn edit-btn" onclick="editPredictTopic(${t.id})">编辑</button>
+                               <button class="action-btn" style="background:#e74c3c;color:#fff;" onclick="openPredictResolve(${t.id})">结算</button>
+                               <button class="action-btn delete-btn" onclick="deletePredictTopic(${t.id})">删除</button>`
+                            : `<span style="color:#999;font-size:0.85rem;">已结束</span>`;
                         return `<tr>
                             <td>${t.id}</td>
-                            <td>${escHtml(t.question)}</td>
-                            <td>${optionNames}</td>
+                            <td>${escHtml(question)}</td>
+                            <td>${optionNames || '-'}</td>
                             <td>${pool}</td>
                             <td>${new Date(t.end_time).toLocaleString()}</td>
                             <td>${statusBadge}</td>
@@ -4205,7 +4330,11 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
             const label = document.getElementById('predictBetTopicLabel');
             label.textContent = topicId ? `(话题 #${topicId})` : '';
             try {
-                const data = await newApiRequest('/api/predict/admin/bets', 'POST', { topicId: topicId || null });
+                const data = await fetch('https://api.funbua.uk/api/predict/admin/bets', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ topicId: topicId || null })
+                }).then(r => r.json());
                 if (!data.success) throw new Error(data.message);
                 const bets = data.bets || [];
                 tbody.innerHTML = bets.length === 0
@@ -4243,14 +4372,21 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
 
         function editPredictTopic(id) {
             // 需要从后端重新获取数据
-            newApiRequest('/api/predict/admin/list', 'POST', {}).then(data => {
+            fetch('https://api.funbua.uk/api/predict/admin/list', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            }).then(r => r.json()).then(data => {
                 if (data.success) {
                     const t = data.topics.find(x => x.id == id);
                     if (t) {
                         document.getElementById('predictTopicModalTitle').textContent = '编辑话题';
                         document.getElementById('predictTopicEditId').value = id;
                         document.getElementById('predictTopicQuestion').value = t.question;
-                        document.getElementById('predictTopicOptions').value = t.options.join('\n');
+                        const opts = Array.isArray(t.options)
+                            ? t.options
+                            : (typeof t.options === 'string' && t.options ? t.options.split(/[,\n]/).map(s => s.trim()).filter(Boolean) : []);
+                        document.getElementById('predictTopicOptions').value = opts.join('\n');
                         const d = new Date(t.end_time);
                         document.getElementById('predictTopicEndTime').value = d.toISOString().slice(0, 16);
                         document.getElementById('predictTopicModal').style.display = 'flex';
@@ -4272,10 +4408,15 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
             if (!question || !options.length || !endTime) return alert('请填写完整');
             try {
                 let data;
+                const predictApi = (path, body) => fetch('https://api.funbua.uk' + path, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                }).then(r => r.json());
                 if (id) {
-                    data = await newApiRequest('/api/predict/admin/update', 'POST', { id: parseInt(id), question, options, end_time: endTime });
+                    data = await predictApi('/api/predict/admin/update', { id: parseInt(id), question, options, end_time: endTime });
                 } else {
-                    data = await newApiRequest('/api/predict/admin/create', 'POST', { question, options, end_time: endTime });
+                    data = await predictApi('/api/predict/admin/create', { question, options, end_time: endTime });
                 }
                 if (data.success) {
                     alert('保存成功');
@@ -4291,7 +4432,11 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
 
         async function deletePredictTopic(id) {
             if (!confirm('确定删除该话题？已有的投注记录仍然保留。')) return;
-            const data = await newApiRequest('/api/predict/admin/delete', 'POST', { id });
+            const data = await fetch('https://api.funbua.uk/api/predict/admin/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id })
+            }).then(r => r.json());
             if (data.success) {
                 alert('已删除');
                 await loadPredictTopics();
@@ -4301,14 +4446,21 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
         }
 
         function openPredictResolve(id) {
-            newApiRequest('/api/predict/admin/list', 'POST', {}).then(data => {
+            fetch('https://api.funbua.uk/api/predict/admin/list', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            }).then(r => r.json()).then(data => {
                 if (data.success) {
                     const t = data.topics.find(x => x.id == id);
                     if (t) {
                         document.getElementById('predictResolveId').value = id;
                         document.getElementById('predictResolveQuestion').textContent = t.question;
                         const optsDiv = document.getElementById('predictResolveOptions');
-                        optsDiv.innerHTML = t.options.map((o, i) =>
+                        const opts = Array.isArray(t.options)
+                            ? t.options
+                            : (typeof t.options === 'string' && t.options ? t.options.split(/[,\n]/).map(s => s.trim()).filter(Boolean) : []);
+                        optsDiv.innerHTML = opts.map((o, i) =>
                             `<label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 8px;border:1px solid #ddd;border-radius:4px;">
                                 <input type="radio" name="predictWinner" value="${i}" required> ${escHtml(o)}
                             </label>`
@@ -4329,7 +4481,11 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
             const winner = document.querySelector('input[name="predictWinner"]:checked');
             if (!winner || !confirm('确认结算？将会给中奖用户派发奖金。')) return;
             try {
-                const data = await newApiRequest('/api/predict/admin/resolve', 'POST', { id, winner: parseInt(winner.value) });
+                const data = await fetch('https://api.funbua.uk/api/predict/admin/resolve', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id, winner: parseInt(winner.value) })
+                }).then(r => r.json());
                 if (data.success) {
                     alert(`结算完成！总奖池 ${data.totalPool}，中奖 ${data.winCount} 人`);
                     closePredictResolveModal();

@@ -1863,7 +1863,7 @@
                     <span class="text-[var(--neon-green)] font-bold" data-i18n="invite_reward_role_invitee">被邀请方</span>：<span data-i18n="invite_reward_invitee">通过你的链接注册，直接获得 <span class="text-[var(--neon-green)] font-bold">¥2</span> 奖励。</span>
                 </div>
                 <div class="text-zinc-300">
-                    <span class="text-[var(--neon-blue)] font-bold" data-i18n="invite_reward_role_inviter">邀请方（你）</span>：<span data-i18n="invite_reward_inviter">被邀请好友购买 VIP 后，你将获得其<span class="text-[var(--neon-blue)] font-bold">首笔订单</span>金额 <span class="text-[var(--neon-blue)] font-bold">20%</span> 的返现。<span class="text-zinc-500">（返现需管理员审核后发放，并非实时到账）</span></span>
+                    <span class="text-[var(--neon-blue)] font-bold" data-i18n="invite_reward_role_inviter">邀请方（你）</span>：<span data-i18n="invite_reward_inviter">被邀请好友购买 VIP 月订单或年订单后，你将获得其<span class="text-[var(--neon-blue)] font-bold">首笔订单</span>金额 <span class="text-[var(--neon-blue)] font-bold">20%</span> 的返现。<span class="text-zinc-500">（返现需管理员审核后发放，并非实时到账）</span></span>
                 </div>
             </div>
 
@@ -1908,7 +1908,7 @@
                     <span class="text-[var(--neon-green)] font-bold" data-i18n="invite_reward_role_invitee">被邀请方</span>：<span data-i18n="invite_reward_invitee">通过你的链接注册，直接获得 <span class="text-[var(--neon-green)] font-bold">¥2</span> 奖励。</span>
                 </div>
                 <div class="text-zinc-300">
-                    <span class="text-[var(--neon-blue)] font-bold" data-i18n="invite_reward_role_inviter">邀请方（你）</span>：<span data-i18n="invite_reward_inviter">被邀请好友购买 VIP 后，你将获得其<span class="text-[var(--neon-blue)] font-bold">首笔订单</span>金额 <span class="text-[var(--neon-blue)] font-bold">20%</span> 的返现。<span class="text-zinc-500">（返现需管理员审核后发放，并非实时到账）</span></span>
+                    <span class="text-[var(--neon-blue)] font-bold" data-i18n="invite_reward_role_inviter">邀请方（你）</span>：<span data-i18n="invite_reward_inviter">被邀请好友购买 VIP 月订单或年订单后，你将获得其<span class="text-[var(--neon-blue)] font-bold">首笔订单</span>金额 <span class="text-[var(--neon-blue)] font-bold">20%</span> 的返现。<span class="text-zinc-500">（返现需管理员审核后发放，并非实时到账）</span></span>
                 </div>
             </div>
 
@@ -3281,9 +3281,15 @@
                 document.getElementById('my-invites-link').value = link;
                 document.getElementById('my-invites-code').value = code;
 
-                const invited = Array.isArray(user?.invited_user) ? user.invited_user : [];
+                let invited = user?.invited_user;
+                if (typeof invited === 'string') {
+                    try { invited = JSON.parse(invited); } catch (e) { invited = []; }
+                }
+                invited = Array.isArray(invited) ? invited : [];
                 let rebates = [];
-                try { rebates = JSON.parse(user?.rebates || '[]'); } catch (e) {}
+                try {
+                    rebates = typeof user?.rebates === 'string' ? JSON.parse(user.rebates || '[]') : (user?.rebates || []);
+                } catch (e) {}
                 const earned = rebates.filter(r => r.status === 'approved').reduce((s, r) => s + (parseFloat(r.rebate) || 0), 0);
 
                 document.getElementById('my-invites-count').textContent = invited.length;
@@ -3296,10 +3302,8 @@
                     listEl.innerHTML = invited.map(u => {
                         const name = u.username || u;
                         const r = rebates.find(x => x.invitee === name);
-                        const statusTxt = !r ? '未购买' : r.status === 'approved' ? '已返现 ¥' + parseFloat(r.rebate).toFixed(2)
-                            : r.status === 'pending' ? '返现审核中 ¥' + parseFloat(r.rebate).toFixed(2) : '已驳回';
-                        const statusColor = !r ? 'text-zinc-500' : r.status === 'approved' ? 'text-[var(--neon-green)]'
-                            : r.status === 'pending' ? 'text-[var(--neon-blue)]' : 'text-zinc-500';
+                        const statusTxt = r ? (translations[currentLang]?.my_invites_bought || '已购买') : (translations[currentLang]?.my_invites_not_bought || '未购买');
+                        const statusColor = r ? 'text-[var(--neon-green)]' : 'text-zinc-500';
                         return `<div class="flex justify-between items-center rounded border border-zinc-700 bg-zinc-900 px-4 py-3">
                             <span class="text-white">${name}</span>
                             <span class="${statusColor} text-xs">${statusTxt}</span>
@@ -3374,6 +3378,18 @@
                         userInfo.balance = userData.balance;
                         userInfo.game_winnings = userData.game_winnings || 0;
                         if (userData.invite_code) userInfo.invite_code = userData.invite_code;
+                        if (userData.invited_user !== undefined) {
+                            try {
+                                userInfo.invited_user = typeof userData.invited_user === 'string'
+                                    ? JSON.parse(userData.invited_user) : userData.invited_user;
+                            } catch (e) { userInfo.invited_user = []; }
+                        }
+                        if (userData.rebates !== undefined) {
+                            try {
+                                userInfo.rebates = typeof userData.rebates === 'string'
+                                    ? JSON.parse(userData.rebates) : userData.rebates;
+                            } catch (e) { userInfo.rebates = []; }
+                        }
                         if (userData.source !== undefined) userInfo.source = userData.source;
                         if (userData.free_expire_date) userInfo.free_expire_date = userData.free_expire_date;
                         if (userData.last_checkin) userInfo.last_checkin = userData.last_checkin;

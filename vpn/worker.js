@@ -10,6 +10,31 @@ function fbChoiceLabel(_match, choice) {
   return map[choice] || choice;
 }
 
+// 邀请返现：被邀请人开通首笔 VIP 订单（月或年），给邀请人生成该笔订单价格 20% 的待审核返现记录
+async function grantRebate(DB, inviteeUsername, orderPrice, isYearly) {
+  try {
+    const me = await DB.prepare('SELECT invited_by FROM user WHERE username = ?').bind(inviteeUsername).first();
+    if (!me?.invited_by) return;
+    const inviter = await DB.prepare('SELECT username, rebates FROM user WHERE username = ?').bind(me.invited_by).first();
+    if (!inviter) return;
+    let rebates = [];
+    try { rebates = JSON.parse(inviter.rebates || '[]'); } catch (e) {}
+    // 仅首笔订单返现：若该被邀请人已有未驳回的返现记录，则不再生成
+    const existed = rebates.some(r => r.invitee === inviteeUsername && r.status !== 'rejected');
+    if (existed) return;
+    const nowTime = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    rebates.unshift({
+      invitee: inviteeUsername,
+      order_type: isYearly ? 'year' : 'month',
+      order_price: orderPrice,
+      rebate: +(orderPrice * 0.2).toFixed(2),
+      status: 'pending',
+      created_at: nowTime
+    });
+    await DB.prepare('UPDATE user SET rebates = ? WHERE username = ?').bind(JSON.stringify(rebates), inviter.username).run();
+  } catch (e) {}
+}
+
 // 自动续费单个用户的函数
 async function autoRenewUser(DB, user) {
   const now = new Date();
@@ -68,7 +93,10 @@ async function autoRenewUser(DB, user) {
   
   if (r.success && r.meta.changes > 0) {
     const nowStr = new Date().toISOString().slice(0,19).replace('T',' ');
-    
+
+    // 邀请返现：自动续费虽是一笔 VIP 订单，但 grantRebate 已按首笔去重，不会重复返现
+    await grantRebate(DB, user.username, pr, yr);
+
     // 给用户发送通知（多语言）
     await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)').bind(user.username, nt({
       cn: `您的VIP已自动续费成功！金额：${pr}元，天数：${dur}天`,
@@ -1130,26 +1158,8 @@ export default {
               .bind('immmor', msg, nowTime)
               .run();
             
-            // 邀请返现：被邀请人开通首笔 VIP 订单，给邀请人生成待审核返现记录
-            const me = await DB.prepare('SELECT invited_by FROM user WHERE username = ?').bind(username).first();
-            if (me?.invited_by) {
-              const inviter = await DB.prepare('SELECT username, rebates FROM user WHERE username = ?').bind(me.invited_by).first();
-              if (inviter) {
-                let rebates = [];
-                try { rebates = JSON.parse(inviter.rebates || '[]'); } catch (e) {}
-                const existed = rebates.some(r => r.invitee === username && r.status !== 'rejected');
-                if (!existed) {
-                  rebates.unshift({
-                    invitee: username,
-                    order_price: vipPrice,
-                    rebate: +(vipPrice * 0.2).toFixed(2),
-                    status: 'pending',
-                    created_at: nowTime
-                  });
-                  await DB.prepare('UPDATE user SET rebates = ? WHERE username = ?').bind(JSON.stringify(rebates), inviter.username).run();
-                }
-              }
-            }
+            // 邀请返现：被邀请人每开通一笔 VIP 订单（月或年），给邀请人生成该笔订单价格 20% 的待审核返现记录
+            await grantRebate(DB, username, vipPrice, isYearly);
 
             const updatedUser = await DB
               .prepare('SELECT username, balance, v_expire_date, v_token, v_link_clash, v_link_v2ray, vorders FROM user WHERE username = ?')
@@ -1551,13 +1561,13 @@ dns:
 proxies:
   - name: "VIP-Expired-Server"
     type: vmess
-    server: expired.phantom.immmor.com
+    server: expired.phantom.funbua.uk
     port: 443
     uuid: ${crypto.randomUUID()}
     alterId: 0
     cipher: auto
     tls: true
-    servername: expired.phantom.immmor.com
+    servername: expired.phantom.funbua.uk
 proxy-groups:
   - name: "PROXY"
     type: select
@@ -1633,7 +1643,7 @@ rules:
             const v2rayConfig = JSON.stringify({
               v: '2',
               ps: 'VIP-Expired-Server',
-              add: 'expired.phantom.immmor.com',
+              add: 'expired.phantom.funbua.uk',
               port: '443',
               id: crypto.randomUUID(),
               aid: '0',
@@ -1642,7 +1652,7 @@ rules:
               host: '',
               path: '',
               tls: 'tls',
-              sni: 'expired.phantom.immmor.com'
+              sni: 'expired.phantom.funbua.uk'
             });
             const expiredConfig = 'vmess://' + btoa(v2rayConfig);
             return new Response(expiredConfig, {
@@ -2967,12 +2977,19 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
         try {
           const row = await DB.prepare('SELECT value FROM link WHERE key = ?').bind('predict_topics').first();
           const topics = row?.value ? JSON.parse(row.value) : [];
-          // 统计每个话题的下注人数
+          // 统计每个话题的下注人数与真实奖池（实时从 game_bet 聚合）
           for (const t of topics) {
             const bets = await DB.prepare("SELECT username, SUM(cost) as total FROM game_bet WHERE game_type='predict' AND json_extract(result, '$.topic_id') = ? GROUP BY username")
               .bind(String(t.id)).all();
-            t.bettor_count = bets.results?.length || 0;
-            t.total_pool = t.pools ? t.pools.reduce((a, b) => a + b, 0) : 0;
+            const rows = bets.results || [];
+            t.bettor_count = rows.length || 0;
+            t.total_pool = rows.reduce((sum, r) => sum + (Number(r.total) || 0), 0);
+            // 归一化 options 为数组，避免前端字段缺失
+            if (typeof t.options === 'string') {
+              t.options = t.options.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
+            } else if (!Array.isArray(t.options)) {
+              t.options = [];
+            }
           }
           return resJson({ success: true, topics });
         } catch (err) {
