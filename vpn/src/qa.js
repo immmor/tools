@@ -136,16 +136,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         tag.onclick = () => handleSuggestionClick(q);
                         frag.appendChild(tag);
                     });
-                    const leaveMsgTag = document.createElement('span');
-                        leaveMsgTag.className = 'support-suggestion';
-                        leaveMsgTag.textContent = (window.translations && window.translations[window.currentLang]?.support_leave_btn) || '留言';
-                        leaveMsgTag.onclick = async () => {
-                            isLeaveMessageMode = true;
-                            const msg = (window.translations && window.translations[window.currentLang]?.support_idle_msg) || '您可以留下您的问题，我们会尽快回复您。';
-                            await addBotMessageStream(msg);
-                            input.placeholder = (window.translations && window.translations[window.currentLang]?.support_leave_placeholder) || '请输入您的留言...';
-                        };
-                    frag.appendChild(leaveMsgTag);
                     return frag;
                 };
                 track.appendChild(buildItems());
@@ -334,28 +324,110 @@ document.addEventListener('DOMContentLoaded', () => {
             await addBotMessageStream(questionData.answer, questionData.action);
         };
 
-        const fuzzySearch = (query) => {
-            if (!query.trim()) return [];
-            const queryLower = query.toLowerCase();
-            return questions.map(q => {
-                const questionLower = q.question.toLowerCase();
-                let score = 0;
-                
-                if (questionLower.includes(queryLower)) {
-                    score += 10;
-                    const index = questionLower.indexOf(queryLower);
-                    if (index === 0) score += 5;
-                }
-                
-                queryLower.split('').forEach(char => {
-                    if (questionLower.includes(char)) score += 1;
+        // 同义词/归一化词典（按语种）。匹配前把两边都映射到标准词，解决近义词与口语差异。
+        // 默认 en 词典作为「通用/跨语种」兜底（英文词在所有语种界面都能命中），zh 为中文口语归一化。
+        const SYNONYM_MAP = {
+            'zh-CN': {
+                '连不上': '连接', '连不了': '连接', '无法连接': '连接', '连不上网': '连接', '断线': '连接', '断流': '连接',
+                '充钱': '充值', '续费': '充值', '交钱': '充值', '付款': '充值', '支付': '充值',
+                '开户': '开通vip', '开通vip': '开通vip', '买vip': '开通vip', '升级vip': '开通vip', '办会员': '开通vip',
+                '慢': '速度慢', '卡': '速度慢', '卡顿': '速度慢', '延迟高': '速度慢',
+                '下不了': '下载', '装客户端': '下载', '获取客户端': '下载', '安装包': '下载',
+                '代理': '代理商', '加盟': '代理商', '分销': '代理商',
+                '封号': '账号被封', '被封': '账号被封',
+                '安卓': 'android', '苹果': 'ios', '苹果手机': 'ios', '鸿蒙': 'harmonyos',
+                '配置': '配置', '导入': '配置', '订阅': '配置', '订阅链接': '配置',
+                '密保': '密保', '密保问题': '密保', '安保': '密保',
+                '邀请': '邀请', '推广': '邀请', '返利': '邀请', '提成': '邀请',
+                '语言': '语言', '切换语言': '语言', '改语言': '语言', '换语言': '语言',
+            },
+            // 英文及非中文语种的口语归一化（也覆盖用户用英文词搜索的场景）
+            'en': {
+                'connect': '连接', 'cant connect': '连接', 'cannot connect': '连接', "can't connect": '连接', 'disconnect': '连接', 'drop': '连接', 'keeps dropping': '连接',
+                'recharge': '充值', 'top up': '充值', 'topup': '充值', 'pay': '充值', 'payment': '充值', 'subscribe': '充值',
+                'slow': '速度慢', 'laggy': '速度慢', 'lag': '速度慢', 'high ping': '速度慢', 'buffering': '速度慢', 'speed': '速度慢',
+                'download': '下载', 'install': '下载', 'setup': '下载', 'app': '下载', 'client': '下载', 'get the app': '下载',
+                'windows': 'windows', 'mac': 'mac', 'macos': 'mac', 'android': 'android', 'ios': 'ios', 'iphone': 'ios', 'harmonyos': 'harmonyos', 'huawei': 'harmonyos',
+                'protocol': '协议', 'vpn protocol': '协议',
+                'config': '配置', 'configure': '配置', 'subscription': '配置', 'subscribe link': '配置', 'import': '配置', 'qr': '配置',
+                'agent': '代理商', 'reseller': '代理商', 'distributor': '代理商', 'partner': '代理商',
+                'banned': '账号被封', 'ban': '账号被封', 'suspended': '账号被封', 'blocked': '账号被封', 'disable': '账号被封',
+                'invite': '邀请', 'referral': '邀请', 'affiliate': '邀请', 'commission': '邀请',
+                'language': '语言', 'change language': '语言', 'switch language': '语言', 'locale': '语言',
+                'vip': '开通vip', 'membership': '开通vip', 'member': '开通vip', 'premium': '开通vip', 'upgrade': '开通vip',
+                'security': '密保', 'security question': '密保', '2fa': '密保', 'protect': '密保',
+            },
+        };
+        // 非中文语种统一复用 en 词典（英文通用词在各语种界面都能命中）
+        const getSynonyms = (lang) => SYNONYM_MAP[lang] || SYNONYM_MAP['en'];
+
+        // 把文本切成「词单元」：先按词典做最长匹配替换归一化，再按 2-gram + 分词符切分
+        const tokenize = (text) => {
+            let t = (text || '').toLowerCase();
+            // 移除常见标点与空格
+            t = t.replace(/[？?！!，,。.、；;：:""''（）()【】\[\]~\-_/\\]/g, ' ');
+            // 同义词归一化（长词优先）；优先当前语种词典，再叠加 en 通用词典
+            const dict = { ...SYNONYM_MAP['en'], ...getSynonyms(window.currentLang) };
+            const keys = Object.keys(dict).sort((a, b) => b.length - a.length);
+            keys.forEach(k => { t = t.split(k).join(' ' + dict[k] + ' '); });
+            // 中文 2-gram
+            const grams = new Set();
+            const cn = t.replace(/[^一-龥]/g, '');
+            for (let i = 0; i < cn.length - 1; i++) grams.add(cn.substr(i, 2));
+            if (cn.length === 1) grams.add(cn);
+            // 英文/数字单词
+            t.split(/\s+/).forEach(w => { if (w) grams.add(w); });
+            return [...grams];
+        };
+
+        // 单条问题的可匹配词库（question + keywords + aliases 合并）
+        const buildIndexTokens = (q) => {
+            const parts = [q.question, ...(q.keywords || []), ...(q.aliases || [])];
+            const set = new Set();
+            parts.forEach(p => tokenize(p).forEach(tk => set.add(tk)));
+            return set;
+        };
+
+        const scoreOne = (queryTokens, q) => {
+            const idx = buildIndexTokens(q);
+            let score = 0;
+            queryTokens.forEach(qt => {
+                if (idx.has(qt)) score += qt.length >= 2 ? 6 : 3; // 长词/已归一化词权重更高
+            });
+            return score;
+        };
+
+        // 多意图拆分：按连接词/标点把一句话拆成多个子问题
+        const splitIntents = (text) => {
+            const segs = text.split(/[，,。.\n；;、]|(?:还有)|(?:另外)|(?:以及)|(?:并且)|(?:\s+和\s+)/).map(s => s.trim()).filter(Boolean);
+            return segs.length > 1 ? segs : [text];
+        };
+
+        const matchQuestions = (query, limit = 3) => {
+            const trimmed = (query || '').trim();
+            if (!trimmed) return [];
+            // 子意图分别打分后合并，避免一个长句只命中第一条
+            const subQueries = splitIntents(trimmed);
+            const bestByQuestion = new Map();
+            subQueries.forEach(sq => {
+                const qt = tokenize(sq);
+                if (qt.length === 0) return;
+                questions.forEach(q => {
+                    const s = scoreOne(qt, q);
+                    const key = q.question;
+                    if (!bestByQuestion.has(key) || bestByQuestion.get(key) < s) {
+                        bestByQuestion.set(key, Math.max(bestByQuestion.get(key) || 0, s));
+                    }
                 });
-                
-                return { ...q, score };
-            })
-            .filter(q => q.score > 0)
-            .sort((a, b) => b.score - a.score)
-            .slice(0, 3);
+            });
+            return [...bestByQuestion.entries()]
+                .map(([qk, score]) => {
+                    const base = questions.find(q => q.question === qk);
+                    return { ...base, score };
+                })
+                .filter(q => q.score > 0)
+                .sort((a, b) => b.score - a.score)
+                .slice(0, limit);
         };
 
         const handleSend = async () => {
@@ -405,17 +477,32 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             
-            const results = fuzzySearch(text);
-            
-            if (results.length > 0) {
-                await addBotMessageStream(results[0].answer, results[0].action);
-                
-                if (results.length > 1) {
-                    await addRelatedQuestions(results.slice(1));
+            const results = matchQuestions(text);
+            // 高置信度阈值：分数过低视为未命中，避免噪声误答
+            const HIT_THRESHOLD = 6;
+            const hits = results.filter(r => r.score >= HIT_THRESHOLD);
+
+            if (hits.length > 0) {
+                // 多意图：逐条流式回复，取前 2 条直接应答，其余作为相关推荐
+                const primary = hits.slice(0, 2);
+                for (const r of primary) {
+                    await addBotMessageStream(r.answer, r.action);
+                }
+                const related = results.filter(r => !primary.includes(r)).slice(0, 3);
+                if (related.length > 0) {
+                    await addRelatedQuestions(related);
                 }
             } else {
-                const noAnswer = (window.translations && window.translations[window.currentLang]?.support_no_answer) || '抱歉，我暂时无法回答这个问题。请详细描述您的问题，我们会尽快为您解决。';
-                await addBotMessageStream(noAnswer);
+                // 兜底：给出最相近的候选问题 + 留言入口，而不是一句冷冰冰的「无法回答」
+                const guessLabel = (window.translations && window.translations[window.currentLang]?.support_guess)
+                    || '没完全理解您的问题，您是不是想问：';
+                await addBotMessageStream(guessLabel);
+                if (results.length > 0) {
+                    await addRelatedQuestions(results.slice(0, 3));
+                }
+                const leaveLabel = (window.translations && window.translations[window.currentLang]?.support_leave_btn)
+                    || '以上都不是？点这里留言给人工客服';
+                await addBotMessageStream(leaveLabel, { type: 'openComplaint', label: leaveLabel });
             }
         };
 
