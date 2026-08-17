@@ -1504,11 +1504,10 @@
                 <h3>替换所有使用该链接的用户</h3>
                 <button class="close-btn" onclick="closeReplaceLinkModal()">&times;</button>
             </div>
-            <div style="margin-bottom: 1rem;">
-                <label style="display:block; margin-bottom:0.4rem; font-weight:500; color:#4a5568;">源链接（users 表中所有使用此链接的用户都将被替换）</label>
-                <div id="replaceLinkSourceText" style="word-break: break-all; font-size:0.8rem; background:#f7fafc; padding:0.5rem; border-radius:4px; color:#718096;"></div>
-                <div id="replaceLinkCount" style="margin-top:0.5rem; font-weight:600; color:#9f7aea;"></div>
-                <div id="replaceLinkUsers" style="margin-top:0.5rem; line-height:1.8;"></div>
+            <div style="margin-bottom:1rem;">
+                <div id="replaceLinkSourceText" style="word-break:break-all;font-size:0.8rem;background:#f7fafc;padding:0.5rem;border-radius:4px;color:#718096;"></div>
+                <div id="replaceLinkCount" style="margin-top:0.5rem;font-weight:600;color:#9f7aea;"></div>
+                <div id="replaceLinkUsers" style="margin-top:0.5rem;line-height:1.8;"></div>
             </div>
             <div class="form-group">
                 <label>新的 Clash 链接</label>
@@ -1518,9 +1517,16 @@
                 <label>新的 V2Ray 链接</label>
                 <input type="text" id="newReplaceV2ray" required>
             </div>
-            <div style="display:flex; gap:10px; align-items:center; margin-top:15px;">
+            <div class="form-group">
+                <label>是否同时替换当前节点链接</label>
+                <div style="display:flex; gap:1.5rem; margin-top:0.5rem;">
+                    <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="radio" name="replaceNodeLink" value="no" checked> 不替换</label>
+                    <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="radio" name="replaceNodeLink" value="yes"> 替换</label>
+                </div>
+            </div>
+            <div style="display:flex;gap:10px;align-items:center;margin-top:15px;">
                 <button class="btn" onclick="confirmReplaceLinkUsers()" style="background-color:#9f7aea;">执行替换</button>
-                <span id="replaceLinkHint" style="color:#718096; font-size:0.85rem;"></span>
+                <span id="replaceLinkHint" style="color:#718096;font-size:0.85rem;"></span>
             </div>
         </div>
     </div>
@@ -2435,6 +2441,8 @@
             if (selectedPage) {
                 selectedPage.style.display = 'block';
             }
+
+            // 游戏管理数据改为手动刷新（页面上的刷新按钮），不再自动加载
 
             // 设置菜单活跃状态
             const activeMenuItem = document.querySelector(`[onclick="showPage('${pageName}')"]`);
@@ -3536,6 +3544,7 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
                 return;
             }
             window.replaceLinkSource = { clash: sourceClash, v2ray: sourceV2ray };
+            window.replaceLinkSourceNodeId = nodeId;
 
             // 去 users 表找出所有 v_link_clash / v_link_v2ray 等于源链接的用户
             const usersResult = await apiRequest('/api/users?page=1&limit=9999', 'GET');
@@ -3560,6 +3569,8 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
             document.getElementById('newReplaceClash').value = '';
             document.getElementById('newReplaceV2ray').value = '';
             document.getElementById('replaceLinkHint').textContent = '';
+            const noRadio = document.querySelector('input[name="replaceNodeLink"][value="no"]');
+            if (noRadio) noRadio.checked = true;
             document.getElementById('replaceLinkModal').style.display = 'flex';
         }
 
@@ -3579,24 +3590,30 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
                 alert('新的 Clash 链接和 V2Ray 链接都必须填写');
                 return;
             }
-            if (!confirm(`确定要将 ${usernames.length} 个使用该链接的用户替换为新链接吗？`)) {
-                return;
-            }
-            const hint = document.getElementById('replaceLinkHint');
+            const replaceNode = document.querySelector('input[name="replaceNodeLink"]:checked')?.value === 'yes';
+            if (!confirm(`确定将 ${usernames.length} 个用户${replaceNode ? '及当前节点' : ''}的链接替换为新链接？`)) return;
+
             let done = 0, failed = 0;
+            const hint = document.getElementById('replaceLinkHint');
             for (const username of usernames) {
-                hint.textContent = `替换中... ${done + failed}/${usernames.length}`;
-                // 参考检查链接里的替换逻辑：POST /api/user/edit 更新用户链接
-                const result = await newApiRequest('/api/user/edit', 'POST', {
-                    username: username,
-                    v_link_clash: newClash,
-                    v_link_v2ray: newV2ray
+                hint.textContent = `替换用户中... ${done + failed}/${usernames.length}`;
+                const r = await newApiRequest('/api/user/edit', 'POST', {
+                    username, v_link_clash: newClash, v_link_v2ray: newV2ray
                 });
-                if (result.code === 200) done++;
-                else failed++;
+                r.code === 200 ? done++ : failed++;
             }
-            hint.textContent = `完成：成功 ${done} 个，失败 ${failed} 个`;
-            alert(`批量替换完成：成功 ${done} 个，失败 ${failed} 个`);
+
+            if (replaceNode) {
+                const node = (window.currentNodeList || []).find(n => n.id === window.replaceLinkSourceNodeId);
+                const nr = node && await newApiRequest('/api/node', 'PUT', {
+                    id: node.id, email: node.email, password: node.password, type: node.type,
+                    clash_link: newClash, v2ray_link: newV2ray, expire_date: node.expire_date || ''
+                });
+                hint.textContent = `用户：成功 ${done}/失败 ${failed}；当前节点：${nr && nr.code === 200 ? '已替换' : '未替换'}`;
+            } else {
+                hint.textContent = `完成：成功 ${done} 个，失败 ${failed} 个`;
+            }
+            alert(`完成：成功 ${done} 个，失败 ${failed} 个${replaceNode ? '（含当前节点）' : ''}`);
             closeReplaceLinkModal();
         }
 
@@ -4281,7 +4298,7 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
         async function loadPredictTopics() {
             const tbody = document.getElementById('predictTopicBody');
             try {
-                const data = await fetch('https://api.funbua.uk/api/predict/admin/list', {
+                const data = await fetch('https://api.immmor.com/api/predict/admin/list', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({})
@@ -4292,7 +4309,7 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
                     ? '<tr><td colspan="8" style="text-align:center;color:#999;">暂无预测话题，请新增</td></tr>'
                     : topics.map(t => {
                         const question = t.question || t.title || t.topic || '-';
-                        const rawOpts = t.options || t.choices || t.option_list;
+                        const rawOpts = t.options || t.option_pools || t.choices || t.option_list;
                         const opts = Array.isArray(rawOpts)
                             ? rawOpts
                             : (typeof rawOpts === 'string' && rawOpts
@@ -4330,7 +4347,7 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
             const label = document.getElementById('predictBetTopicLabel');
             label.textContent = topicId ? `(话题 #${topicId})` : '';
             try {
-                const data = await fetch('https://api.funbua.uk/api/predict/admin/bets', {
+                const data = await fetch('https://api.immmor.com/api/predict/admin/bets', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ topicId: topicId || null })
@@ -4372,7 +4389,7 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
 
         function editPredictTopic(id) {
             // 需要从后端重新获取数据
-            fetch('https://api.funbua.uk/api/predict/admin/list', {
+            fetch('https://api.immmor.com/api/predict/admin/list', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({})
@@ -4382,7 +4399,7 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
                     if (t) {
                         document.getElementById('predictTopicModalTitle').textContent = '编辑话题';
                         document.getElementById('predictTopicEditId').value = id;
-                        document.getElementById('predictTopicQuestion').value = t.question;
+                        document.getElementById('predictTopicQuestion').value = t.question || t.title || t.topic || '';
                         const opts = Array.isArray(t.options)
                             ? t.options
                             : (typeof t.options === 'string' && t.options ? t.options.split(/[,\n]/).map(s => s.trim()).filter(Boolean) : []);
@@ -4432,7 +4449,7 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
 
         async function deletePredictTopic(id) {
             if (!confirm('确定删除该话题？已有的投注记录仍然保留。')) return;
-            const data = await fetch('https://api.funbua.uk/api/predict/admin/delete', {
+            const data = await fetch('https://api.immmor.com/api/predict/admin/delete', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id })
@@ -4446,7 +4463,7 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
         }
 
         function openPredictResolve(id) {
-            fetch('https://api.funbua.uk/api/predict/admin/list', {
+            fetch('https://api.immmor.com/api/predict/admin/list', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({})
@@ -4481,7 +4498,7 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
             const winner = document.querySelector('input[name="predictWinner"]:checked');
             if (!winner || !confirm('确认结算？将会给中奖用户派发奖金。')) return;
             try {
-                const data = await fetch('https://api.funbua.uk/api/predict/admin/resolve', {
+                const data = await fetch('https://api.immmor.com/api/predict/admin/resolve', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ id, winner: parseInt(winner.value) })

@@ -2926,12 +2926,13 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
             bettorMap[tid][oi] = (bettorMap[tid][oi] || 0) + 1;
           }
           for (const t of topics) {
-            const optionNames = t.options || t.option_pools || [];
-            const optLen = optionNames.length;
-            t.options = optionNames;
-            t.option_pools = Array.from({ length: optLen }, (_, i) => poolMap[String(t.id)]?.[i] || 0);
-            t.option_bettors = Array.from({ length: optLen }, (_, i) => bettorMap[String(t.id)]?.[i] || 0);
-            t.pool = t.option_pools.reduce((a, b) => a + b, 0);
+            const optLen = (t.options || []).length;
+            // 统一字段：pools 为实时聚合奖池，覆盖存储中的占位值
+            t.pools = Array.from({ length: optLen }, (_, i) => poolMap[String(t.id)]?.[i] || 0);
+            t.bettors = Array.from({ length: optLen }, (_, i) => bettorMap[String(t.id)]?.[i] || 0);
+            t.pool = t.pools.reduce((a, b) => a + b, 0);
+            delete t.option_pools;
+            delete t.option_bettors;
           }
           return resJson({ success: true, topics });
         } catch (err) {
@@ -2977,20 +2978,46 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
         try {
           const row = await DB.prepare('SELECT value FROM link WHERE key = ?').bind('predict_topics').first();
           const topics = row?.value ? JSON.parse(row.value) : [];
-          // 统计每个话题的下注人数与真实奖池（实时从 game_bet 聚合）
-          for (const t of topics) {
-            const bets = await DB.prepare("SELECT username, SUM(cost) as total FROM game_bet WHERE game_type='predict' AND json_extract(result, '$.topic_id') = ? GROUP BY username")
-              .bind(String(t.id)).all();
-            const rows = bets.results || [];
-            t.bettor_count = rows.length || 0;
-            t.total_pool = rows.reduce((sum, r) => sum + (Number(r.total) || 0), 0);
-            // 归一化 options 为数组，避免前端字段缺失
-            if (typeof t.options === 'string') {
-              t.options = t.options.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
-            } else if (!Array.isArray(t.options)) {
-              t.options = [];
-            }
+          // 统计每个话题的下注人数与真实奖池（在 JS 侧聚合，规避 D1 json_extract 数字/字符串类型不匹配）
+          const bets = await DB.prepare("SELECT result, cost FROM game_bet WHERE game_type='predict'").all();
+          const poolMap = {};
+          const bettorMap = {};
+          for (const b of (bets.results || [])) {
+            let parsed;
+            try { parsed = JSON.parse(b.result || '{}'); } catch (e) { continue; }
+            const tid = String(parsed.topic_id);
+            const cost = b.cost || 0;
+            if (!poolMap[tid]) poolMap[tid] = 0;
+            if (!bettorMap[tid]) bettorMap[tid] = new Set();
+            poolMap[tid] += cost;
+            bettorMap[tid].add(parsed.username || b.username);
           }
+          for (const t of topics) {
+            const tid = String(t.id);
+            t.total_pool = poolMap[tid] || 0;
+            t.bettor_count = bettorMap[tid] ? bettorMap[tid].size : 0;
+            // 归一化 options 为数组（兼容 option_pools / options / choices 等多种字段名）
+            const rawOpts = t.options ?? t.option_pools ?? t.choices ?? t.option_list;
+            let opts;
+            if (Array.isArray(rawOpts)) {
+              opts = rawOpts.map(s => String(s).trim()).filter(Boolean);
+            } else if (typeof rawOpts === 'string') {
+              opts = rawOpts.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
+            } else {
+              opts = [];
+            }
+            t.options = opts;
+            // 统一 pools 字段：实时聚合奖池覆盖存储占位值，长度与 options 对齐
+            if (!Array.isArray(t.pools) || t.pools.length !== opts.length) {
+              t.pools = opts.map((_, i) => poolMap[tid]?.[i] || 0);
+            }
+            delete t.option_pools;
+            delete t.option_bettors;
+            if (!('pools' in t)) t.pools = opts.map(() => 0);
+          }
+          // 持久化迁移：把旧的 option_pools/pool 字段统一为 options/pools
+          await DB.prepare('UPDATE link SET value = ? WHERE key = ?')
+            .bind(JSON.stringify(topics), 'predict_topics').run();
           return resJson({ success: true, topics });
         } catch (err) {
           return resJson({ success: false, message: err.message }, 500);
@@ -3101,13 +3128,15 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           if (idx < 0) return resJson({ success: false, message: '话题不存在' }, 404);
           if (topics[idx].status === 'resolved') return resJson({ success: false, message: '该话题已结算' }, 400);
 
-          // 计算总奖池和中奖选项奖池
-          const allBets = await DB.prepare("SELECT rowid, username, cost, result FROM game_bet WHERE game_type='predict' AND json_extract(result, '$.topic_id') = ?")
-            .bind(String(id)).all();
-          const bets = allBets.results || [];
+          // 计算总奖池和中奖选项奖池（JS 侧聚合，规避 D1 json_extract 数字/字符串类型不匹配）
+          const allBets = await DB.prepare("SELECT id, username, cost, result FROM game_bet WHERE game_type='predict'").all();
+          const bids = String(id);
+          const bets = (allBets.results || []).filter(b => {
+            try { return String(JSON.parse(b.result || '{}').topic_id) === bids; } catch { return false; }
+          });
           const totalPool = bets.reduce((s, b) => s + Number(b.cost), 0);
           const winBets = bets.filter(b => {
-            try { return JSON.parse(b.result).option_index == winner; } catch { return false; }
+            try { return Number(JSON.parse(b.result).option_index) === Number(winner); } catch { return false; }
           });
           const winPool = winBets.reduce((s, b) => s + Number(b.cost), 0);
 
@@ -3121,9 +3150,9 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           // 派奖
           for (const b of winBets) {
             const prize = winPool > 0 ? Math.floor((Number(b.cost) / winPool) * payoutPool) : 0;
-            if (prize > 0) {
+            if (prize > 0 && b.username) {
               await DB.prepare('UPDATE user SET balance = balance + ? WHERE username = ?').bind(prize, b.username).run();
-              await DB.prepare('UPDATE game_bet SET prize = ? WHERE rowid = ?').bind(prize, b.rowid).run();
+              await DB.prepare('UPDATE game_bet SET prize = ? WHERE id = ?').bind(prize, b.id).run();
             }
           }
 

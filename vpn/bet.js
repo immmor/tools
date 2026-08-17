@@ -1000,18 +1000,34 @@
             return '¥' + Number(v).toFixed(2);
         }
 
+        function parseTime(isoStr) {
+            if (!isoStr) return null;
+            // 兼容两种格式：
+            //  - 带时区/偏移：2026-08-29T10:07:00.000Z 或 2026-08-15T23:59:00+08:00（new Date 直接解析）
+            //  - 无时区：2026-08-15T23:59:00（视为本地时间，补 T 解析）
+            let d;
+            if (/z$|[+\-]\d{2}:?\d{2}$/i.test(isoStr)) {
+                d = new Date(isoStr);
+            } else {
+                const s = isoStr.replace(' ', 'T');
+                d = new Date(s);
+                if (isNaN(d.getTime())) d = new Date(s + 'Z');
+            }
+            return isNaN(d.getTime()) ? null : d;
+        }
+
         function toLocalTime(isoStr) {
-            if (!isoStr) return '';
+            const d = parseTime(isoStr);
+            if (!d) return isoStr || '';
             try {
-                const d = new Date(isoStr + 'Z');
-                if (isNaN(d.getTime())) return isoStr;
                 return d.toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
             } catch (e) { return isoStr; }
         }
 
         function getRemaining(isoStr) {
-            if (!isoStr) return '';
-            const diff = new Date(isoStr + 'Z') - new Date();
+            const d = parseTime(isoStr);
+            if (!d) return '';
+            const diff = d - new Date();
             if (diff <= 0) return '已结束';
             const dh = Math.floor(diff / 3600000);
             const dm = Math.floor((diff % 3600000) / 60000);
@@ -1021,7 +1037,8 @@
         }
 
         function isExpired(isoStr) {
-            return isoStr && new Date(isoStr + 'Z') <= new Date();
+            const d = parseTime(isoStr);
+            return !!(d && d <= new Date());
         }
 
         function getColor(idx) {
@@ -1045,9 +1062,9 @@
                         ...t,
                         question: t.question || t.title,
                         options: t.options || [],
-                        option_pools: t.option_pools || t.options.map(() => 0),
-                        pool: Array.isArray(t.option_pools) ? t.option_pools.reduce((a, b) => a + b, 0) : Number(t.pool) || 0,
-                        option_bettors: t.option_bettors || t.options.map(() => 0),
+                        pools: t.pools || t.options.map(() => 0),
+                        pool: Array.isArray(t.pools) ? t.pools.reduce((a, b) => a + b, 0) : Number(t.pool) || 0,
+                        bettors: t.bettors || t.options.map(() => 0),
                         winner: t.winner == null || Number(t.winner) < 0 ? null : t.winner
                     }));
                     console.log('预测话题已从后端加载:', allTopics.length, '个');
@@ -1073,10 +1090,10 @@
                 const active = t.status === 'active';
                 const expired = active && isExpired(t.end_time);
                 const displayStatus = !active ? 'resolved' : expired ? 'ended' : 'active';
-                const totalPool = t.pool || 0;
+                const totalPool = t.pool || (t.pools ? t.pools.reduce((a, b) => a + b, 0) : 0) || 0;
 
                 const barHTML = t.options.map((_, i) => {
-                    const amt = (t.option_pools && t.option_pools[i]) || 0;
+                    const amt = (t.pools && t.pools[i]) || 0;
                     const pct = totalPool > 0 ? (amt / totalPool * 100) : (1 / t.options.length * 100);
                     const isWinner = !active && t.winner === i;
                     const odds = amt > 0 ? (totalPool / amt).toFixed(2) : '--';
