@@ -494,15 +494,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } else {
                 // 兜底：给出最相近的候选问题 + 留言入口，而不是一句冷冰冰的「无法回答」
+                const leaveLabel = (window.translations && window.translations[window.currentLang]?.support_leave_btn)
+                    || '留言';
+                // 留言按钮挂在引导语气泡内，不单独占位气泡
                 const guessLabel = (window.translations && window.translations[window.currentLang]?.support_guess)
-                    || '没完全理解您的问题，您是不是想问：';
-                await addBotMessageStream(guessLabel);
+                    || '没完全理解您的问题，您是不是想：';
+                await addBotMessageStream(guessLabel, { type: 'openComplaint', label: leaveLabel });
                 if (results.length > 0) {
                     await addRelatedQuestions(results.slice(0, 3));
                 }
-                const leaveLabel = (window.translations && window.translations[window.currentLang]?.support_leave_btn)
-                    || '以上都不是？点这里留言给人工客服';
-                await addBotMessageStream(leaveLabel, { type: 'openComplaint', label: leaveLabel });
             }
         };
 
