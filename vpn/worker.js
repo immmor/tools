@@ -169,6 +169,30 @@ export default {
         })());
       }
 
+      // ========== talangya 商品代理（绕过CORS，原样返回） ==========
+      if (path === '/api/talangya/commodity' && request.method === 'GET') {
+        const r = await fetch('https://talangya.com/user/api/index/commodity?categoryId=0&compact=1', {
+          headers: {
+            'accept': 'application/json, text/javascript, */*; q=0.01',
+            'accept-language': 'zh-CN,zh;q=0.9',
+            'referer': 'https://talangya.com/',
+            'sec-ch-ua': '"Not=A?Brand";v="99", "Google Chrome";v="151", "Chromium";v="151"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': '"macOS"',
+            'sec-fetch-dest': 'empty',
+            'sec-fetch-mode': 'cors',
+            'sec-fetch-site': 'same-origin',
+            'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36',
+            'x-requested-with': 'XMLHttpRequest',
+            'cookie': 'ACG-SHOP=d4tuugthg3i49cj66fqnfo48p4'
+          }
+        });
+        const data = await r.text();
+        return new Response(data, {
+          headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json; charset=utf-8' }
+        });
+      }
+
       // ========== 发送邮箱验证码接口 ==========
       if (path === '/api/send-verify-code' && request.method === 'POST') {
         const params = await request.json();
@@ -1205,7 +1229,13 @@ export default {
           const user = await DB.prepare('SELECT survey FROM user WHERE username = ?').bind(username).first();
           if (!user) return resJson({ code: 404, msg: '用户不存在' }, 404);
           const survey = user.survey ? JSON.parse(user.survey) : {};
-          survey[key] = value;
+          // 叠加模式：同一 key 保留历史记录（兼容旧格式的单值）
+          const prev = survey[key];
+          let list = Array.isArray(prev) ? prev : (prev !== undefined && prev !== null ? [prev] : []);
+          // 北京时间（UTC+8）
+          const ts = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+          list.push({ value, ts });
+          survey[key] = list;
           await DB.prepare('UPDATE user SET survey = ? WHERE username = ?').bind(JSON.stringify(survey), username).run();
           return resJson({ code: 200, msg: '提交成功' });
         } catch (err) {
@@ -1771,12 +1801,12 @@ proxies:
     tls: false
     skip-cert-verify: true
 proxy-groups:
-  - name: "🚀 免费节点已到期"
+  - name: "🚀 免费节点已到期，请重新签到"
     type: select
     proxies:
       - FREE_EXPIRED_SIGNIN_REQUIRED
 rules:
-  - MATCH,🚀 免费节点已到期
+  - MATCH,🚀 免费节点已到期，请重新签到
 `;
             return new Response(mockConfig, {
               headers: {
@@ -1850,7 +1880,7 @@ rules:
           if (!user.free_expire_date || new Date(user.free_expire_date) < now) {
             const mockConfig = `{
   "v": "2",
-  "ps": "🚀 免费节点已到期",
+  "ps": "🚀 免费节点已到期，请重新签到",
   "add": "expired.freenode.local",
   "port": "8080",
   "id": "00000000-0000-0000-0000-000000000000",
