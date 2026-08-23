@@ -45,14 +45,7 @@
             background: rgba(15, 15, 15, 0.9);
             border: 1px solid #333;
             clip-path: polygon(0 0, 92% 0, 100% 20px, 100% 100%, 8% 100%, 0 94%);
-            transition: all 0.3s;
             position: relative;
-        }
-
-        .cyber-card:hover {
-            border-color: var(--neon-green);
-            box-shadow: 0 0 20px rgba(0, 255, 65, 0.2);
-            transform: translateY(-5px);
         }
 
         .cyber-card::after {
@@ -136,8 +129,7 @@
         }
 
         .download-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0, 243, 255, 0.4);
+            box-shadow: 0 0 15px rgba(0, 243, 255, 0.4);
         }
     </style>
 </head>
@@ -341,8 +333,40 @@
                         <div class="step-number">1</div>
                         <div>
                             <h3 class="text-lg font-bold mb-2" data-i18n="step_1">下载客户端</h3>
-                            <p class="text-zinc-400 mb-3" data-i18n="step_1_desc_ios">从 App Store 下载 Shadowrocket</p>
+                            
+                            <p class="text-zinc-400 mt-3" data-i18n="step_1_desc_ios">从 App Store 下载 Shadowrocket</p>
                             <a href="https://apps.apple.com/app/shadowrocket/id932747118" class="download-btn inline-block" data-i18n="shadowrocket_btn">Shadowrocket</a>
+
+                            <!-- 免费账号列表 -->
+                            <div class="cyber-card p-4 mt-3 border-[var(--neon-green)] max-h-64 overflow-y-auto">
+                                 <div class="flex items-center mb-3">
+                                    <i data-lucide="key" class="w-5 h-5 text-[var(--neon-green)] mr-2"></i>
+                                    <h3 class="text-base font-bold text-[var(--neon-green)]" data-i18n="free_accounts">免费账号列表</h3>
+                                    <span class="ml-2 px-1.5 py-0.5 text-[9px] uppercase font-bold tracking-wider bg-[var(--neon-green)] text-black rounded" data-i18n="free_tag">Free</span>
+                                </div>
+                                
+                                <div class="cyber-card border-[var(--neon-red)] p-3 mb-3">
+                                    <div class="flex items-start gap-2">
+                                        <i data-lucide="alert-triangle" class="w-5 h-5 text-[var(--neon-red)] mt-0.5 flex-shrink-0"></i>
+                                        <div class="text-[10px] text-zinc-300 space-y-1">
+                                            <p class="font-bold text-[var(--neon-red)] mb-1" data-i18n="ios_risk_title">共享账号风险提示：</p>
+                                            <p data-i18n="ios_risk_1">⚠ 所有账号均为免费公益账号，不做任何售后服务。</p>
+                                            <p data-i18n="ios_risk_2">⚠ 使用苹果ID必须从App Store 登录,千万不要登录「iCloud」,否则可能导致锁机或者隐私泄漏!</p>
+                                            <p data-i18n="ios_risk_3">⚠ 本站不提供任何付费解锁服务，也不会索取任何个人信息。任何收费解锁或信息索取行为，均为诈骗，请提高警惕。</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="space-y-1.5" id="accounts-list">
+                                    <!-- 账号列表将通过 JavaScript 动态生成 -->
+                                </div>
+                                
+                                <div class="mt-3 pt-3 border-t border-zinc-700">
+                                    <p class="text-[10px] text-zinc-500" data-i18n="accounts_note">
+                                        * 以上账号仅供学习测试使用，请勿用于商业用途。账号可能会定期更换，请注意时效性。
+                                    </p>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
@@ -651,6 +675,84 @@
 
         // 在加载翻译后检测操作系统
         detectAndActivatePlatform();
+
+        // 获取免费账号列表
+        async function loadFreeAccounts() {
+            try {
+                const response = await fetch('sharocket.json');
+                if (!response.ok) throw new Error('Failed to load accounts');
+                
+                const data = await response.json();
+                if (!data.success || !data.data?.accounts?.group1) return;
+
+                const accounts = data.data.accounts.group1;
+                const container = document.getElementById('accounts-list');
+                if (!container) return;
+
+                // 如果账号列表已填充，不重复填充
+                if (container.children.length > 0) return;
+
+                accounts.forEach((account, index) => {
+                    const card = document.createElement('div');
+                    card.className = 'cyber-card p-3 transition-colors group cursor-pointer hover:border-[var(--neon-blue)]';
+
+                    card.innerHTML = `
+                        <div class="flex justify-between items-start mb-2">
+                            <span class="text-xs text-zinc-500 font-mono">#${account.id}</span>
+                            <span class="text-xs px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono" title="${account.regionName}">
+                                ${account.region}
+                            </span>
+                        </div>
+                        <div class="space-y-1">
+                            <div class="flex items-center gap-2 text-sm">
+                                <span class="text-zinc-500 w-16 flex-shrink-0" data-i18n="email">邮箱:</span>
+                                <code class="text-zinc-300 break-all flex-1 font-mono text-xs">${account.fullEmail}</code>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 cursor-pointer" onclick="event.stopPropagation(); copyToClipboard('${account.fullEmail}', this)"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                            </div>
+                            <div class="flex items-center gap-2 text-sm">
+                                <span class="text-zinc-500 w-16 flex-shrink-0" data-i18n="password">密码:</span>
+                                <code class="text-[var(--neon-green)] break-all flex-1 font-mono text-xs">${account.password}</code>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 cursor-pointer" onclick="event.stopPropagation(); copyToClipboard('${account.password}', this)"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                            </div>
+                        </div>
+                    `;
+
+                    container.appendChild(card);
+                });
+
+                lucide.createIcons();
+                if (translations[currentLang]) applyTranslation(currentLang);
+            } catch (error) {
+                console.error('Failed to load free accounts:', error);
+                const container = document.getElementById('accounts-list');
+                if (container) {
+                    container.innerHTML = `<p class="text-center text-zinc-500 py-4" data-i18n="accounts_error">无法加载账号列表，请稍后重试</p>`;
+                    if (translations[currentLang]) applyTranslation(currentLang);
+                }
+            }
+        }
+
+        // 复制文本到剪贴板
+        function copyToClipboard(text, element) {
+            navigator.clipboard.writeText(text).then(() => {
+                // 复制成功，显示视觉反馈
+                element.outerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00ff41" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+                
+                setTimeout(() => {
+                    element.outerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 cursor-pointer" onclick="event.stopPropagation(); copyToClipboard(\'' + text + '\', this)"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+                }, 1000);
+            }).catch(() => {
+                // 复制失败
+                element.outerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ff003c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>';
+                
+                setTimeout(() => {
+                    element.outerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 cursor-pointer" onclick="event.stopPropagation(); copyToClipboard(\'' + text + '\', this)"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+                }, 1000);
+            });
+        }
+
+        // 初始化加载账号列表
+        loadFreeAccounts();
 
         // 矩阵背景效果
         const canvas = document.getElementById('matrix-bg');
