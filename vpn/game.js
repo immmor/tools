@@ -842,7 +842,7 @@
         window.GameCenterModule = { renderGameHistory, updateBalanceDisplay };
     };
 
-    // ===== 中奖信息轮播（纯前端模拟） =====
+    // ===== 中奖 & 提现消息轮播（纯前端模拟） =====
     const initWinnerCarousel = () => {
         const tabsEl = document.querySelector('.game-tabs');
         if (!tabsEl || document.getElementById('winner-carousel')) return;
@@ -862,8 +862,8 @@
                     margin-bottom: 1.5rem;
                     padding: 0.3rem 0.9rem;
                     background: linear-gradient(135deg, rgba(20,24,40,0.85), rgba(30,20,48,0.85));
-                    border: 1px solid rgba(255,200,80,0.35);
-                    box-shadow: 0 0 18px rgba(255,170,0,0.18), inset 0 0 12px rgba(0,243,255,0.08);
+                    border: 1px solid rgba(0,243,255,0.35);
+                    box-shadow: 0 0 18px rgba(0,243,255,0.18), inset 0 0 12px rgba(0,255,65,0.08);
                     backdrop-filter: blur(6px);
                 }
                 .winner-carousel-label {
@@ -877,8 +877,8 @@
                     font-size: 1.1rem;
                     border-radius: 0.5rem;
                     color: #1a1206;
-                    background: linear-gradient(90deg, #ffd34d, #ff9d2f);
-                    box-shadow: 0 0 10px rgba(255,180,40,0.55);
+                    background: linear-gradient(90deg, #00f3ff, #00e676);
+                    box-shadow: 0 0 10px rgba(0,243,255,0.55);
                     white-space: nowrap;
                 }
                 .winner-carousel-view {
@@ -918,7 +918,7 @@
                 }
                 .winner-slide .winner-name {
                     font-weight: 700;
-                    color: #ffb347;
+                    color: #00e6ff;
                     font-family: ui-monospace, monospace;
                 }
                 .winner-slide .winner-game {
@@ -931,41 +931,69 @@
                     text-shadow: 0 0 8px rgba(255,210,60,0.5);
                 }
                 .winner-slide .winner-amount::before {
-                    content: '🪙 ';
+                    content: '💰 ';
+                }
+                .winner-slide .withdraw-amount {
+                    font-weight: 800;
+                    color: #ff9100;
+                    font-family: ui-monospace, monospace;
+                    text-shadow: 0 0 8px rgba(255,160,40,0.5);
+                }
+                .winner-slide .withdraw-amount::before {
+                    content: '💰 ';
+                }
+                .winner-slide .withdraw-label {
+                    color: #00e676;
+                    font-weight: 700;
                 }
             `;
             document.head.appendChild(style);
         }
 
-        // 模拟数据
+        // 模拟数据 — 混合中奖 + 提现
         const tr = (k) => (window.translations && window.translations[currentLang] && window.translations[currentLang][k]) || k;
         const mailPrefix = ['a', 'b', 'c', 'm', 'x', 'k', 't', 'z', 'user', 'vip', '2386'];
         const mailDomains = ['qq.com', '163.com', 'gmail.com', 'outlook.com', 'foxmail.com'];
         const gameKeys = ['game_wheel', 'game_slot', 'game_scratch'];
-        const prizes = [200, 100, 50, 20];
+        const winPrizes = [5, 10, 20, 50, 100];
+        const withdrawAmounts = [50, 100, 200, 500];
+        const methods = ['微信', '支付宝', 'USDT', 'BTC'];
         const buildName = () => {
             const p = mailPrefix[Math.floor(Math.random() * mailPrefix.length)];
             const d = mailDomains[Math.floor(Math.random() * mailDomains.length)];
             return p + '***@' + d;
         };
-        const mockWinners = [];
-        for (let i = 0; i < 10; i++) {
-            const name = buildName();
+        const mockItems = [];
+        for (let i = 0; i < 5; i++) {
+            const name1 = buildName();
             const gameKey = gameKeys[Math.floor(Math.random() * gameKeys.length)];
-            const amount = prizes[Math.floor(Math.random() * prizes.length)];
-            mockWinners.push({ name, gameKey, game: tr(gameKey), amount });
+            const amount1 = winPrizes[Math.floor(Math.random() * winPrizes.length)];
+            mockItems.push({ type: 'win', name: name1, gameKey, game: tr(gameKey), amount: amount1 });
+
+            const name2 = buildName();
+            const amount2 = withdrawAmounts[Math.floor(Math.random() * withdrawAmounts.length)];
+            const method = methods[Math.floor(Math.random() * methods.length)];
+            mockItems.push({ type: 'withdraw', name: name2, amount: amount2, method });
         }
 
         const buildSlide = (w) => {
             const slide = document.createElement('div');
             slide.className = 'winner-slide';
-            slide.innerHTML =
-                '<span class="winner-icon">🎉</span>' +
-                '<span class="winner-name">' + w.name + '</span>' +
-                '<span data-i18n="winner_at">' + tr('winner_at') + '</span>' +
-                '<span class="winner-game" data-i18n="' + w.gameKey + '">' + w.game + '</span>' +
-                '<span data-i18n="winner_won">' + tr('winner_won') + '</span>' +
-                '<span class="winner-amount">' + w.amount + '</span>';
+            if (w.type === 'win') {
+                slide.innerHTML =
+                    '<span class="winner-icon">🎉</span>' +
+                    '<span class="winner-name">' + w.name + '</span>' +
+                    '<span data-i18n="winner_at">' + tr('winner_at') + '</span>' +
+                    '<span class="winner-game" data-i18n="' + w.gameKey + '">' + w.game + '</span>' +
+                    '<span data-i18n="winner_won">' + tr('winner_won') + '</span>' +
+                    '<span class="winner-amount">' + w.amount + '</span>';
+            } else {
+                slide.innerHTML =
+                    '<span class="winner-icon">💸</span>' +
+                    '<span class="winner-name">' + w.name + '</span>' +
+                    '<span class="withdraw-label" data-i18n="withdraw_title">' + tr('withdraw_title') + '</span>' +
+                    '<span class="withdraw-amount">' + w.amount + '</span>';
+            }
             return slide;
         };
 
@@ -978,7 +1006,7 @@
         const track = document.createElement('div');
         track.className = 'winner-carousel-track';
         // 复制一份数据实现无缝循环
-        [...mockWinners, ...mockWinners].forEach(w => track.appendChild(buildSlide(w)));
+        [...mockItems, ...mockItems].forEach(w => track.appendChild(buildSlide(w)));
         view.appendChild(track);
         carousel.appendChild(view);
         tabsEl.insertAdjacentElement('beforebegin', carousel);
