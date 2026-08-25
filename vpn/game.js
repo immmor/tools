@@ -1097,6 +1097,21 @@
                         bettors: t.bettors || t.options.map(() => 0),
                         winner: t.winner == null || Number(t.winner) < 0 ? null : t.winner
                     }));
+                    // 排序：可投注(active且未过期) → 已结束未结算 → 已结算；同组按截止时间从近到远
+                    allTopics.sort((a, b) => {
+                        const rankOf = (tp) => {
+                            const isActive = tp.status === 'active';
+                            const expired = isActive && isExpired(tp.end_time);
+                            if (isActive && !expired) return 0;
+                            if (isActive && expired) return 1;
+                            return 2;
+                        };
+                        const ra = rankOf(a), rb = rankOf(b);
+                        if (ra !== rb) return ra - rb;
+                        const ta = parseTime(a.end_time)?.getTime() || 0;
+                        const tb = parseTime(b.end_time)?.getTime() || 0;
+                        return ra === 2 ? tb - ta : ta - tb;
+                    });
                     console.log('预测话题已从后端加载:', allTopics.length, '个');
                 } else {
                     allTopics = [];
