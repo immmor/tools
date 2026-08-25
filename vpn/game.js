@@ -606,6 +606,75 @@
         let hasValidCard = false;
         let scratchIsDrawing = false;
         let scratchEventsInitialized = false;
+        let scratchNoise = null;
+
+        const ensureScratchNoise = () => {
+            if (scratchNoise) return scratchNoise;
+            const ctx = getGameAudioCtx();
+            const sampleRate = ctx.sampleRate;
+            const dur = 2;
+            const buf = ctx.createBuffer(1, sampleRate * dur, sampleRate);
+            const data = buf.getChannelData(0);
+            let last = 0;
+            for (let i = 0; i < data.length; i++) {
+                const white = Math.random() * 2 - 1;
+                last = (last + 0.02 * white) / 1.02;
+                data[i] = (last * 3.5 + white * 0.6) * 0.35;
+            }
+            const src = ctx.createBufferSource();
+            src.buffer = buf;
+            src.loop = true;
+            const hp = ctx.createBiquadFilter();
+            hp.type = 'highpass';
+            hp.frequency.value = 600;
+            hp.Q.value = 0.5;
+            const bp = ctx.createBiquadFilter();
+            bp.type = 'bandpass';
+            bp.frequency.value = 3200;
+            bp.Q.value = 0.6;
+            const gain = ctx.createGain();
+            gain.gain.value = 0;
+            src.connect(hp).connect(bp).connect(gain).connect(ctx.destination);
+            src.start();
+            scratchNoise = { src, bp, gain, stop: () => { try { src.stop(); } catch (e) {} gain.disconnect(); } };
+            return scratchNoise;
+        };
+
+        const startScratchNoise = () => {
+            try {
+                const n = ensureScratchNoise();
+                const now = n.gain.context.currentTime;
+                n.gain.gain.cancelScheduledValues(now);
+                n.gain.gain.setValueAtTime(0, now);
+                n.gain.gain.linearRampToValueAtTime(0.22, now + 0.04);
+                n.bp.frequency.cancelScheduledValues(now);
+                n.bp.frequency.setValueAtTime(2200, now);
+                n.bp.frequency.linearRampToValueAtTime(4200, now + 0.06);
+            } catch (e) {}
+        };
+
+        const updateScratchNoiseByMove = (dx, dy) => {
+            try {
+                const n = ensureScratchNoise();
+                const speed = Math.min(1, Math.sqrt(dx * dx + dy * dy) / 60);
+                const vol = 0.08 + speed * 0.3;
+                const freq = 2200 + speed * 3600;
+                const now = n.gain.context.currentTime;
+                n.gain.gain.setTargetAtTime(vol, now, 0.015);
+                n.bp.frequency.setTargetAtTime(freq, now, 0.02);
+            } catch (e) {}
+        };
+
+        const stopScratchNoise = () => {
+            if (!scratchNoise) return;
+            try {
+                const n = scratchNoise;
+                const now = n.gain.context.currentTime;
+                n.gain.gain.cancelScheduledValues(now);
+                n.gain.gain.setValueAtTime(Math.max(n.gain.gain.value, 0), now);
+                n.gain.gain.linearRampToValueAtTime(0, now + 0.08);
+            } catch (e) {}
+        };
 
         const initScratchCard = () => {
             const canvas = document.getElementById('scratch-canvas');
@@ -671,20 +740,34 @@
         const initScratchEvents = () => {
             if (!scratchCanvas) return;
 
+            const getClientXY = (e) => {
+                if (e.touches && e.touches[0]) {
+                    return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                }
+                return { x: e.clientX || 0, y: e.clientY || 0 };
+            };
+
             const getPos = (e) => {
                 const rect = scratchCanvas.getBoundingClientRect();
                 const scaleX = scratchCanvas.width / rect.width;
                 const scaleY = scratchCanvas.height / rect.height;
-                if (e.touches) {
-                    return {
-                        x: (e.touches[0].clientX - rect.left) * scaleX,
-                        y: (e.touches[0].clientY - rect.top) * scaleY
-                    };
-                }
+                const c = getClientXY(e);
                 return {
-                    x: (e.clientX - rect.left) * scaleX,
-                    y: (e.clientY - rect.top) * scaleY
+                    x: (c.x - rect.left) * scaleX,
+                    y: (c.y - rect.top) * scaleY,
+                    cx: c.x,
+                    cy: c.y
                 };
+            };
+
+            let lastClient = null;
+            let lastMoveTick = 0;
+            const idleFadeTimer = { id: null };
+            const scheduleIdleFade = () => {
+                if (idleFadeTimer.id) clearTimeout(idleFadeTimer.id);
+                idleFadeTimer.id = setTimeout(() => {
+                    if (scratchIsDrawing) stopScratchNoise();
+                }, 120);
             };
 
             const draw = (e) => {
@@ -694,21 +777,49 @@
                 scratchCtx.beginPath();
                 scratchCtx.arc(pos.x, pos.y, 25, 0, Math.PI * 2);
                 scratchCtx.fill();
+
+                const now = performance.now();
+                if (lastClient != null && now - lastMoveTick > 10) {
+                    const dx = pos.cx - lastClient.x;
+                    const dy = pos.cy - lastClient.y;
+                    if (Math.abs(dx) + Math.abs(dy) > 0.4) {
+                        updateScratchNoiseByMove(dx, dy);
+                        scheduleIdleFade();
+                        lastClient = { x: pos.cx, y: pos.cy };
+                        lastMoveTick = now;
+                    }
+                } else if (lastClient == null) {
+                    lastClient = { x: pos.cx, y: pos.cy };
+                }
+
                 checkScratchProgress();
             };
 
-            scratchCanvas.addEventListener('mousedown', (e) => {
-                if (hasValidCard) { scratchIsDrawing = true; draw(e); }
-            });
-            scratchCanvas.addEventListener('mousemove', draw);
-            scratchCanvas.addEventListener('mouseup', () => { scratchIsDrawing = false; });
-            scratchCanvas.addEventListener('mouseleave', () => { scratchIsDrawing = false; });
+            const onDown = (e) => {
+                if (!hasValidCard) return;
+                scratchIsDrawing = true;
+                ensureScratchNoise();
+                startScratchNoise();
+                lastClient = null;
+                lastMoveTick = 0;
+                draw(e);
+            };
+            const onUp = () => {
+                scratchIsDrawing = false;
+                stopScratchNoise();
+                lastClient = null;
+                if (idleFadeTimer.id) clearTimeout(idleFadeTimer.id);
+            };
 
-            scratchCanvas.addEventListener('touchstart', (e) => {
-                if (hasValidCard) { scratchIsDrawing = true; draw(e); }
-            });
-            scratchCanvas.addEventListener('touchmove', draw);
-            scratchCanvas.addEventListener('touchend', () => { scratchIsDrawing = false; });
+            scratchCanvas.addEventListener('mousedown', onDown);
+            scratchCanvas.addEventListener('mousemove', draw);
+            scratchCanvas.addEventListener('mouseup', onUp);
+            scratchCanvas.addEventListener('mouseleave', onUp);
+
+            scratchCanvas.addEventListener('touchstart', (e) => { onDown(e); try { e.preventDefault(); } catch (_) {} }, { passive: false });
+            scratchCanvas.addEventListener('touchmove', (e) => { draw(e); try { e.preventDefault(); } catch (_) {} }, { passive: false });
+            scratchCanvas.addEventListener('touchend', onUp);
+            scratchCanvas.addEventListener('touchcancel', onUp);
         };
 
         const checkScratchProgress = () => {
