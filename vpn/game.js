@@ -206,9 +206,10 @@
                     const topicQ = typeof PredictModule?.getTopicQuestion === 'function'
                         ? PredictModule.getTopicQuestion(parsed.topic_id)
                         : '';
-                    resultText = `${topicQ || ('话题#' + (parsed.topic_id ?? '?'))} → ${parsed.option_name || '选项'}`;
+                    const _tr = (k) => (window.translations?.[window.currentLang]?.[k]) || k;
+                    resultText = `${topicQ || (_tr('predict_topic') + '#' + (parsed.topic_id ?? '?'))} → ${parsed.option_name || _tr('predict_option')}`;
                 } catch (e) {
-                    resultText = item.result || '预测记录';
+                    resultText = item.result || ((window.translations?.[window.currentLang]?.['predict_record']) || '预测记录');
                 }
             }
             const isGift = parseFloat(item.cost) === 0;
@@ -1014,6 +1015,7 @@
     // ===== 预测未来 — 无庄家彩池模式 =====
     const PredictModule = (() => {
         const API_BASE = 'https://api.immmor.com';
+        const t = (k) => (window.translations?.[window.currentLang]?.[k]) || k;
         let allTopics = [];
         let myPredictBets = {}; // { topicId: { optionIndex, amount } } 本地追踪
 
@@ -1056,12 +1058,12 @@
             const d = parseTime(isoStr);
             if (!d) return '';
             const diff = d - new Date();
-            if (diff <= 0) return '已结束';
+            if (diff <= 0) return t('predict_ended');
             const dh = Math.floor(diff / 3600000);
             const dm = Math.floor((diff % 3600000) / 60000);
-            if (dh >= 24) return `${Math.floor(dh / 24)}天${dh % 24}h`;
+            if (dh >= 24) return `${Math.floor(dh / 24)}${t('predict_days')}${dh % 24}h`;
             if (dh > 0) return `${dh}h${dm}m`;
-            return `${dm}分钟`;
+            return `${dm}${t('predict_minutes')}`;
         }
 
         function isExpired(isoStr) {
@@ -1111,37 +1113,37 @@
             const container = $('predict-topics');
             if (!container) return;
             if (!allTopics.length) {
-                container.innerHTML = '<p class="text-xs text-center text-zinc-500 py-8">暂无预测话题</p>';
+                container.innerHTML = '<p class="text-xs text-center text-zinc-500 py-8">' + t('predict_no_topics') + '</p>';
                 return;
             }
-            container.innerHTML = allTopics.map((t) => {
-                const active = t.status === 'active';
-                const expired = active && isExpired(t.end_time);
+            container.innerHTML = allTopics.map((tp) => {
+                const active = tp.status === 'active';
+                const expired = active && isExpired(tp.end_time);
                 const displayStatus = !active ? 'resolved' : expired ? 'ended' : 'active';
-                const totalPool = t.pool || (t.pools ? t.pools.reduce((a, b) => a + b, 0) : 0) || 0;
+                const totalPool = tp.pool || (tp.pools ? tp.pools.reduce((a, b) => a + b, 0) : 0) || 0;
 
-                const barHTML = t.options.map((_, i) => {
-                    const amt = (t.pools && t.pools[i]) || 0;
-                    const pct = totalPool > 0 ? (amt / totalPool * 100) : (1 / t.options.length * 100);
-                    const isWinner = !active && t.winner === i;
+                const barHTML = tp.options.map((_, i) => {
+                    const amt = (tp.pools && tp.pools[i]) || 0;
+                    const pct = totalPool > 0 ? (amt / totalPool * 100) : (1 / tp.options.length * 100);
+                    const isWinner = !active && tp.winner === i;
                     const odds = amt > 0 ? (totalPool / amt).toFixed(2) : '--';
                     return { pct, isWinner, odds, color: getColor(i) };
                 });
 
-                const myBet = myPredictBets[t.id];
-                const optionsHTML = t.options.map((opt, i) => {
+                const myBet = myPredictBets[tp.id];
+                const optionsHTML = tp.options.map((opt, i) => {
                     const b = barHTML[i];
                     let cls = 'predict-opt-btn';
                     if (myBet && myBet.optionIndex === i) cls += ' selected';
                     if (b.isWinner) cls += ' resolved-winner';
                     return `
-                        <button class="${cls}" data-topic="${t.id}" data-opt="${i}" ${!active ? 'disabled' : ''}>
+                        <button class="${cls}" data-topic="${tp.id}" data-opt="${i}" ${!active ? 'disabled' : ''}>
                             <span class="text-xs flex items-center gap-2">
                                 <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${b.color};flex-shrink:0;"></span>
                                 ${b.isWinner ? '🏆 ' : ''}${opt}
                             </span>
                             <span class="text-[10px] font-mono" style="color:#999;">
-                                赔率 ${b.odds} | ${Number(b.pct).toFixed(1)}%
+                                ${t('predict_odds')} ${b.odds} | ${Number(b.pct).toFixed(1)}%
                             </span>
                         </button>`;
                 }).join('');
@@ -1153,21 +1155,21 @@
                 return `
                     <div class="predict-topic-card ${!active ? 'resolved' : ''}">
                         <div class="flex justify-between items-start mb-1">
-                            <p class="text-xs font-bold leading-relaxed flex-1 mr-2">${t.question}</p>
+                            <p class="text-xs font-bold leading-relaxed flex-1 mr-2">${tp.question}</p>
                             <div class="flex items-center gap-2 shrink-0">
                                 <span class="predict-badge ${displayStatus}">${
-                                    displayStatus === 'active' ? '进行中' :
-                                    displayStatus === 'resolved' ? '已结算' : '已截止'
+                                    displayStatus === 'active' ? t('predict_ongoing') :
+                                    displayStatus === 'resolved' ? t('predict_settled') : t('predict_closed')
                                 }</span>
                             </div>
                         </div>
                         <div class="flex items-center justify-between mb-2">
-                            <span class="predict-time">${displayStatus === 'active' ? '截止: ' + toLocalTime(t.end_time) + ' (' + getRemaining(t.end_time) + ')' : '已结束'}</span>
+                            <span class="predict-time">${displayStatus === 'active' ? t('predict_deadline') + ' ' + toLocalTime(tp.end_time) + ' (' + getRemaining(tp.end_time) + ')' : t('predict_ended')}</span>
                             <span class="predict-pool-amount">${formatMoney(totalPool)}</span>
                         </div>
                         <div class="predict-pool-bar">${barSegments}</div>
                         <div class="grid gap-1 mt-2" style="display:flex; flex-direction:column; gap:6px;">${optionsHTML}</div>
-                        ${t.winner !== null && t.winner !== undefined ? `<p class="text-[10px] mt-2" style="color:var(--neon-green);">结果: ${t.options[t.winner]}</p>` : ''}
+                        ${tp.winner !== null && tp.winner !== undefined ? `<p class="text-[10px] mt-2" style="color:var(--neon-green);">${t('predict_result')} ${tp.options[tp.winner]}</p>` : ''}
                     </div>`;
             }).join('');
 
@@ -1181,16 +1183,25 @@
         async function placeBet(topicId, optIndex) {
             const user = getUserInfo();
             if (!user?.username) {
-                alert('请先登录');
+                alert(t('alert_login'));
                 document.getElementById('auth-toggle')?.click();
                 return;
             }
-            const topic = allTopics.find(t => String(t.id) === String(topicId));
+            const topic = allTopics.find(tp2 => String(tp2.id) === String(topicId));
             if (!topic || topic.status !== 'active') return;
             const optName = topic.options[optIndex];
-            const amount = prompt(`你对「${topic.question}」\n投注: ${optName}\n请输入投注金额（¥）：`, '10');
-            if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) return;
-            const betAmount = parseFloat(Number(amount).toFixed(2));
+            const MIN_BET = 10;
+            let amount;
+            while (true) {
+                const raw = prompt(t('predict_enter_amount').replace('{question}', topic.question).replace('{option}', optName).replace('{min}', MIN_BET), String(MIN_BET));
+                if (raw == null) return;
+                if (!raw || isNaN(Number(raw))) continue;
+                const v = parseFloat(Number(raw).toFixed(2));
+                if (v < MIN_BET) { alert(t('predict_min_bet').replace('{min}', MIN_BET)); continue; }
+                amount = v;
+                break;
+            }
+            const betAmount = amount;
 
             try {
                 const res = await fetch(`${API_BASE}/api/predict/bet`, {
@@ -1206,11 +1217,11 @@
                     renderTopics();
                     loadMyBets();
                 } else {
-                    alert(data.message || '投注失败');
+                    alert(data.message || t('predict_bet_failed'));
                 }
             } catch (e) {
                 console.warn('投注API失败', e);
-                alert('网络错误，请重试');
+                alert(t('predict_network_error'));
             }
         }
 
