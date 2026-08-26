@@ -63,7 +63,9 @@ async function autoRenewUser(DB, user) {
 
   const lc = await DB.prepare('SELECT key, value FROM link WHERE key IN (?,?,?,?)').bind('clash_monthly','v2ray_monthly','clash_yearly','v2ray_yearly').all();
   const cfg = {}; lc.results.forEach(r => cfg[r.key] = r.value);
-  const ne = new Date(); ne.setDate(ne.getDate() + dur);
+  // 自动续费额外赠送 2 天，仅延长有效期，订单记录仍按实际购买天数
+  const RENEW_BONUS_DAYS = 2;
+  const ne = new Date(); ne.setDate(ne.getDate() + dur + RENEW_BONUS_DAYS);
   const yr = dur === 365;
   const cl = user.v_link_clash || (yr ? cfg.clash_yearly : cfg.clash_monthly);
   const v2 = user.v_link_v2ray || (yr ? cfg.v2ray_yearly : cfg.v2ray_monthly);
@@ -99,14 +101,14 @@ async function autoRenewUser(DB, user) {
 
     // 给用户发送通知（多语言）
     await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)').bind(user.username, nt({
-      cn: `您的VIP已自动续费成功！金额：${pr}元，天数：${dur}天`,
-      en: `Your VIP has been automatically renewed successfully! Amount: ¥${pr}, Days: ${dur}`,
-      jp: `VIPの自動更新が成功しました！金額：${pr}円、日数：${dur}日`,
-      kr: `VIP 자동 갱신 성공! 금액: ¥${pr}, 일수: ${dur}일`,
-      es: `¡Renovación automática de VIP exitosa! Monto: ¥${pr}, Días: ${dur}`,
-      vi: `Gia hạn VIP tự động thành công! Số tiền: ¥${pr}, Ngày: ${dur}`,
-      ar: `تم تجديد VIP تلقائيًا بنجاح! المبلغ: ¥${pr}, الأيام: ${dur}`,
-      ru: `Автоматическое продление VIP успешно! Сумма: ¥${pr}, Дни: ${dur}`
+      cn: `您的VIP已自动续费成功！金额：${pr}元，天数：${dur}天（额外赠送${RENEW_BONUS_DAYS}天）`,
+      en: `Your VIP has been automatically renewed successfully! Amount: ¥${pr}, Days: ${dur} (+${RENEW_BONUS_DAYS} bonus)`,
+      jp: `VIPの自動更新が成功しました！金額：${pr}円、日数：${dur}日（${RENEW_BONUS_DAYS}日プレゼント）`,
+      kr: `VIP 자동 갱신 성공! 금액: ¥${pr}, 일수: ${dur}일(+${RENEW_BONUS_DAYS}일 증정)`,
+      es: `¡Renovación automática de VIP exitosa! Monto: ¥${pr}, Días: ${dur} (+${RENEW_BONUS_DAYS})`,
+      vi: `Gia hạn VIP tự động thành công! Số tiền: ¥${pr}, Ngày: ${dur} (+${RENEW_BONUS_DAYS})`,
+      ar: `تم تجديد VIP تلقائيًا بنجاح! المبلغ: ¥${pr}, الأيام: ${dur} (+${RENEW_BONUS_DAYS})`,
+      ru: `Автоматическое продление VIP успешно! Сумма: ¥${pr}, Дни: ${dur} (+${RENEW_BONUS_DAYS})`
     }), nowStr).run();
     
     // 给管理员发送通知（仅中文）
