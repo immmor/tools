@@ -1087,6 +1087,11 @@
             const method = methods[Math.floor(Math.random() * methods.length)];
             mockItems.push({ type: 'withdraw', name: name2, amount: amount2, method });
         }
+        // 打乱顺序，避免中奖/提现严格交替显得太规律
+        for (let i = mockItems.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [mockItems[i], mockItems[j]] = [mockItems[j], mockItems[i]];
+        }
 
         const buildSlide = (w) => {
             const slide = document.createElement('div');
