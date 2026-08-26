@@ -115,6 +115,63 @@
         setTimeout(() => playGameTone(90, 0.1, 'triangle', 0.07), 45);
     };
 
+    // 中奖音：清脆风铃式上行 + 明亮"叮"收尾（八音盒/抽中奖感）
+    const playWinSound = () => {
+        try {
+            const ctx = getGameAudioCtx();
+            const now = ctx.currentTime;
+            // 风铃上行（高频正弦，像八音盒快速跑动）
+            const notes = [659.25, 783.99, 987.77, 1174.66, 1318.51]; // E5 G5 B5 D6 E6
+            notes.forEach((f, i) => {
+                const t = now + i * 0.06;
+                const osc = ctx.createOscillator();
+                const g = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(f, t);
+                g.gain.setValueAtTime(0, t);
+                g.gain.linearRampToValueAtTime(0.14, t + 0.01);
+                g.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
+                osc.connect(g).connect(ctx.destination);
+                osc.start(t);
+                osc.stop(t + 0.55);
+            });
+            // 收尾明亮"叮"（高频短衰减，清脆上头）
+            const t2 = now + 0.34;
+            const ding = ctx.createOscillator();
+            const dg = ctx.createGain();
+            ding.type = 'sine';
+            ding.frequency.setValueAtTime(1567.98, t2); // G6
+            dg.gain.setValueAtTime(0, t2);
+            dg.gain.linearRampToValueAtTime(0.16, t2 + 0.005);
+            dg.gain.exponentialRampToValueAtTime(0.0001, t2 + 0.6);
+            ding.connect(dg).connect(ctx.destination);
+            ding.start(t2);
+            ding.stop(t2 + 0.65);
+        } catch (e) { /* 忽略音频错误 */ }
+    };
+
+    // 未中奖音：柔和下行二音（更轻更低）
+    const playLoseSound = () => {
+        try {
+            const ctx = getGameAudioCtx();
+            const now = ctx.currentTime;
+            const seq = [349.23, 261.63];   // F4 -> C4 柔和下行
+            seq.forEach((f, i) => {
+                const t = now + i * 0.14;
+                const osc = ctx.createOscillator();
+                const g = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(f, t);
+                g.gain.setValueAtTime(0, t);
+                g.gain.linearRampToValueAtTime(0.08, t + 0.02);
+                g.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
+                osc.connect(g).connect(ctx.destination);
+                osc.start(t);
+                osc.stop(t + 0.34);
+            });
+        } catch (e) { /* 忽略 */ }
+    };
+
     const showGameResult = (isWin, amount, icon) => {
         const modal = document.getElementById('game-result-modal');
         const iconEl = document.getElementById('game-result-icon');
@@ -126,24 +183,80 @@
         
         modal.classList.remove('win', 'lose');
         modal.classList.add(isWin ? 'win' : 'lose');
+
+        // 中奖/失败音效（WebAudio 合成，覆盖所有调用本弹窗的游戏）
+        if (isWin) playWinSound();
+        else playLoseSound();
         
         iconEl.textContent = icon || (isWin ? '🎉' : '😔');
         titleEl.textContent = isWin ? (dict.game_result_win_title || '恭喜中奖！') : (dict.game_result_lose_title || '未中奖');
-        amountEl.textContent = isWin ? `¥${amount}` : '';
         amountEl.style.display = isWin ? 'block' : 'none';
+        if (isWin) {
+            const target = Number(amount) || 0;
+            amountEl.textContent = '¥0';   // 先归零，避免延迟期间显示旧占位符（如 ¥100）
+            const dur = 800;
+            // 延迟启动：等图标弹入 + 粒子炸开的高潮过后，金额再开始滚动揭晓
+            setTimeout(() => {
+                const t0 = performance.now();
+                const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+                const step = (now) => {
+                    const p = Math.min(1, (now - t0) / dur);
+                    const v = Math.round(target * easeOut(p));
+                    amountEl.textContent = `¥${v}`;
+                    if (p < 1) requestAnimationFrame(step);
+                    else amountEl.textContent = `¥${target}`;
+                };
+                requestAnimationFrame(step);
+            }, 380);
+        }
+
+        // 中奖：狂暴粒子炸裂（海量星火从中心疯狂爆开铺满全屏，纯 CSS 过渡无库）
+        if (isWin) {
+            const colors = ['#00ff41', '#00f3ff', '#ffaa00', '#ffffff', '#39ffaf', '#7df9ff'];
+            const N = 70;
+            const maxR = Math.max(window.innerWidth, window.innerHeight) * 0.62;
+            for (let i = 0; i < N; i++) {
+                const p = document.createElement('div');
+                p.className = 'win-particle ' + (i % 3 === 0 ? 'front' : 'back');
+                const size = 7 + Math.random() * 13;
+                const color = colors[Math.floor(Math.random() * colors.length)];
+                p.style.width = p.style.height = size + 'px';
+                p.style.background = color;
+                p.style.boxShadow = '0 0 ' + (size + 6) + 'px ' + color + ', 0 0 ' + (size + 14) + 'px ' + color;
+                const ang = Math.random() * Math.PI * 2;
+                const dist = maxR * (0.35 + Math.random() * 0.65);
+                const dx = Math.cos(ang) * dist;
+                const dy = Math.sin(ang) * dist;
+                const rot = (Math.random() * 720 - 360);
+                const dur = 0.8 + Math.random() * 0.9;
+                modal.appendChild(p);
+                requestAnimationFrame(() => {
+                    p.style.transition = `transform ${dur}s cubic-bezier(0.15,0.9,0.25,1), opacity ${dur}s ease`;
+                    p.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) rotate(${rot}deg) scale(${0.1 + Math.random() * 0.3})`;
+                    p.style.opacity = '0';
+                });
+                setTimeout(() => p.remove(), (dur + 0.2) * 1000);
+            }
+        }
         
         closeBtn.textContent = dict.game_result_close || '确定';
         
         modal.classList.add('show');
-        
-        closeBtn.onclick = () => {
-            modal.classList.remove('show');
+        // 中奖瞬间触发屏幕震动（仅中奖时）
+        if (isWin) {
+            modal.classList.add('shake');
+            setTimeout(() => modal.classList.remove('shake'), 500);
+        }
+
+        const hideModal = () => {
+            modal.classList.remove('show', 'shake');
+            modal.querySelectorAll('.win-particle').forEach(el => el.remove());
         };
-        
+
+        closeBtn.onclick = hideModal;
+
         modal.onclick = (e) => {
-            if (e.target === modal) {
-                modal.classList.remove('show');
-            }
+            if (e.target === modal) hideModal();
         };
     };
 
@@ -582,6 +695,12 @@
                     if (data.prize > 0) {
                         playSlotWinSound();
                         showGameResult(true, data.prize, '🎰');
+                        // 中奖：机台整组发光脉冲
+                        const reels = document.querySelector('.slot-reels');
+                        if (reels) {
+                            reels.classList.add('win');
+                            setTimeout(() => reels.classList.remove('win'), 1800);
+                        }
                     } else {
                         showGameResult(false, 0, '🎰');
                     }
