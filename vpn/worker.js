@@ -3391,14 +3391,18 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
             if (!rec) return resJson({ success: false, message: '无待审核记录' }, 404);
 
             const now = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+            const msgNow = new Date().toISOString().slice(0, 19).replace('T', ' ');
             rec.status = action === 'approve' ? 'approved' : 'rejected';
             rec.reviewed_at = now;
             rec.reviewer = operator || 'admin';
-            await DB.prepare('UPDATE user SET balance = balance + ?, rebates = ? WHERE username = ?')
-              .bind(action === 'approve' ? rec.rebate : 0, JSON.stringify(rebates), inviter).run();
+            await DB.prepare('UPDATE user SET balance = balance + ?, game_winnings = COALESCE(game_winnings, 0) + ?, rebates = ? WHERE username = ?')
+              .bind(action === 'approve' ? rec.rebate : 0, action === 'approve' ? rec.rebate : 0, JSON.stringify(rebates), inviter).run();
             if (action === 'approve') {
               await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
-                .bind(inviter, `✅ 邀请返现 ¥${parseFloat(rec.rebate).toFixed(2)}（来自 ${invitee} 的 VIP 订单）已审核通过，已发放到余额`, now).run();
+                .bind(inviter, `✅ 邀请返现 ¥${parseFloat(rec.rebate).toFixed(2)}（来自 ${invitee} 的 VIP 订单）已审核通过，已发放到余额`, msgNow).run();
+            } else {
+              await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
+                .bind(inviter, `❌ 邀请返现 ¥${parseFloat(rec.rebate).toFixed(2)}（来自 ${invitee} 的 VIP 订单）未通过审核`, msgNow).run();
             }
             return resJson({ success: true, message: action === 'approve' ? '已通过并发放' : '已拒绝' });
           } catch (err) {
