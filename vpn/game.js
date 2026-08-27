@@ -1183,15 +1183,17 @@
 
         // 模拟数据 — 混合中奖 + 提现
         const tr = (k) => (window.translations && window.translations[currentLang] && window.translations[currentLang][k]) || k;
-        const mailPrefix = ['a', 'b', 'c', 'm', 'x', 'k', 't', 'z', 'user', 'vip', '2386'];
-        const mailDomains = ['qq.com', '163.com', 'gmail.com', 'outlook.com', 'foxmail.com'];
+        const mailPrefix = ['a', 'b', 'c', 'm', 'x', 'k', 't', 'z'];
+        const qqMailPrefix = ['2386', '1234', '5688', '8899', '3366', '2023', '1122', '5566'];
+        const otherMailDomains = ['163.com', 'gmail.com', 'outlook.com', 'foxmail.com'];
         const gameKeys = ['game_wheel', 'game_slot', 'game_scratch'];
         const winPrizes = [5, 10, 20, 50, 100];
         const withdrawAmounts = [50, 100, 200, 500];
         const methods = ['微信', '支付宝', 'USDT', 'BTC'];
         const buildName = () => {
-            const p = mailPrefix[Math.floor(Math.random() * mailPrefix.length)];
-            const d = mailDomains[Math.floor(Math.random() * mailDomains.length)];
+            const d = Math.random() < 0.5 ? 'qq.com' : otherMailDomains[Math.floor(Math.random() * otherMailDomains.length)];
+            const pool = d === 'qq.com' ? qqMailPrefix : mailPrefix;
+            const p = pool[Math.floor(Math.random() * pool.length)];
             return p + '***@' + d;
         };
         const mockItems = [];
