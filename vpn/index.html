@@ -1431,6 +1431,26 @@
             text-shadow: 0 0 15px rgba(255, 170, 0, 0.7);
             animation: amountPulse 1s ease-in-out infinite;
         }
+
+        /* VIP 套餐天数累加动画（只作用在数字上，不作用在单位上） */
+        #vip-plan-days .vip-plan-num {
+            display: inline-block;
+            padding: 0 2px;
+            border-radius: 3px;
+            transition: transform 0.3s ease, color 0.3s ease, text-shadow 0.3s ease, background-color 0.3s ease;
+        }
+        #vip-plan-days .vip-plan-num.days-bump {
+            color: var(--neon-green);
+            text-shadow: 0 0 8px var(--neon-green);
+            transform: scale(1.25);
+            background-color: rgba(0, 255, 65, 0.08);
+        }
+        #vip-plan-days .vip-plan-num.days-bump-revert {
+            color: var(--neon-red);
+            text-shadow: 0 0 8px var(--neon-red);
+            transform: scale(1.25);
+            background-color: rgba(255, 0, 60, 0.08);
+        }
         @keyframes amountPulse {
             0%, 100% { transform: scale(1); text-shadow: 0 0 15px rgba(255, 170, 0, 0.7); }
             50% { transform: scale(1.12); text-shadow: 0 0 30px rgba(255, 170, 0, 1); }
@@ -1788,7 +1808,7 @@
                 <!-- 下拉菜单 -->
                 <div id="dropdown-menu" class="dropdown-menu absolute right-0 top-full mt-2 w-39 hidden z-[100] max-h-[60vh] overflow-y-auto">
                     <div class="px-4 py-3 border-b border-zinc-800 text-center bg-zinc-800/40">
-                        <div id="user-name" class="text-base font-bold text-white break-all leading-snug max-w-[124px] mx-auto">用户</div>
+                        <div id="user-name" class="text-base font-bold text-white break-all leading-snug max-w-[124px] mx-auto uppercase">用户</div>
                     </div>
                     <div class="px-4 pt-3 pb-4 border-b border-zinc-800 text-center">
                     <div id="user-balance" class="text-xl font-black text-[var(--neon-green)]">¥0</div>
@@ -2782,7 +2802,7 @@
                                 <div class="flex justify-between items-start mb-3">
                                     <div>
                                         <h2 class="text-xl md:text-2xl font-black uppercase" data-i18n="vip_nodes_title">VIP节点</h2>
-                                        <div class="text-xs text-zinc-500 mt-1">${duration === 30 ? (dict.vip_plan_monthly || '月付') : (dict.vip_plan_annual || '年付')} ${dict.vip_plan_suffix || '套餐'} (${duration === 30 ? (dict.vip_quota_reset || '30 天') : (dict.vip_quota_reset_annual || '365 天')}) • ¥${price.toFixed(2)}</div>
+                                        <div class="text-xs text-zinc-500 mt-1">${duration === 30 ? (dict.vip_plan_monthly || '月付') : (dict.vip_plan_annual || '年付')} ${dict.vip_plan_suffix || '套餐'} (<span id="vip-plan-days" data-base="${duration}"><span class="vip-plan-num">${duration}</span>${duration === 30 ? (dict.vip_quota_reset || '30 天').replace(/\d+/g, '') : (dict.vip_quota_reset_annual || '365 天').replace(/\d+/g, '')}</span>) • ¥${price.toFixed(2)}</div>
                                         <div class="text-[10px] text-zinc-500" data-i18n="vip_price_fluctuate">*价格会随着服务器维护成本而有所波动，请互相理解*</div>
                                     </div>
                                     <button onclick="this.closest('.fixed').remove()" class="text-zinc-500 hover:text-white">
@@ -2872,21 +2892,72 @@
 
         const toggleAutoRenew = async (username, checkbox, renewPrice = 10) => {
             const tip = document.getElementById('renew-insufficient-tip');
+            const daysEl = document.getElementById('vip-plan-days');
+            const numEl = daysEl?.querySelector('.vip-plan-num');
+
+            // 短促累加音效（Web Audio API，无需外部文件）
+            let audioCtx = null;
+            const playTick = (final) => {
+                try {
+                    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.type = 'sine';
+                    osc.frequency.value = final ? 880 : 660;
+                    gain.gain.value = 0.06;
+                    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.08);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.08);
+                } catch (_) { /* 静默降级 */ }
+            };
+
+            // 累加 / 回退动画（逐帧 +1/-1，只作用在数字上，不作用在单位上）
+            const animateDays = (delta) => {
+                if (!numEl) return;
+                const base = parseInt(daysEl.dataset.base || '0', 10);
+                const current = parseInt(numEl.textContent || '0', 10);
+                const target = base + delta;
+                if (target === current) return;
+                const step = target > current ? 1 : -1;
+                const bumpClass = delta === 0 ? 'days-bump-revert' : 'days-bump';
+                numEl.classList.add(bumpClass);
+                const tick = (isFinal) => {
+                    const now = parseInt(numEl.textContent || '0', 10);
+                    const next = now + step;
+                    if ((step > 0 && next > target) || (step < 0 && next < target)) {
+                        numEl.textContent = target;
+                        if (delta > 0) playTick(true);
+                        setTimeout(() => numEl.classList.remove(bumpClass), 280);
+                        return;
+                    }
+                    numEl.textContent = next;
+                    if (delta > 0) playTick(false);
+                    setTimeout(() => tick(isFinal), 160);
+                };
+                tick(false);
+            };
+
             try {
                 await fetch('https://api.funbua.uk/api/toggle-auto-renew', {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, enabled: checkbox.checked })
                 });
-                if (checkbox.checked && tip) {
-                    const balance = parseFloat(userInfo?.balance || 0);
-                    if (balance < renewPrice) {
-                        tip.classList.remove('hidden');
-                    } else {
-                        tip.classList.add('hidden');
+                if (checkbox.checked) {
+                    animateDays(2);
+                    if (tip) {
+                        const balance = parseFloat(userInfo?.balance || 0);
+                        if (balance < renewPrice) {
+                            tip.classList.remove('hidden');
+                        } else {
+                            tip.classList.add('hidden');
+                        }
                     }
-                } else if (tip) {
-                    tip.classList.add('hidden');
+                } else {
+                    animateDays(0);
+                    if (tip) tip.classList.add('hidden');
                 }
             } catch (e) {
                 checkbox.checked = !checkbox.checked;

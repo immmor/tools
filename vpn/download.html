@@ -131,6 +131,26 @@
         .download-btn:hover {
             box-shadow: 0 0 15px rgba(0, 243, 255, 0.4);
         }
+
+        .buy-btn {
+            background: linear-gradient(135deg, #f59e0b, #ea580c);
+            color: #000;
+            border: none;
+            padding: 12px 24px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+        .buy-btn:hover {
+            box-shadow: 0 0 20px rgba(245, 158, 11, 0.5);
+            transform: translateY(-1px);
+        }
+        .buy-btn:active {
+            transform: translateY(0);
+        }
     </style>
 </head>
 <body>
@@ -335,7 +355,9 @@
                             <h3 class="text-lg font-bold mb-2" data-i18n="step_1">下载客户端</h3>
                             
                             <p class="text-zinc-400 mt-3" data-i18n="step_1_desc_ios">从 App Store 下载 Shadowrocket</p>
-                            <a href="https://apps.apple.com/app/shadowrocket/id932747118" class="download-btn inline-block" data-i18n="shadowrocket_btn">Shadowrocket</a>
+                            <a href="https://apps.apple.com/app/shadowrocket/id932747118" class="download-btn inline-flex items-center gap-2 mt-3" data-i18n="shadowrocket_btn">
+                                🚀 Shadowrocket
+                            </a>
 
                             <!-- 免费账号列表 -->
                             <div class="cyber-card p-4 mt-3 border-[var(--neon-green)] max-h-64 overflow-y-auto w-full max-w-xl">
@@ -366,6 +388,11 @@
                                         * 以上账号仅供学习测试使用，请勿用于商业用途。账号可能会定期更换，请注意时效性。
                                     </p>
                                 </div>
+                            </div>
+                            <button onclick="document.getElementById('contact-modal').classList.remove('hidden')" class="buy-btn mt-3 mb-4 flex items-center justify-center gap-2">
+                                <span class="text-base" data-i18n="contact_buy_btn">联系客服购买账号</span>
+                                <span class="px-2 py-0.5 bg-black/30 text-white text-xs font-bold rounded">¥40</span>
+                            </button>
                             </div>
                         </div>
                     </div>
@@ -540,6 +567,32 @@
         </div>
     </footer>
 
+    <div id="contact-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] hidden flex items-center justify-center p-4">
+        <div class="cyber-card p-6 md:p-8 w-full max-w-md" style="clip-path: none;">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-black uppercase" data-i18n="nav_contact">联系客服</h2>
+                <button onclick="document.getElementById('contact-modal').classList.add('hidden')" class="text-zinc-500 hover:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <form id="contact-form">
+                <div class="mb-4">
+                    <label class="block text-xs text-zinc-500 mb-2 uppercase tracking-widest" data-i18n="contact_username_label">用户名</label>
+                    <input id="contact-username" type="text" class="w-full bg-zinc-900 border border-zinc-700 px-4 py-3 text-white focus:border-[var(--neon-blue)] focus:outline-none" required data-i18n-placeholder="contact_username_placeholder" placeholder="请输入您的用户名" />
+                </div>
+                <div class="mb-4">
+                    <label class="block text-xs text-zinc-500 mb-2 uppercase tracking-widest" data-i18n="contact_modal_label">留言内容</label>
+                    <textarea id="contact-content" rows="5" class="w-full bg-zinc-900 border border-zinc-700 px-4 py-3 text-white focus:border-[var(--neon-blue)] focus:outline-none resize-none" required data-i18n-placeholder="contact_modal_placeholder" placeholder="请输入您的问题或留言..."></textarea>
+                </div>
+                <button type="submit" class="w-full bg-[var(--neon-blue)] hover:bg-blue-600 text-black font-bold py-3 px-4 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" data-i18n="contact_submit_btn">提交留言</button>
+            </form>
+            <div id="contact-message" class="mt-4 text-center text-xs hidden"></div>
+        </div>
+    </div>
+
     <script>
         lucide.createIcons();
 
@@ -580,6 +633,12 @@
                 const key = element.getAttribute('data-i18n');
                 if (dict[key]) {
                     element.innerHTML = dict[key];
+                }
+            });
+            document.querySelectorAll('[data-i18n-placeholder]').forEach(element => {
+                const key = element.getAttribute('data-i18n-placeholder');
+                if (dict[key]) {
+                    element.placeholder = dict[key];
                 }
             });
 
@@ -760,6 +819,47 @@
         // 初始化加载账号列表
         loadFreeAccounts();
 
+        // 联系客服留言提交
+        document.getElementById('contact-form')?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const content = document.getElementById('contact-content');
+            const msg = document.getElementById('contact-message');
+            const btn = e.target.querySelector('button');
+            const usernameInput = document.getElementById('contact-username');
+            if (!content.value.trim() || !usernameInput.value.trim()) return;
+            const dict = translations[currentLang] || {};
+            const username = usernameInput.value.trim();
+            btn.textContent = dict.contact_submitting || '提交中...';
+            btn.disabled = true;
+            try {
+                const txt = `${'[小火箭购买]'} ${dict.contact_user || '用户'}: ${username}\n${dict.contact_content || '内容'}: ${content.value.trim()}`;
+                const send = (u) => fetch('https://api.funbua.uk/api/send-message', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content: txt, target: 'single', username: u })
+                }).then(r => r.json());
+                const [r1, r2] = await Promise.all([send('admin'), send('immmor')]);
+                if (r1.code === 200 || r2.code === 200) {
+                    msg.textContent = dict.contact_success || '留言提交成功！我们会尽快联系您。';
+                    msg.className = 'mt-4 text-center text-xs text-green-500';
+                    msg.classList.remove('hidden');
+                    content.value = '';
+                    usernameInput.value = '';
+                    setTimeout(() => document.getElementById('contact-modal').classList.add('hidden'), 1500);
+                } else {
+                    msg.textContent = r1.msg || r2.msg || (dict.contact_fail || '提交失败');
+                    msg.className = 'mt-4 text-center text-xs text-red-500';
+                    msg.classList.remove('hidden');
+                }
+            } catch (err) {
+                msg.textContent = dict.contact_network_error || '网络错误，请稍后重试';
+                msg.className = 'mt-4 text-center text-xs text-red-500';
+                msg.classList.remove('hidden');
+            }
+            btn.textContent = dict.contact_submit_btn || '提交留言';
+            btn.disabled = false;
+        });
+
         // 矩阵背景效果
         const canvas = document.getElementById('matrix-bg');
         if (canvas) {
@@ -796,6 +896,47 @@
 
             setInterval(draw, 33);
         }
+
+        // 联系客服留言提交
+        document.getElementById('contact-form')?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const content = document.getElementById('contact-content');
+            const msg = document.getElementById('contact-message');
+            const btn = e.target.querySelector('button');
+            const usernameInput = document.getElementById('contact-username');
+            if (!content.value.trim() || !usernameInput.value.trim()) return;
+            const dict = translations[currentLang] || {};
+            const username = usernameInput.value.trim();
+            btn.textContent = dict.contact_submitting || '提交中...';
+            btn.disabled = true;
+            try {
+                const txt = `${dict.contact_prefix || '[联系客服]'} ${dict.contact_user || '用户'}: ${username}\n${dict.contact_content || '内容'}: ${content.value.trim()}`;
+                const send = (u) => fetch('https://api.funbua.uk/api/send-message', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content: txt, target: 'single', username: u })
+                }).then(r => r.json());
+                const [r1, r2] = await Promise.all([send('admin'), send('immmor')]);
+                if (r1.code === 200 || r2.code === 200) {
+                    msg.textContent = dict.contact_success || '留言提交成功！我们会尽快联系您。';
+                    msg.className = 'mt-4 text-center text-xs text-green-500';
+                    msg.classList.remove('hidden');
+                    content.value = '';
+                    usernameInput.value = '';
+                    setTimeout(() => document.getElementById('contact-modal').classList.add('hidden'), 1500);
+                } else {
+                    msg.textContent = r1.msg || r2.msg || (dict.contact_fail || '提交失败');
+                    msg.className = 'mt-4 text-center text-xs text-red-500';
+                    msg.classList.remove('hidden');
+                }
+            } catch (err) {
+                msg.textContent = dict.contact_network_error || '网络错误，请稍后重试';
+                msg.className = 'mt-4 text-center text-xs text-red-500';
+                msg.classList.remove('hidden');
+            }
+            btn.textContent = dict.contact_submit_btn || '提交留言';
+            btn.disabled = false;
+        });
     </script>
 </body>
 </html>
