@@ -61,9 +61,12 @@ async function autoRenewUser(DB, user) {
   else if (user.balance >= mp) { dur = 30; pr = mp; }
   else return null;
 
+  // 自动续费专属福利：每次续费额外赠送 2 天
+  const actualDays = dur + 2;
+
   const lc = await DB.prepare('SELECT key, value FROM link WHERE key IN (?,?,?,?)').bind('clash_monthly','v2ray_monthly','clash_yearly','v2ray_yearly').all();
   const cfg = {}; lc.results.forEach(r => cfg[r.key] = r.value);
-  const ne = new Date(); ne.setDate(ne.getDate() + dur);
+  const ne = new Date(); ne.setDate(ne.getDate() + actualDays);
   const yr = dur === 365;
   const cl = user.v_link_clash || (yr ? cfg.clash_yearly : cfg.clash_monthly);
   const v2 = user.v_link_v2ray || (yr ? cfg.v2ray_yearly : cfg.v2ray_monthly);
@@ -78,7 +81,7 @@ async function autoRenewUser(DB, user) {
   }
   vorders.unshift({
     type: 'vip',
-    duration: dur,
+    duration: actualDays,
     price: pr,
     created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
     method: 'balance',
@@ -99,20 +102,20 @@ async function autoRenewUser(DB, user) {
 
     // 给用户发送通知（多语言）
     await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)').bind(user.username, nt({
-      cn: `您的VIP已自动续费成功！金额：${pr}元，天数：${dur}天`,
-      en: `Your VIP has been automatically renewed successfully! Amount: ¥${pr}, Days: ${dur}`,
-      jp: `VIPの自動更新が成功しました！金額：${pr}円、日数：${dur}日`,
-      kr: `VIP 자동 갱신 성공! 금액: ¥${pr}, 일수: ${dur}일`,
-      es: `¡Renovación automática de VIP exitosa! Monto: ¥${pr}, Días: ${dur}`,
-      vi: `Gia hạn VIP tự động thành công! Số tiền: ¥${pr}, Ngày: ${dur}`,
-      ar: `تم تجديد VIP تلقائيًا بنجاح! المبلغ: ¥${pr}, الأيام: ${dur}`,
-      ru: `Автоматическое продление VIP успешно! Сумма: ¥${pr}, Дни: ${dur}`
+      cn: `您的VIP已自动续费成功！金额：${pr}元，天数：${actualDays}天（含自动续费赠送2天）`,
+      en: `Your VIP has been automatically renewed successfully! Amount: ¥${pr}, Days: ${actualDays} (incl. 2 bonus days)`,
+      jp: `VIPの自動更新が成功しました！金額：${pr}円、日数：${actualDays}日（自動更新ボーナス2日含む）`,
+      kr: `VIP 자동 갱신 성공! 금액: ¥${pr}, 일수: ${actualDays}일 (자동 갱신 보너스 2일 포함)`,
+      es: `¡Renovación automática de VIP exitosa! Monto: ¥${pr}, Días: ${actualDays} (incl. 2 días de regalo)`,
+      vi: `Gia hạn VIP tự động thành công! Số tiền: ¥${pr}, Ngày: ${actualDays} (gồm 2 ngày tặng thêm)`,
+      ar: `تم تجديد VIP تلقائيًا بنجاح! المبلغ: ¥${pr}, الأيام: ${actualDays} (يشمل يومين هدية)`,
+      ru: `Автоматическое продление VIP успешно! Сумма: ¥${pr}, Дни: ${actualDays} (включая 2 бонусных дня)`
     }), nowStr).run();
     
     // 给管理员发送通知（仅中文）
-    await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)').bind('immmor', `用户 ${user.username} 自动续费VIP成功！金额：${pr}元，天数：${dur}天`, nowStr).run();
+    await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)').bind('immmor', `用户 ${user.username} 自动续费VIP成功！金额：${pr}元，天数：${actualDays}天（含自动续费赠送2天）`, nowStr).run();
     
-    return { username: user.username, amount: pr, days: dur };
+    return { username: user.username, amount: pr, days: actualDays };
   }
   
   return null;
