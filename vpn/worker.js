@@ -63,9 +63,7 @@ async function autoRenewUser(DB, user) {
 
   const lc = await DB.prepare('SELECT key, value FROM link WHERE key IN (?,?,?,?)').bind('clash_monthly','v2ray_monthly','clash_yearly','v2ray_yearly').all();
   const cfg = {}; lc.results.forEach(r => cfg[r.key] = r.value);
-  // 自动续费额外赠送 2 天，仅延长有效期，订单记录仍按实际购买天数
-  const RENEW_BONUS_DAYS = 2;
-  const ne = new Date(); ne.setDate(ne.getDate() + dur + RENEW_BONUS_DAYS);
+  const ne = new Date(); ne.setDate(ne.getDate() + dur);
   const yr = dur === 365;
   const cl = user.v_link_clash || (yr ? cfg.clash_yearly : cfg.clash_monthly);
   const v2 = user.v_link_v2ray || (yr ? cfg.v2ray_yearly : cfg.v2ray_monthly);
@@ -101,14 +99,14 @@ async function autoRenewUser(DB, user) {
 
     // 给用户发送通知（多语言）
     await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)').bind(user.username, nt({
-      cn: `您的VIP已自动续费成功！金额：${pr}元，天数：${dur}天（额外赠送${RENEW_BONUS_DAYS}天）`,
-      en: `Your VIP has been automatically renewed successfully! Amount: ¥${pr}, Days: ${dur} (+${RENEW_BONUS_DAYS} bonus)`,
-      jp: `VIPの自動更新が成功しました！金額：${pr}円、日数：${dur}日（${RENEW_BONUS_DAYS}日プレゼント）`,
-      kr: `VIP 자동 갱신 성공! 금액: ¥${pr}, 일수: ${dur}일(+${RENEW_BONUS_DAYS}일 증정)`,
-      es: `¡Renovación automática de VIP exitosa! Monto: ¥${pr}, Días: ${dur} (+${RENEW_BONUS_DAYS})`,
-      vi: `Gia hạn VIP tự động thành công! Số tiền: ¥${pr}, Ngày: ${dur} (+${RENEW_BONUS_DAYS})`,
-      ar: `تم تجديد VIP تلقائيًا بنجاح! المبلغ: ¥${pr}, الأيام: ${dur} (+${RENEW_BONUS_DAYS})`,
-      ru: `Автоматическое продление VIP успешно! Сумма: ¥${pr}, Дни: ${dur} (+${RENEW_BONUS_DAYS})`
+      cn: `您的VIP已自动续费成功！金额：${pr}元，天数：${dur}天`,
+      en: `Your VIP has been automatically renewed successfully! Amount: ¥${pr}, Days: ${dur}`,
+      jp: `VIPの自動更新が成功しました！金額：${pr}円、日数：${dur}日`,
+      kr: `VIP 자동 갱신 성공! 금액: ¥${pr}, 일수: ${dur}일`,
+      es: `¡Renovación automática de VIP exitosa! Monto: ¥${pr}, Días: ${dur}`,
+      vi: `Gia hạn VIP tự động thành công! Số tiền: ¥${pr}, Ngày: ${dur}`,
+      ar: `تم تجديد VIP تلقائيًا بنجاح! المبلغ: ¥${pr}, الأيام: ${dur}`,
+      ru: `Автоматическое продление VIP успешно! Сумма: ¥${pr}, Дни: ${dur}`
     }), nowStr).run();
     
     // 给管理员发送通知（仅中文）
@@ -193,6 +191,66 @@ export default {
         return new Response(data, {
           headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json; charset=utf-8' }
         });
+      }
+
+      // ========== 无头浏览器抓取页面文字接口（Browser Run Quick Actions，无需 npm 依赖） ==========
+      // GET /api/baidu-text?url=https://www.baidu.com （url 可选，默认百度）
+      // 依赖：控制台已添加 Browser Run binding（名称 BROWSER），且兼容日期 >= 2026-03-24
+      if (path === '/api/baidu-text' && request.method === 'GET') {
+        const target = url.searchParams.get('url') || 'https://www.baidu.com';
+        if (!env.BROWSER) {
+          return resJson({
+            success: false,
+            message: '浏览器服务未配置！请在 Cloudflare 控制台为该 Worker 添加 Browser Run binding（Variable name 填 BROWSER），并确认兼容日期 >= 2026-03-24'
+          }, 500);
+        }
+        try {
+          const resp = await env.BROWSER.quickAction('content', {
+            url: target,
+            gotoOptions: { waitUntil: 'networkidle2' },
+            rejectResourceTypes: ['image', 'stylesheet', 'font'],
+            userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36'
+          });
+          const json = await resp.json();
+          if (!json.success) {
+            const errs = json.errors || [];
+            const isRateLimit = errs.some(e => e.code === 2001 || e.code === 429 || String(e.message || '').toLowerCase().includes('rate limit'));
+            return resJson({
+              success: false,
+              message: isRateLimit
+                ? '浏览器服务调用过于频繁（免费版每10秒限1次 / 每天限10分钟），请稍等10秒再试或升级 Workers Paid'
+                : '浏览器抓取失败',
+              errors: errs
+            }, isRateLimit ? 429 : 500);
+          }
+          const html = json.result.html || '';
+          const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+          const title = titleMatch ? titleMatch[1].trim() : '';
+          // 提取纯文字：去 script/style/注释/标签/HTML实体，合并空白
+          const text = html
+            .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+            .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+            .replace(/<!--[\s\S]*?-->/g, ' ')
+            .replace(/<[^>]+>/g, ' ')
+            .replace(/&nbsp;/gi, ' ')
+            .replace(/&amp;/gi, '&')
+            .replace(/&lt;/gi, '<')
+            .replace(/&gt;/gi, '>')
+            .replace(/&quot;/gi, '"')
+            .replace(/\s+/g, ' ')
+            .trim();
+          return resJson({
+            success: true,
+            title,
+            url: json.result.url || target,
+            textLength: text.length,
+            text,
+            timeMs: json.result.timeMs || 0,
+            fetchedAt: new Date().toISOString()
+          });
+        } catch (e) {
+          return resJson({ success: false, message: '浏览器抓取失败', error: e.message }, 500);
+        }
       }
 
       // ========== 发送邮箱验证码接口 ==========

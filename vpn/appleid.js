@@ -1,4 +1,6 @@
 import https from 'https';
+import fs from 'fs';
+import path from 'path';
 
 const options = {
   hostname: 'pifaid.com',
@@ -42,6 +44,8 @@ const req = https.get(options, function (res) {
       .replace(/\\u003c/g, '<')
       .replace(/\\u003e/g, '>')
       .replace(/\\u0026/g, '&');
-    console.log(json);
+    const outPath = path.join(import.meta.dirname, 'appleid.json');
+    fs.writeFileSync(outPath, json, 'utf-8');
+    console.log('已输出到', outPath);
   });
 });
