@@ -1349,6 +1349,74 @@
         }
 
         /* 游戏结果弹窗样式 */
+        .lang-modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.92);
+            backdrop-filter: blur(8px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            padding: 16px;
+        }
+        .lang-modal-overlay.hidden { display: none; }
+        .lang-modal-card {
+            background: #18181b;
+            border: 1px solid #27272a;
+            border-radius: 12px;
+            padding: 32px 24px;
+            max-width: 360px;
+            width: 100%;
+            text-align: center;
+            animation: lang-fade-in 0.3s ease-out;
+        }
+        @keyframes lang-fade-in {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        .lang-modal-title {
+            font-size: 17px;
+            font-weight: 800;
+            color: #fff;
+            letter-spacing: 1px;
+            margin-bottom: 4px;
+        }
+        .lang-modal-subtitle {
+            font-size: 13px;
+            color: #a1a1aa;
+            margin-bottom: 16px;
+        }
+        .lang-modal-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+        .lang-modal-option {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 10px 12px;
+            border: 1px solid #27272a;
+            border-radius: 8px;
+            background: #09090b;
+            color: #e4e4e7;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .lang-modal-option:hover {
+            border-color: var(--neon-green);
+            background: rgba(0, 255, 65, 0.06);
+            color: #fff;
+        }
+        .lang-modal-option .flag { font-size: 20px; }
+        @media (max-width: 480px) {
+            .lang-modal-card { padding: 24px 18px; }
+            .lang-modal-grid { grid-template-columns: 1fr; }
+        }
+
         .game-result-modal {
             position: fixed;
             top: 0;
@@ -1996,6 +2064,15 @@
                 </p>
             </div>
             <div id="auth-message" class="mt-4 text-center text-xs hidden"></div>
+        </div>
+    </div>
+
+    <!-- 首次访问：语言选择弹窗（必须选择） -->
+    <div id="lang-first-modal" class="lang-modal-overlay hidden">
+        <div class="lang-modal-card">
+            <div class="lang-modal-title">Select Language</div>
+            <div class="lang-modal-subtitle">Choose your preferred language</div>
+            <div id="lang-modal-grid" class="lang-modal-grid"></div>
         </div>
     </div>
 
@@ -6161,6 +6238,12 @@
                 Object.assign(translations, { 'zh-CN': zh, 'en-US': en, 'ko-KR': ko, 'ar-SA': ar, 'ru-RU': ru, 'es-ES': es, 'ja-JP': ja, 'vi-VN': vi });
                 applyTranslation(currentLang);
                 initSurvey();
+
+                // 首次访问弹窗
+                if (!localStorage.getItem('preferredLang') && !urlLang) {
+                    var m = document.getElementById('lang-first-modal');
+                    if (m) { m.classList.remove('hidden'); document.body.style.overflow = 'hidden'; }
+                }
             } catch (e) { console.error('Failed to load translations:', e); }
         }
 
@@ -6317,6 +6400,31 @@
         document.addEventListener('click', function() {
             langDropdown.classList.add('hidden');
         });
+
+        // 语言选择弹窗
+        const LANG_OPTIONS = [
+            ['zh-CN','🇨🇳','中文'],['en-US','🇺🇸','English'],['ko-KR','🇰🇷','한국어'],
+            ['ar-SA','🇸🇦','العربية'],['ru-RU','🇷🇺','Русский'],['es-ES','🇪🇸','Español'],
+            ['ja-JP','🇯🇵','日本語'],['vi-VN','🇻🇳','Tiếng Việt']
+        ];
+        const langGrid = document.getElementById('lang-modal-grid');
+        if (langGrid) {
+            langGrid.innerHTML = LANG_OPTIONS.map(function(o) {
+                return '<button class="lang-modal-option" data-lang="'+o[0]+'"><span class="flag">'+o[1]+'</span>'+o[2]+'</button>';
+            }).join('');
+            langGrid.addEventListener('click', function(e) {
+                var btn = e.target.closest('.lang-modal-option');
+                if (!btn) return;
+                var lang = btn.getAttribute('data-lang');
+                var modal = document.getElementById('lang-first-modal');
+                if (modal) { modal.classList.add('hidden'); document.body.style.overflow = ''; }
+                applyTranslation(lang);
+                localStorage.setItem('preferredLang', lang);
+                var newUrl = new URL(window.location.href);
+                newUrl.searchParams.set('lang', lang);
+                history.replaceState(null, '', newUrl.toString());
+            });
+        }
 
         const savedLang = localStorage.getItem('preferredLang');
         if (!urlLang && savedLang && translations[savedLang]) {
