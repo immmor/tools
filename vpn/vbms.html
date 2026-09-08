@@ -1399,7 +1399,9 @@
                                 <tr>
                                     <th>邀请人</th>
                                     <th>被邀请人</th>
+                                    <th>第几单</th>
                                     <th>订单金额</th>
+                                    <th>比例</th>
                                     <th>返现金额</th>
                                     <th>状态</th>
                                     <th>申请时间</th>
@@ -1461,6 +1463,12 @@
                         <label for="userVLinkV2ray">V2Ray链接</label>
                         <input type="text" id="userVLinkV2ray" name="userVLinkV2ray">
                     </div>
+                    <div class="form-group" style="grid-column: span 2;">
+                        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                            <button type="button" onclick="openPickNodeLinkModal()" style="background-color:#9f7aea; color:white; padding:0.5rem 1rem; border:none; border-radius:4px; cursor:pointer;">替换链接</button>
+                            <span style="color:#718096; font-size:0.85rem;">从"节点链接管理"中选择节点，点击后 Clash 与 V2Ray 两个链接会<b>同时</b>填入上方两个输入框</span>
+                        </div>
+                    </div>
                     <div class="form-group">
                         <label for="userNotTrusted">不信任 (yes/否)</label>
                         <input type="text" id="userNotTrusted" name="userNotTrusted" placeholder="留空或其他值表示正常">
@@ -1507,6 +1515,23 @@
                 </div>
                 <button type="submit" class="btn" style="margin-top: 15px; flex-shrink: 0;">保存</button>
             </form>
+        </div>
+    </div>
+
+    <!-- 从节点库替换链接选择弹窗 -->
+    <div id="pickNodeLinkModal" class="modal">
+        <div class="modal-content" style="max-width: 860px;">
+            <div class="modal-header">
+                <h3>替换链接（来自节点链接管理）</h3>
+                <button class="close-btn" onclick="closePickNodeLinkModal()">&times;</button>
+            </div>
+            <div style="margin-bottom: 0.75rem; font-size: 0.85rem; color: #718096;">点击下方任一节点的"选用替换"，将<b>同时</b>替换该用户编辑表单中的 Clash 与 V2Ray 两个链接。</div>
+            <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 0.75rem;">
+                <input type="text" id="pickNodeLinkSearch" placeholder="搜索邮箱 / Clash / V2Ray 链接" oninput="filterPickNodeLinkList()" style="flex:1; padding:0.5rem; border:1px solid #e2e8f0; border-radius:4px;">
+                <span id="pickNodeLinkCount" style="color:#718096; font-size:0.85rem;"></span>
+                <button class="add-btn" onclick="openPickNodeLinkModal()" style="background-color:#4299e1; margin:0;">刷新</button>
+            </div>
+            <div id="pickNodeLinkList" style="border:1px solid #e2e8f0; border-radius:6px; max-height:52vh; overflow-y:auto;"></div>
         </div>
     </div>
 
@@ -2824,6 +2849,91 @@
         // 关闭用户模态框
         function closeUserModal() {
             document.getElementById('userModal').style.display = 'none';
+        }
+
+        // 打开"从节点库替换链接"选择弹窗（来源：节点链接管理 /api/node）
+        async function openPickNodeLinkModal() {
+            document.getElementById('pickNodeLinkModal').style.display = 'flex';
+            document.getElementById('pickNodeLinkSearch').value = '';
+            const listBox = document.getElementById('pickNodeLinkList');
+            listBox.innerHTML = '<div style="padding:2rem;text-align:center;color:#718096;">加载节点链接中...</div>';
+            let result;
+            try {
+                result = await newApiRequest('/api/node', 'GET');
+            } catch (e) {
+                result = null;
+            }
+            if (result && result.code === 200 && Array.isArray(result.data)) {
+                window.currentNodeList = result.data;
+                renderPickNodeLinkList(result.data);
+            } else {
+                listBox.innerHTML = '<div style="padding:2rem;text-align:center;color:#e53e3e;">加载失败，请稍后重试</div>';
+                document.getElementById('pickNodeLinkCount').textContent = '';
+            }
+        }
+
+        function closePickNodeLinkModal() {
+            document.getElementById('pickNodeLinkModal').style.display = 'none';
+        }
+
+        function renderPickNodeLinkList(list) {
+            const listBox = document.getElementById('pickNodeLinkList');
+            document.getElementById('pickNodeLinkCount').textContent = '共 ' + list.length + ' 个节点';
+            if (!list.length) {
+                listBox.innerHTML = '<div style="padding:2rem;text-align:center;color:#718096;">暂无可用节点，请先到"节点链接管理"添加节点</div>';
+                return;
+            }
+            listBox.innerHTML = list.map(function(n) {
+                const clash = (n.clash_link || '').trim();
+                const v2ray = (n.v2ray_link || '').trim();
+                const ok = clash && v2ray;
+                const btn = ok
+                    ? '<button type="button" class="action-btn edit-btn" style="flex-shrink:0; margin:0;" onclick="applyPickNodeLink(' + n.id + ')">选用替换</button>'
+                    : '<button type="button" class="action-btn" style="flex-shrink:0; margin:0; background:#cbd5e0; color:#fff; cursor:not-allowed;" disabled title="该节点 Clash / V2Ray 链接不完整，不可替换">链接不完整</button>';
+                return '<div style="display:flex; align-items:center; gap:0.75rem; padding:0.65rem 0.75rem; border-bottom:1px solid #edf2f7; background:' + (ok ? '#ffffff' : '#fff5f5') + ';">' +
+                    '<div style="flex:1; min-width:0;">' +
+                        '<div style="font-weight:600; color:#2d3748; font-size:0.88rem;">' + (n.email || '-') +
+                            '<span style="background:#edf2f7; color:#4a5568; font-size:0.72rem; padding:0.1rem 0.45rem; border-radius:4px; margin-left:0.4rem;">' + (n.type || '-') + '</span>' +
+                            '<span style="color:#a0aec0; font-size:0.75rem; margin-left:0.4rem;">到期：' + (n.expire_date ? String(n.expire_date).split(' ')[0] : '-') + '</span>' +
+                        '</div>' +
+                        '<div style="font-size:0.78rem; color:#718096; line-height:1.55; word-break:break-all; margin-top:0.2rem;">' +
+                            '<div><span style="color:#2b6cb0;">Clash:</span> ' + (clash || '<span style="color:#e53e3e;">空</span>') + '</div>' +
+                            '<div><span style="color:#2b6cb0;">V2Ray:</span> ' + (v2ray || '<span style="color:#e53e3e;">空</span>') + '</div>' +
+                        '</div>' +
+                    '</div>' +
+                    btn +
+                '</div>';
+            }).join('');
+        }
+
+        function filterPickNodeLinkList() {
+            const kw = document.getElementById('pickNodeLinkSearch').value.trim().toLowerCase();
+            const all = window.currentNodeList || [];
+            if (!kw) {
+                renderPickNodeLinkList(all);
+                return;
+            }
+            const filtered = all.filter(function(n) {
+                const hay = String(n.email || '') + ' ' + String(n.clash_link || '') + ' ' + String(n.v2ray_link || '') + ' ' + String(n.type || '') + ' ' + String(n.expire_date || '');
+                return hay.toLowerCase().indexOf(kw) !== -1;
+            });
+            renderPickNodeLinkList(filtered);
+        }
+
+        // 选中节点后同时替换用户编辑表单中的 Clash / V2Ray 两个链接
+        function applyPickNodeLink(nodeId) {
+            const node = (window.currentNodeList || []).find(function(n) { return n.id === nodeId; });
+            if (!node) return;
+            const clash = (node.clash_link || '').trim();
+            const v2ray = (node.v2ray_link || '').trim();
+            if (!clash || !v2ray) {
+                alert('该节点链接不完整，无法替换');
+                return;
+            }
+            document.getElementById('userVLinkClash').value = clash;
+            document.getElementById('userVLinkV2ray').value = v2ray;
+            closePickNodeLinkModal();
+            alert('已同时替换 Clash 与 V2Ray 链接，点击下方"保存"按钮后生效');
         }
 
         // 修改用户 - 打开编辑弹窗
@@ -4809,7 +4919,7 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
         function renderRebates(list) {
             const tbody = document.getElementById('rebateTableBody');
             if (!list.length) {
-                tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#999;">暂无返现记录</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#999;">暂无返现记录</td></tr>';
                 return;
             }
             const statusMap = { pending: '待审核', approved: '已通过', rejected: '已驳回' };
@@ -4818,7 +4928,9 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
                 <tr>
                     <td>${escHtml(r.inviter)}</td>
                     <td>${escHtml(r.invitee)}</td>
+                    <td>第 ${r.order_index || '-'} 单</td>
                     <td>¥${parseFloat(r.order_price || 0).toFixed(2)}</td>
+                    <td>${r.rate ? (r.rate * 100).toFixed(0) + '%' : '-'}</td>
                     <td style="color:#48bb78;font-weight:bold;">¥${parseFloat(r.rebate || 0).toFixed(2)}</td>
                     <td style="color:${statusColor[r.status] || '#000'}">${statusMap[r.status] || r.status}</td>
                     <td>${r.created_at || ''}</td>

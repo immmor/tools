@@ -10,8 +10,9 @@ function fbChoiceLabel(_match, choice) {
   return map[choice] || choice;
 }
 
-// 邀请返现：被邀请人开通首笔 VIP 订单（月或年），给邀请人生成该笔订单价格 20% 的待审核返现记录
-async function grantRebate(DB, inviteeUsername, orderPrice, isYearly) {
+// 邀请返现：被邀请人每开通一笔 VIP 订单（月或年），按订单序号阶梯返现给邀请人
+// 阶梯比例：第1笔订单 20%，第2笔订单 15%，第3笔及以后每笔订单 10%（均生成待审核返现记录）
+async function grantRebate(DB, inviteeUsername, orderPrice, isYearly, orderId) {
   try {
     const me = await DB.prepare('SELECT invited_by FROM user WHERE username = ?').bind(inviteeUsername).first();
     if (!me?.invited_by) return;
@@ -19,15 +20,20 @@ async function grantRebate(DB, inviteeUsername, orderPrice, isYearly) {
     if (!inviter) return;
     let rebates = [];
     try { rebates = JSON.parse(inviter.rebates || '[]'); } catch (e) {}
-    // 仅首笔订单返现：若该被邀请人已有未驳回的返现记录，则不再生成
-    const existed = rebates.some(r => r.invitee === inviteeUsername && r.status !== 'rejected');
-    if (existed) return;
+    // 幂等：同一笔订单（orderId）不重复生成返现记录
+    if (orderId && rebates.some(r => r.order_id === orderId && r.status !== 'rejected')) return;
+    // 统计该被邀请人已产生（未驳回）的返现笔数，决定本次阶梯比例
+    const paidCount = rebates.filter(r => r.invitee === inviteeUsername && r.status !== 'rejected').length;
+    const rate = paidCount === 0 ? 0.2 : (paidCount === 1 ? 0.15 : 0.1);
     const nowTime = new Date().toISOString().slice(0, 19).replace('T', ' ');
     rebates.unshift({
       invitee: inviteeUsername,
+      order_id: orderId || null,
+      order_index: paidCount + 1,
       order_type: isYearly ? 'year' : 'month',
       order_price: orderPrice,
-      rebate: +(orderPrice * 0.2).toFixed(2),
+      rate: rate,
+      rebate: +(orderPrice * rate).toFixed(2),
       status: 'pending',
       created_at: nowTime
     });
@@ -79,7 +85,9 @@ async function autoRenewUser(DB, user) {
   } catch (e) {
     vorders = [];
   }
+  const renewOrderId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   vorders.unshift({
+    id: renewOrderId,
     type: 'vip',
     duration: actualDays,
     price: pr,
@@ -97,8 +105,8 @@ async function autoRenewUser(DB, user) {
   if (r.success && r.meta.changes > 0) {
     const nowStr = new Date().toISOString().slice(0,19).replace('T',' ');
 
-    // 邀请返现：自动续费虽是一笔 VIP 订单，但 grantRebate 已按首笔去重，不会重复返现
-    await grantRebate(DB, user.username, pr, yr);
+    // 邀请返现：自动续费是一笔 VIP 订单，按阶梯比例给邀请人生成待审核返现记录（orderId 保证幂等）
+    await grantRebate(DB, user.username, pr, yr, renewOrderId);
 
     // 给用户发送通知（多语言）
     await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)').bind(user.username, nt({
@@ -640,7 +648,7 @@ export default {
             const registerTime = new Date(new Date().getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
             invitedUsers.unshift({ username: username, registerTime: registerTime });
             await DB.prepare('UPDATE user SET invited_user = ? WHERE username = ?').bind(JSON.stringify(invitedUsers), inviterUsername).run();
-            // 记录被邀请人由谁邀请（用于后续首单返现）
+            // 记录被邀请人由谁邀请（用于后续阶梯返现）
             await DB.prepare('UPDATE user SET invited_by = ? WHERE username = ?').bind(inviterUsername, username).run();
           }
           
@@ -1210,6 +1218,7 @@ export default {
           }
           
           const newOrder = {
+            id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
             type: 'vip',
             duration: duration,
             price: vipPrice,
@@ -1245,8 +1254,8 @@ export default {
               .bind('immmor', msg, nowTime)
               .run();
             
-            // 邀请返现：被邀请人每开通一笔 VIP 订单（月或年），给邀请人生成该笔订单价格 20% 的待审核返现记录
-            await grantRebate(DB, username, vipPrice, isYearly);
+            // 邀请返现：被邀请人每开通一笔 VIP 订单（月或年），按阶梯比例给邀请人生成待审核返现记录
+            await grantRebate(DB, username, vipPrice, isYearly, newOrder.id);
 
             const updatedUser = await DB
               .prepare('SELECT username, balance, v_expire_date, v_token, v_link_clash, v_link_v2ray, vorders FROM user WHERE username = ?')
