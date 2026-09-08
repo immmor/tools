@@ -3405,11 +3405,11 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
       // ========== 提现：提交提现申请 ==========
       if (path === '/api/withdraw' && request.method === 'POST') {
         try {
-          const { username, amount, method, qrCode, account } = await request.json();
+          const { username, amount, method, qrCode, account, email } = await request.json();
           if (!username) return resJson({ success: false, key: 'withdraw_err_login', message: '请先登录' }, 401);
           if (!amount || amount <= 0) return resJson({ success: false, key: 'withdraw_err_amount', message: '请输入有效金额' }, 400);
           if (!method) return resJson({ success: false, key: 'withdraw_err_method', message: '请选择收款方式' }, 400);
-          if (method !== 'wechat' && method !== 'alipay' && !method.startsWith('crypto_')) return resJson({ success: false, key: 'withdraw_err_method', message: '请选择收款方式' }, 400);
+          if (method !== 'wechat' && method !== 'alipay' && !method.startsWith('crypto_') && method !== 'okx_usdt' && method !== 'binance_usdt') return resJson({ success: false, key: 'withdraw_err_method', message: '请选择收款方式' }, 400);
 
           let finalQrCode = null;
           if (method.startsWith('crypto_')) {
@@ -3417,6 +3417,11 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
             const acc = (account || '').trim();
             if (!acc) return resJson({ success: false, key: 'withdraw_err_qr', message: '请填写收款账号' }, 400);
             finalQrCode = acc;
+          } else if (method === 'okx_usdt' || method === 'binance_usdt') {
+            // OKX/Binance 通过邮箱提现，无需二维码
+            const emailVal = (email || '').trim();
+            if (!emailVal) return resJson({ success: false, key: 'withdraw_err_qr', message: '请填写收款邮箱' }, 400);
+            finalQrCode = emailVal;
           } else {
             // 收款码若客户端未上传（复用已存），则从服务端取用，避免重复传输图片
             finalQrCode = qrCode;
