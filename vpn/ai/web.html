@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>本地 RAG 知识库</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+           background: #f5f6f8; color: #1f2329; }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px; }
+    h1 { font-size: 20px; margin: 0 0 16px; }
+    .box { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    #log { min-height: 320px; max-height: 60vh; overflow-y: auto; }
+    .msg { margin-bottom: 14px; }
+    .msg .role { font-size: 12px; color: #8a9099; margin-bottom: 4px; }
+    .msg .bubble { background: #f0f2f5; padding: 10px 12px; border-radius: 10px; white-space: pre-wrap; line-height: 1.6; }
+    .msg.me .bubble { background: #d6e4ff; }
+    .src { font-size: 12px; color: #8a9099; margin-top: 6px; }
+    .input { display: flex; gap: 8px; margin-top: 16px; }
+    input { flex: 1; padding: 10px 12px; border: 1px solid #d9dce1; border-radius: 10px; font-size: 14px; }
+    button { padding: 10px 18px; border: none; background: #3370ff; color: #fff; border-radius: 10px; cursor: pointer; }
+    button:disabled { opacity: .5; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>本地 RAG 知识库 · qwen2.5:3b</h1>
+    <div class="box">
+      <div id="log"></div>
+      <div class="input">
+        <input id="q" placeholder="输入你的问题，回车发送" autofocus>
+        <button id="send">发送</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const log = document.getElementById('log');
+    const q = document.getElementById('q');
+    const send = document.getElementById('send');
+
+    function addMsg(role, text, src) {
+      const el = document.createElement('div');
+      el.className = 'msg ' + (role === 'me' ? 'me' : '');
+      el.innerHTML = `<div class="role">${role === 'me' ? '你' : '助手'}</div>
+                      <div class="bubble"></div>`;
+      el.querySelector('.bubble').textContent = text;
+      if (src && src.length) {
+        const s = document.createElement('div');
+        s.className = 'src';
+        s.textContent = '参考来源：' + src.map(x => `${x.source} (${x.score})`).join('，');
+        el.appendChild(s);
+      }
+      log.appendChild(el);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    async function ask() {
+      const text = q.value.trim();
+      if (!text) return;
+      q.value = '';
+      send.disabled = true;
+      addMsg('me', text);
+      addMsg('bot', '思考中…');
+      try {
+        const r = await fetch('/api/query', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: text })
+        });
+        const data = await r.json();
+        log.lastChild.remove(); // 移除“思考中”
+        if (data.error) addMsg('bot', '错误：' + data.error);
+        else addMsg('bot', data.answer, data.sources);
+      } catch (e) {
+        log.lastChild.remove();
+        addMsg('bot', '请求失败：' + e.message);
+      } finally {
+        send.disabled = false;
+      }
+    }
+
+    send.onclick = ask;
+    q.onkeydown = e => { if (e.key === 'Enter') ask(); };
+  </script>
+</body>
+</html>
