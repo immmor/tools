@@ -129,6 +129,65 @@ async function autoRenewUser(DB, user) {
   return null;
 }
 
+// ========== 用户卡号（站点装饰卡用，唯一 + 持久化） ==========
+const CARD_PREFIX = '5266'; // 卡号前缀（4 位），想换风格改这里
+
+// 生成 16 位卡号：前缀 + 12 位随机数字
+function generateCardNumber() {
+  const bytes = new Uint8Array(12);
+  crypto.getRandomValues(bytes);
+  let digits = '';
+  for (let i = 0; i < 12; i++) digits += bytes[i] % 10;
+  return CARD_PREFIX + digits;
+}
+
+// 懒加载 card_number 字段与唯一索引（幂等，每个实例只执行一次）
+async function ensureCardColumn(DB) {
+  if (globalThis.__cardColReady) return;
+  try { await DB.prepare('ALTER TABLE user ADD COLUMN card_number TEXT').run(); } catch (e) {}
+  try { await DB.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_user_card_number ON user (card_number)').run(); } catch (e) {}
+  globalThis.__cardColReady = true;
+}
+
+// 取用户卡号，没有就补发一张（唯一索引防撞号，撞了就重试）
+async function ensureCardNumber(DB, rowid) {
+  if (!rowid) return '';
+  await ensureCardColumn(DB);
+  let row = null;
+  try {
+    row = await DB.prepare('SELECT card_number FROM user WHERE rowid = ?').bind(rowid).first();
+  } catch (e) {
+    return '';
+  }
+  if (!row) return '';
+  if (row.card_number) return row.card_number;
+  for (let i = 0; i < 8; i++) {
+    const card = generateCardNumber();
+    try {
+      await DB.prepare('UPDATE user SET card_number = ? WHERE rowid = ?').bind(card, rowid).run();
+      return card;
+    } catch (e) {
+      // 撞号 → 换一个再来
+    }
+  }
+  return '';
+}
+
+// 注册时挑一个尚未被占用的卡号
+async function pickUniqueCardNumber(DB) {
+  await ensureCardColumn(DB);
+  for (let i = 0; i < 8; i++) {
+    const card = generateCardNumber();
+    try {
+      const exists = await DB.prepare('SELECT 1 AS ok FROM user WHERE card_number = ?').bind(card).first();
+      if (!exists) return card;
+    } catch (e) {
+      return card;
+    }
+  }
+  return generateCardNumber();
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -557,11 +616,14 @@ export default {
 
         // 原子插入：利用数据库 UNIQUE 约束防止并发重复注册
         // 不再单独 SELECT 检查，直接 INSERT，由数据库保证原子性
+        // 给新用户分配一张唯一卡号（站点装饰卡用）
+        const newCardNumber = await pickUniqueCardNumber(DB);
+
         let result;
         try {
           result = await DB
-            .prepare('INSERT INTO user (username, password, balance, v_expire_date, learn_vip_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code, v_token, v_link_clash, v_link_v2ray, price_plan, survey, security_answer, fetch_link, source, not_trusted, auto_rewn, vorders, web3_address) VALUES (?, ?, ?, NULL, NULL, 307200, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)')
-            .bind(username, password, finalBalance, new Date().toISOString().slice(0, 19).replace('T', ' '), userInviteCode, '', '', '', pricePlanStr, '{}', securityAnswer || '', '[]', source || '', notTrustedValue, '[]', web3AddressLower || '')
+            .prepare('INSERT INTO user (username, password, balance, v_expire_date, learn_vip_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code, v_token, v_link_clash, v_link_v2ray, price_plan, survey, security_answer, fetch_link, source, not_trusted, auto_rewn, vorders, web3_address, card_number) VALUES (?, ?, ?, NULL, NULL, 307200, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)')
+            .bind(username, password, finalBalance, new Date().toISOString().slice(0, 19).replace('T', ' '), userInviteCode, '', '', '', pricePlanStr, '{}', securityAnswer || '', '[]', source || '', notTrustedValue, '[]', web3AddressLower || '', newCardNumber)
             .run();
         } catch (e) {
           // 捕获 UNIQUE 约束冲突 → 用户名已存在（并发注册竞争时触发）
@@ -672,8 +734,9 @@ export default {
           return resJson({ success: false, message: '用户名和密码不能为空！' }, 400);
         }
 
+        await ensureCardColumn(DB);
         const user = await DB
-          .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders, invite_code, invited_user, rebates FROM user WHERE username = ? AND password = ?')
+          .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders, invite_code, invited_user, rebates, card_number FROM user WHERE username = ? AND password = ?')
           .bind(username, password)
           .first();
 
@@ -694,7 +757,9 @@ export default {
 
           const pricePlan = user.price_plan ? JSON.parse(user.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
 
-          return resJson({ success: true, message: '登录成功！', userInfo: { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates }, pricePlan });
+          const cardNumber = user.card_number || await ensureCardNumber(DB, user.rowid);
+
+          return resJson({ success: true, message: '登录成功！', userInfo: { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates, card_number: cardNumber }, pricePlan });
         } else {
           return resJson({ success: false, message: '用户名或密码错误' }, 401);
         }
@@ -712,8 +777,9 @@ export default {
         // 统一用小写处理，避免大小写不匹配问题
         const addressLower = address.toLowerCase();
 
+        await ensureCardColumn(DB);
         const user = await DB
-          .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders FROM user WHERE username = ? OR web3_address = ?')
+          .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders, card_number FROM user WHERE username = ? OR web3_address = ?')
           .bind(addressLower, addressLower)
           .first();
 
@@ -734,7 +800,9 @@ export default {
 
           const pricePlan = user.price_plan ? JSON.parse(user.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
 
-          return resJson({ success: true, message: '登录成功！', userInfo: { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates }, pricePlan });
+          const cardNumber = user.card_number || await ensureCardNumber(DB, user.rowid);
+
+          return resJson({ success: true, message: '登录成功！', userInfo: { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates, card_number: cardNumber }, pricePlan });
         } else {
           return resJson({ success: true, needRegister: true, address: address, message: '该钱包地址未注册，请完成注册！' });
         }
@@ -801,8 +869,9 @@ export default {
           return resJson({ success: false, message: '缺少授权码！' }, 400);
         }
 
+        await ensureCardColumn(DB);
         const user = await DB
-          .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders, invite_code, invited_user, rebates, login_ticket, ticket_expire FROM user WHERE login_ticket = ?')
+          .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders, invite_code, invited_user, rebates, login_ticket, ticket_expire, card_number FROM user WHERE login_ticket = ?')
           .bind(ticket)
           .first();
 
@@ -832,7 +901,9 @@ export default {
 
           const pricePlan = user.price_plan ? JSON.parse(user.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
 
-          return resJson({ success: true, message: '登录成功！', userInfo: { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates }, pricePlan });
+          const cardNumber = user.card_number || await ensureCardNumber(DB, user.rowid);
+
+          return resJson({ success: true, message: '登录成功！', userInfo: { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates, card_number: cardNumber }, pricePlan });
         } else {
           return resJson({ success: false, message: '用户不存在' }, 401);
         }
@@ -1414,6 +1485,38 @@ export default {
         }
       }
 
+      // ========== 支付密码接口：GET 查询状态 / POST 设置（6位数字） ==========
+      if (path === '/api/pay-password') {
+        try {
+          // 懒加载字段：不存在时新增
+          try { await DB.prepare('ALTER TABLE user ADD COLUMN pay_password TEXT').run(); } catch (e) {}
+
+          // 查询是否已设置
+          if (request.method === 'GET') {
+            const username = url.searchParams.get('username');
+            if (!username) return resJson({ code: 400, msg: '缺少username参数' }, 400);
+            const user = await DB.prepare('SELECT pay_password FROM user WHERE username = ?').bind(username).first();
+            if (!user) return resJson({ code: 404, msg: '用户不存在' }, 404);
+            return resJson({ code: 200, hasPayPassword: !!user.pay_password });
+          }
+
+          // 设置支付密码
+          if (request.method === 'POST') {
+            const { username, password, payPassword } = await request.json();
+            if (!username || !password || !payPassword) return resJson({ code: 400, msg: '参数不完整' }, 400);
+            if (!/^\d{6}$/.test(String(payPassword))) return resJson({ code: 400, msg: '支付密码必须为6位数字' }, 400);
+            // 校验登录密码，确认身份
+            const user = await DB.prepare('SELECT username FROM user WHERE username = ? AND password = ?').bind(username, password).first();
+            if (!user) return resJson({ code: 401, msg: '登录密码错误' }, 401);
+            await DB.prepare('UPDATE user SET pay_password = ? WHERE username = ?').bind(String(payPassword), username).run();
+            return resJson({ code: 200, msg: '支付密码设置成功' });
+          }
+        } catch (err) {
+          console.error('Pay password error:', err);
+          return resJson({ code: 500, msg: '操作失败', error: err.message }, 500);
+        }
+      }
+
       // ========== 用户间转账接口 ==========
       if (path === '/api/transfer' && request.method === 'POST') {
         try {
@@ -1431,19 +1534,25 @@ export default {
             return resJson({ code: 400, msg: '转账金额必须大于0' }, 400);
           }
           if (!password) {
-            return resJson({ code: 400, msg: '请输入密码以确认转账' }, 400);
+            return resJson({ code: 400, msg: '请输入6位支付密码以确认转账' }, 400);
           }
 
-          // 校验转出用户是否存在 + 身份（密码）校验
+          // 确保支付密码字段存在
+          try { await DB.prepare('ALTER TABLE user ADD COLUMN pay_password TEXT').run(); } catch (e) {}
+
+          // 校验转出用户是否存在 + 支付密码校验
           const sender = await DB
-            .prepare('SELECT username, password, balance FROM user WHERE username = ?')
+            .prepare('SELECT username, pay_password, balance FROM user WHERE username = ?')
             .bind(from)
             .first();
           if (!sender) {
             return resJson({ code: 404, msg: '转出用户不存在' }, 404);
           }
-          if (sender.password !== password) {
-            return resJson({ code: 401, msg: '密码错误，转账被拒绝' }, 401);
+          if (!sender.pay_password) {
+            return resJson({ code: 403, msg: '请先设置6位支付密码' }, 403);
+          }
+          if (String(sender.pay_password) !== String(password)) {
+            return resJson({ code: 401, msg: '支付密码错误，转账被拒绝' }, 401);
           }
 
           // 校验收款用户是否存在
@@ -1483,6 +1592,10 @@ export default {
             ]);
             return resJson({ code: 500, msg: '转账失败，已撤销' }, 500);
           }
+
+          const msgTime = new Date().toISOString().slice(0, 19).replace('T', ' ');
+          await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
+            .bind('immmor', `💰 用户 ${from} 向 ${to} 转账 ¥${amt}`, msgTime).run();
 
           return resJson({ code: 200, msg: '转账成功', from, to, amount: amt });
         } catch (err) {
@@ -1824,7 +1937,7 @@ rules:
           // 记录用户调用
           const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
           const fetchLink = user.fetch_link ? JSON.parse(user.fetch_link) : [];
-          fetchLink.unshift({ type: 'vip', protocol: 'clash', fetchTime: beijingTime, ip: request.headers.get('CF-Connecting-IP') || 'unknown', location: [request.headers.get('CF-IPCountry'), request.headers.get('CF-IPRegion'), request.headers.get('CF-IPCity')].filter(Boolean).join(' ') || 'unknown', domain: new URL(request.url).hostname });
+          fetchLink.unshift({ type: 'vip', protocol: 'clash', fetchTime: beijingTime, ip: request.headers.get('CF-Connecting-IP') || 'unknown', location: [request.headers.get('CF-IPCountry'), request.headers.get('CF-IPRegion'), request.headers.get('CF-IPCity')].filter(Boolean).join(' ') || 'unknown', domain: new URL(request.url).hostname, link: vipUrl });
           if (fetchLink.length > 50) fetchLink.pop();
           await DB.prepare('UPDATE user SET fetch_link = ? WHERE username = ?').bind(JSON.stringify(fetchLink), user.username).run();
           
@@ -1902,7 +2015,7 @@ rules:
           // 记录用户调用
           const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
           const fetchLink = user.fetch_link ? JSON.parse(user.fetch_link) : [];
-          fetchLink.unshift({ type: 'vip', protocol: 'v2ray', fetchTime: beijingTime, ip: request.headers.get('CF-Connecting-IP') || 'unknown', location: [request.headers.get('CF-IPCountry'), request.headers.get('CF-IPRegion'), request.headers.get('CF-IPCity')].filter(Boolean).join(' ') || 'unknown', domain: new URL(request.url).hostname });
+          fetchLink.unshift({ type: 'vip', protocol: 'v2ray', fetchTime: beijingTime, ip: request.headers.get('CF-Connecting-IP') || 'unknown', location: [request.headers.get('CF-IPCountry'), request.headers.get('CF-IPRegion'), request.headers.get('CF-IPCity')].filter(Boolean).join(' ') || 'unknown', domain: new URL(request.url).hostname, link: vipV2rayUrl });
           if (fetchLink.length > 50) fetchLink.pop();
           await DB.prepare('UPDATE user SET fetch_link = ? WHERE username = ?').bind(JSON.stringify(fetchLink), user.username).run();
           
@@ -2030,7 +2143,7 @@ rules:
           // 记录用户调用
           const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
           const fetchLink = user.fetch_link ? JSON.parse(user.fetch_link) : [];
-          fetchLink.unshift({ type: 'free', protocol: 'clash', fetchTime: beijingTime, ip: request.headers.get('CF-Connecting-IP') || 'unknown', location: [request.headers.get('CF-IPCountry'), request.headers.get('CF-IPRegion'), request.headers.get('CF-IPCity')].filter(Boolean).join(' ') || 'unknown', domain: new URL(request.url).hostname });
+          fetchLink.unshift({ type: 'free', protocol: 'clash', fetchTime: beijingTime, ip: request.headers.get('CF-Connecting-IP') || 'unknown', location: [request.headers.get('CF-IPCountry'), request.headers.get('CF-IPRegion'), request.headers.get('CF-IPCity')].filter(Boolean).join(' ') || 'unknown', domain: new URL(request.url).hostname, link: clashUrl });
           if (fetchLink.length > 50) fetchLink.pop();
           await DB.prepare('UPDATE user SET fetch_link = ? WHERE username = ?').bind(JSON.stringify(fetchLink), username).run();
           
@@ -2113,7 +2226,7 @@ rules:
           // 记录用户调用
           const beijingTime = new Date(now.getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
           const fetchLink = user.fetch_link ? JSON.parse(user.fetch_link) : [];
-          fetchLink.unshift({ type: 'free', protocol: 'v2ray', fetchTime: beijingTime, ip: request.headers.get('CF-Connecting-IP') || 'unknown', location: [request.headers.get('CF-IPCountry'), request.headers.get('CF-IPRegion'), request.headers.get('CF-IPCity')].filter(Boolean).join(' ') || 'unknown', domain: new URL(request.url).hostname });
+          fetchLink.unshift({ type: 'free', protocol: 'v2ray', fetchTime: beijingTime, ip: request.headers.get('CF-Connecting-IP') || 'unknown', location: [request.headers.get('CF-IPCountry'), request.headers.get('CF-IPRegion'), request.headers.get('CF-IPCity')].filter(Boolean).join(' ') || 'unknown', domain: new URL(request.url).hostname, link: v2rayUrl });
           if (fetchLink.length > 50) fetchLink.pop();
           await DB.prepare('UPDATE user SET fetch_link = ? WHERE username = ?').bind(JSON.stringify(fetchLink), username).run();
           
@@ -3983,9 +4096,6 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
         const ordersData = await ordersRes.json().catch(() => null);
         const orderCount = ordersData?.data?.pagination?.total
           ?? (Array.isArray(ordersData?.data?.orders) ? ordersData.data.orders.length : 0);
-        console.log('订单接口查询结果:', orderCount);
-        await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
-          .bind('immmor', `定时订单查询完成，订单总数：${orderCount}`, ts).run();
       } catch (e) {
         console.error('请求订单接口失败:', e);
       }

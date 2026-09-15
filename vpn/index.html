@@ -653,6 +653,16 @@
             display: none;
         }
 
+        /* 未读强制阅读消息：醒目样式，未确认前不可关闭消息窗口 */
+        .forced-unread {
+            background: rgba(255, 170, 0, 0.08);
+            border-left: 3px solid var(--neon-orange);
+        }
+        .forced-unread .forced-confirm {
+            background: var(--neon-orange);
+            color: #18181b;
+        }
+
         .loading-dots::after {
             content: '';
             display: inline-block;
@@ -1890,6 +1900,7 @@
                     </div>
                 </div>
             </div>
+
             <div id="vorders-container" class="relative">
                 <div id="vorders-dropdown" class="dropdown-menu fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80%] h-[70%] z-[100] flex flex-col hidden">
                     <div class="px-4 py-3 border-b border-zinc-800 text-center shrink-0">
@@ -3864,7 +3875,19 @@
 
             const renderNotifications = (dataNotifications = []) => {
                 const list = document.getElementById('notification-list');
-                notifications = dataNotifications;
+                const typeRank = (n) => {
+                    const t = parseMessageMeta(n.content).type;
+                    return t === 'must_input' ? 2 : t === 'must_read' ? 1 : 0;
+                };
+                notifications = dataNotifications.slice().sort((a, b) => {
+                    const ua = !a.is_read, ub = !b.is_read;
+                    if (ua !== ub) return ua ? -1 : 1; // 未读全部置顶
+                    if (ua) { // 未读组内：类型优先级（需确认 > 必读 > 普通）再按时间
+                        const ra = typeRank(a), rb = typeRank(b);
+                        if (ra !== rb) return rb - ra;
+                    }
+                    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime(); // 时间倒序
+                });
                 list.innerHTML = '';
                 
                 if (!notifications.length) {
@@ -3872,54 +3895,113 @@
                     return;
                 }
                 
-                notifications.forEach((notif, idx) => {
+                notifications.forEach((notif) => {
+                    const meta = parseMessageMeta(notif.content);
+                    const forced = meta.type !== 'normal';
+                    const isMustInputUnread = forced && meta.type === 'must_input' && !notif.is_read;
                     const div = document.createElement('div');
-                    div.className = 'px-4 py-3 border-b border-zinc-800/50 hover:bg-zinc-800/50 transition-colors cursor-pointer notification-item relative';
-                    div.innerHTML = `
-                        <div class="flex justify-between items-start gap-2">
-                            <div class="flex-1 min-w-0">
-                                <p class="text-sm ${!notif.is_read ? 'text-white font-bold' : 'text-zinc-400'}">${getMessageContent(notif.content)}</p>
-                                <p class="text-xs text-zinc-600 mt-1">${formatTime(notif.created_at)}</p>
-                            </div>
-                            <div class="flex items-center gap-2 shrink-0 mt-0.5">
-                                ${!notif.is_read ? '<span class="w-2 h-2 bg-[var(--neon-red)] rounded-full shrink-0"></span>' : ''}
-                                <button class="notif-reply-btn shrink-0 text-[var(--neon-blue)] hover:text-white hover:border-[var(--neon-blue)] transition-colors px-2 py-1 rounded border border-zinc-700" title="${translations[currentLang]?.notification_reply || '回复'}"><i class="fa-solid fa-reply fa-flip-horizontal"></i></button>
-                            </div>
-                        </div>
-                    `;
-                    div.onclick = async () => {
-                        const wasUnread = !notifications[idx].is_read;
-                        if (wasUnread) {
-                            await markAsRead(notifications[idx].id);
-                            notifications[idx].is_read = true;
-                            renderNotifications(notifications);
-                            checkUnread(notifications);
-                        }
-                        // 仅未读的赠送消息点击才跳转游戏
-                        if (!wasUnread) return;
-                        const content = notifications[idx].content || '';
-                        const giftMatch = content.match(/\|(wheel|slot|scratch)$/);
-                        if (giftMatch) {
+                    div.className = 'px-4 py-3 border-b border-zinc-800/50 notification-item relative transition-colors'
+                        + (forced ? ' border-l-2 border-[var(--neon-orange)] bg-[var(--neon-orange)]/5' : '')
+                        + ((!notif.is_read && !isMustInputUnread) ? ' hover:bg-zinc-800/50 cursor-pointer' : '');
+                    const badge = forced
+                        ? (meta.type === 'must_input'
+                            ? `<span class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-px rounded-full border border-[var(--neon-blue)]/50 text-[var(--neon-blue)] bg-[var(--neon-blue)]/10 mr-1 align-middle"><i class="fa-solid fa-keyboard text-[9px]"></i>${(translations[currentLang]?.msg_badge_must_input || '需确认')}</span>`
+                            : `<span class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-px rounded-full border border-[var(--neon-orange)]/50 text-[var(--neon-orange)] bg-[var(--neon-orange)]/10 mr-1 align-middle"><i class="fa-solid fa-circle-exclamation text-[9px]"></i>${(translations[currentLang]?.msg_badge_must_read || '必读')}</span>`)
+                        : '';
+                    const bodyHtml = `<p class="text-sm ${!notif.is_read ? 'text-white font-bold' : 'text-zinc-400'}">${badge}${meta.body}</p><p class="text-xs text-zinc-600 mt-1">${formatTime(notif.created_at)}</p>`;
+
+                    if (isMustInputUnread) {
+                        // 未读强制输入消息：内联输入控件，输入正确内容后才能确认
+                        const textHtml = `<p class="text-sm ${!notif.is_read ? 'text-white font-bold' : 'text-zinc-400'}">${badge}${meta.body}</p>`;
+                        const timeHtml = `<p class="text-xs text-zinc-600 mt-1">${formatTime(notif.created_at)}</p>`;
+                        div.innerHTML = `
+                            <div class="flex flex-col gap-2">
+                                <div class="flex justify-between items-start gap-2">
+                                    <div class="flex-1 min-w-0">${textHtml}</div>
+                                    <div class="flex items-center gap-2 shrink-0 mt-0.5">
+                                        <span class="w-2 h-2 bg-[var(--neon-red)] rounded-full shrink-0"></span>
+                                        <button class="notif-reply-btn shrink-0 text-[var(--neon-blue)] hover:text-white hover:border-[var(--neon-blue)] transition-colors px-2 py-1 rounded border border-zinc-700" title="${translations[currentLang]?.notification_reply || '回复'}"><i class="fa-solid fa-reply fa-flip-horizontal"></i></button>
+                                    </div>
+                                </div>
+                                <div class="flex items-stretch gap-1">
+                                    <input class="forced-input flex-1 bg-zinc-900 border border-zinc-700 px-3 py-2 text-white text-sm focus:border-[var(--neon-blue)] focus:outline-none" placeholder="${(translations[currentLang]?.msg_input_placeholder || '请输入：{keyword}').replace('{keyword}', meta.keyword)}">
+                                    <button class="forced-confirm btn-cyber px-2 py-1.5 text-xs whitespace-nowrap">${translations[currentLang]?.msg_confirm_btn || '确认'}</button>
+                                </div>
+                                <p class="forced-err text-xs text-[var(--neon-red)] mt-1 hidden">${translations[currentLang]?.msg_input_error || '输入内容不正确，请仔细核对。'}</p>
+                                ${timeHtml}
+                            </div>`;
+                        div.querySelector('.forced-confirm').addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            const inp = div.querySelector('.forced-input');
+                            if ((inp.value || '').trim().toLowerCase() !== (meta.keyword || '').trim().toLowerCase()) {
+                                div.querySelector('.forced-err').classList.remove('hidden');
+                                inp.focus();
+                                return;
+                            }
+                            acknowledgeForced(notif);
+                        });
+                        div.querySelector('.forced-input').addEventListener('click', e => e.stopPropagation());
+                        div.querySelector('.notif-reply-btn').onclick = (e) => {
+                            e.stopPropagation();
                             notificationDropdown.classList.add('hidden');
-                            goToGiftGame(giftMatch[1]);
-                        }
-                    };
-                    div.querySelector('.notif-reply-btn').onclick = (e) => {
-                        e.stopPropagation();
-                        notificationDropdown.classList.add('hidden');
-                        if (userInfo) {
-                            resetForm();
-                            modal.dataset.type = 'reply';
-                            const dict = translations[currentLang];
-                            if (title) title.textContent = (dict?.notification_reply_title || '回复消息');
-                            if (label) label.textContent = (dict?.notification_reply_label || '回复内容');
-                            if (content) content.placeholder = (dict?.notification_reply_placeholder || '请输入您的回复...');
-                            if (submitBtn) submitBtn.textContent = (dict?.notification_reply_submit || '发送回复');
-                            toggleModal(true);
-                        } else {
-                            openModal();
-                        }
-                    };
+                            if (userInfo) {
+                                resetForm();
+                                modal.dataset.type = 'reply';
+                                const dict = translations[currentLang];
+                                if (title) title.textContent = (dict?.notification_reply_title || '回复消息');
+                                if (label) label.textContent = (dict?.notification_reply_label || '回复内容');
+                                if (content) content.placeholder = (dict?.notification_reply_placeholder || '请输入您的回复...');
+                                if (submitBtn) submitBtn.textContent = (dict?.notification_reply_submit || '发送回复');
+                                toggleModal(true);
+                            } else {
+                                openModal();
+                            }
+                        };
+                    } else {
+                        // 普通消息 / 必读消息 / 已读消息：外观一致，仅颜色与标记不同
+                        div.innerHTML = `
+                            <div class="flex justify-between items-start gap-2">
+                                <div class="flex-1 min-w-0">
+                                    ${bodyHtml}
+                                </div>
+                                <div class="flex items-center gap-2 shrink-0 mt-0.5">
+                                    ${!notif.is_read ? '<span class="w-2 h-2 bg-[var(--neon-red)] rounded-full shrink-0"></span>' : ''}
+                                    <button class="notif-reply-btn shrink-0 text-[var(--neon-blue)] hover:text-white hover:border-[var(--neon-blue)] transition-colors px-2 py-1 rounded border border-zinc-700" title="${translations[currentLang]?.notification_reply || '回复'}"><i class="fa-solid fa-reply fa-flip-horizontal"></i></button>
+                                </div>
+                            </div>`;
+                        div.onclick = async () => {
+                            const wasUnread = !notif.is_read;
+                            if (wasUnread) {
+                                await markAsRead(notif.id);
+                                notif.is_read = true;
+                                renderNotifications(notifications);
+                                checkUnread(notifications);
+                            }
+                            if (!wasUnread) return;
+                            const content = notif.content || '';
+                            const giftMatch = content.match(/\|(wheel|slot|scratch)$/);
+                            if (giftMatch) {
+                                notificationDropdown.classList.add('hidden');
+                                goToGiftGame(giftMatch[1]);
+                            }
+                        };
+                        div.querySelector('.notif-reply-btn').onclick = (e) => {
+                            e.stopPropagation();
+                            notificationDropdown.classList.add('hidden');
+                            if (userInfo) {
+                                resetForm();
+                                modal.dataset.type = 'reply';
+                                const dict = translations[currentLang];
+                                if (title) title.textContent = (dict?.notification_reply_title || '回复消息');
+                                if (label) label.textContent = (dict?.notification_reply_label || '回复内容');
+                                if (content) content.placeholder = (dict?.notification_reply_placeholder || '请输入您的回复...');
+                                if (submitBtn) submitBtn.textContent = (dict?.notification_reply_submit || '发送回复');
+                                toggleModal(true);
+                            } else {
+                                openModal();
+                            }
+                        };
+                    }
                     list.appendChild(div);
                 });
 
@@ -3928,9 +4010,38 @@
                 if (giftNotif && !window.__giftShown.has(giftNotif.id)) {
                     showGiftOverlay(giftNotif);
                 }
+
+                // 存在未读强制消息时，保持消息窗口打开
+                if (hasUnreadForced()) notificationDropdown?.classList.remove('hidden');
             };
 
             window.__rerenderNotifications = () => renderNotifications(notifications);
+
+            // ============ 强制阅读消息：必须已读 / 输入确认才能关闭（集成在通知列表内） ============
+            const FORCED_TYPES = ['must_read', 'must_input'];
+
+            const parseMessageMeta = (content) => {
+                let parsed = null;
+                try { parsed = JSON.parse(content); } catch (e) { parsed = null; }
+                if (parsed && typeof parsed === 'object' && FORCED_TYPES.includes(parsed.type)) {
+                    const titleObj = (parsed.title && typeof parsed.title === 'object') ? parsed.title : null;
+                    const title = titleObj ? (titleObj[currentLang === 'zh-CN' ? 'cn' : 'en'] || titleObj.cn || titleObj.en || '') : '';
+                    return { type: parsed.type, keyword: parsed.keyword || '', title, body: getMessageContent(content) };
+                }
+                return { type: 'normal', title: '', keyword: '', body: getMessageContent(content) };
+            };
+
+            const isForcedType = (content) => parseMessageMeta(content).type !== 'normal';
+
+            const hasUnreadForced = () => notifications.some(n => !n.is_read && isForcedType(n.content));
+
+            const acknowledgeForced = async (notif) => {
+                await markAsRead(notif.id);
+                const i = notifications.findIndex(n => String(n.id) === String(notif.id));
+                if (i >= 0) notifications[i].is_read = true;
+                renderNotifications(notifications);
+                checkUnread(notifications);
+            };
 
             const markAllAsRead = async () => {
                 if (!userInfo) return;
@@ -4007,16 +4118,18 @@
             if (notificationBtn && notificationDropdown) {
                 notificationBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
-                    notificationDropdown.classList.toggle('hidden');
-                    if (!notificationDropdown.classList.contains('hidden')) {
+                    if (notificationDropdown.classList.contains('hidden')) {
+                        notificationDropdown.classList.remove('hidden');
                         hasUnread = false;
                         checkUnread(notifications);
                         lucide.createIcons();
+                    } else if (!hasUnreadForced()) {
+                        notificationDropdown.classList.add('hidden');
                     }
                 });
 
                 document.addEventListener('click', (e) => {
-                    if (notificationContainer && !notificationContainer.contains(e.target)) {
+                    if (notificationContainer && !notificationContainer.contains(e.target) && !hasUnreadForced()) {
                         notificationDropdown.classList.add('hidden');
                     }
                 });

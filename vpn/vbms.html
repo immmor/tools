@@ -1106,6 +1106,22 @@
                                     <option value="single">单个用户</option>
                                 </select>
                             </div>
+                            <div class="form-group">
+                                <label for="messageType">消息类型</label>
+                                <select id="messageType" style="width: 100%; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 4px;">
+                                    <option value="normal">普通消息（点击标记已读）</option>
+                                    <option value="must_read">必须阅读才能关闭（点击确认）</option>
+                                    <option value="must_input">需输入内容确认才能关闭</option>
+                                </select>
+                            </div>
+                            <div class="form-group" id="messageTitleGroup" style="display: none;">
+                                <label for="messageTitle">弹窗标题（可选）</label>
+                                <input type="text" id="messageTitle" placeholder="如：重要公告" style="width: 100%; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 4px;">
+                            </div>
+                            <div class="form-group" id="messageKeywordGroup" style="display: none;">
+                                <label for="messageKeyword">确认关键词（用户须输入此内容才能关闭）</label>
+                                <input type="text" id="messageKeyword" placeholder="如：我已阅读并同意" style="width: 100%; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 4px;">
+                            </div>
                             <div class="form-group" id="singleUserGroup" style="display: none;">
                                 <label for="singleUsername">用户名</label>
                                 <input type="text" id="singleUsername" placeholder="请输入用户名" style="width: 100%; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 4px;">
@@ -1133,13 +1149,14 @@
                                     <th onclick="sortMessages('id')" style="cursor:pointer;">ID <span class="sort-indicator" data-col="id"></span></th>
                                     <th onclick="sortMessages('username')" style="cursor:pointer;">用户 <span class="sort-indicator" data-col="username"></span></th>
                                     <th onclick="sortMessages('content')" style="cursor:pointer;">内容 <span class="sort-indicator" data-col="content"></span></th>
+                                    <th>类型</th>
                                     <th onclick="sortMessages('is_read')" style="cursor:pointer;">状态 <span class="sort-indicator" data-col="is_read"></span></th>
                                     <th onclick="sortMessages('created_at')" style="cursor:pointer;">时间 <span class="sort-indicator" data-col="created_at"></span></th>
                                     <th>操作</th>
                                 </tr>
                             </thead>
                             <tbody id="messagesTableBody">
-                                <tr><td colspan="6" style="text-align:center;color:#999;">请选择查看范围并点击查询</td></tr>
+                                <tr><td colspan="7" style="text-align:center;color:#999;">请选择查看范围并点击查询</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -3986,14 +4003,17 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
 
         // 发送消息
         async function sendMessage() {
-            const content = document.getElementById('messageContent').value.trim();
+            const rawContent = document.getElementById('messageContent').value.trim();
             const target = document.getElementById('messageTarget').value;
-            
-            if (!content) {
+            const msgType = document.getElementById('messageType').value;
+            const msgTitle = document.getElementById('messageTitle').value.trim();
+            const msgKeyword = document.getElementById('messageKeyword').value.trim();
+
+            if (!rawContent) {
                 alert('请输入消息内容');
                 return;
             }
-            
+
             if (target === 'single') {
                 const username = document.getElementById('singleUsername').value.trim();
                 if (!username) {
@@ -4001,22 +4021,39 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
                     return;
                 }
             }
-            
+
+            // 特殊类型消息：将类型、确认关键词、标题与正文打包为 JSON 写入 content
+            let content = rawContent;
+            if (msgType === 'must_read' || msgType === 'must_input') {
+                if (msgType === 'must_input' && !msgKeyword) {
+                    alert('「需输入内容确认」类型必须填写确认关键词');
+                    return;
+                }
+                const langs = ['cn', 'en', 'jp', 'kr', 'es', 'vi', 'ar', 'ru'];
+                const obj = { type: msgType };
+                if (msgType === 'must_input') obj.keyword = msgKeyword;
+                if (msgTitle) obj.title = { cn: msgTitle, en: msgTitle };
+                langs.forEach(l => { obj[l] = rawContent; });
+                content = JSON.stringify(obj);
+            }
+
             const loadingBtn = document.querySelector('#messagesPage button.btn');
             const originalText = loadingBtn.innerText;
             loadingBtn.innerText = '发送中...';
             loadingBtn.disabled = true;
-            
+
             try {
-                const result = await newApiRequest('/api/send-message', 'POST', { 
-                    content, 
+                const result = await newApiRequest('/api/send-message', 'POST', {
+                    content,
                     target,
                     username: target === 'single' ? document.getElementById('singleUsername').value.trim() : null
                 });
-                
+
                 if (result.code === 200) {
                     alert(`发送成功！${result.message || ''}`);
                     document.getElementById('messageContent').value = '';
+                    document.getElementById('messageTitle').value = '';
+                    document.getElementById('messageKeyword').value = '';
                     if (target === 'single') {
                         document.getElementById('singleUsername').value = '';
                     }
@@ -4041,6 +4078,13 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
             }
         });
 
+        // 切换发送消息类型，显示对应附加字段
+        document.getElementById('messageType').addEventListener('change', function() {
+            const t = this.value;
+            document.getElementById('messageTitleGroup').style.display = (t === 'must_read' || t === 'must_input') ? 'block' : 'none';
+            document.getElementById('messageKeywordGroup').style.display = (t === 'must_input') ? 'block' : 'none';
+        });
+
         let messagesData = [];
         let messagesSortCol = '';
         let messagesSortDir = 'asc';
@@ -4051,18 +4095,18 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
             const tbody = document.getElementById('messagesTableBody');
 
             if (!target) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;">请选择查看范围</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;">请选择查看范围</td></tr>';
                 messagesData = [];
                 return;
             }
 
             if (target === 'single' && !username) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;">请输入用户名</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;">请输入用户名</td></tr>';
                 messagesData = [];
                 return;
             }
 
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">加载中...</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">加载中...</td></tr>';
 
             try {
                 let url = `/api/messages?username=${encodeURIComponent(currentUserInfo?.username || '')}&all=true`;
@@ -4074,12 +4118,12 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
                     messagesData = res.data.messages;
                     renderMessages();
                 } else {
-                    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;">暂无消息记录</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;">暂无消息记录</td></tr>';
                     messagesData = [];
                 }
             } catch (e) {
                 console.error('加载消息失败:', e);
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#e53e3e;">加载失败</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#e53e3e;">加载失败</td></tr>';
             }
         }
 
@@ -4096,10 +4140,26 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
             renderMessages();
         }
 
+        function messageDisplayContent(m) {
+            try {
+                const p = JSON.parse(m.content);
+                if (p && typeof p === 'object') return p.cn || p.en || m.content;
+            } catch (e) {}
+            return m.content;
+        }
+
+        function messageTypeLabel(m) {
+            let t = 'normal';
+            try { const p = JSON.parse(m.content); if (p && p.type) t = p.type; } catch (e) {}
+            if (t === 'must_read') return '<span style="color:#ed8936;">必须阅读</span>';
+            if (t === 'must_input') return '<span style="color:#9f7aea;">需输入确认</span>';
+            return '<span style="color:#999;">普通</span>';
+        }
+
         function renderMessages() {
             const tbody = document.getElementById('messagesTableBody');
             if (!messagesData.length) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;">暂无消息记录</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;">暂无消息记录</td></tr>';
                 return;
             }
             const sorted = [...messagesData].sort((a, b) => {
@@ -4121,7 +4181,8 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
                 <tr>
                     <td>${m.id}</td>
                     <td>${m.username}</td>
-                    <td style="max-width: 400px; word-break: break-all;">${m.content}</td>
+                    <td style="max-width: 400px; word-break: break-all;">${messageDisplayContent(m)}</td>
+                    <td>${messageTypeLabel(m)}</td>
                     <td>${m.is_read === 1 || m.is_read === '1' ? '<span style="color:#48bb78;">已读</span>' : '<span style="color:#ed8936;">未读</span>'}</td>
                     <td>${m.created_at || ''}</td>
                     <td>

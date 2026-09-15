@@ -10,12 +10,102 @@
 
         body {
             background-color: #fbfbfb;
+            background-image:
+                linear-gradient(rgba(0,0,0,0.035) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0,0,0,0.035) 1px, transparent 1px),
+                linear-gradient(rgba(0,0,0,0.018) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0,0,0,0.018) 1px, transparent 1px);
+            background-size: 80px 80px, 80px 80px, 16px 16px, 16px 16px;
+            background-position: -1px -1px, -1px -1px, -1px -1px, -1px -1px;
             color: #1a1a1a;
             font-family: 'Inter', sans-serif;
             overflow-x: hidden;
         }
 
         .mono { font-family: 'Space Mono', monospace; }
+
+        /* 跟随鼠标的鱼眼网格（canvas 绘制） */
+        .grid-canvas {
+            position: fixed;
+            inset: 0;
+            z-index: -1;
+            pointer-events: none;
+            display: block;
+        }
+
+        /* 细腻的噪点纹理，增加纸张般质感 */
+        .grain {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            pointer-events: none;
+            opacity: 0.035;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+        }
+
+        /* 页面载入时的入场动画 */
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(18px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .enter {
+            opacity: 0;
+            animation: fadeUp 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+        }
+
+        /* 卡片入场（带错落延迟） */
+        @keyframes cardIn {
+            from { opacity: 0; transform: translateY(22px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* 弹窗背景模糊淡入 */
+        .modal-overlay {
+            display: flex;
+            opacity: 0;
+            visibility: hidden;
+            backdrop-filter: blur(0px);
+            transition: opacity 0.3s ease, visibility 0.3s ease, backdrop-filter 0.3s ease;
+        }
+        .modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+            backdrop-filter: blur(4px);
+        }
+        .modal {
+            transform: translateY(24px) scale(0.96);
+            opacity: 0;
+            transition: transform 0.38s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.3s ease;
+        }
+        .modal-overlay.active .modal {
+            transform: translateY(0) scale(1);
+            opacity: 1;
+        }
+
+        /* 弹窗关闭按钮的轻巧动效 */
+        .modal-close {
+            transition: transform 0.2s ease, color 0.2s ease;
+        }
+        .modal-close:hover { transform: rotate(90deg); color: #000; }
+
+        /* 导航下划线滑入效果 */
+        .nav-link { position: relative; }
+        .nav-link::after {
+            content: '';
+            position: absolute;
+            left: 0; bottom: -4px;
+            width: 100%; height: 1px;
+            background: #000;
+            transform: scaleX(0);
+            transform-origin: left;
+            transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+        }
+        .nav-link:hover::after { transform: scaleX(1); }
+
+        /* 价格标签微动效 */
+        .price-tag, .want-tag { transition: transform 0.3s ease, letter-spacing 0.3s ease; }
+        .item-card:hover .price-tag,
+        .market-card:hover .want-tag { transform: scale(1.05); letter-spacing: 0.05em; }
 
         /* 创意的侧边固定文字 */
         .vertical-label {
@@ -61,11 +151,35 @@
             height: 130px;
             display: flex;
             flex-direction: column;
+            overflow: hidden;
+            isolation: isolate;
+        }
+
+        /* 卡片背景的账号类型水印 */
+        .card-icon {
+            position: absolute;
+            right: -14px;
+            bottom: -14px;
+            width: 120px;
+            height: 120px;
+            color: #000;
+            opacity: 0.05;
+            z-index: -1;
+            pointer-events: none;
+            transition: opacity 0.4s ease, transform 0.5s cubic-bezier(0.2,0.8,0.2,1);
+        }
+        .card-icon svg { width: 100%; height: 100%; display: block; }
+
+        .item-card:hover .card-icon,
+        .market-card:hover .card-icon {
+            opacity: 0.09;
+            transform: scale(1.08) rotate(-4deg);
         }
 
         .item-card:hover {
             border-color: #000;
-            transform: translateY(-2px);
+            transform: translateY(-4px);
+            box-shadow: 0 12px 30px -12px rgba(0,0,0,0.18);
         }
 
         .item-card h3 {
@@ -127,10 +241,13 @@
             height: 130px;
             display: flex;
             flex-direction: column;
+            overflow: hidden;
+            isolation: isolate;
         }
         .market-card:hover {
             border-color: #000;
-            transform: translateY(-2px);
+            transform: translateY(-4px);
+            box-shadow: 0 12px 30px -12px rgba(0,0,0,0.18);
         }
         .market-card h3 { min-height: 1.5rem; margin-bottom: 0.5rem; }
         .market-card p { flex-grow: 1; margin-bottom: 0.5rem; }
@@ -158,7 +275,6 @@
         }
 
         .modal-overlay {
-            display: none;
             position: fixed;
             top: 0;
             left: 0;
@@ -168,10 +284,6 @@
             z-index: 1000;
             justify-content: center;
             align-items: center;
-        }
-
-        .modal-overlay.active {
-            display: flex;
         }
 
         .modal {
@@ -194,14 +306,17 @@
 </head>
 <body class="p-6 md:p-16 lg:px-48">
 
+    <div class="grain"></div>
+    <canvas class="grid-canvas" id="gridCanvas"></canvas>
+
     <div class="vertical-label">数字账号 / 批发零售</div>
 
-    <header class="flex justify-between items-end mb-4">
+    <header class="flex justify-between items-end mb-4 enter" style="animation-delay: 0.05s">
         <div>
             <h1 class="text-2xl font-bold tracking-tighter">账号小卖部</h1>
         </div>
         <nav class="flex gap-8 text-[11px] font-bold uppercase tracking-widest relative">
-            <a href="#" id="loginBtn" class="text-gray-600 hover:text-black transition-colors">登录</a>
+            <a href="#" id="loginBtn" class="nav-link text-gray-600 hover:text-black transition-colors">登录</a>
             <div id="userDropdown" class="hidden absolute right-0 top-full mt-2 bg-white border border-gray-200 shadow-lg min-w-[100px]">
                 <div class="px-4 text-xs text-center flex items-center justify-center h-10 border-b">
                     <div class="font-bold text-lg" id="userBalance">¥0.00</div>
@@ -212,7 +327,7 @@
         </nav>
     </header>
 
-    <div class="mb-6">
+    <div class="mb-6 enter" style="animation-delay: 0.15s">
         <h2 class="text-4xl font-light leading-tight mb-6">
             卖各种<b>便宜好用</b>的账号。
         </h2>
@@ -222,7 +337,7 @@
         </div>
     </div>
 
-    <div class="mb-10 flex justify-center">
+    <div class="mb-10 flex justify-center enter" style="animation-delay: 0.25s">
         <input type="text" id="searchInput" placeholder="搜索..." class="w-full md:w-80 px-4 py-2 border border-gray-200 text-sm focus:outline-none focus:border-black transition-colors">
     </div>
 
@@ -318,13 +433,48 @@
         let allMarketAccounts = [];
         let currentTab = 'sell';
 
+        // 账号类型 SVG 水印图标（极简线条风）
+        const ICONS = {
+            ai: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="8" width="14" height="11" rx="2.5"/><path d="M12 4v4"/><circle cx="12" cy="3" r="1"/><circle cx="9" cy="13" r="1"/><circle cx="15" cy="13" r="1"/><path d="M9.5 16.5h5"/></svg>',
+            music: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V6l10-2v12"/><circle cx="6" cy="18" r="3"/><circle cx="16" cy="16" r="3"/></svg>',
+            dev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M8 7l-5 5 5 5"/><path d="M16 7l5 5-5 5"/></svg>',
+            video: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M10 9l5 3-5 3z"/></svg>',
+            design: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l4 4-7 7-4 1 1-4z"/><path d="M14 6l4 4"/><path d="M9.5 11.5l-2 2"/></svg>',
+            note: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/><path d="M10 12h5M10 15h5M10 18h3"/></svg>',
+            office: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M4 10h16M10 10v10"/></svg>',
+            cloud: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18a4 4 0 010-8 5 5 0 019.6-1.4A3.5 3.5 0 0117 18z"/></svg>',
+            storage: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6"/><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/></svg>',
+            default: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="1.4"/><circle cx="12" cy="6" r="1.4"/><circle cx="18" cy="6" r="1.4"/><circle cx="6" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="18" cy="12" r="1.4"/><circle cx="6" cy="18" r="1.4"/><circle cx="12" cy="18" r="1.4"/><circle cx="18" cy="18" r="1.4"/></svg>'
+        };
+        function iconFor(type) {
+            return ICONS[type] || ICONS.default;
+        }
+
+        // 余额数字滚动动画
+        function animateBalance(target) {
+            const el = document.getElementById('userBalance');
+            const start = parseFloat(el.dataset.val || '0');
+            const startTime = performance.now();
+            const duration = 700;
+            function tick(now) {
+                const p = Math.min((now - startTime) / duration, 1);
+                const eased = 1 - Math.pow(1 - p, 3);
+                const val = start + (target - start) * eased;
+                el.textContent = '¥' + val.toFixed(2);
+                if (p < 1) requestAnimationFrame(tick);
+                else el.dataset.val = target;
+            }
+            requestAnimationFrame(tick);
+        }
+
         function renderAccounts(accounts) {
             const main = document.querySelector('main');
             main.innerHTML = '';
             accounts.forEach((acc, i) => {
                 const div = document.createElement('div');
                 div.innerHTML = `
-                    <div class="item-card">
+                    <div class="item-card" style="animation: cardIn 0.5s cubic-bezier(0.2,0.8,0.2,1) both; animation-delay: ${i * 0.04}s;">
+                        <div class="card-icon">${iconFor(acc.type)}</div>
                         <span class="price-tag mono">${acc.price}</span>
                         <h3 class="text-xl font-bold mb-2">${acc.name}</h3>
                         <p class="text-xs text-gray-400 mb-2 leading-relaxed line-clamp-2">${acc.description}</p>
@@ -344,7 +494,8 @@
             accounts.forEach((acc, i) => {
                 const div = document.createElement('div');
                 div.innerHTML = `
-                    <div class="market-card">
+                    <div class="market-card" style="animation: cardIn 0.5s cubic-bezier(0.2,0.8,0.2,1) both; animation-delay: ${i * 0.04}s;">
+                        <div class="card-icon">${iconFor(acc.type)}</div>
                         <span class="want-tag mono">¥${acc.price}</span>
                         <h3 class="text-xl font-bold mb-2">${acc.name}</h3>
                         <p class="text-xs text-gray-400 mb-2 leading-relaxed line-clamp-2">${acc.description}</p>
@@ -437,7 +588,7 @@
             loginBtn.textContent = displayUsername;
             loginBtn.classList.remove('text-gray-300');
             loginBtn.classList.add('text-black');
-            userBalance.textContent = '¥' + currentUser.balance.toFixed(2);
+            animateBalance(currentUser.balance);
         }
 
         loginBtn.addEventListener('click', (e) => {
@@ -552,7 +703,7 @@
                      loginBtn.textContent = displayUsername;
                      loginBtn.classList.remove('text-gray-300');
                      loginBtn.classList.add('text-black');
-                     userBalance.textContent = '¥' + currentUser.balance.toFixed(2);
+                     animateBalance(currentUser.balance);
                  } else {
                     alert(data.message || '登录失败');
                 }
@@ -681,7 +832,7 @@
                 if (data.code === 200) {
                     currentUser.balance = data.balance;
                     localStorage.setItem('currentUser', JSON.stringify(currentUser));
-                    userBalance.textContent = '¥' + currentUser.balance.toFixed(2);
+                    animateBalance(currentUser.balance);
                     
                     const orderId = 'ORD-' + Date.now() + '-' + Math.random().toString(36).slice(-4).toUpperCase();
                     const account = 'user' + Math.floor(Math.random() * 10000);
@@ -714,6 +865,128 @@
                 alert('购买失败，请稍后重试');
             }
         });
+
+        // 放大网格随鼠标优雅跟随（鱼眼扭曲，无硬边）
+        (function () {
+            const canvas = document.getElementById('gridCanvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+            let W = 0, H = 0;
+            const MAJOR = 84, MINOR = 28;   // 主格 / 细格
+            const STRENGTH = 0.15;          // 最大放大倍数（更克制）
+            const RADIUS = 340;             // 影响半径（更柔和的扩散）
+            const EASE = 0.09;              // 跟随缓动
+
+            let tx = window.innerWidth / 2, ty = window.innerHeight / 2;
+            let cx = tx, cy = ty;
+            let targetStrength = 0, curStrength = 0;
+            let pressed = false;
+            let raf = null;
+
+            function resize() {
+                W = window.innerWidth; H = window.innerHeight;
+                canvas.width = W * dpr; canvas.height = H * dpr;
+                canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                draw();
+            }
+            window.addEventListener('resize', resize);
+
+            function drawGrid(spacing, color, lw) {
+                ctx.strokeStyle = color;
+                ctx.lineWidth = lw;
+                ctx.beginPath();
+                const step = 14;
+                const kX0 = Math.floor(-1), kX1 = Math.ceil(W / spacing) + 1;
+                const kY0 = Math.floor(-1), kY1 = Math.ceil(H / spacing) + 1;
+                // 竖线
+                for (let k = kX0; k <= kX1; k++) {
+                    const Lx = k * spacing;
+                    let started = false;
+                    for (let Ly = -spacing; Ly <= H + spacing; Ly += step) {
+                        const dx = Lx - cx, dy = Ly - cy;
+                        const d2 = dx * dx + dy * dy;
+                        const m = 1 + curStrength * Math.exp(-d2 / (RADIUS * RADIUS));
+                        const sx = cx + dx * m, sy = cy + dy * m;
+                        if (!started) { ctx.moveTo(sx, sy); started = true; }
+                        else ctx.lineTo(sx, sy);
+                    }
+                }
+                // 横线
+                for (let k = kY0; k <= kY1; k++) {
+                    const Ly = k * spacing;
+                    let started = false;
+                    for (let Lx = -spacing; Lx <= W + spacing; Lx += step) {
+                        const dx = Lx - cx, dy = Ly - cy;
+                        const d2 = dx * dx + dy * dy;
+                        const m = 1 + curStrength * Math.exp(-d2 / (RADIUS * RADIUS));
+                        const sx = cx + dx * m, sy = cy + dy * m;
+                        if (!started) { ctx.moveTo(sx, sy); started = true; }
+                        else ctx.lineTo(sx, sy);
+                    }
+                }
+                ctx.stroke();
+            }
+
+            function draw() {
+                ctx.clearRect(0, 0, W, H);
+                ctx.fillStyle = '#fbfbfb';
+                ctx.fillRect(0, 0, W, H);
+                drawGrid(MINOR, 'rgba(0,0,0,0.035)', 1);
+                drawGrid(MAJOR, 'rgba(0,0,0,0.075)', 1);
+            }
+
+            function loop() {
+                cx += (tx - cx) * EASE;
+                cy += (ty - cy) * EASE;
+                curStrength += (targetStrength - curStrength) * 0.06;
+                draw();
+                const moving = Math.abs(tx - cx) > 0.15 || Math.abs(ty - cy) > 0.15
+                            || Math.abs(targetStrength - curStrength) > 0.002;
+                if (moving) {
+                    raf = requestAnimationFrame(loop);
+                } else {
+                    raf = null;
+                }
+            }
+            function start() { if (!raf) raf = requestAnimationFrame(loop); }
+
+            window.addEventListener('mousedown', (e) => {
+                pressed = true;
+                tx = e.clientX; ty = e.clientY;
+                targetStrength = STRENGTH;
+                start();
+            });
+            window.addEventListener('mousemove', (e) => {
+                tx = e.clientX; ty = e.clientY;
+                if (pressed) start();
+            });
+            window.addEventListener('mouseup', () => {
+                pressed = false;
+                targetStrength = 0;
+                start();
+            });
+            window.addEventListener('mouseleave', () => {
+                if (pressed) { pressed = false; targetStrength = 0; start(); }
+            });
+            window.addEventListener('touchstart', (e) => {
+                if (!e.touches[0]) return;
+                pressed = true;
+                tx = e.touches[0].clientX; ty = e.touches[0].clientY;
+                targetStrength = STRENGTH;
+                start();
+            }, { passive: true });
+            window.addEventListener('touchmove', (e) => {
+                if (!e.touches[0]) return;
+                tx = e.touches[0].clientX; ty = e.touches[0].clientY;
+                if (pressed) start();
+            }, { passive: true });
+            window.addEventListener('touchend', () => { pressed = false; targetStrength = 0; start(); });
+
+            resize();
+        })();
     </script>
 
     <footer class="mt-18 border-t border-gray-100 pt-8 flex justify-center items-center text-[10px] mono text-gray-300">

@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minecraft 风格超级马里奥</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background-color: #111;
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        h1 {
+            margin-bottom: 10px;
+            font-size: 24px;
+            text-shadow: 2px 2px #000;
+        }
+        #game-container {
+            position: relative;
+            border: 4px solid #333;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+        }
+        canvas {
+            background-color: #5c94fc; /* 主机版马里奥天空蓝 */
+            display: block;
+            image-rendering: pixelated; /* 保持像素清晰度 */
+        }
+        .ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            display: flex;
+            justify-content: space-between;
+            font-weight: bold;
+            font-size: 18px;
+            text-shadow: 2px 2px #000;
+            pointer-events: none;
+        }
+        .controls-hint {
+            margin-top: 10px;
+            color: #aaa;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>MINECRAFT MARIO</h1>
+    <div id="game-container">
+        <div class="ui">
+            <div id="score">SCORE: 000000</div>
+            <div id="coins">COINS: 00</div>
+            <div id="world">WORLD: 1-1</div>
+        </div>
+        <canvas id="gameCanvas" width="640" height="400"></canvas>
+    </div>
+    <div class="controls-hint">操作说明: [A / D] 或 [左 / 右方向键] 移动，[W / 空间键 / 上方向键] 跳跃</div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // 基础配置
+        const BLOCK_SIZE = 32;
+        const GRAVITY = 0.5;
+
+        // 按键状态
+        const keys = {
+            left: false,
+            right: false,
+            jump: false
+        };
+
+        // 游戏状态
+        let score = 0;
+        let coins = 0;
+        let gameOver = false;
+        let gameWin = false;
+        let cameraX = 0;
+
+        // 地图数据 (1: 泥土, 2: 草方块, 3: 问号箱/红石箱, 4: 实心基岩, 5: 旗杆)
+        // 0 代表空气
+        const map = [
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5,0,0,0],
+            [0,0,0,0,0,0,3,2,3,2,3,0,0,0,0,0,0,0,0,0,0,0,3,3,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,4,0,0,5,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,4,4,0,0,5,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,4,4,4,0,0,5,0,0,0],
+            [2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,0,0,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+        ];
+
+        // 玩家（MC 史蒂夫/马里奥 混合体）
+        const player = {
+            x: 50,
+            y: 200,
+            width: 28,
+            height: 32,
+            vx: 0,
+            vy: 0,
+            speed: 4,
+            jumpPower: -10.5,
+            grounded: false
+        };
+
+        // 怪物（MC 苦力怕/僵尸风格）
+        class Enemy {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.width = 28;
+                this.height = 32;
+                this.vx = -1.5;
+                this.alive = true;
+            }
+
+            update() {
+                if (!this.alive) return;
+                
+                this.x += this.vx;
+
+                // 简单的地图碰撞与反向
+                let gridX = Math.floor((this.x + (this.vx < 0 ? 0 : this.width)) / BLOCK_SIZE);
+                let gridY = Math.floor((this.y + this.height / 2) / BLOCK_SIZE);
+
+                if (map[gridY] && map[gridY][gridX] && map[gridY][gridX] !== 0) {
+                    this.vx *= -1;
+                }
+            }
+
+            draw() {
+                if (!this.alive) return;
+                const screenX = this.x - cameraX;
+
+                // 绘制 MC 苦力怕风格怪物
+                ctx.fillStyle = '#0a5c0a'; // 暗绿色
+                ctx.fillRect(screenX, this.y, this.width, this.height);
+
+                // 苦力怕脸部
+                ctx.fillStyle = '#000';
+                // 眼睛
+                ctx.fillRect(screenX + 4, this.y + 6, 6, 6);
+                ctx.fillRect(screenX + 18, this.y + 6, 6, 6);
+                // 嘴巴
+                ctx.fillRect(screenX + 10, this.y + 12, 8, 12);
+                ctx.fillRect(screenX + 7, this.y + 16, 14, 8);
+            }
+        }
+
+        const enemies = [
+            new Enemy(400, 350),
+            new Enemy(800, 350),
+            new Enemy(1100, 350)
+        ];
+
+        // 事件监听
+        window.addEventListener('keydown', e => {
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keys.left = true;
+            if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keys.right = true;
+            if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W' || e.key === ' ') {
+                if (player.grounded) {
+                    player.vy = player.jumpPower;
+                    player.grounded = false;
+                }
+            }
+        });
+
+        window.addEventListener('keyup', e => {
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keys.left = false;
+            if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keys.right = false;
+        });
+
+        // 碰撞检测 AABB
+        function checkCollision(rect1, rect2) {
+            return rect1.x < rect2.x + rect2.width &&
+                   rect1.x + rect1.width > rect2.x &&
+                   rect1.y < rect2.y + rect2.height &&
+                   rect1.y + rect1.height > rect2.y;
+        }
+
+        // 游戏逻辑更新
+        function update() {
+            if (gameOver || gameWin) return;
+
+            // 左右移动
+            if (keys.left) player.vx = -player.speed;
+            else if (keys.right) player.vx = player.speed;
+            else player.vx = 0;
+
+            // 重力
+            player.vy += GRAVITY;
+
+            // 移动 X 轴并检测碰撞
+            player.x += player.vx;
+            collideMap('x');
+
+            // 移动 Y 轴并检测碰撞
+            player.y += player.vy;
+            player.grounded = false;
+            collideMap('y');
+
+            // 掉落虚空判断
+            if (player.y > canvas.height + 100) {
+                gameOver = true;
+            }
+
+            // 更新相机位置 (水平平滑跟随)
+            if (player.x - cameraX > canvas.width / 2) {
+                cameraX = player.x - canvas.width / 2;
+            }
+
+            // 更新怪物
+            enemies.forEach(enemy => {
+                enemy.update();
+
+                // 玩家与怪物碰撞
+                if (enemy.alive && checkCollision(player, enemy)) {
+                    // 从上方踩怪物
+                    if (player.vy > 0 && player.y + player.height - player.vy <= enemy.y + 12) {
+                        enemy.alive = false;
+                        player.vy = player.jumpPower / 1.5;
+                        score += 100;
+                    } else {
+                        gameOver = true;
+                    }
+                }
+            });
+
+            // 更新 UI
+            document.getElementById('score').innerText = `SCORE: ${String(score).padStart(6, '0')}`;
+            document.getElementById('coins').innerText = `COINS: ${String(coins).padStart(2, '0')}`;
+        }
+
+        // 地图碰撞检测
+        function collideMap(axis) {
+            const startX = Math.floor(player.x / BLOCK_SIZE);
+            const endX = Math.ceil((player.x + player.width) / BLOCK_SIZE);
+            const startY = Math.floor(player.y / BLOCK_SIZE);
+            const endY = Math.ceil((player.y + player.height) / BLOCK_SIZE);
+
+            for (let y = startY; y < endY; y++) {
+                for (let x = startX; x < endX; x++) {
+                    if (map[y] && map[y][x] && map[y][x] !== 0) {
+                        const tileType = map[y][x];
+                        const blockRect = { x: x * BLOCK_SIZE, y: y * BLOCK_SIZE, width: BLOCK_SIZE, height: BLOCK_SIZE };
+
+                        // 触碰旗杆通关
+                        if (tileType === 5) {
+                            gameWin = true;
+                            return;
+                        }
+
+                        if (checkCollision(player, blockRect)) {
+                            if (axis === 'x') {
+                                if (player.vx > 0) player.x = blockRect.x - player.width;
+                                if (player.vx < 0) player.x = blockRect.x + blockRect.width;
+                            }
+                            if (axis === 'y') {
+                                if (player.vy > 0) { // 向下落
+                                    player.y = blockRect.y - player.height;
+                                    player.vy = 0;
+                                    player.grounded = true;
+                                } else if (player.vy < 0) { // 顶方块
+                                    player.y = blockRect.y + blockRect.height;
+                                    player.vy = 0;
+
+                                    // 顶问号/红石箱子
+                                    if (tileType === 3) {
+                                        map[y][x] = 4; // 变成基岩/变空箱
+                                        coins += 1;
+                                        score += 200;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 渲染绘制
+        function draw() {
+            // 清屏 (画天空)
+            ctx.fillStyle = '#5c94fc';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 绘制地图方块 (Minecraft 像素风格)
+            for (let y = 0; y < map.length; y++) {
+                for (let x = 0; x < map[y].length; x++) {
+                    const tile = map[y][x];
+                    const drawX = x * BLOCK_SIZE - cameraX;
+                    const drawY = y * BLOCK_SIZE;
+
+                    // 只绘制在屏幕范围内的方块
+                    if (drawX + BLOCK_SIZE < 0 || drawX > canvas.width) continue;
+
+                    if (tile === 1) { // 泥土方块
+                        ctx.fillStyle = '#866043';
+                        ctx.fillRect(drawX, drawY, BLOCK_SIZE, BLOCK_SIZE);
+                        ctx.fillStyle = '#573d26'; // 泥土纹理
+                        ctx.fillRect(drawX + 4, drawY + 4, 8, 8);
+                        ctx.fillRect(drawX + 18, drawY + 16, 8, 8);
+                    } else if (tile === 2) { // 草方块
+                        ctx.fillStyle = '#866043'; // 下层泥土
+                        ctx.fillRect(drawX, drawY, BLOCK_SIZE, BLOCK_SIZE);
+                        ctx.fillStyle = '#5c8e32'; // 上层绿草
+                        ctx.fillRect(drawX, drawY, BLOCK_SIZE, 8);
+                        ctx.fillRect(drawX + 4, drawY + 8, 4, 4);
+                        ctx.fillRect(drawX + 16, drawY + 8, 6, 4);
+                    } else if (tile === 3) { // 幸运箱 / 幸运方块
+                        ctx.fillStyle = '#e59b24';
+                        ctx.fillRect(drawX, drawY, BLOCK_SIZE, BLOCK_SIZE);
+                        ctx.fillStyle = '#fff';
+                        ctx.font = 'bold 20px monospace';
+                        ctx.fillText('?', drawX + 10, drawY + 24);
+                    } else if (tile === 4) { // 已叩击的基岩方块
+                        ctx.fillStyle = '#555';
+                        ctx.fillRect(drawX, drawY, BLOCK_SIZE, BLOCK_SIZE);
+                        ctx.fillStyle = '#333';
+                        ctx.fillRect(drawX + 2, drawY + 2, 28, 28);
+                    } else if (tile === 5) { // MC 风格旗杆/绿宝石柱
+                        ctx.fillStyle = '#aaa';
+                        ctx.fillRect(drawX + 12, drawY, 8, BLOCK_SIZE);
+                        if (y === 5) { // 旗帜顶部
+                            ctx.fillStyle = '#4ae24a';
+                            ctx.fillRect(drawX - 12, drawY, 24, 16);
+                        }
+                    }
+                }
+            }
+
+            // 绘制怪物
+            enemies.forEach(enemy => enemy.draw());
+
+            // 绘制玩家 (史蒂夫红衣服 - 马里奥配色)
+            const playerScreenX = player.x - cameraX;
+            // 头部 (史蒂夫皮肤色)
+            ctx.fillStyle = '#ffcc99';
+            ctx.fillRect(playerScreenX + 4, player.y, 20, 12);
+            // 红色帽子
+            ctx.fillStyle = '#ff0000';
+            ctx.fillRect(playerScreenX + 2, player.y - 2, 24, 6);
+            // 蓝色背带裤 (MC 方块感)
+            ctx.fillStyle = '#0000ff';
+            ctx.fillRect(playerScreenX + 4, player.y + 12, 20, 14);
+            // 手臂 (红袖)
+            ctx.fillStyle = '#ff0000';
+            ctx.fillRect(playerScreenX, player.y + 12, 4, 10);
+            ctx.fillRect(playerScreenX + 24, player.y + 12, 4, 10);
+            // 鞋子
+            ctx.fillStyle = '#663300';
+            ctx.fillRect(playerScreenX + 2, player.y + 26, 10, 6);
+            ctx.fillRect(playerScreenX + 16, player.y + 26, 10, 6);
+
+            // 游戏结束显示
+            if (gameOver) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#ff3333';
+                ctx.font = '30px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2);
+                ctx.fillStyle = '#fff';
+                ctx.font = '16px monospace';
+                ctx.fillText('刷新页面重新开始', canvas.width / 2, canvas.height / 2 + 40);
+            }
+
+            // 通关显示
+            if (gameWin) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#33ff33';
+                ctx.font = '30px monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText('YOU WIN!', canvas.width / 2, canvas.height / 2);
+                ctx.fillStyle = '#fff';
+                ctx.font = '16px monospace';
+                ctx.fillText(`最终得分: ${score}`, canvas.width / 2, canvas.height / 2 + 40);
+            }
+        }
+
+        // 游戏主循环
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // 启动游戏
+        gameLoop();
+    </script>
+</body>
+</html>
