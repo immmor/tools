@@ -208,7 +208,7 @@ export default {
         headers: {
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
           'Access-Control-Max-Age': '86400'
         }
       });
@@ -1302,7 +1302,7 @@ export default {
             newExpireDate.setDate(now.getDate() + duration);
           }
           
-          const vToken = generateVToken();
+          const vToken = user.v_token || generateVToken();
           
           const isYearly = duration === 365;
           const vLinkClash = user.v_link_clash || (isYearly ? config.clash_yearly : config.clash_monthly);
