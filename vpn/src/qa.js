@@ -251,6 +251,31 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                         SupportModule.close();
                     };
+                case 'openInvite':
+                    return () => {
+                        const inviteBtn = document.getElementById('invite-btn');
+                        if (inviteBtn) inviteBtn.click();
+                        else {
+                            const loginHandler = getActionHandler('openLogin');
+                            if (loginHandler) loginHandler();
+                        }
+                        SupportModule.close();
+                    };
+                case 'openAgent':
+                    return () => {
+                        document.getElementById('agent-btn')?.click();
+                        SupportModule.close();
+                    };
+                case 'openLanguage':
+                    return () => {
+                        document.getElementById('lang-btn')?.click();
+                        SupportModule.close();
+                    };
+                case 'openComplaintModal':
+                    return () => {
+                        document.getElementById('complaint-btn')?.click();
+                        SupportModule.close();
+                    };
                 case 'openComplaint':
                     return async () => {
                         isLeaveMessageMode = true;

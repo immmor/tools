@@ -100,7 +100,10 @@ async function autoRenewUser(DB, user) {
   const vordersStr = JSON.stringify(vorders);
 
   // 自动续费只延长有效期与链接，不重新生成 v_token（沿用用户原有 token，避免旧 token 失效）
-  const r = await DB.prepare('UPDATE user SET balance = balance - ?, v_expire_date = ?, v_link_clash = ?, v_link_v2ray = ?, vorders = ? WHERE username = ?').bind(pr, ne.toISOString().slice(0,19).replace('T',' '), cl, v2, vordersStr, user.username).run();
+  // 防重复续费：仅当库中 v_expire_date 仍处于「待续费」区间时才扣费，
+  // 避免定时任务与 /api/vip-status 并发/重试导致同一用户被扣两次费、发两条消息
+  const guardDue = new Date(now.getTime() + oneDayInMs).toISOString().slice(0, 19).replace('T', ' ');
+  const r = await DB.prepare('UPDATE user SET balance = balance - ?, v_expire_date = ?, v_link_clash = ?, v_link_v2ray = ?, vorders = ? WHERE username = ? AND (v_expire_date IS NULL OR v_expire_date <= ?)').bind(pr, ne.toISOString().slice(0,19).replace('T',' '), cl, v2, vordersStr, user.username, guardDue).run();
   
   if (r.success && r.meta.changes > 0) {
     const nowStr = new Date().toISOString().slice(0,19).replace('T',' ');
@@ -1446,20 +1449,6 @@ export default {
           let expireDate = user.v_expire_date ? new Date(user.v_expire_date.replace(' ', 'T') + 'Z') : null;
           let isVipValid = expireDate && expireDate > now;
           let daysRemaining = isVipValid ? Math.max(0, Math.ceil((expireDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))) : 0;
-
-          if (!isVipValid && user.auto_rewn) {
-            // 使用新的自动续费函数
-            const result = await autoRenewUser(DB, user);
-            if (result) {
-              user = await DB
-                .prepare('SELECT username, v_expire_date, v_token, v_link_clash, v_link_v2ray, auto_rewn, balance, price_plan FROM user WHERE username = ?')
-                .bind(username)
-                .first();
-              expireDate = user.v_expire_date ? new Date(user.v_expire_date.replace(' ', 'T') + 'Z') : null;
-              isVipValid = expireDate && expireDate > now;
-              daysRemaining = isVipValid ? Math.max(0, Math.ceil((expireDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))) : 0;
-            }
-          }
 
           return resJson({
             code: 200, msg: '查询成功',
