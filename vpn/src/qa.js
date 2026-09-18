@@ -232,7 +232,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     return () => {
                         const userInfo = window.userInfo || JSON.parse(localStorage.getItem('userInfo') || '{}');
                         const username = userInfo.username || '';
-                        window.open(`https://immmor.com/pay?username=${encodeURIComponent(username)}`, '_blank');
+                        const lang = (window.currentLang || 'zh-CN').split('-')[0];
+                        window.open(`https://funbua.uk/vpay?username=${encodeURIComponent(username)}&lang=${encodeURIComponent(lang)}`, '_blank');
                     };
                 case 'openLogin':
                     return () => {
