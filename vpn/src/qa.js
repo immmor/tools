@@ -5,8 +5,8 @@ document.addEventListener('DOMContentLoaded', () => {
         let idleTimer = null;
         let isLeaveMessageMode = false;
         let isBotReplying = false;
+        // 回复期间仅禁用发送按钮；输入框保持可聚焦/可输入（不禁用，避免失焦）
         const setInputEnabled = (enabled) => {
-            if (input) input.disabled = !enabled;
             if (sendBtn) sendBtn.disabled = !enabled;
         };
         const modal = document.getElementById('support-modal');
