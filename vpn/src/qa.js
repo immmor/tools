@@ -197,13 +197,29 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         };
 
+        // 可提现金额：与用户名下拉框一致，取自 /api/get-user -> min(balance, game_winnings)
+        const fetchWithdrawable = async () => {
+            const userInfo = window.userInfo || JSON.parse(localStorage.getItem('userInfo') || '{}');
+            const username = userInfo.username;
+            if (!username) return 0;
+            try {
+                const res = await fetch(`${API_BASE}/api/get-user?name=${encodeURIComponent(username)}`);
+                const data = await res.json();
+                if (data && data.code === 200 && data.data) {
+                    const b = parseFloat(data.data.balance || 0);
+                    const g = parseFloat(data.data.game_winnings || 0);
+                    return Math.min(b, g);
+                }
+            } catch (e) { /* 静默 */ }
+            return 0;
+        };
+
         const addBotMessageStream = async (text, action) => {
             isBotReplying = true;
             setInputEnabled(false);
-            if (Math.random() > 0.3) {
-                showTypingIndicator();
-                await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 800));
-            }
+            // 始终显示「思考中」动画，并随机思考 1–3 秒后再开始输出
+            showTypingIndicator();
+            await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
             removeTypingIndicator();
             const div = document.createElement('div');
             div.className = 'flex gap-3 support-bot-message';
@@ -224,6 +240,14 @@ document.addEventListener('DOMContentLoaded', () => {
             await typeWriter(bubble, text, 30 + Math.random() * 20);
 
             if (action && action.label) {
+                if (action.type === 'openWithdraw') {
+                    const amt = await fetchWithdrawable();
+                    const amtLabel = (window.translations && window.translations[window.currentLang]?.withdrawable_label) || '可提现';
+                    const amtEl = document.createElement('div');
+                    amtEl.style.cssText = 'margin-top:8px;font-size:12px;font-weight:bold;color:var(--neon-green);';
+                    amtEl.textContent = `${amtLabel}：¥${amt.toFixed(2)}`;
+                    bubble.appendChild(amtEl);
+                }
                 const btn = document.createElement('button');
                 btn.className = 'support-action-btn mt-3';
                 btn.textContent = action.label;
@@ -293,6 +317,12 @@ document.addEventListener('DOMContentLoaded', () => {
                         const msg = (window.translations && window.translations[window.currentLang]?.support_idle_msg) || '您可以留下您的问题，我们会尽快回复您。';
                         await addBotMessageStream(msg);
                         input.placeholder = (window.translations && window.translations[window.currentLang]?.support_leave_placeholder) || '请输入您的留言...';
+                    };
+                case 'openWithdraw':
+                    return () => {
+                        if (typeof openWithdrawModal === 'function') openWithdrawModal();
+                        else document.getElementById('withdraw-btn')?.click();
+                        SupportModule.close();
                     };
                 default:
                     return null;
@@ -494,6 +524,12 @@ document.addEventListener('DOMContentLoaded', () => {
             Object.values(SYNONYM_MAP).forEach(m => Object.values(m).forEach(v => s.add(v)));
             return s;
         })();
+
+        // 提现类核心词作为高权重意图词：用户只说「提现」或「可以提现吗」也应触发提现问答
+        // （否则仅凭一个 2-gram 命中只得 3 分，低于 HIT_THRESHOLD 而进入兜底分支）
+        ['提现', '提款', '取现', '提钱', 'withdraw', 'withdrawal', 'cashout',
+         'retirar', 'retiro', '引出', '出金', '출금', '인출', 'вывод', 'вывести', 'rút', 'سحب']
+            .forEach(w => INTENT_TOKENS.add(w));
 
         // 把文本切成「词单元」：先按词典做最长匹配替换归一化，再按 2-gram + 分词符切分
         const tokenize = (text) => {
