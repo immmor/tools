@@ -4,6 +4,11 @@ document.addEventListener('DOMContentLoaded', () => {
         let loadedLang = null;
         let idleTimer = null;
         let isLeaveMessageMode = false;
+        let isBotReplying = false;
+        const setInputEnabled = (enabled) => {
+            if (input) input.disabled = !enabled;
+            if (sendBtn) sendBtn.disabled = !enabled;
+        };
         const modal = document.getElementById('support-modal');
         const closeBtn = document.getElementById('support-close');
         const messagesContainer = document.getElementById('support-messages');
@@ -193,6 +198,8 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         const addBotMessageStream = async (text, action) => {
+            isBotReplying = true;
+            setInputEnabled(false);
             if (Math.random() > 0.3) {
                 showTypingIndicator();
                 await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 800));
@@ -224,6 +231,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 bubble.appendChild(btn);
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
             }
+            isBotReplying = false;
+            setInputEnabled(true);
         };
 
         const getActionHandler = (actionType) => {
@@ -346,6 +355,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         const handleSuggestionClick = async (questionData) => {
+            if (isBotReplying) return;
             addMessage('user', questionData.question);
             await addBotMessageStream(questionData.answer, questionData.action);
         };
@@ -386,6 +396,13 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         // 非中文语种统一复用 en 词典（英文通用词在各语种界面都能命中）
         const getSynonyms = (lang) => SYNONYM_MAP[lang] || SYNONYM_MAP['en'];
+        // 所有意图归一化词（SYNONYM_MAP 的值）：命中它们说明用户表达了明确的意图，
+        // 权重应高于「什么/怎么」这类泛义 2-gram，避免被通用词带偏到错误问题。
+        const INTENT_TOKENS = (() => {
+            const s = new Set();
+            Object.values(SYNONYM_MAP).forEach(m => Object.values(m).forEach(v => s.add(v)));
+            return s;
+        })();
 
         // 把文本切成「词单元」：先按词典做最长匹配替换归一化，再按 2-gram + 分词符切分
         const tokenize = (text) => {
@@ -418,7 +435,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const idx = buildIndexTokens(q);
             let score = 0;
             queryTokens.forEach(qt => {
-                if (idx.has(qt)) score += qt.length >= 2 ? 6 : 3; // 长词/已归一化词权重更高
+                if (idx.has(qt)) score += INTENT_TOKENS.has(qt) ? 10 : (qt.length >= 2 ? 3 : 2); // 意图词权重更高；泛义2-gram降权，避免被通用词误判为命中
             });
             return score;
         };
@@ -457,11 +474,13 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         const handleSend = async () => {
+            if (isBotReplying) return;
             const text = input.value.trim();
             if (!text) return;
             
             addMessage('user', text);
             input.value = '';
+            resetIdleTimer();
             
             if (isLeaveMessageMode) {
                 const userInfo = window.userInfo || JSON.parse(localStorage.getItem('userInfo') || '{}');
@@ -510,7 +529,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (hits.length > 0) {
                 // 多意图：逐条流式回复，取前 2 条直接应答，其余作为相关推荐
-                const primary = hits.slice(0, 2);
+                const primary = hits.slice(0, 1);
                 for (const r of primary) {
                     await addBotMessageStream(r.answer, r.action);
                 }
@@ -526,9 +545,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const guessLabel = (window.translations && window.translations[window.currentLang]?.support_guess)
                     || '没完全理解您的问题，您是不是想：';
                 await addBotMessageStream(guessLabel, { type: 'openComplaint', label: leaveLabel });
-                if (results.length > 0) {
-                    await addRelatedQuestions(results.slice(0, 3));
-                }
             }
         };
 
@@ -539,6 +555,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (questions.length === 0 || loadedLang !== currentLang) {
                 loadQuestions();
             }
+            resetIdleTimer();
+        };
+
+        // 空闲计时：用户最后一次输入或发消息后 2 分钟无活动，自动转入留言模式
+        const resetIdleTimer = () => {
             if (idleTimer) clearTimeout(idleTimer);
             idleTimer = setTimeout(async () => {
                 const msg = (window.translations && window.translations[window.currentLang]?.support_idle_msg) || '您可以留下您的问题，我们会尽快回复您。';
@@ -552,6 +573,8 @@ document.addEventListener('DOMContentLoaded', () => {
             modal.classList.add('hidden');
             if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
             isLeaveMessageMode = false;
+            isBotReplying = false;
+            setInputEnabled(true);
             input.placeholder = '';
         };
 
@@ -571,6 +594,7 @@ document.addEventListener('DOMContentLoaded', () => {
         input?.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') handleSend();
         });
+        input?.addEventListener('input', resetIdleTimer);
 
         document.addEventListener('languageChanged', () => {
             if (!modal.classList.contains('hidden')) {
