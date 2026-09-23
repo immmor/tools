@@ -2978,7 +2978,7 @@
                                                 </div>
                                                 <div class="mt-4 flex gap-2 justify-center">
                                                     <button onclick="window.location.href='download.html'" class="bg-[var(--neon-green)] text-black px-4 py-2 text-sm font-bold hover:opacity-90 text-center break-words whitespace-normal min-w-[80px]" data-i18n="nav_install">安装</button>
-                                                    <button onclick="resetVToken('${userInfo.username}')" class="bg-[var(--neon-orange)] text-black px-4 py-2 text-sm font-bold hover:opacity-90 text-center break-words whitespace-normal min-w-[80px]" data-i18n="vip_reset_link_caution">重置链接，慎点！！</button>
+                                                    <button onclick="resetVToken('${userInfo.username}')" class="bg-[var(--neon-red)] text-black px-4 py-2 text-sm font-bold hover:opacity-90 text-center break-words whitespace-normal min-w-[80px]" data-i18n="vip_reset_link_caution">重置链接，慎点！！</button>
                                                     <button onclick="document.getElementById('complaint-modal').classList.remove('hidden')" class="bg-zinc-700 text-white px-4 py-2 text-sm font-bold hover:opacity-90 text-center break-words whitespace-normal min-w-[80px]" data-i18n="vip_complaint">投诉</button>
                                                 </div>
                                             </div>` :
@@ -3722,7 +3722,7 @@
                     const data = await res.json();
                     if (data.code === 200) {
                         const userData = data.data;
-                        els.balance.textContent = `¥${Number(userData.balance || 0).toFixed(2)}`;
+                        animateBalance(userData.balance);
                         if (els.username) els.username.textContent = userInfo.username || '';
                         
                         // 同步数据到本地
@@ -4680,7 +4680,7 @@
                                     userInfo.balance = (parseFloat(userInfo.balance || 0) + lastPendingWithdrawAmount).toFixed(2);
                                     userInfo.game_winnings = (parseFloat(userInfo.game_winnings || 0) + lastPendingWithdrawAmount).toFixed(2);
                                     localStorage.setItem('userInfo', JSON.stringify(userInfo));
-                                    if (els.balance) els.balance.textContent = `¥${userInfo.balance}`;
+                                    if (els.balance) animateBalance(userInfo.balance);
                                 }
                                 if (els.withdrawAvailable) els.withdrawAvailable.textContent = `¥${getWithdrawable().toFixed(2)}`;
                                 if (typeof loadWithdrawHistory === 'function') loadWithdrawHistory();
@@ -4710,6 +4710,29 @@
                     if (typeof openWithdrawModal === 'function') openWithdrawModal();
                 });
             })();
+
+            // 余额显示：与上次相比若增加，做数字滚动增长动画
+            let lastBalanceShown = null;
+            const animateBalance = (val) => {
+                const el = els.balance;
+                if (!el) return;
+                const to = Number(val || 0);
+                if (lastBalanceShown === null || to <= lastBalanceShown) {
+                    lastBalanceShown = to;
+                    el.textContent = `¥${to.toFixed(2)}`;
+                    return;
+                }
+                const from = lastBalanceShown;
+                lastBalanceShown = to;
+                const t0 = performance.now();
+                const tick = (now) => {
+                    const p = Math.min(1, (now - t0) / 800);
+                    const e = 1 - Math.pow(1 - p, 3);
+                    el.textContent = `¥${(from + (to - from) * e).toFixed(2)}`;
+                    if (p < 1) requestAnimationFrame(tick);
+                };
+                requestAnimationFrame(tick);
+            };
 
             const openWithdrawModal = () => {
                 if (!userInfo || !userInfo.username) return;
@@ -4770,6 +4793,11 @@
 
             // 缓存最近一次提现记录，供 updateBalance 同步即时显示（避免网络延迟导致看不到 / 闪烁）
             let lastWithdrawHistory = null;
+            // 在历史里找某方式最近一次记录；方式名可能带/不带 crypto_ 前缀，归一化后再比
+            const historyRecOf = (method) => {
+                const key = (method || '').replace(/^crypto_/, '');
+                return [...(lastWithdrawHistory || [])].reverse().find(r => (r.method || '').replace(/^crypto_/, '') === key);
+            };
             const loadWithdrawHistory = async () => {
                 let history = [];
                 try {
@@ -4846,7 +4874,7 @@
                                         userInfo.balance = (parseFloat(userInfo.balance || 0) + cancelAmount).toFixed(2);
                                         userInfo.game_winnings = (parseFloat(userInfo.game_winnings || 0) + cancelAmount).toFixed(2);
                                         localStorage.setItem('userInfo', JSON.stringify(userInfo));
-                                        if (els.balance) els.balance.textContent = `¥${userInfo.balance}`;
+                                        if (els.balance) animateBalance(userInfo.balance);
                                     }
                                     if (els.withdrawAvailable) els.withdrawAvailable.textContent = `¥${getWithdrawable().toFixed(2)}`;
                                     loadWithdrawHistory();
@@ -4943,7 +4971,7 @@
                         userInfo.balance = (parseFloat(userInfo.balance) - amount).toFixed(2);
                         userInfo.game_winnings = (parseFloat(userInfo.game_winnings) - amount).toFixed(2);
                         localStorage.setItem('userInfo', JSON.stringify(userInfo));
-                        els.balance.textContent = `¥${userInfo.balance}`;
+                        animateBalance(userInfo.balance);
                         els.withdrawAvailable.textContent = `¥${getWithdrawable().toFixed(2)}`;
                         els.withdrawAmount.value = '';
                         loadWithdrawHistory();
@@ -5707,10 +5735,13 @@
             const info = cryptoMap[withdrawMethod] || {};
             const dict = translations[currentLang] || {};
             els.withdrawAccount.placeholder = (info.placeholderKey && dict[info.placeholderKey]) || info.placeholder || dict['crypto_default_ph'] || '请输入收款地址（请确认与所选网络一致）';
-                            els.withdrawAccount.value = savedCryptoAccounts[withdrawMethod] || '';
+                            // 直接从提现历史记录取最近一次该方式的账号
+                            const rec = historyRecOf(withdrawMethod);
+                            els.withdrawAccount.value = (rec && (rec.qr_code || rec.account)) || savedCryptoAccounts[withdrawMethod] || '';
                             withdrawAccount = els.withdrawAccount.value.trim();
                         } else if (isEmail) {
-                            els.withdrawEmail.value = '';
+                            const rec = historyRecOf(withdrawMethod);
+                            els.withdrawEmail.value = (rec && (rec.qr_code || rec.account || rec.email)) || '';
                             els.withdrawEmail.placeholder = withdrawMethod === 'okx_usdt' ? '请输入 OKX 账户邮箱' : '请输入 Binance 账户邮箱';
                         } else {
                             showQrCode(savedQrCodes[withdrawMethod] || '');

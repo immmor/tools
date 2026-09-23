@@ -41,6 +41,22 @@ async function grantRebate(DB, inviteeUsername, orderPrice, isYearly, orderId) {
   } catch (e) {}
 }
 
+// ========== Upstash Redis REST 客户端（无依赖，Worker 兼容） ==========
+// 在 Cloudflare Worker 控制台 Settings → Variables/Secrets 中配置：
+//   UPSTASH_REDIS_REST_URL   例如 https://xxx.upstash.io
+//   UPSTASH_REDIS_REST_TOKEN 例如 Axxxxxxxx
+// 用法：redis(env,'SET','key','val','EX',60) / redis(env,'GET','key') / redis(env,'DEL','key')
+async function redis(env, ...args) {
+  const base = (env.UPSTASH_REDIS_REST_URL || '').replace(/\/+$/, '');
+  const token = env.UPSTASH_REDIS_REST_TOKEN || '';
+  const url = base + '/' + args.map(a => encodeURIComponent(String(a))).join('/');
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error('Upstash HTTP ' + res.status);
+  const data = await res.json();
+  if (data.error) throw new Error('Upstash: ' + data.error);
+  return data.result; // 不存在的 key 返回 null
+}
+
 // 自动续费单个用户的函数
 async function autoRenewUser(DB, user) {
   const now = new Date();
@@ -344,23 +360,15 @@ export default {
           return resJson({ success: false, message: '请输入有效的邮箱地址！' }, 400);
         }
 
-        // 检查频率限制：同一邮箱60秒内只能发送一次
-        const lastSent = await DB.prepare('SELECT value FROM link WHERE key = ?').bind(`verify_code_time_${email}`).first();
-        if (lastSent) {
-          const elapsed = Date.now() - parseInt(lastSent.value);
-          if (elapsed < 60000) {
-            const remaining = Math.ceil((60000 - elapsed) / 1000);
-            return resJson({ success: false, message: `请 ${remaining} 秒后再试！` }, 429);
-          }
+        // 频率限制：验证码 key 本身带 60s TTL，只要它还存活（TTL>0）就说明 60 秒内已发送过
+        const ttl = await redis(env, 'TTL', `verify_code_${email}`);
+        if (ttl > 0) {
+          return resJson({ success: false, message: `请 ${ttl} 秒后再试！` }, 429);
         }
 
-        // 生成6位数字验证码
+        // 生成6位数字验证码，存入同一个 key（1分钟自动过期，过期即等于冷却结束）
         const verifyCode = Math.floor(100000 + Math.random() * 900000).toString();
-        const now = Date.now().toString();
-
-        // 存储验证码和时间戳（5分钟有效）
-        await DB.prepare('INSERT OR REPLACE INTO link (key, value) VALUES (?, ?)').bind(`verify_code_${email}`, verifyCode).run();
-        await DB.prepare('INSERT OR REPLACE INTO link (key, value) VALUES (?, ?)').bind(`verify_code_time_${email}`, now).run();
+        await redis(env, 'SET', `verify_code_${email}`, verifyCode, 'EX', 60);
 
         // 通过 Resend 发送验证码
         const RESEND_API_KEY = env.RESEND_API_KEY;
@@ -421,32 +429,20 @@ export default {
           return resJson({ success: false, message: '邮箱和验证码不能为空！' }, 400);
         }
 
-        const storedCode = await DB.prepare('SELECT value FROM link WHERE key = ?').bind(`verify_code_${email}`).first();
+        const storedCode = await redis(env, 'GET', `verify_code_${email}`);
 
         if (!storedCode) {
-          return resJson({ success: false, message: '请先获取验证码！' }, 400);
+          // key 不存在 = 未获取或已自动过期（Redis TTL）
+          return resJson({ success: false, message: '请先获取验证码，或验证码已过期！' }, 400);
         }
 
-        // 检查验证码是否过期（5分钟）
-        const timeRow = await DB.prepare('SELECT value FROM link WHERE key = ?').bind(`verify_code_time_${email}`).first();
-        if (timeRow) {
-          const elapsed = Date.now() - parseInt(timeRow.value);
-          if (elapsed > 5 * 60 * 1000) {
-            // 验证码已过期，清理
-            await DB.prepare('DELETE FROM link WHERE key = ?').bind(`verify_code_${email}`).run();
-            await DB.prepare('DELETE FROM link WHERE key = ?').bind(`verify_code_time_${email}`).run();
-            return resJson({ success: false, message: '验证码已过期，请重新获取！' }, 400);
-          }
-        }
-
-        if (storedCode.value !== code) {
+        if (storedCode !== code) {
           return resJson({ success: false, message: '验证码错误！' }, 400);
         }
 
-        // 验证成功：清理验证码，存储 verified 标记（5分钟有效，用于注册时校验）
-        await DB.prepare('DELETE FROM link WHERE key = ?').bind(`verify_code_${email}`).run();
-        await DB.prepare('DELETE FROM link WHERE key = ?').bind(`verify_code_time_${email}`).run();
-        await DB.prepare('INSERT OR REPLACE INTO link (key, value) VALUES (?, ?)').bind(`verify_passed_${email}`, String(Date.now())).run();
+        // 验证成功：删除验证码，写入已验证标记（1分钟自动过期，用于注册校验）
+        await redis(env, 'DEL', `verify_code_${email}`);
+        await redis(env, 'SET', `verify_passed_${email}`, String(Date.now()), 'EX', 60);
 
         return resJson({ success: true, message: '验证成功！' });
       }
@@ -471,15 +467,10 @@ export default {
 
         // 校验验证码：必须完成邮箱验证后才能注册（谷歌/GitHub 登录跳过此检查）
         if (!fromGoogle && !fromGithub) {
-          const verifyPassed = await DB.prepare('SELECT value FROM link WHERE key = ?').bind(`verify_passed_${username}`).first();
+          const verifyPassed = await redis(env, 'GET', `verify_passed_${username}`);
           if (!verifyPassed) {
-            return resJson({ success: false, message: '请先完成邮箱验证！' }, 400);
-          }
-          // 检查验证标记是否过期（5分钟）
-          const verifyPassedTime = parseInt(verifyPassed.value);
-          if (Date.now() - verifyPassedTime > 5 * 60 * 1000) {
-            await DB.prepare('DELETE FROM link WHERE key = ?').bind(`verify_passed_${username}`).run();
-            return resJson({ success: false, message: '验证已过期，请重新验证邮箱！' }, 400);
+            // key 不存在 = 未验证或已自动过期（Redis TTL）
+            return resJson({ success: false, message: '请先完成邮箱验证，或验证已过期，请重新验证！' }, 400);
           }
         }
 
@@ -648,7 +639,7 @@ export default {
 
         if (result.success) {
           // 注册成功，清理验证标记
-          await DB.prepare('DELETE FROM link WHERE key = ?').bind(`verify_passed_${username}`).run();
+          await redis(env, 'DEL', `verify_passed_${username}`);
 
           const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
           const msg = nt({
