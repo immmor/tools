@@ -5611,9 +5611,33 @@
                 els.switch.addEventListener('click', toggleMode);
                 els.form.addEventListener('submit', handleSubmit);
                 
-                // 发送验证码按钮
+                // 发送验证码按钮（基于时间戳，后台节流也能对齐真实时间）
                 let sendCodeCooldown = false;
-                
+                let codeTimer = null;
+                let codeEndTime = 0;
+                const CODE_GAP = 60000; // 验证码冷却时长(ms)
+
+                const resetCodeBtn = () => {
+                    sendCodeCooldown = false;
+                    if (codeTimer) { clearInterval(codeTimer); codeTimer = null; }
+                    els.sendCodeBtn.disabled = false;
+                    els.sendCodeBtn.textContent = translations[currentLang]?.modal_send_code || '发送验证码';
+                };
+
+                const updateCodeBtn = () => {
+                    const remain = Math.ceil((codeEndTime - Date.now()) / 1000);
+                    if (remain <= 0) {
+                        resetCodeBtn();
+                    } else {
+                        els.sendCodeBtn.textContent = `${remain}s`;
+                    }
+                };
+
+                // 切回页面时立即校正剩余时间
+                document.addEventListener('visibilitychange', () => {
+                    if (!document.hidden && codeTimer) updateCodeBtn();
+                });
+
                 els.sendCodeBtn.addEventListener('click', async () => {
                     if (sendCodeCooldown) return;
                     
@@ -5646,20 +5670,10 @@
                     
                     sendCodeCooldown = true;
                     els.sendCodeBtn.disabled = true;
-                    let countdown = 60;
-                    els.sendCodeBtn.textContent = `${countdown}s`;
-                    
-                    const timer = setInterval(() => {
-                        countdown--;
-                        els.sendCodeBtn.textContent = `${countdown}s`;
-                        if (countdown <= 0) {
-                            clearInterval(timer);
-                            sendCodeCooldown = false;
-                            els.sendCodeBtn.disabled = false;
-                            els.sendCodeBtn.textContent = dict?.modal_send_code || '发送验证码';
-                        }
-                    }, 1000);
-                    
+                    codeEndTime = Date.now() + CODE_GAP;
+                    updateCodeBtn();
+                    codeTimer = setInterval(updateCodeBtn, 250);
+
                     try {
                         const res = await fetch(`${API}/api/send-verify-code`, {
                             method: 'POST',
@@ -5667,23 +5681,16 @@
                             body: JSON.stringify({ email })
                         });
                         const data = await res.json();
-                        
+
                         if (data.success) {
                             showMsg(data.message);
                         } else {
                             showMsg(data.message || '发送失败，请稍后重试', true);
-                            // 如果发送失败，重置倒计时
-                            clearInterval(timer);
-                            sendCodeCooldown = false;
-                            els.sendCodeBtn.disabled = false;
-                            els.sendCodeBtn.textContent = dict?.modal_send_code || '发送验证码';
+                            resetCodeBtn();
                         }
                     } catch {
                         showMsg(dict?.network_error || '网络错误，请稍后重试', true);
-                        clearInterval(timer);
-                        sendCodeCooldown = false;
-                        els.sendCodeBtn.disabled = false;
-                        els.sendCodeBtn.textContent = dict?.modal_send_code || '发送验证码';
+                        resetCodeBtn();
                     }
                 });
                 
