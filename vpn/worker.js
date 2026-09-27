@@ -726,7 +726,7 @@ export default {
         let result;
         try {
           result = await DB
-            .prepare('INSERT INTO user (username, password, balance, v_expire_date, learn_vip_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code, v_token, v_link_clash, v_link_v2ray, price_plan, survey, security_answer, fetch_link, source, not_trusted, auto_rewn, vorders, web3_address, card_number) VALUES (?, ?, ?, NULL, NULL, 307200, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)')
+            .prepare('INSERT INTO user (username, password, balance, v_expire_date, learn_vip_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code, v_token, v_link_clash, v_link_v2ray, price_plan, survey, security_answer, fetch_link, source, not_trusted, auto_rewn, vorders, web3_address, card_number) VALUES (?, ?, ?, NULL, NULL, 153600, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)')
             .bind(username, password, finalBalance, new Date().toISOString().slice(0, 19).replace('T', ' '), userInviteCode, '', '', '', pricePlanStr, '{}', securityAnswer || '', '[]', source || '', notTrustedValue, '[]', web3AddressLower || '', newCardNumber)
             .run();
         } catch (e) {
@@ -865,6 +865,7 @@ export default {
 
           const cardNumber = user.card_number || await ensureCardNumber(DB, user.rowid);
 
+
           return resJson({ success: true, message: '登录成功！', userInfo: { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, p_token: pToken, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates, card_number: cardNumber }, pricePlan });
         } else {
           return resJson({ success: false, message: '用户名或密码错误' }, 401);
@@ -908,6 +909,7 @@ export default {
 
           const cardNumber = user.card_number || await ensureCardNumber(DB, user.rowid);
           const pToken = await newPToken(DB, user.username);
+
 
           return resJson({ success: true, message: '登录成功！', userInfo: { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, p_token: pToken, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates, card_number: cardNumber }, pricePlan });
         } else {
@@ -1010,6 +1012,7 @@ export default {
 
           const cardNumber = user.card_number || await ensureCardNumber(DB, user.rowid);
 
+
           return resJson({ success: true, message: '登录成功！', userInfo: { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates, card_number: cardNumber }, pricePlan });
         } else {
           return resJson({ success: false, message: '用户不存在' }, 401);
@@ -1065,6 +1068,7 @@ export default {
 
             const pricePlan = user.price_plan ? JSON.parse(user.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
             const pToken = await newPToken(DB, user.username);
+  
 
             return resJson({ success: true, message: '登录成功！', userInfo: { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, p_token: pToken, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates }, pricePlan });
           } else {
@@ -1163,6 +1167,7 @@ export default {
 
             const pricePlan = user.price_plan ? JSON.parse(user.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
             const pToken = await newPToken(DB, user.username);
+  
 
             return resJson({ success: true, message: '登录成功！', userInfo: { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, p_token: pToken, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates }, pricePlan });
           } else {
@@ -1531,7 +1536,7 @@ export default {
           if (!username) return resJson({ code: 400, msg: '缺少username参数' }, 400);
 
           let user = await DB
-            .prepare('SELECT username, v_expire_date, v_token, v_link_clash, v_link_v2ray, auto_rewn, balance, price_plan FROM user WHERE username = ?')
+            .prepare('SELECT username, v_expire_date, v_token, v_link_clash, v_link_v2ray, auto_rewn, balance, price_plan, monthly_quota, used_quota, quota_reset_date FROM user WHERE username = ?')
             .bind(username)
             .first();
 
@@ -1547,6 +1552,7 @@ export default {
             data: {
               username: user.username, v_expire_date: user.v_expire_date, v_token: user.v_token,
               v_link_clash: user.v_link_clash, v_link_v2ray: user.v_link_v2ray,
+              monthly_quota: user.monthly_quota, used_quota: user.used_quota, quota_reset_date: user.quota_reset_date,
               is_vip_valid: isVipValid, days_remaining: daysRemaining, auto_renew: !!user.auto_rewn
             }
           });
@@ -1912,61 +1918,6 @@ export default {
         } catch (err) {
           console.error('User edit error:', err);
           return resJson({ code: 500, msg: '修改失败', error: err.message }, 500);
-        }
-      }
-
-      // ========== 查询流量使用情况接口 ==========
-      if (path === '/api/quota' && request.method === 'GET') {
-        try {
-          const username = url.searchParams.get('username');
-          
-          if (!username) {
-            return resJson({ code: 400, msg: '缺少username参数' }, 400);
-          }
-          
-          const user = await DB
-            .prepare('SELECT monthly_quota, used_quota, quota_reset_date, v_expire_date, v_link_clash, v_link_v2ray FROM user WHERE username = ?')
-            .bind(username)
-            .first();
-          
-          if (!user) {
-            return resJson({ code: 404, msg: '用户不存在' }, 404);
-          }
-          
-          const now = new Date();
-          const expireDate = user.v_expire_date ? new Date(user.v_expire_date) : null;
-          const isVipValid = expireDate && expireDate > now;
-          
-          // 检查是否需要重置流量
-          const resetDate = user.quota_reset_date ? new Date(user.quota_reset_date) : new Date();
-          const nextMonth = new Date(resetDate);
-          nextMonth.setMonth(nextMonth.getMonth() + 1);
-          
-          if (now > nextMonth) {
-            await DB
-              .prepare('UPDATE user SET used_quota = 0, quota_reset_date = ? WHERE username = ?')
-              .bind(now.toISOString().slice(0, 19).replace('T', ' '), username)
-              .run();
-            user.used_quota = 0;
-          }
-          
-          return resJson({
-            code: 200,
-            msg: '查询成功',
-            data: {
-              username: username,
-              is_vip: isVipValid,
-              monthly_quota: user.monthly_quota || 307200,
-              used_quota: user.used_quota || 0,
-              remaining_quota: (user.monthly_quota || 307200) - (user.used_quota || 0),
-              quota_reset_date: user.quota_reset_date,
-              v_link_clash: user.v_link_clash,
-              v_link_v2ray: user.v_link_v2ray,
-              next_reset_date: nextMonth.toISOString().slice(0, 19).replace('T', ' ')
-            }
-          });
-        } catch (err) {
-          return resJson({ code: 500, msg: '查询失败', error: err.message }, 500);
         }
       }
 

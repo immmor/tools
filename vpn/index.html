@@ -2964,7 +2964,7 @@
                                             `<div class="text-[var(--neon-green)] text-sm">
                                                 <div><span data-i18n="vip_valid_until_label">有效期至</span>: ${new Date(vipInfo.v_expire_date).toLocaleDateString()}</div>
                                                 <div><span data-i18n="vip_remaining_days_label">剩余天数</span>: ${vipInfo.days_remaining}</div>
-                                                <div><span data-i18n="vip_available_quota">可用流量</span>: 150GB(<span data-i18n="vip_quota_reset">30天重置</span>)</div>
+                                                <div><span data-i18n="vip_available_quota">可用流量</span>: ${(vipInfo.monthly_quota || 153600) / 1024}GB(<span data-i18n="vip_quota_reset">30天重置</span>)</div>
                                                 <div><span data-i18n="vip_max_devices">可用设备</span>: 3</div>
                                                 <div class="flex items-center justify-center gap-2">
                                                     <span data-i18n="vip_auto_renew">到期续购(余额扣款)</span>
@@ -3769,46 +3769,6 @@
                 }
             };
             
-            const updateQuota = async () => {
-                if (!userInfo) {
-                    document.getElementById('dropdown-quota').classList.add('hidden');
-                    return;
-                }
-                
-                try {
-                    const res = await fetch(`${API}/api/quota?username=${encodeURIComponent(userInfo.username)}`);
-                    const data = await res.json();
-                    
-                    if (data.code === 200) {
-                        const quotaData = data.data;
-                        const usedGB = (quotaData.used_quota / 1024).toFixed(1);
-                        const totalGB = (quotaData.monthly_quota / 1024).toFixed(0);
-                        const percentage = Math.min(100, Math.round((quotaData.used_quota / quotaData.monthly_quota) * 100));
-                        
-                        // 更新下拉菜单流量显示
-                        const dropdownQuota = document.getElementById('dropdown-quota');
-                        const dropdownQuotaText = document.getElementById('dropdown-quota-text');
-                        const dropdownQuotaBar = document.getElementById('dropdown-quota-bar');
-                        
-                        dropdownQuotaText.textContent = `${usedGB}GB/${totalGB}GB`;
-                        dropdownQuotaBar.style.width = `${percentage}%`;
-                        dropdownQuota.classList.remove('hidden');
-                        
-                        // 根据使用情况设置颜色
-                        if (percentage > 80) {
-                            dropdownQuotaBar.style.background = 'var(--neon-red)';
-                        } else if (percentage > 60) {
-                            dropdownQuotaBar.style.background = 'var(--neon-blue)';
-                        } else {
-                            dropdownQuotaBar.style.background = 'var(--neon-green)';
-                        }
-                    }
-                } catch (error) {
-                    console.error('流量查询失败:', error);
-                    document.getElementById('dropdown-quota').classList.add('hidden');
-                }
-            };
-            
             const loadPricePlan = async () => {
                 let plan = userInfo?.pricePlan;
                 if (!plan) {
@@ -4298,7 +4258,6 @@
                     els.btn.textContent = displayName;
                     updateBalance();
                     loadPricePlan();
-                    // updateQuota();
                     loadMessages();
                     notificationDropdown.classList.remove('hidden');
                     document.dispatchEvent(new CustomEvent('userLoggedIn'));
@@ -4997,13 +4956,6 @@
                 els.withdrawMsg.className = `text-center text-xs ${type === 'error' ? 'text-[var(--neon-red)]' : 'text-[var(--neon-green)]'}`;
                 els.withdrawMsg.classList.remove('hidden');
             };
-            
-            // // 定期更新流量信息（每30秒）
-            // const startQuotaPolling = () => {
-            //     if (userInfo) {
-            //         setInterval(updateQuota, 30000);
-            //     }
-            // };
             
             const applyOAuthRegisterEmail = (email, provider) => {
                 oauthEmail = email;
