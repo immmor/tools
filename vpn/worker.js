@@ -57,6 +57,107 @@ async function redis(env, ...args) {
   return data.result; // 不存在的 key 返回 null
 }
 
+// ========== 可插拔 AI 对话（默认 Agnes AI，非流式） ==========
+// 接入新模型：在 AI_PROVIDERS 中新增一项即可，无需改动 callAI 与路由。
+// 每个 provider 需提供：
+//   endpoint     请求地址
+//   apiKeyEnv    存放 API Key 的 Worker 环境变量名（在控制台 Secrets 中配置）
+//   defaultModel 默认模型名
+//   buildBody    根据入参构造请求体（messages / model / 可选 temperature / maxTokens）
+//   parseReply   从响应 JSON 中解析出回复文本
+const AI_PROVIDERS = {
+  agnes: {
+    endpoint: 'https://api.agnes-ai.cn/v1/chat/completions',
+    apiKeyEnv: 'AGNES_API_KEY',
+    defaultModel: 'agnes-2.5-flash',
+    buildBody: ({ model, messages, temperature, maxTokens }) => ({
+      model: model || 'agnes-2.5-flash',
+      messages,
+      temperature: temperature ?? 0.7,
+      max_tokens: maxTokens || 1024,
+    }),
+    parseReply: (data) => data?.choices?.[0]?.message?.content ?? '',
+  },
+  // 示例：接入 OpenAI（去掉注释并在控制台配置 OPENAI_API_KEY 即可）
+  // openai: {
+  //   endpoint: 'https://api.openai.com/v1/chat/completions',
+  //   apiKeyEnv: 'OPENAI_API_KEY',
+  //   defaultModel: 'gpt-4o-mini',
+  //   buildBody: ({ model, messages, temperature, maxTokens }) => ({
+  //     model: model || 'gpt-4o-mini',
+  //     messages,
+  //     temperature: temperature ?? 0.7,
+  //     max_tokens: maxTokens || 1024,
+  //   }),
+  //   parseReply: (data) => data?.choices?.[0]?.message?.content ?? '',
+  // },
+  // Gemini：模型名在 URL 中，key 走 query 参数，消息体为 contents 结构
+  // 控制台需配置 GEMINI_API_KEY；role 映射 user->user / assistant->model / system->systemInstruction
+  gemini: {
+    endpoint: (model) => `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+    auth: 'query',
+    apiKeyEnv: 'GEMINI_API_KEY',
+    defaultModel: 'gemini-flash-latest',
+    buildBody: ({ messages, temperature, maxTokens }) => {
+      const sys = messages.filter(m => m.role === 'system').map(m => m.content).join('\n');
+      const contents = messages
+        .filter(m => m.role !== 'system')
+        .map(m => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.content }],
+        }));
+      const body = { contents };
+      if (sys) body.systemInstruction = { parts: [{ text: sys }] };
+      const gen = {};
+      if (temperature != null) gen.temperature = temperature;
+      if (maxTokens) gen.maxOutputTokens = maxTokens;
+      if (Object.keys(gen).length) body.generationConfig = gen;
+      return body;
+    },
+    parseReply: (data) => {
+      const parts = data?.candidates?.[0]?.content?.parts;
+      if (!Array.isArray(parts)) return '';
+      return parts.map(p => p.text || '').join('');
+    },
+  },
+};
+
+// 通用 AI 调用（非流式，返回 { reply, model, raw }）
+async function callAI(env, { provider = 'agnes', model, messages, temperature, maxTokens } = {}) {
+  const p = AI_PROVIDERS[provider];
+  if (!p) throw new Error('未知的 AI provider: ' + provider);
+  const apiKey = env[p.apiKeyEnv];
+  if (!apiKey) throw new Error(`未配置 API Key 环境变量: ${p.apiKeyEnv}`);
+  const finalModel = model || p.defaultModel;
+
+  // endpoint 可为字符串，或 (model) => url 的函数（如 Gemini 把模型名放进 URL）
+  const endpoint = typeof p.endpoint === 'function' ? p.endpoint(finalModel) : p.endpoint;
+
+  // 鉴权方式：'bearer'（默认，放 Authorization 头）或 'query'（key 放 query 参数，如 Gemini）
+  const authMode = p.auth || 'bearer';
+  const headers = { 'Content-Type': 'application/json', ...(p.headers || {}) };
+  let finalEndpoint = endpoint;
+  if (authMode === 'bearer') {
+    headers['Authorization'] = `Bearer ${apiKey}`;
+  } else if (authMode === 'query') {
+    finalEndpoint += (endpoint.includes('?') ? '&' : '?') + 'key=' + encodeURIComponent(apiKey);
+  }
+
+  const res = await fetch(finalEndpoint, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(p.buildBody({ model: finalModel, messages, temperature, maxTokens })),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`AI 接口 HTTP ${res.status}: ${text.slice(0, 500)}`);
+  }
+  const data = await res.json();
+  const reply = p.parseReply(data);
+  if (!reply) throw new Error('AI 接口返回空回复');
+  return { reply, model: finalModel, raw: data };
+}
+
 // 自动续费单个用户的函数
 async function autoRenewUser(DB, user) {
   const now = new Date();
@@ -4017,6 +4118,36 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           });
         } catch (err) {
           return resJson({ code: 500, msg: '查询失败', error: String(err) }, 500);
+        }
+      }
+
+      // ========== AI 对话接口（非流式，默认 Agnes AI；可插拔其它模型） ==========
+      if (path === '/api/ai-chat' && request.method === 'POST') {
+        try {
+          const params = await request.json();
+          const { messages, provider, model, temperature, maxTokens } = params;
+          if (!Array.isArray(messages) || messages.length === 0) {
+            return resJson({ code: 400, msg: 'messages 不能为空，且需为数组' }, 400);
+          }
+          // 简单校验每条消息结构
+          for (const m of messages) {
+            if (!m || !['system', 'user', 'assistant'].includes(m.role) || typeof m.content !== 'string') {
+              return resJson({ code: 400, msg: 'messages 中存在非法消息（需含 role(user/system/assistant) 与 content 字符串）' }, 400);
+            }
+          }
+          const result = await callAI(env, { provider, model, messages, temperature, maxTokens });
+          return resJson({
+            code: 200,
+            msg: 'ok',
+            data: {
+              reply: result.reply,
+              model: result.model,
+              provider: provider || 'agnes',
+            },
+          });
+        } catch (err) {
+          console.error('AI 对话错误:', err);
+          return resJson({ code: 500, msg: 'AI 调用失败：' + err.message }, 500);
         }
       }
 

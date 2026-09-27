@@ -707,6 +707,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const openModal = () => {
             modal.classList.remove('hidden');
             if (window.lucide) lucide.createIcons();
+            // 给静态欢迎语（第一条自动消息）填充当前时间
+            const welcomeTimeEl = document.getElementById('support-welcome-time');
+            if (welcomeTimeEl) welcomeTimeEl.textContent = fmtClock(new Date());
             const currentLang = window.currentLang || 'zh-CN';
             if (questions.length === 0 || loadedLang !== currentLang) {
                 loadQuestions();
