@@ -265,7 +265,7 @@
 
         /* ============ 新增：各功能界面 ============ */
         html { scroll-behavior: smooth; }
-        .section { position: relative; z-index: 2; max-width: 1300px; margin: 0 auto; padding: 90px 20px; scroll-margin-top: 20px; }
+        .section { position: relative; z-index: 2; max-width: 1300px; margin: 0 auto; padding: 30px 20px 60px; scroll-margin-top: 20px; }
         .section-kicker { color: var(--primary-yellow); font-size: 12px; letter-spacing: 2px; text-transform: uppercase; font-weight: 600; }
         .section-title { font-size: 40px; font-weight: 800; margin-top: 12px; line-height: 1.1; }
         .section-title .hl { background: var(--primary-yellow); color: var(--text-dark); padding: 0 10px; display: inline-block; transform: skewX(-8deg); }
@@ -353,14 +353,22 @@
         .me-quick button { flex: 1; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); color: #ddd; padding: 10px; border-radius: 10px; cursor: pointer; font-size: 13px; transition: .2s; }
         .me-quick button:hover { color: var(--primary-yellow); border-color: rgba(255,215,0,0.35); }
 
-        /* 文档 */
-        .doc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 40px; }
-        .code-panel { background: rgba(20,20,20,0.7); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; overflow: hidden; }
-        .code-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 13px; color: #ccc; }
-        .code-copy { background: none; border: 1px solid rgba(255,255,255,0.15); color: #ccc; border-radius: 8px; padding: 4px 10px; font-size: 11px; cursor: pointer; }
-        .code-copy:hover { color: var(--primary-yellow); border-color: var(--y-border); }
-        .code-panel pre { margin: 0; padding: 18px; font-family: 'SF Mono', Consolas, monospace; font-size: 12.5px; line-height: 1.7; color: #d8d8d8; overflow-x: auto; white-space: pre; }
-        .code-panel pre .k { color: var(--primary-yellow); }
+        /* 文档 - Editor 片段风格 */
+        .doc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; margin-top: 40px; }
+        .code-panel { position: relative; background: rgba(10,10,10,0.65); border-left: 3px solid var(--primary-yellow); padding: 2px 0 2px 0; overflow: hidden; border-radius: 0 6px 6px 0; }
+        .code-panel::before, .code-head { display: none; }
+        .code-lang-tag { position: absolute; bottom: 14px; right: 14px; font-family: 'JetBrains Mono', 'SF Mono', monospace; font-size: 10.5px; font-weight: 700; letter-spacing: 1.5px; color: var(--text-dark); background: var(--primary-yellow); padding: 3px 8px; border-radius: 4px; z-index: 3; text-transform: uppercase; }
+        .code-copy-btn { position: absolute; top: 12px; right: 12px; width: 28px; height: 28px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.12); background: rgba(0,0,0,0.3); color: #888; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px; line-height: 1; z-index: 3; transition: .2s; backdrop-filter: blur(4px); }
+        .code-copy-btn:hover { color: #000; background: var(--primary-yellow); border-color: var(--primary-yellow); transform: scale(1.08); }
+        .code-copy-btn svg { width: 13px; height: 13px; fill: currentColor; }
+        .code-panel pre { margin: 0; padding: 16px 48px 44px 0; font-family: 'JetBrains Mono', 'SF Mono', Consolas, monospace; font-size: 13px; line-height: 1.85; color: #d4d4d4; overflow-x: auto; background: transparent; white-space: pre; }
+        .code-panel pre code { display: block; counter-reset: ln; }
+        .code-panel pre code .cl { display: block; }
+        .code-panel pre code .cl::before { counter-increment: ln; content: counter(ln); display: inline-block; width: 32px; margin-right: 16px; text-align: right; color: rgba(255,255,255,0.18); font-size: 11.5px; user-select: none; }
+        .code-panel pre .k { color: #FFD700; font-weight: 600; }
+        .code-panel pre .s { color: #C586C0; }
+        .code-panel pre .c { color: #6A9955; font-style: italic; }
+        .code-panel pre .v { color: #E5C07B; }
         .doc-note { font-size: 13px; color: #999; margin-top: 16px; line-height: 1.7; }
         .doc-note b { color: var(--primary-yellow); }
 
@@ -449,8 +457,8 @@
                         <p>接入厂商</p>
                     </div>
                     <div class="stat-item">
-                        <h3>1</h3>
-                        <p>把密钥通吃全部模型</p>
+                        <h3 id="homeModelCount">0</h3>
+                        <p>可用模型</p>
                     </div>
                 </div>
 
@@ -520,7 +528,7 @@
       model:"deepseek-chat",
       messages:[{role:"user",content:"你好"}],
       stream:true }) });
-<span class="k">const</span> reader = res.body.getReader();  <span class="k">// 流式读取</span></code></pre>
+<span class="k">const</span> reader = res.body.getReader();  <span class="c">// 流式读取</span></code></pre>
             </div>
             <div class="code-panel">
                 <div class="code-head"><span>Python 示例</span><button class="code-copy" onclick="copyCode(this)">复制</button></div>
@@ -647,12 +655,57 @@ echo $resp;</code></pre>
             mg.appendChild(card);
         });
 
+        // 首页：动态模型总数
+        const totalModels = MODELS.reduce((s, m) => s + m.models.length, 0);
+        const homeCount = document.getElementById('homeModelCount');
+        if (homeCount) homeCount.textContent = totalModels;
+
         // 复制代码
         function copyCode(btn){
             const code = btn.parentElement.nextElementSibling.innerText;
             navigator.clipboard.writeText(code);
             const old = btn.textContent; btn.textContent='已复制'; setTimeout(()=>btn.textContent=old, 1500);
         }
+
+        // 文档代码块：Editor 片段风格初始化
+        (function initCodePanels(){
+            const langMap = ['cURL', 'JavaScript', 'Python', 'Go', 'Java', 'PHP'];
+            document.querySelectorAll('.code-panel').forEach((panel, i) => {
+                const lang = langMap[i];
+                // 1) 删掉旧 .code-head
+                panel.querySelectorAll('.code-head').forEach(el => el.remove());
+                // 2) 右下角语言标签
+                if (lang) {
+                    const tag = document.createElement('div');
+                    tag.className = 'code-lang-tag';
+                    tag.textContent = lang;
+                    panel.appendChild(tag);
+                }
+                // 3) 右上角复制按钮（SVG icon）
+                const btn = document.createElement('button');
+                btn.className = 'code-copy-btn';
+                btn.title = '复制';
+                btn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z"/></svg>';
+                btn.addEventListener('click', function(){
+                    const pre = panel.querySelector('pre');
+                    const lines = pre.querySelectorAll('.cl');
+                    const text = Array.from(lines).map(l => l.textContent).join('\n');
+                    navigator.clipboard.writeText(text);
+                    this.innerHTML = '<svg viewBox="0 0 24 24" style="fill:#FFD700"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>';
+                    const old = this.innerHTML;
+                    setTimeout(() => { this.innerHTML = '<svg viewBox="0 0 24 24"><path d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1zm3 4H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm0 16H8V7h11v14z"/></svg>'; }, 1500);
+                });
+                panel.appendChild(btn);
+                // 4) 给每行包 .cl，方便 CSS 行号 + 选中复制
+                const code = panel.querySelector('pre code');
+                if (!code) return;
+                const raw = code.innerHTML;
+                const lines = raw.split('\n');
+                // 保留末尾空行的情况
+                const wrapped = lines.map(line => `<span class="cl">${line || '&nbsp;'}</span>`).join('');
+                code.innerHTML = wrapped;
+            });
+        })();
 
         // ===== 密钥管理（本地生成 + localStorage） =====
         const KEY_STORE = 'aihub_keys';
