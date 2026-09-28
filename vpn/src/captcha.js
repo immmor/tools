@@ -418,7 +418,7 @@
     const showStatus = (msg, type) => {
       if (!statusEl) return;
       statusEl.textContent = msg;
-      statusEl.className = `absolute bottom-1 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded text-[10px] z-10 ${type === 'ok' ? 'bg-[var(--neon-green)]/80 text-black' : 'bg-red-500/80 text-white'}`;
+      statusEl.className = `absolute bottom-1 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded text-[10px] z-10 ${type === 'ok' ? 'text-[var(--neon-green)]' : 'text-red-400'}`;
       statusEl.classList.remove('hidden');
     };
 
@@ -431,6 +431,9 @@
         if (confirmBtn) confirmBtn.disabled = true;
         const t = i18n();
         showStatus(t.text_captcha_ok || '验证成功', 'ok');
+      } else {
+        const t = i18n();
+        showStatus(t.text_captcha_fail || '验证码错误，请重试', 'error');
       }
     };
 
@@ -525,6 +528,8 @@
         input.disabled = true;
         if (confirmBtn) confirmBtn.disabled = true;
         showStatus(i18n().text_captcha_ok || '验证成功', 'ok');
+      } else {
+        showStatus(i18n().audio_captcha_wrong || '验证码错误，请重试', 'error');
       }
     };
 
