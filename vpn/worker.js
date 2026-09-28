@@ -551,7 +551,7 @@ export default {
       // ========== 注册接口（核心）→ 用户名密码注册 ==========
       if (path === '/api/register' && request.method === 'POST') {
         const params = await request.json();
-        const { username, password, inviteCode, securityAnswer, source, priceParam, fromGoogle, fromGithub, web3Address } = params;
+        const { username, password, inviteCode, securityAnswer, source, priceParam, fromGoogle, fromGithub, web3Address, sliderVerified, textVerified, audioVerified } = params;
         
         // 统一用小写处理 web3 地址
         const web3AddressLower = web3Address ? web3Address.toLowerCase() : '';
@@ -566,8 +566,8 @@ export default {
           return resJson({ success: false, message: '邮箱格式不正确！' }, 400);
         }
 
-        // 校验验证码：必须完成邮箱验证后才能注册（谷歌/GitHub 登录跳过此检查）
-        if (!fromGoogle && !fromGithub) {
+        // 校验验证码：必须完成邮箱验证后才能注册（谷歌/GitHub 登录、滑块验证、图片文字验证、声音验证 跳过此检查）
+        if (!fromGoogle && !fromGithub && !sliderVerified && !textVerified && !audioVerified) {
           const verifyPassed = await redis(env, 'GET', `verify_passed_${username}`);
           if (!verifyPassed) {
             // key 不存在 = 未验证或已自动过期（Redis TTL）
@@ -743,15 +743,25 @@ export default {
           await redis(env, 'DEL', `verify_passed_${username}`);
 
           const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+          // 注册验证方式标签（按语言），用于管理员通知区分来源
+          const verifyMethod = fromGoogle ? { cn: '谷歌登录', en: 'Google login', jp: 'Googleログイン', kr: 'Google 로그인', es: 'Inicio de sesión de Google', vi: 'Đăng nhập Google', ar: 'تسجيل دخول Google', ru: 'Вход через Google' }
+            : fromGithub ? { cn: 'GitHub登录', en: 'GitHub login', jp: 'GitHubログイン', kr: 'GitHub 로그인', es: 'Inicio de sesión de GitHub', vi: 'Đăng nhập GitHub', ar: 'تسجيل دخول GitHub', ru: 'Вход через GitHub' }
+            : web3Address ? { cn: 'Web3钱包', en: 'Web3 wallet', jp: 'Web3ウォレット', kr: 'Web3 지갑', es: 'Billetera Web3', vi: 'Ví Web3', ar: 'محفظة Web3', ru: 'Web3 кошелёк' }
+            : sliderVerified ? { cn: '滑块验证', en: 'Slider verification', jp: 'スライダー認証', kr: '슬라이더 인증', es: 'Verificación deslizante', vi: 'Xác minh thanh trượt', ar: 'التحقق المنزلق', ru: 'Слайдер-верификация' }
+            : textVerified ? { cn: '图片文字验证', en: 'Image text verification', jp: '画像文字認証', kr: '이미지 문자 인증', es: 'Verificación de texto de imagen', vi: 'Xác minh chữ trong ảnh', ar: 'التحقق من نص الصورة', ru: 'Проверка текста с картинки' }
+            : audioVerified ? { cn: '声音验证', en: 'Audio verification', jp: '音声認証', kr: '음성 인증', es: 'Verificación de audio', vi: 'Xác minh bằng giọng nói', ar: 'التحقق الصوتي', ru: 'Аудио-верификация' }
+            : { cn: '邮箱验证码', en: 'Email code', jp: 'メール認証コード', kr: '이메일 코드', es: 'Código de correo', vi: 'Mã email', ar: 'رمز البريد الإلكتروني', ru: 'Код по email' };
+
           const msg = nt({
-            cn: `用户 ${username} 注册成功！`,
-            en: `User ${username} registered successfully!`,
-            jp: `ユーザー ${username} が登録しました！`,
-            kr: `사용자 ${username} 님이 등록했습니다!`,
-            es: `¡El usuario ${username} se registró exitosamente!`,
-            vi: `Người dùng ${username} đã đăng ký thành công!`,
-            ar: `قام المستخدم ${username} بالتسجيل بنجاح!`,
-            ru: `Пользователь ${username} успешно зарегистрировался!`
+            cn: `用户 ${username} 通过${verifyMethod.cn}注册成功！`,
+            en: `User ${username} registered successfully via ${verifyMethod.en}!`,
+            jp: `ユーザー ${username} が${verifyMethod.jp}で登録に成功しました！`,
+            kr: `사용자 ${username} 님이 ${verifyMethod.kr}로 등록했습니다!`,
+            es: `¡El usuario ${username} se registró exitosamente vía ${verifyMethod.es}!`,
+            vi: `Người dùng ${username} đã đăng ký thành công qua ${verifyMethod.vi}!`,
+            ar: `قام المستخدم ${username} بالتسجيل بنجاح عبر ${verifyMethod.ar}!`,
+            ru: `Пользователь ${username} успешно зарегистрировался через ${verifyMethod.ru}!`
           });
 
           await DB
