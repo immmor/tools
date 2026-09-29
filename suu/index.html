@@ -152,6 +152,16 @@
             min-width: 0;
             max-width: 32rem;
         }
+        /* 首页 feed 大屏瀑布流：高度随内容自然变化，不再每行等高 */
+        #feed { column-count: 1; column-gap: 1.5rem; }
+        @media (min-width: 768px) { #feed { column-count: 2; } }
+        @media (min-width: 1024px) { #feed { column-count: 3; } }
+        #feed > .glass-card {
+            break-inside: avoid;
+            -webkit-column-break-inside: avoid;
+            margin-bottom: 1.5rem;
+            width: 100%;
+        }
         @keyframes slideUp {
             from { transform: translateY(100%); }
             to { transform: translateY(0); }
@@ -167,6 +177,13 @@
         @keyframes wave {
             0%,100% { transform: scaleY(0.35); }
             50% { transform: scaleY(1); }
+        }
+
+        /* 搜索定位到帖子时的高亮 */
+        .post-highlight { animation: postPulse 1.6s ease; }
+        @keyframes postPulse {
+            0% { box-shadow: 0 0 0 0 rgba(59,130,246,0.55); }
+            100% { box-shadow: 0 0 0 14px rgba(59,130,246,0); }
         }
 
         /* 开屏动画 */
@@ -196,18 +213,22 @@
                 </svg>
             </div>
         </div>
-        <a href="#" class="nav-item-active text-gray-400 hover:text-blue-500 transition-colors" data-tab="home">
+        <a href="#" class="nav-item-active text-gray-400 hover:text-blue-500 transition-colors flex flex-col items-center" data-tab="home">
             <i data-lucide="home"></i>
+            <span class="hidden md:block text-[10px] leading-none mt-1">首页</span>
         </a>
-        <a href="#" class="text-gray-500 hover:text-blue-500 transition-colors" data-tab="planet">
+        <a href="#" class="text-gray-500 hover:text-blue-500 transition-colors flex flex-col items-center" data-tab="planet">
             <i data-lucide="globe"></i>
+            <span class="hidden md:block text-[10px] leading-none mt-1">星球</span>
         </a>
-        <a href="#" class="text-gray-400 hover:text-blue-500 transition-colors relative" data-tab="message">
+        <a href="#" class="text-gray-400 hover:text-blue-500 transition-colors relative flex flex-col items-center" data-tab="message">
             <i data-lucide="message-circle"></i>
             <span id="msg-badge" class="hidden absolute -top-1 -right-1 bg-pink-500 text-white text-[10px] leading-none min-w-[1rem] h-4 px-1 rounded-full flex items-center justify-center">0</span>
+            <span class="hidden md:block text-[10px] leading-none mt-1">消息</span>
         </a>
-        <a href="#" class="text-gray-400 hover:text-blue-500 transition-colors" data-tab="profile">
+        <a href="#" class="text-gray-400 hover:text-blue-500 transition-colors flex flex-col items-center" data-tab="profile">
             <i data-lucide="user"></i>
+            <span class="hidden md:block text-[10px] leading-none mt-1">我的</span>
         </a>
         <div id="settings-btn" class="hidden md:block mt-auto text-gray-400 cursor-pointer hover:text-blue-500 transition-colors">
             <i data-lucide="settings"></i>
@@ -235,7 +256,7 @@
                 <button class="ptab px-6 py-2 rounded-full whitespace-nowrap" data-cat="voice">语音匹配</button>
             </div>
 
-            <div id="feed" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
+            <div id="feed"></div>
             <p id="feed-empty" class="hidden text-center text-gray-400 py-10">这个分类还没有动态哦～</p>
         </div>
 
@@ -405,6 +426,25 @@
             <p class="text-center text-xs text-gray-400 mt-6">Suuful v1.0.0</p>
         </div>
 
+        <!-- ============ POST DETAIL ============ -->
+        <div id="post-detail-content" class="hidden">
+            <header class="flex items-center mb-5">
+                <button id="post-detail-back" class="p-2 rounded-full hover:bg-gray-100 transition-colors mr-4">
+                    <i data-lucide="chevron-left" class="w-6 h-6 text-gray-600"></i>
+                </button>
+                <h1 class="text-xl font-bold text-gray-800">帖子详情</h1>
+            </header>
+            <div id="post-detail-body"></div>
+            <div class="glass-card rounded-2xl p-6 mt-6">
+                <h3 class="font-bold text-gray-800 mb-3">评论 <span id="detail-comment-total"></span></h3>
+                <div id="detail-comment-list" class="space-y-4"></div>
+            </div>
+            <div class="glass-card rounded-2xl p-6 mt-4 flex items-center gap-2">
+                <input id="detail-comment-input" type="text" placeholder="友善地评论..." class="flex-1 min-w-0 bg-white/60 px-4 py-2.5 rounded-full text-sm text-gray-700 placeholder-gray-400 focus:outline-none">
+                <button id="detail-comment-send" class="px-4 py-2.5 bg-blue-500 text-white rounded-full text-sm font-medium hover:bg-blue-600 transition-colors flex-shrink-0">发送</button>
+            </div>
+        </div>
+
         <!-- ============ ADD POST ============ -->
         <div id="add-post-content" class="hidden">
             <header class="flex items-center mb-6">
@@ -458,7 +498,9 @@
                 <h3 class="font-bold text-gray-800">评论 <span id="comment-total" class="text-sm text-gray-400"></span></h3>
                 <button id="comment-close" class="p-1 pr-0 -mr-0.5 text-gray-400 hover:text-gray-600"><i data-lucide="x" class="w-5 h-5"></i></button>
             </div>
-            <div id="comment-list" class="space-y-4 overflow-y-auto no-scrollbar flex-1 max-h-[45vh]"></div>
+            <div id="comment-scroll" class="flex-1 overflow-y-auto no-scrollbar max-h-[60vh]">
+                <div id="comment-list" class="space-y-4"></div>
+            </div>
             <div class="flex items-center gap-2 pt-4 mt-2 border-t border-gray-200">
                 <input id="comment-input" type="text" placeholder="友善地评论..." class="flex-1 min-w-0 bg-white/60 px-4 py-2.5 rounded-full text-sm text-gray-700 placeholder-gray-400 focus:outline-none">
                 <button id="comment-send" class="px-4 py-2.5 bg-blue-500 text-white rounded-full text-sm font-medium hover:bg-blue-600 transition-colors flex-shrink-0">发送</button>
@@ -698,6 +740,7 @@
                 const id = +card.dataset.postId;
                 const p = posts.find(x => x.id === id);
                 card.querySelector('[data-act="like"]').addEventListener('click', e => {
+                    e.stopPropagation();
                     p.liked = !p.liked;
                     p.likes += p.liked ? 1 : -1;
                     const btn = e.currentTarget;
@@ -708,20 +751,11 @@
                     btn.querySelector('.like-count').textContent = fmtCount(p.likes);
                     if (currentPostPlanet) renderPlanetPosts();
                 });
-                card.querySelector('[data-act="comment"]').addEventListener('click', () => openComment(id));
-                card.querySelector('[data-act="share"]').addEventListener('click', () => {
-                    p.shares++;
-                    toast('已分享给好友');
-                });
-                const audio = card.querySelector('[data-audio]');
-                if (audio) audio.addEventListener('click', () => {
-                    const playBtn = audio.querySelector('.audio-play-btn');
-                    if (currentAudio && currentAudio.container === audio) { stopCurrentAudio(); return; }
-                    stopCurrentAudio();
-                    currentAudio = playMelody(audio, p.audio.duration, playBtn);
-                    currentAudio.container = audio;
-                    setAudioIcon(playBtn, true);
-                });
+                card.querySelector('[data-act="comment"]').addEventListener('click', e => { e.stopPropagation(); openComment(id); });
+                card.querySelector('[data-act="share"]').addEventListener('click', e => { e.stopPropagation(); p.shares++; toast('已分享给好友'); });
+                bindAudioBlock(card.querySelector('[data-audio]'), p);
+                // 点击帖子卡片任意区域 -> 进入独立帖子详情页
+                card.addEventListener('click', e => { if (e.target.closest('[data-act]')) return; openPostDetail(id); });
             });
         }
 
@@ -748,6 +782,18 @@
                 if (pb) setAudioIcon(pb, false);
                 currentAudio = null;
             }
+        }
+        function bindAudioBlock(audio, p) {
+            if (!audio || !p.audio) return;
+            audio.addEventListener('click', e => {
+                e.stopPropagation();
+                const playBtn = audio.querySelector('.audio-play-btn');
+                if (currentAudio && currentAudio.container === audio) { stopCurrentAudio(); return; }
+                stopCurrentAudio();
+                currentAudio = playMelody(audio, p.audio.duration, playBtn);
+                currentAudio.container = audio;
+                setAudioIcon(playBtn, true);
+            });
         }
         function playMelody(container, duration, playBtn) {
             const ctx = getCtx();
@@ -788,7 +834,91 @@
         }
 
         // ============================================================
-        // 评论弹窗
+        // 帖子详情页（点击帖子进入的独立界面）
+        // ============================================================
+        let postDetailReturn = 'home-content';
+        function postDetailHTML(p) {
+            const imgHTML = (p.images && p.images.length)
+                ? `<div class="grid ${p.images.length>1?'grid-cols-2':'grid-cols-1'} gap-2 mb-4">${p.images.map(src => `<div class="aspect-video rounded-xl bg-cover bg-center" style="background-image:url('${src}')"></div>`).join('')}</div>`
+                : '';
+            const audioHTML = p.audio
+                ? `<div class="bg-blue-50/50 p-3 rounded-2xl flex items-center gap-3 border border-blue-100 cursor-pointer hover:bg-blue-50 transition-all mb-4" data-audio>
+                       <div class="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center text-white shadow-md audio-play-btn"><i data-lucide="play" class="w-5 h-5 fill-current"></i></div>
+                       <div class="flex-1 min-w-0">
+                           <div class="flex gap-1 items-end h-4 mb-1">
+                               <div class="w-1 bg-blue-300 h-2 rounded-full wave-bar"></div>
+                               <div class="w-1 bg-blue-400 h-4 rounded-full wave-bar" style="animation-delay:.1s"></div>
+                               <div class="w-1 bg-blue-300 h-3 rounded-full wave-bar" style="animation-delay:.2s"></div>
+                               <div class="w-1 bg-blue-500 h-2 rounded-full wave-bar" style="animation-delay:.3s"></div>
+                               <div class="w-1 bg-blue-200 h-4 rounded-full wave-bar" style="animation-delay:.15s"></div>
+                           </div>
+                           <p class="text-xs text-blue-600 font-medium">${p.audio.duration}"</p>
+                       </div>
+                   </div>`
+                : '';
+            return `
+                <div class="glass-card p-6 flex flex-col">
+                    <div class="flex items-center gap-3 mb-3">
+                        <img src="${p.avatar}" class="w-11 h-11 rounded-full bg-blue-100">
+                        <div><h3 class="font-bold text-gray-800">${esc(p.user)}</h3><p class="text-xs text-gray-400">${p.time}</p></div>
+                    </div>
+                    ${p.content ? `<p class="text-gray-600 text-sm leading-relaxed mb-4">${esc(p.content)}</p>` : ''}
+                    ${imgHTML}${audioHTML}
+                    <div class="flex items-center gap-6 pt-3 border-t border-gray-100">
+                        <button data-act="like" class="flex items-center gap-1 hover:text-pink-500 transition-colors ${p.liked?'text-pink-500':''}">
+                            <i data-lucide="heart" class="w-4 h-4 ${p.liked?'fill-current':''}"></i> <span class="text-xs like-count">${fmtCount(p.likes)}</span>
+                        </button>
+                        <button data-act="comment" class="flex items-center gap-1 hover:text-blue-500 transition-colors">
+                            <i data-lucide="message-square" class="w-4 h-4"></i> <span class="text-xs">${p.comments.length}</span>
+                        </button>
+                        <button data-act="share" class="flex items-center gap-1 hover:text-gray-600 transition-colors">
+                            <i data-lucide="share-2" class="w-4 h-4"></i> <span class="text-xs">${fmtCount(p.shares)}</span>
+                        </button>
+                    </div>
+                </div>`;
+        }
+
+        function openPostDetail(id) {
+            const p = posts.find(x => x.id === id);
+            if (!p) return;
+            postDetailReturn = currentView() || 'home-content';
+            commentTargetId = id;
+            stopCurrentAudio();
+            $('#post-detail-body').innerHTML = postDetailHTML(p);
+            bindAudioBlock($('#post-detail-body').querySelector('[data-audio]'), p);
+            const body = $('#post-detail-body');
+            body.querySelector('[data-act="like"]').addEventListener('click', e => {
+                e.stopPropagation();
+                p.liked = !p.liked; p.likes += p.liked ? 1 : -1;
+                const btn = e.currentTarget;
+                btn.classList.toggle('text-pink-500', p.liked);
+                btn.classList.toggle('text-gray-400', !p.liked);
+                const icon = btn.querySelector('svg');
+                icon.classList.toggle('fill-current', p.liked);
+                btn.querySelector('.like-count').textContent = fmtCount(p.likes);
+                if (currentPostPlanet) renderPlanetPosts();
+            });
+            body.querySelector('[data-act="share"]').addEventListener('click', e => { e.stopPropagation(); p.shares++; toast('已分享给好友'); });
+            body.querySelector('[data-act="comment"]').addEventListener('click', e => { e.stopPropagation(); document.getElementById('detail-comment-input').focus(); });
+            renderDetailComments();
+            showView('post-detail-content');
+            refreshIcons();
+        }
+
+        function sendDetailComment() {
+            const input = document.getElementById('detail-comment-input');
+            const text = input.value.trim();
+            if (!text) return;
+            const p = posts.find(x => x.id === commentTargetId);
+            if (!p) return;
+            p.comments.push({ user:ME, avatar:AV('User'), text, time:'刚刚' });
+            input.value = '';
+            renderDetailComments();
+            if (currentPostPlanet) renderPlanetPosts();
+        }
+
+        // ============================================================
+        // 评论弹窗（保留，未在主流程调用）
         // ============================================================
         function openComment(postId) {
             commentTargetId = postId;
@@ -798,26 +928,32 @@
             $('#comment-modal').classList.remove('hidden');
         }
 
+        function commentListHTML(p) {
+            if (!p.comments.length) return `<p class="text-center text-gray-400 text-sm py-8">还没有评论，来抢沙发吧～</p>`;
+            return p.comments.map((c, i) => `
+                <div class="flex items-start gap-3">
+                    <img src="${c.avatar}" class="w-9 h-9 rounded-full bg-blue-100 flex-shrink-0">
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2">
+                            <h4 class="text-sm font-medium text-gray-800 truncate">${esc(c.user)}</h4>
+                            <span class="text-xs text-gray-400 flex-shrink-0">${esc(c.time)}</span>
+                        </div>
+                        <p class="text-sm text-gray-600 mt-0.5">${esc(c.text)}</p>
+                    </div>
+                    <button class="comment-like-btn ${c.liked?'text-pink-400':'text-gray-300'} hover:text-pink-400 transition-colors flex-shrink-0" data-ci="${i}"><i data-lucide="heart" class="w-4 h-4 ${c.liked?'fill-current':''}"></i></button>
+                </div>`).join('');
+        }
         function renderComments() {
             const p = posts.find(x => x.id === commentTargetId);
             $('#comment-total').textContent = `(${p.comments.length})`;
-            const list = $('#comment-list');
-            if (!p.comments.length) {
-                list.innerHTML = `<p class="text-center text-gray-400 text-sm py-8">还没有评论，来抢沙发吧～</p>`;
-            } else {
-                list.innerHTML = p.comments.map((c, i) => `
-                    <div class="flex items-start gap-3">
-                        <img src="${c.avatar}" class="w-9 h-9 rounded-full bg-blue-100 flex-shrink-0">
-                        <div class="flex-1 min-w-0">
-                            <div class="flex items-center gap-2">
-                                <h4 class="text-sm font-medium text-gray-800 truncate">${esc(c.user)}</h4>
-                                <span class="text-xs text-gray-400 flex-shrink-0">${esc(c.time)}</span>
-                            </div>
-                            <p class="text-sm text-gray-600 mt-0.5">${esc(c.text)}</p>
-                        </div>
-                        <button class="comment-like-btn ${c.liked?'text-pink-400':'text-gray-300'} hover:text-pink-400 transition-colors flex-shrink-0" data-ci="${i}"><i data-lucide="heart" class="w-4 h-4 ${c.liked?'fill-current':''}"></i></button>
-                    </div>`).join('');
-            }
+            $('#comment-list').innerHTML = commentListHTML(p);
+            refreshIcons();
+        }
+        function renderDetailComments() {
+            const p = posts.find(x => x.id === commentTargetId);
+            const total = document.getElementById('detail-comment-total');
+            if (total) total.textContent = `(${p.comments.length})`;
+            document.getElementById('detail-comment-list').innerHTML = commentListHTML(p);
             refreshIcons();
         }
 
@@ -1064,7 +1200,7 @@
         // ============================================================
         // 视图切换
         // ============================================================
-        const VIEW_IDS = ['home-content','planet-content','planet-detail-content','message-content','chat-content','profile-content','settings-content','add-post-content'];
+        const VIEW_IDS = ['home-content','planet-content','planet-detail-content','message-content','chat-content','profile-content','settings-content','post-detail-content','add-post-content'];
         function currentView() { return VIEW_IDS.find(id => !$('#'+id).classList.contains('hidden')); }
         let returnView = 'profile-content';
 
@@ -1165,6 +1301,24 @@
             if (icon) icon.classList.toggle('fill-current', c.liked);
         });
 
+        // 帖子详情页
+        $('#post-detail-back').addEventListener('click', () => showView(postDetailReturn));
+        $('#detail-comment-send').addEventListener('click', sendDetailComment);
+        $('#detail-comment-input').addEventListener('keydown', e => { if (e.key === 'Enter') sendDetailComment(); });
+        $('#detail-comment-list').addEventListener('click', e => {
+            const btn = e.target.closest('.comment-like-btn');
+            if (!btn) return;
+            const i = +btn.dataset.ci;
+            const p = posts.find(x => x.id === commentTargetId);
+            const c = p.comments[i];
+            if (!c) return;
+            c.liked = !c.liked;
+            btn.classList.toggle('text-pink-400', c.liked);
+            btn.classList.toggle('text-gray-300', !c.liked);
+            const icon = btn.querySelector('svg') || btn.querySelector('i');
+            if (icon) icon.classList.toggle('fill-current', c.liked);
+        });
+
         // 聊天发送
         $('#chat-send').addEventListener('click', sendChat);
         $('#chat-input').addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
@@ -1181,6 +1335,20 @@
             const card = e.target.closest('[data-goto]');
             if (card) openComment(+card.dataset.goto);
         });
+
+        // 从搜索结果进入帖子：切到所在分类、滚动并高亮定位
+        function gotoPost(id) {
+            const p = posts.find(x => x.id === id);
+            if (p) { currentCat = (p.cat && p.cat.length) ? p.cat[0] : 'recommend'; syncHomeCat(); }
+            renderFeed();
+            showView('home-content');
+            const card = document.querySelector(`[data-post-id="${id}"]`);
+            if (card) {
+                card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                card.classList.add('post-highlight');
+                setTimeout(() => card.classList.remove('post-highlight'), 1600);
+            }
+        }
 
         // 搜索
         $('#search-btn').addEventListener('click', () => {
@@ -1212,7 +1380,7 @@
                 </div>`).join('');
             $('#search-results').innerHTML = html || `<p class="text-center text-gray-400 text-sm py-8">未找到「${esc(q)}」相关结果</p>`;
             $$('[data-search-planet]').forEach(el => el.addEventListener('click', () => { $('#search-modal').classList.add('hidden'); openPlanet(el.dataset.searchPlanet); }));
-            $$('[data-search-post]').forEach(el => el.addEventListener('click', () => { $('#search-modal').classList.add('hidden'); goTab('home'); openComment(+el.dataset.searchPost); }));
+            $$('[data-search-post]').forEach(el => el.addEventListener('click', () => { $('#search-modal').classList.add('hidden'); gotoPost(+el.dataset.searchPost); }));
             refreshIcons();
         });
 
