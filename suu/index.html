@@ -129,6 +129,10 @@
             box-shadow: 0 2px 10px rgba(239,68,68,0.28);
             cursor: pointer;
         }
+        #chat-plus-btn { transition: transform .2s ease, color .2s ease; }
+        #chat-plus-btn.open { transform: rotate(45deg); color: #3b82f6; }
+        .voice-bar { width:3px; height:6px; background:#6366f1; border-radius:2px; animation: vbar .9s ease-in-out infinite; }
+        @keyframes vbar { 0%,100%{height:6px;} 50%{height:22px;} }
 
         .modal-overlay {
             position: fixed;
@@ -383,12 +387,23 @@
                 </button>
             </div>
             <div id="chat-emoji-panel" class="hidden mb-2 p-3 glass-card rounded-2xl grid grid-cols-8 gap-1.5"></div>
+            <div id="voice-overlay" class="hidden fixed bottom-28 left-1/2 -translate-x-1/2 z-[60] glass-card rounded-2xl px-5 py-3 flex items-center gap-3 shadow-2xl">
+                <div class="flex items-end gap-[3px] h-6" id="voice-bars">
+                    <span class="voice-bar" style="animation-delay:0s"></span>
+                    <span class="voice-bar" style="animation-delay:.15s"></span>
+                    <span class="voice-bar" style="animation-delay:.3s"></span>
+                    <span class="voice-bar" style="animation-delay:.45s"></span>
+                    <span class="voice-bar" style="animation-delay:.6s"></span>
+                </div>
+                <span id="voice-timer" class="text-sm text-gray-700 font-mono tabular-nums">0:00</span>
+                <span id="voice-tip" class="text-xs text-gray-400">松开发送 · 上滑取消</span>
+            </div>
             <div class="flex items-center glass-card p-2 rounded-full">
                 <div class="flex items-center">
                     <button class="p-2 text-gray-500 hover:text-blue-500 transition-colors flex-shrink-0" id="chat-plus-btn">
                         <i data-lucide="plus" class="w-5 h-5"></i>
                     </button>
-                    <button class="p-2 text-gray-500 hover:text-blue-500 transition-colors flex-shrink-0" id="chat-voice-btn">
+                    <button class="p-2 text-gray-500 hover:text-blue-500 transition-colors flex-shrink-0" id="chat-voice-btn" style="touch-action:none">
                         <i data-lucide="mic" class="w-5 h-5"></i>
                     </button>
                 </div>
@@ -1211,17 +1226,36 @@
                     pad = 'px-4 py-3';
                     bubbleCls = 'redpacket-bubble';
                     tailCls = mine ? 'rounded-br-md' : 'rounded-bl-md';
+                } else if (h.type === 'voice') {
+                    const secs = Math.max(1, Math.round(h.dur));
+                    const w = Math.min(200, 110 + secs * 5);
+                    body = `<div class="flex items-center gap-2" data-voice="1" data-src="${h.url || ''}" data-dur="${secs}" style="width:${w}px">
+                                <button class="voice-play w-8 h-8 rounded-full ${mine?'bg-white/25 text-white':'bg-indigo-100 text-indigo-500'} flex items-center justify-center flex-shrink-0">
+                                    <i data-lucide="play" class="w-4 h-4"></i>
+                                </button>
+                                <div class="flex-1 h-1.5 rounded-full ${mine?'bg-white/30':'bg-indigo-200'} overflow-hidden min-w-[60px]">
+                                    <div class="voice-prog h-full w-0 ${mine?'bg-white':'bg-indigo-500'}"></div>
+                                </div>
+                            </div>`;
+                    bubbleCls = mine ? 'chat-bubble-me' : 'chat-bubble-them';
+                    tailCls = mine ? 'rounded-br-md' : 'rounded-bl-md';
                 } else {
                     body = esc(h.text);
                     bubbleCls = mine ? 'chat-bubble-me' : 'chat-bubble-them';
                     tailCls = mine ? 'rounded-br-md' : 'rounded-bl-md';
                 }
+                const isVoice = h.type === 'voice';
+                const vsecs = isVoice ? Math.max(1, Math.round(h.dur)) : 0;
                 const tsCls = (h.type === 'redpacket') ? 'text-white/70' : (mine ? 'text-white/75' : 'text-indigo-400');
-                const tsMt = (h.type === 'image' || h.type === 'location' || h.type === 'redpacket') ? 'mt-1' : '';
+                const tsAlign = mine ? 'text-right' : 'text-left';
+                const tsMt = (h.type === 'image' || h.type === 'location' || h.type === 'redpacket' || isVoice) ? 'mt-1' : '';
+                const tsHtml = isVoice
+                    ? `<div class="flex items-center justify-between gap-3 text-[10px] ${tsCls} ${tsMt}"><span>${vsecs}"</span><span>${h.time}</span></div>`
+                    : `<div class="text-[10px] ${tsCls} ${tsAlign} ${tsMt}">${h.time}</div>`;
                 return `<div class="flex ${mine?'justify-end':'justify-start'}">
                     <div class="max-w-[80%] ${pad} rounded-2xl text-sm ${bubbleCls} ${tailCls}">
                         ${body}
-                        <div class="text-[10px] ${tsCls} text-left ${tsMt}">${h.time}</div>
+                        ${tsHtml}
                     </div>
                 </div>`;
             }).join('');
@@ -1286,6 +1320,16 @@
             const t = nowTime();
             m.history.push({ from:'me', type:'redpacket', text, time:t });
             m.last = '[红包] ' + text;
+            m.time = t;
+            renderChat(m);
+            autoReply(m);
+        }
+
+        function sendChatVoice(url, dur) {
+            const m = messages.find(x => x.id === activeChatId);
+            const t = nowTime();
+            m.history.push({ from:'me', type:'voice', url, dur, time:t });
+            m.last = '[语音]';
             m.time = t;
             renderChat(m);
             autoReply(m);
@@ -1592,13 +1636,82 @@
         // 聊天发送
         $('#chat-send').addEventListener('click', sendChat);
         $('#chat-input').addEventListener('keydown', e => { if (e.key === 'Enter') sendChat(); });
-        $('#chat-voice-btn').addEventListener('click', () => toast('🎤 按住说话（演示）'));
+        // 语音：按住说话，松开发送，上滑取消
+        let recState = null; // { start, cancel, real, stream, recorder, timer }
+        const voiceBtn = $('#chat-voice-btn');
+        function fmtVoice(ms){ const s = Math.floor(ms/1000); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; }
+        function voiceSetCancel(c){
+            if (!recState) return;
+            recState.cancel = c;
+            $('#voice-tip').textContent = c ? '松开取消' : '松开发送 · 上滑取消';
+            $('#voice-tip').classList.toggle('text-red-400', c);
+            $('#voice-overlay').classList.toggle('opacity-60', c);
+        }
+        function voiceStart(){
+            if (recState) return;
+            recState = { start: Date.now(), cancel:false, real:false, stream:null, recorder:null, timer:null };
+            $('#voice-overlay').classList.remove('hidden','opacity-60');
+            $('#voice-tip').textContent = '松开发送 · 上滑取消';
+            $('#voice-tip').classList.remove('text-red-400');
+            $('#voice-timer').textContent = '0:00';
+            recState.timer = setInterval(() => { $('#voice-timer').textContent = fmtVoice(Date.now()-recState.start); }, 200);
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder) {
+                navigator.mediaDevices.getUserMedia({ audio:true }).then(stream => {
+                    if (!recState) { stream.getTracks().forEach(t => t.stop()); return; }
+                    const startTime = Date.now();
+                    recState.stream = stream; recState.real = true;
+                    let discarded = false;
+                    let rec;
+                    try { rec = new MediaRecorder(stream); } catch(e) { recState.real = false; return; }
+                    recState.recorder = rec;
+                    recState.discardFn = () => { discarded = true; };
+                    const chunks = [];
+                    rec.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
+                    rec.onstop = () => {
+                        stream.getTracks().forEach(t => t.stop());
+                        if (discarded) return;
+                        const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
+                        sendChatVoice(URL.createObjectURL(blob), (Date.now()-startTime)/1000);
+                    };
+                    rec.start();
+                }).catch(() => { if (recState) recState.real = false; });
+            }
+        }
+        function voiceStop(){
+            if (!recState) return;
+            clearInterval(recState.timer);
+            const elapsed = Date.now() - recState.start;
+            const st = recState; recState = null;
+            $('#voice-overlay').classList.add('hidden');
+            if (st.cancel || elapsed < 400) {
+                if (st.discardFn) st.discardFn();
+                if (st.recorder && st.recorder.state !== 'inactive') st.recorder.stop();
+                else if (st.stream) st.stream.getTracks().forEach(t => t.stop());
+                return;
+            }
+            if (st.real && st.recorder) {
+                st.recorder.stop();
+            } else {
+                sendChatVoice(null, elapsed/1000);
+            }
+        }
+        voiceBtn.addEventListener('pointerdown', e => { e.preventDefault(); voiceStart(); window._vy = e.clientY; try { voiceBtn.setPointerCapture(e.pointerId); } catch(_) {} });
+        voiceBtn.addEventListener('pointermove', e => { if (!recState) return; voiceSetCancel(e.clientY < (window._vy||0) - 60); });
+        voiceBtn.addEventListener('pointerup', e => { if (recState) voiceStop(); });
+        voiceBtn.addEventListener('pointercancel', e => { if (recState) voiceStop(); });
+        // 兜底：部分浏览器不支持指针捕获时，用 window 监听保证上滑取消生效
+        window.addEventListener('pointermove', e => { if (!recState) return; voiceSetCancel(e.clientY < (window._vy||0) - 60); });
+        window.addEventListener('pointerup', () => { if (recState) voiceStop(); });
+        window.addEventListener('pointercancel', () => { if (recState) voiceStop(); });
 
         // 聊天二级操作面板
         $('#chat-plus-btn').addEventListener('click', () => {
             $('#chat-actions').classList.toggle('hidden');
             $('#chat-emoji-panel').classList.add('hidden');
         });
+        new MutationObserver(() => {
+            $('#chat-plus-btn').classList.toggle('open', !$('#chat-actions').classList.contains('hidden'));
+        }).observe($('#chat-actions'), { attributes:true, attributeFilter:['class'] });
         $('#chat-action-image').addEventListener('click', () => $('#chat-image-input').click());
         $('#chat-action-camera').addEventListener('click', () => $('#chat-camera-input').click());
         function bindImageInput(elId) {
@@ -1648,9 +1761,28 @@
             $('#chat-emoji-panel').classList.add('hidden');
         });
 
-        // 红包气泡点击领取（演示）
+        // 红包气泡点击领取（演示）+ 语音气泡播放
+        let voiceAudio = new Audio();
+        let voiceCurBtn = null;
+        function setVoiceBtn(btn, playing){ if(!btn) return; btn.innerHTML = `<i data-lucide="${playing?'pause':'play'}" class="w-4 h-4"></i>`; refreshIcons(); }
         $('#chat-box').addEventListener('click', e => {
-            if (e.target.closest('[data-redpacket]')) toast('🧧 红包已领取（演示）');
+            const rp = e.target.closest('[data-redpacket]');
+            if (rp) { toast('🧧 红包已领取（演示）'); return; }
+            const pbtn = e.target.closest('.voice-play');
+            if (!pbtn) return;
+            const wrap = pbtn.closest('[data-voice]');
+            const src = wrap.dataset.src;
+            if (!src) { toast('🔊 播放语音（演示）'); return; }
+            if (voiceCurBtn === pbtn && !voiceAudio.paused) { voiceAudio.pause(); return; }
+            if (voiceCurBtn && voiceCurBtn !== pbtn) setVoiceBtn(voiceCurBtn, false);
+            voiceCurBtn = pbtn;
+            voiceAudio.src = src;
+            voiceAudio.play().catch(() => toast('🔊 播放失败（演示）'));
+            setVoiceBtn(pbtn, true);
+            const prog = pbtn.parentElement.querySelector('.voice-prog');
+            voiceAudio.ontimeupdate = () => { if (prog) prog.style.width = Math.min(100, (voiceAudio.currentTime / (voiceAudio.duration || 1)) * 100) + '%'; };
+            voiceAudio.onended = () => { setVoiceBtn(pbtn, false); if (prog) prog.style.width = '0%'; voiceCurBtn = null; };
+            voiceAudio.onpause = () => { setVoiceBtn(pbtn, false); };
         });
 
         // 个人主页分类
