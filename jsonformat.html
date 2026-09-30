@@ -6,72 +6,196 @@
     <title>immmor JSON | 极客语法美化</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Inter:wght@400;500;600;700&display=swap');
+
         body {
-            background: radial-gradient(circle at top right, #1e293b, #0f172a, #000000);
+            background:
+                radial-gradient(1200px 600px at 100% -10%, rgba(96,165,250,0.10), transparent 60%),
+                radial-gradient(1000px 500px at -10% 110%, rgba(167,139,250,0.10), transparent 60%),
+                radial-gradient(circle at top right, #1e293b, #0f172a, #000000);
             min-height: 100vh;
             color: white;
             overflow: hidden;
+            font-family: 'Inter', system-ui, sans-serif;
         }
         .glass {
-            background: rgba(255, 255, 255, 0.03);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.035);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255,255,255,0.05);
         }
         .gradient-text {
             background: linear-gradient(90deg, #60a5fa, #a78bfa, #f472b6);
             -webkit-background-clip: text;
+            background-clip: text;
             -webkit-text-fill-color: transparent;
         }
-        /* JSON 高亮颜色 */
-        .json-key { color: #f472b6; }      /* 粉红 */
-        .json-string { color: #4ade80; }   /* 绿色 */
-        .json-number { color: #fbbf24; }   /* 琥珀色 */
-        .json-boolean { color: #60a5fa; }  /* 蓝色 */
-        .json-null { color: #94a3b8; }     /* 灰色 */
+
+        /* 统一按钮样式 */
+        .btn {
+            padding: 0.4rem 0.9rem;
+            border-radius: 0.6rem;
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: rgba(226, 232, 240, 0.85);
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            transition: all 0.18s ease;
+        }
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            border-color: rgba(255, 255, 255, 0.18);
+            transform: translateY(-1px);
+        }
+        .btn-accent {
+            background: linear-gradient(135deg, rgba(96,165,250,0.2), rgba(167,139,250,0.2));
+            border-color: rgba(167,139,250,0.35);
+            color: #e0e7ff;
+        }
+        .btn-accent:hover {
+            background: linear-gradient(135deg, rgba(96,165,250,0.32), rgba(167,139,250,0.32));
+            border-color: rgba(167,139,250,0.55);
+        }
+
+        .section-label {
+            font-size: 0.7rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.18em;
+            font-weight: 600;
+        }
+
+        /* 自定义滚动条 */
+        #json-output, textarea { scrollbar-width: thin; scrollbar-color: rgba(148,163,184,0.25) transparent; }
+        #json-output::-webkit-scrollbar, textarea::-webkit-scrollbar { width: 8px; height: 8px; }
+        #json-output::-webkit-scrollbar-thumb, textarea::-webkit-scrollbar-thumb {
+            background: rgba(148,163,184,0.25); border-radius: 8px;
+        }
+        #json-output::-webkit-scrollbar-thumb:hover, textarea::-webkit-scrollbar-thumb:hover {
+            background: rgba(148,163,184,0.45);
+        }
+
+        textarea {
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        textarea:focus {
+            border-color: rgba(96,165,250,0.5);
+            box-shadow: 0 0 0 3px rgba(96,165,250,0.12);
+        }
+
+        /* JSON 高亮颜色 (Material 风) */
+        .json-key     { color: #c792ea; }   /* 紫 */
+        .json-string  { color: #c3e88d; }   /* 绿 */
+        .json-number  { color: #f78c6c; }   /* 橙 */
+        .json-boolean { color: #82aaff; }   /* 蓝 */
+        .json-null    { color: #717cb4; font-style: italic; }  /* 灰蓝 */
 
         #json-output {
             white-space: pre-wrap;
-            word-wrap: break-word;
-            font-family: 'Fira Code', 'Monaco', monospace;
-            line-height: 1.6;
+            word-break: break-word;
+            font-family: 'Fira Code', 'Monaco', ui-monospace, monospace;
+            font-size: 13px;
+            line-height: 1.75;
         }
-        textarea {
-            scrollbar-width: thin;
-            scrollbar-color: rgba(255,255,255,0.1) transparent;
+
+        /* 可折叠 JSON 树 */
+        .node-line {
+            position: relative;
+            white-space: pre-wrap;
+            word-break: break-word;
+            padding: 1px 10px;
+            margin: 0 -10px;
+            border-radius: 6px;
+            transition: background 0.12s ease;
+        }
+        .node-line:hover { background: rgba(148, 163, 184, 0.07); }
+
+        /* 折叠 + / - 指示器 */
+        .json-node > .node-line:first-child .toggle {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 16px;
+            height: 16px;
+            margin: 0 4px 0 -1px;
+            border-radius: 4px;
+            cursor: pointer;
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            color: #cbd5e1;
+            user-select: none;
+            font-size: 13px;
+            line-height: 1;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.15s ease;
+        }
+        .json-node > .node-line:first-child .toggle:hover {
+            background: rgba(148, 163, 184, 0.18);
+            border-color: rgba(148, 163, 184, 0.6);
+            color: #f1f5f9;
+        }
+        .json-node > .node-line:first-child .toggle::before { content: "\2212"; }  /* − */
+        .json-node.collapsed > .node-line:first-child .toggle::before { content: "+"; }
+
+        /* 缩进引导线 */
+        .json-node > .children {
+            margin-left: 9px;
+            padding-left: 16px;
+            border-left: 1px solid rgba(148, 163, 184, 0.16);
+        }
+
+        .bracket { color: #89ddff; }
+        .preview {
+            display: none;
+            color: #64748b;
+            font-style: italic;
+            margin-left: 0.4em;
+            font-size: 0.85em;
+        }
+        .json-node.collapsed > .children { display: none; }
+        .json-node.collapsed > .node-line .preview { display: inline; }
+
+        /* 顶部标题图标 */
+        .logo-dot {
+            width: 10px; height: 10px; border-radius: 50%;
+            background: linear-gradient(135deg, #60a5fa, #f472b6);
+            box-shadow: 0 0 12px rgba(167,139,250,0.6);
         }
     </style>
 </head>
 <body class="flex flex-col h-screen">
 
     <nav class="h-16 glass flex justify-between items-center px-8 z-50">
-        <div class="flex items-center space-x-4">
+        <div class="flex items-center space-x-3">
+            <div class="logo-dot"></div>
             <span class="text-xl font-bold tracking-tighter gradient-text">immmor.JSON</span>
-            <div class="h-4 w-[1px] bg-white/10 mx-2"></div>
-        </div>
-        <div class="flex space-x-3">
-            <button onclick="copyRaw()" class="px-4 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-xs transition">复制</button>
+            <span class="section-label ml-3 hidden sm:inline">极客语法美化</span>
         </div>
     </nav>
 
     <main class="flex-1 flex flex-col md:flex-row overflow-hidden p-6 gap-6">
         
         <section class="flex-1 flex flex-col space-y-4">
-            <div class="flex justify-between items-center px-2">
-                <span class="text-xs text-gray-400 uppercase tracking-widest">原始数据输入</span>
-                <button onclick="clearAll()" class="text-xs text-gray-600 hover:text-red-400 transition">清空</button>
+            <div class="flex justify-between items-center px-1">
+                <span class="section-label">原始数据输入</span>
+                <button onclick="clearAll()" class="btn !py-1 !px-3">清空</button>
             </div>
             <textarea id="json-input" 
-                class="flex-1 w-full glass rounded-2xl p-6 text-sm font-mono outline-none focus:border-blue-500/50 transition resize-none bg-black/20"
+                class="flex-1 w-full glass rounded-2xl p-6 text-sm font-mono outline-none transition resize-none bg-black/20"
                 placeholder='在此处粘贴复杂的 JSON 字符串...'></textarea>
         </section>
 
         <section class="flex-1 flex flex-col space-y-4">
-            <div class="flex justify-between items-center px-2">
-                <span class="text-xs text-gray-400 uppercase tracking-widest">美化预览</span>
-                <span id="error-msg" class="text-xs text-red-500 font-medium"></span>
+            <div class="flex justify-between items-center px-1">
+                <span class="section-label">美化预览</span>
+                <div class="flex items-center space-x-2">
+                    <button onclick="copyRaw(this)" class="btn !py-1 !px-3">复制</button>
+                    <span id="error-msg" class="text-xs text-red-500 font-medium ml-1"></span>
+                </div>
             </div>
             <div class="flex-1 w-full glass rounded-2xl p-6 overflow-y-auto bg-black/40">
-                <pre id="json-output" class="text-sm"></pre>
+                <div id="json-output"></div>
             </div>
         </section>
     </main>
@@ -94,9 +218,8 @@
                 // 1. 解析 JSON (支持容错，处理一些非标准格式)
                 const jsonObj = JSON.parse(rawValue.replace(/'/g, '"'));
                 
-                // 2. 格式化并高亮
-                const formatted = JSON.stringify(jsonObj, null, 4);
-                outputArea.innerHTML = syntaxHighlight(formatted);
+                // 2. 渲染可折叠树形结构
+                outputArea.innerHTML = renderTree(jsonObj);
                 errorMsg.innerText = 'VALID JSON';
                 errorMsg.classList.replace('text-red-500', 'text-green-500');
             } catch (e) {
@@ -107,37 +230,116 @@
             }
         }
 
-        // 语法高亮正则表达式逻辑
-        function syntaxHighlight(json) {
-            json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
-                let cls = 'json-number';
-                if (/^"/.test(match)) {
-                    if (/:$/.test(match)) {
-                        cls = 'json-key';
-                    } else {
-                        cls = 'json-string';
-                    }
-                } else if (/true|false/.test(match)) {
-                    cls = 'json-boolean';
-                } else if (/null/.test(match)) {
-                    cls = 'json-null';
-                }
-                return '<span class="' + cls + '">' + match + '</span>';
-            });
+        function escapeHtml(s) {
+            return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         }
 
-        function copyRaw() {
+        // 渲染可折叠 JSON 树
+        function renderTree(value) {
+            return buildNode(value, null, 0, true);
+        }
+
+        function buildNode(value, key, indent, isLast) {
+            const comma = isLast ? '' : ',';
+            const keyHtml = key !== null
+                ? '<span class="json-key">"' + escapeHtml(key) + '"</span>: '
+                : '';
+
+            // null
+            if (value === null) {
+                return '<div class="node-line">' +
+                    keyHtml + '<span class="json-null">null</span>' + comma + '</div>';
+            }
+
+            // object / array
+            if (typeof value === 'object') {
+                const isArr = Array.isArray(value);
+                const entries = isArr
+                    ? value.map(function (v) { return [null, v]; })
+                    : Object.entries(value);
+                const open = isArr ? '[' : '{';
+                const close = isArr ? ']' : '}';
+
+                if (entries.length === 0) {
+                    return '<div class="node-line">' +
+                        keyHtml + '<span class="bracket">' + open + close + '</span>' + comma + '</div>';
+                }
+
+                const count = entries.length;
+                const summary = isArr ? count + ' 项' : count + ' 个字段';
+                let childrenHtml = '';
+                for (let i = 0; i < entries.length; i++) {
+                    childrenHtml += buildNode(entries[i][1], entries[i][0], indent + 1, i === count - 1);
+                }
+
+                return '<div class="json-node">' +
+                    '<div class="node-line">' +
+                        '<span class="toggle" onclick="toggleNode(this)"></span>' +
+                        keyHtml +
+                        '<span class="bracket">' + open + '</span>' +
+                        '<span class="preview">' + summary + '</span>' +
+                    '</div>' +
+                    '<div class="children">' + childrenHtml + '</div>' +
+                    '<div class="node-line">' +
+                        '<span class="bracket">' + close + '</span>' + comma +
+                    '</div>' +
+                '</div>';
+            }
+
+            // 基本类型
+            let cls, txt;
+            if (typeof value === 'string') { cls = 'json-string'; txt = '"' + escapeHtml(value) + '"'; }
+            else if (typeof value === 'number') { cls = 'json-number'; txt = value; }
+            else if (typeof value === 'boolean') { cls = 'json-boolean'; txt = value; }
+            return '<div class="node-line">' +
+                keyHtml + '<span class="' + cls + '">' + txt + '</span>' + comma + '</div>';
+        }
+
+        // 折叠 / 展开单个节点
+        function toggleNode(el) {
+            const node = el.closest('.json-node');
+            node.classList.toggle('collapsed');
+        }
+
+        function copyRaw(btn) {
             const raw = inputArea.value;
+            let text;
             try {
                 const jsonObj = JSON.parse(raw);
-                const formatted = JSON.stringify(jsonObj, null, 4);
-                navigator.clipboard.writeText(formatted);
-                alert('已复制格式化后的文本');
+                text = JSON.stringify(jsonObj, null, 4);
             } catch (e) {
-                navigator.clipboard.writeText(raw);
-                alert('已复制原始文本');
+                text = raw;
             }
+            const done = function () {
+                if (btn) {
+                    const old = btn.innerText;
+                    btn.innerText = '已复制';
+                    btn.classList.add('btn-accent');
+                    setTimeout(function () {
+                        btn.innerText = old;
+                        btn.classList.remove('btn-accent');
+                    }, 1200);
+                }
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(done).catch(function () {
+                    fallbackCopy(text, done);
+                });
+            } else {
+                fallbackCopy(text, done);
+            }
+        }
+
+        function fallbackCopy(text, done) {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand('copy'); } catch (e) {}
+            document.body.removeChild(ta);
+            if (done) done();
         }
 
         function clearAll() {
