@@ -1540,7 +1540,7 @@ export default {
 
           const now = new Date();
           const expireDate = user.v_expire_date ? new Date(user.v_expire_date.replace(' ', 'T') + 'Z') : null;
-          // 增加流量必须依附于有效的月付/年付套餐，过期时间跟着当前 VIP 过期时间走
+          // 增加流量必须依附于有效的月付/年付套餐；额外流量有效期不得超过 VIP 本身有效期
           if (!expireDate || expireDate <= now) {
             return resJson({ code: 400, msg: '请先开通有效的VIP套餐后再增加流量' }, 400);
           }
@@ -1549,10 +1549,11 @@ export default {
             return resJson({ code: 400, msg: '余额不足，请先充值', balance: user.balance, required: addPrice }, 400);
           }
 
-          // 过期时间跟着当前界面所选套餐走：月付 30 天、年付 365 天（从购买当下起算）
+          // 额外流量有效期 = min(购买当下 + 套餐时长, VIP 过期日)，确保不超过 VIP 本身有效期
           const dur = parseInt(duration, 10) === 365 ? 365 : 30;
           const isAnnual = dur === 365;
-          const bonusExpire = new Date(now.getTime() + dur * 24 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+          const packageExpire = new Date(now.getTime() + dur * 24 * 60 * 60 * 1000);
+          const bonusExpire = (packageExpire < expireDate ? packageExpire : expireDate).toISOString().slice(0, 19).replace('T', ' ');
 
           // 月/年独立两个流量桶，互不覆盖；购买时若桶已过期则先清零再累加
           const qKey = isAnnual ? 'bonus_quota_annual' : 'bonus_quota_monthly';

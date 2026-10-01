@@ -3021,10 +3021,14 @@
         };
 
         // ==================== 增加流量功能 ====================
-        const addTraffic = async (username, price = 10.00, duration = 30) => {
+        const addTraffic = async (username, price = 10.00, duration = 30, daysRemaining = 0) => {
             const addGb = 150;
-            const confirmMsg = (translations[currentLang]?.alert_confirm_add_traffic || '确定要增加 {gb}GB 流量吗？将从余额扣除 ¥{price}，有效期跟随当前VIP到期时间。')
+            let confirmMsg = (translations[currentLang]?.alert_confirm_add_traffic || '确定要增加 {gb}GB 额外流量吗？将从余额扣除 ¥{price}，有效期不超过 VIP 剩余有效期。')
                 .replace('{gb}', addGb).replace('{price}', price.toFixed(2));
+            if (daysRemaining > 0 && daysRemaining < duration) {
+                const warn = translations[currentLang]?.alert_add_traffic_vip_short || '注意：你的 VIP 仅剩 {days} 天，本次额外流量有效期将按 {days} 天计算。';
+                confirmMsg += '\n\n' + warn.replace('{days}', daysRemaining);
+            }
             if (!confirm(confirmMsg)) return;
 
             try {
@@ -3122,12 +3126,13 @@
                                                 <div><span data-i18n="vip_available_quota">可用流量</span>: ${(vipInfo.monthly_quota || 153600) / 1024}GB(<span data-i18n="vip_quota_reset">30天重置</span>)</div>
                                                 <details class="mt-0">
                                                     <summary class="cursor-pointer select-none text-sm font-bold text-[var(--neon-orange)] flex items-center justify-center gap-1"><span class="vip-extra-toggle">+</span><span data-i18n="vip_extra_traffic">增加额外流量</span></summary>
-                                                    <div class="text-center px-2 md:px-3 pt-1 pb-1">
-                                                        <div class="text-sm text-[var(--neon-orange)] space-y-1">
-                                                            <div><span data-i18n="vip_extra_traffic_monthly">月额外流量</span>: ${((vipInfo.bonus_quota_monthly || 0) / 1024).toFixed(0)}GB${vipInfo.bonus_expire_monthly ? '（过期: ' + new Date(vipInfo.bonus_expire_monthly).toLocaleDateString() + '）' : ''}</div>
-                                                            <div><span data-i18n="vip_extra_traffic_annual">年额外流量</span>: ${((vipInfo.bonus_quota_annual || 0) / 1024).toFixed(0)}GB${vipInfo.bonus_expire_annual ? '（过期: ' + new Date(vipInfo.bonus_expire_annual).toLocaleDateString() + '）' : ''}</div>
+                                                    <div class="text-center">
+                                                        <div class="text-sm text-[var(--neon-orange)]">
+                                                            <div><span data-i18n="vip_extra_traffic_monthly">月额外流量</span>: ${((vipInfo.bonus_quota_monthly || 0) / 1024).toFixed(0)}GB${vipInfo.bonus_expire_monthly ? (dict.vip_bonus_expire ? dict.vip_bonus_expire.replace('{date}', new Date(vipInfo.bonus_expire_monthly).toLocaleDateString()) : '（过期: ' + new Date(vipInfo.bonus_expire_monthly).toLocaleDateString() + '）') : ''}</div>
+                                                            <div><span data-i18n="vip_extra_traffic_annual">年额外流量</span>: ${((vipInfo.bonus_quota_annual || 0) / 1024).toFixed(0)}GB${vipInfo.bonus_expire_annual ? (dict.vip_bonus_expire ? dict.vip_bonus_expire.replace('{date}', new Date(vipInfo.bonus_expire_annual).toLocaleDateString()) : '（过期: ' + new Date(vipInfo.bonus_expire_annual).toLocaleDateString() + '）') : ''}</div>
                                                         </div>
-                                                        <button onclick="addTraffic('${userInfo.username}', ${price}, ${duration})" class="mt-1 w-full bg-[var(--neon-orange)] text-black py-2 font-bold hover:opacity-90">
+                                                        <div class="max-w-[340px] mx-auto text-[10px] text-zinc-500 leading-relaxed">${dict.vip_bonus_expire_note || '额外流量自购买之日起 30 天（月付）/ 365 天（年付）后过期；同一类型再次购买会从新购买时间重新计算，未过期部分累计叠加。'}</div>
+                                                        <button onclick="addTraffic('${userInfo.username}', ${price}, ${duration}, ${vipInfo.days_remaining})" class="mt-1 w-full max-w-[340px] mx-auto block bg-[var(--neon-orange)] text-black py-2 font-bold hover:opacity-90">
                                                             ${dict.vip_add_traffic_btn ? dict.vip_add_traffic_btn.replace('{price}', price.toFixed(2)) : '+150GB 流量 · ¥' + price.toFixed(2)}
                                                         </button>
                                                     </div>
@@ -3141,7 +3146,7 @@
                                                     </label>
                                                 </div>
                                                 <div class="mt-1 text-center text-[var(--neon-orange)] text-xs font-bold" data-i18n="vip_auto_renew_bonus">🎁 开启自动续费，每次自动续费额外赠送 2 天！</div>
-                                                <div id="renew-insufficient-tip" class="hidden mt-2 max-w-[280px] mx-auto p-2 bg-amber-500/10 border border-amber-500/40 rounded text-amber-300 text-xs text-center leading-relaxed">
+                                                <div id="renew-insufficient-tip" class="hidden mt-2 max-w-[340px] mx-auto p-2 bg-amber-500/10 border border-amber-500/40 rounded text-amber-300 text-xs text-center leading-relaxed">
                                                     <span data-i18n="vip_renew_insufficient_tip">温馨提示：您的余额不足以续购，开启后到期将无法自动扣款。</span><a href="https://funbua.uk/vpay" class="inline-block ml-1 align-middle bg-[var(--neon-green)] text-black text-[10px] leading-none py-0.5 px-2 font-bold hover:opacity-90 js-recharge" data-i18n="nav_recharge">充值</a>
                                                 </div>
                                                 <div class="mt-4 flex gap-2 justify-center">
