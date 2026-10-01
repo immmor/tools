@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>灵犀健康 AI - 智能问诊助手</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Chart.js for health stats -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Custom Font: Inter + Noto Sans SC -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        fresh: {
+                            50: '#f0fdf9',
+                            100: '#ccfbf1',
+                            200: '#99f6e4',
+                            300: '#5eead4',
+                            400: '#2dd4bf',
+                            500: '#14b8a6',
+                            600: '#0d9488',
+                        },
+                        sky: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            200: '#bae6fd',
+                            300: '#7dd3fc',
+                            500: '#0ea5e9',
+                        },
+                        macaron: {
+                            pink: '#FDF2F8',
+                            mint: '#ECFDF5',
+                            blue: '#F0F9FF',
+                            purple: '#F5F3FF',
+                            yellow: '#FEFCE8',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'Noto Sans SC', 'sans-serif'],
+                    },
+                    boxShadow: {
+                        'soft': '0 10px 30px -10px rgba(186, 230, 253, 0.4)',
+                        'card': '0 4px 20px -2px rgba(148, 163, 184, 0.08), 0 2px 6px -1px rgba(148, 163, 184, 0.04)',
+                        'float': '0 20px 40px -15px rgba(20, 184, 166, 0.15)',
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        /* Awwwards Style Custom Enhancements */
+        body {
+            background: linear-gradient(135deg, #F0F9FF 0%, #ECFDF5 50%, #F5F3FF 100%);
+            background-attachment: fixed;
+            font-family: 'Inter', 'Noto Sans SC', sans-serif;
+        }
+
+        /* Glassmorphism background */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.75);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.9);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(167, 243, 208, 0.5);
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(45, 212, 191, 0.7);
+        }
+
+        /* Typing effect cursor */
+        .typing-cursor::after {
+            content: '│';
+            animation: blink 1s infinite;
+            color: #14b8a6;
+            font-weight: bold;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        /* Voice Wave Animation */
+        .wave-bar {
+            animation: wave 1.2s ease-in-out infinite alternate;
+        }
+        .wave-bar:nth-child(2) { animation-delay: 0.2s; }
+        .wave-bar:nth-child(3) { animation-delay: 0.4s; }
+        .wave-bar:nth-child(4) { animation-delay: 0.6s; }
+
+        @keyframes wave {
+            0% { height: 4px; }
+            100% { height: 24px; }
+        }
+
+        /* Pulse aura */
+        @keyframes soft-pulse {
+            0%, 100% { transform: scale(1); opacity: 0.4; }
+            50% { transform: scale(1.08); opacity: 0.7; }
+        }
+        .animate-soft-pulse {
+            animation: soft-pulse 4s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body class="h-full text-slate-700 antialiased overflow-hidden selection:bg-teal-100 selection:text-teal-800">
+
+    <div class="flex h-full w-full p-2 sm:p-4 md:p-6 gap-4 md:gap-6 relative">
+        
+        <!-- Mobile Sidebar Drawer Overlay -->
+        <div id="sidebar-overlay" class="fixed inset-0 bg-slate-900/20 backdrop-blur-sm z-40 hidden md:hidden transition-opacity duration-300" onclick="toggleMobileSidebar()"></div>
+
+        <!-- LEFT SIDEBAR / NAVIGATION -->
+        <aside id="left-sidebar" class="fixed md:static inset-y-0 left-0 w-72 z-50 transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out flex flex-col glass-panel rounded-3xl shadow-soft p-5 shrink-0">
+            <!-- App Logo & Title -->
+            <div class="flex items-center gap-3 px-2 py-1 mb-6">
+                <div class="relative flex items-center justify-center w-11 h-11 rounded-2xl bg-gradient-to-tr from-teal-400 to-sky-300 text-white shadow-md shadow-teal-200">
+                    <i data-lucide="heart-pulse" class="w-6 h-6"></i>
+                    <span class="absolute -top-1 -right-1 flex h-3 w-3">
+                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75"></span>
+                      <span class="relative inline-flex rounded-full h-3 w-3 bg-teal-500"></span>
+                    </span>
+                </div>
+                <div>
+                    <h1 class="font-bold text-slate-800 text-lg tracking-tight flex items-center gap-1.5">
+                        灵犀健康 <span class="text-xs px-2 py-0.5 rounded-full bg-teal-100 text-teal-700 font-medium">AI Pro</span>
+                    </h1>
+                    <p class="text-xs text-slate-400 font-normal">极简智能问诊系统</p>
+                </div>
+            </div>
+
+            <!-- New Chat Button -->
+            <button onclick="resetChat()" class="w-full py-3 px-4 mb-6 rounded-2xl bg-gradient-to-r from-teal-500 to-sky-500 text-white font-medium text-sm flex items-center justify-center gap-2 shadow-soft hover:shadow-float hover:scale-[1.02] active:scale-[0.98] transition-all duration-200">
+                <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                <span>开启新对话</span>
+            </button>
+
+            <!-- Mode Selector Nav -->
+            <div class="mb-6">
+                <p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">问诊模式</p>
+                <nav class="space-y-1">
+                    <button onclick="switchMode(this, 'quick')" class="nav-mode-btn active w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all bg-white/80 text-teal-600 shadow-sm border border-teal-100">
+                        <i data-lucide="sparkles" class="w-4 h-4"></i>
+                        <span>快速全科问诊</span>
+                    </button>
+                    <button onclick="switchMode(this, 'report')" class="nav-mode-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium text-slate-600 hover:bg-white/50 transition-all">
+                        <i data-lucide="file-text" class="w-4 h-4"></i>
+                        <span>体检报告解读</span>
+                    </button>
+                    <button onclick="switchMode(this, 'mind')" class="nav-mode-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium text-slate-600 hover:bg-white/50 transition-all">
+                        <i data-lucide="smile" class="w-4 h-4"></i>
+                        <span>心理疏导陪伴</span>
+                    </button>
+                    <button onclick="switchMode(this, 'medicine')" class="nav-mode-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium text-slate-600 hover:bg-white/50 transition-all">
+                        <i data-lucide="pill" class="w-4 h-4"></i>
+                        <span>智能用药指导</span>
+                    </button>
+                </nav>
+            </div>
+
+            <!-- History Section -->
+            <div class="flex-1 overflow-y-auto min-h-0 pr-1 -mr-1">
+                <p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">近期咨询历史</p>
+                <div class="space-y-1.5 text-xs">
+                    <a href="#" class="block p-2.5 rounded-xl hover:bg-white/60 text-slate-600 hover:text-teal-600 transition truncate">
+                        <div class="font-medium truncate">夜间阵发性咳嗽与咽痛</div>
+                        <div class="text-[10px] text-slate-400 mt-0.5">昨天 22:15</div>
+                    </a>
+                    <a href="#" class="block p-2.5 rounded-xl hover:bg-white/60 text-slate-600 hover:text-teal-600 transition truncate">
+                        <div class="font-medium truncate">血常规报告单中白细胞偏高解读</div>
+                        <div class="text-[10px] text-slate-400 mt-0.5">10月24日</div>
+                    </a>
+                    <a href="#" class="block p-2.5 rounded-xl hover:bg-white/60 text-slate-600 hover:text-teal-600 transition truncate">
+                        <div class="font-medium truncate">布洛芬与乙酰氨基酚间隔时间</div>
+                        <div class="text-[10px] text-slate-400 mt-0.5">10月18日</div>
+                    </a>
+                </div>
+            </div>
+
+            <!-- User Profile Widget Footer -->
+            <div class="pt-4 mt-auto border-t border-slate-100 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-full bg-gradient-to-tr from-rose-200 to-orange-100 flex items-center justify-center text-rose-600 font-semibold text-xs border border-white shadow-sm">
+                        林
+                    </div>
+                    <div>
+                        <p class="text-xs font-semibold text-slate-700">林晓微</p>
+                        <p class="text-[10px] text-slate-400">28岁 · 女 · 健康档案已同步</p>
+                    </div>
+                </div>
+                <button class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-white/60 transition">
+                    <i data-lucide="settings" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </aside>
+
+        <!-- MAIN CHAT AREA -->
+        <main class="flex-1 flex flex-col h-full rounded-3xl glass-panel shadow-soft relative overflow-hidden">
+            
+            <!-- Top Header Bar -->
+            <header class="h-16 px-4 sm:px-6 flex items-center justify-between border-b border-white/60 shrink-0">
+                <div class="flex items-center gap-3">
+                    <button onclick="toggleMobileSidebar()" class="md:hidden p-2 text-slate-500 hover:bg-white/60 rounded-xl">
+                        <i data-lucide="menu" class="w-5 h-5"></i>
+                    </button>
+                    <div class="flex items-center gap-2">
+                        <div class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></div>
+                        <span id="current-mode-title" class="font-semibold text-slate-700 text-sm sm:text-base">全科问诊助手在线</span>
+                    </div>
+                    <span class="hidden sm:inline-flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded-full bg-teal-50 text-teal-600 border border-teal-100">
+                        <i data-lucide="shield-check" class="w-3 h-3"></i> 医疗知识库 v4.2 认证
+                    </span>
+                </div>
+
+                <!-- Header Actions -->
+                <div class="flex items-center gap-2">
+                    <button onclick="toggleHealthPanel()" class="xl:hidden p-2 text-slate-600 hover:bg-white/80 rounded-xl flex items-center gap-1.5 text-xs font-medium border border-white/80 shadow-sm">
+                        <i data-lucide="activity" class="w-4 h-4 text-teal-500"></i>
+                        <span class="hidden sm:inline">健康档案</span>
+                    </button>
+                    <button class="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-white/60 transition" title="清空对话">
+                        <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                    </button>
+                    <button class="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-white/60 transition" title="导出诊断记录">
+                        <i data-lucide="download" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Chat Scrollable Body -->
+            <div id="chat-messages" class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+                
+                <!-- Welcome Card -->
+                <div id="welcome-card" class="max-w-2xl mx-auto glass-card p-6 rounded-3xl border border-white/80 shadow-card text-center my-4 transition-all duration-300">
+                    <div class="w-16 h-16 rounded-3xl bg-gradient-to-tr from-sky-200 via-teal-100 to-emerald-200 flex items-center justify-center mx-auto mb-4 shadow-inner text-teal-600">
+                        <i data-lucide="bot" class="w-8 h-8"></i>
+                    </div>
+                    <h2 class="text-xl font-bold text-slate-800 mb-2">您好，晓微！我是您的 AI 随身医师</h2>
+                    <p class="text-xs sm:text-sm text-slate-500 mb-6 leading-relaxed">
+                        基于权威医学知识图谱构建。您可以描述身心症状、上传检查报告，或询问日常用药指导。
+                    </p>
+
+                    <!-- Quick Suggestions Grid -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-left">
+                        <button onclick="sendQuickPrompt('我这几天晚上经常咳嗽，伴有轻微低烧，该怎么办？')" class="p-3.5 rounded-2xl bg-white/70 hover:bg-white hover:shadow-md transition-all border border-slate-100 group flex items-start gap-3">
+                            <div class="p-2 rounded-xl bg-amber-50 text-amber-500 group-hover:scale-110 transition">
+                                <i data-lucide="thermometer" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <div class="text-xs font-semibold text-slate-700 group-hover:text-teal-600">夜间咳嗽与低烧</div>
+                                <div class="text-[11px] text-slate-400 mt-0.5">分析可能病因与居家处置建议</div>
+                            </div>
+                        </button>
+
+                        <button onclick="sendQuickPrompt('帮我解读一下体检报告里，偏高的数据项有哪些含义？')" class="p-3.5 rounded-2xl bg-white/70 hover:bg-white hover:shadow-md transition-all border border-slate-100 group flex items-start gap-3">
+                            <div class="p-2 rounded-xl bg-blue-50 text-blue-500 group-hover:scale-110 transition">
+                                <i data-lucide="file-search" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <div class="text-xs font-semibold text-slate-700 group-hover:text-teal-600">体检异常项快速解读</div>
+                                <div class="text-[11px] text-slate-400 mt-0.5">上传或输入指标数据</div>
+                            </div>
+                        </button>
+
+                        <button onclick="sendQuickPrompt('最近压力大睡不着觉，伴有偏头痛，有什么调理建议？')" class="p-3.5 rounded-2xl bg-white/70 hover:bg-white hover:shadow-md transition-all border border-slate-100 group flex items-start gap-3">
+                            <div class="p-2 rounded-xl bg-purple-50 text-purple-500 group-hover:scale-110 transition">
+                                <i data-lucide="moon" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <div class="text-xs font-semibold text-slate-700 group-hover:text-teal-600">失眠与偏头痛疏导</div>
+                                <div class="text-[11px] text-slate-400 mt-0.5">心理放松与非药物缓解</div>
+                            </div>
+                        </button>
+
+                        <button onclick="sendQuickPrompt('皮肤突然出现红色痒疹，手背较明显，请问可能是什么原因？')" class="p-3.5 rounded-2xl bg-white/70 hover:bg-white hover:shadow-md transition-all border border-slate-100 group flex items-start gap-3">
+                            <div class="p-2 rounded-xl bg-rose-50 text-rose-500 group-hover:scale-110 transition">
+                                <i data-lucide="sparkle" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <div class="text-xs font-semibold text-slate-700 group-hover:text-teal-600">皮肤急发红疹排查</div>
+                                <div class="text-[11px] text-slate-400 mt-0.5">支持拍摄照片进行辅助评估</div>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Chat Items will be inserted here dynamically -->
+                <div id="messages-container" class="space-y-6"></div>
+
+            </div>
+
+            <!-- Input Control Area -->
+            <div class="p-3 sm:p-5 border-t border-white/60 bg-white/40 backdrop-blur-md relative shrink-0">
+                
+                <!-- Attachment Previews Container -->
+                <div id="attachment-preview" class="hidden mb-3 flex items-center gap-2 overflow-x-auto pb-1">
+                    <!-- Dynamic preview item -->
+                </div>
+
+                <!-- Main Input Bar -->
+                <div class="relative flex items-end gap-2 bg-white/90 rounded-2xl p-2 shadow-card border border-slate-100 focus-within:border-teal-300 focus-within:ring-2 focus-within:ring-teal-100 transition-all">
+                    
+                    <!-- Left Tools (Upload, Voice) -->
+                    <div class="flex items-center gap-1 pl-1 pb-1">
+                        <label class="p-2 text-slate-400 hover:text-teal-500 hover:bg-slate-50 rounded-xl cursor-pointer transition" title="上传报告或患处图片">
+                            <i data-lucide="paperclip" class="w-5 h-5"></i>
+                            <input type="file" id="file-input" class="hidden" accept="image/*" onchange="handleFileUpload(event)">
+                        </label>
+                        <button id="voice-btn" onclick="toggleVoiceInput()" class="p-2 text-slate-400 hover:text-teal-500 hover:bg-slate-50 rounded-xl transition relative" title="语音问诊">
+                            <i data-lucide="mic" class="w-5 h-5"></i>
+                        </button>
+                    </div>
+
+                    <!-- Text Area Input -->
+                    <textarea id="user-input" rows="1" placeholder="请详细描述您的症状、持续时间或健康疑问..." class="flex-1 max-h-32 bg-transparent text-xs sm:text-sm text-slate-700 placeholder-slate-400 resize-none border-none focus:outline-none py-2 px-1" onkeydown="handleKeyDown(event)"></textarea>
+
+                    <!-- Send Button -->
+                    <button onclick="sendMessage()" id="send-btn" class="p-2.5 rounded-xl bg-gradient-to-tr from-teal-500 to-sky-500 text-white shadow-soft hover:shadow-float hover:scale-105 active:scale-95 transition-all">
+                        <i data-lucide="send" class="w-4 h-4"></i>
+                    </button>
+                </div>
+
+                <!-- Voice Recording Dynamic Modal Overlay inside Input Area -->
+                <div id="voice-overlay" class="hidden absolute inset-0 bg-white/95 rounded-2xl flex items-center justify-between px-6 z-10 border border-teal-200">
+                    <div class="flex items-center gap-3">
+                        <div class="w-3 h-3 rounded-full bg-rose-500 animate-ping"></div>
+                        <span class="text-xs font-medium text-slate-600">正在倾听您的讲话...</span>
+                        <div class="flex items-center gap-1 h-6 ml-2">
+                            <div class="w-1 bg-teal-400 rounded-full wave-bar h-2"></div>
+                            <div class="w-1 bg-teal-500 rounded-full wave-bar h-4"></div>
+                            <div class="w-1 bg-sky-400 rounded-full wave-bar h-6"></div>
+                            <div class="w-1 bg-emerald-400 rounded-full wave-bar h-3"></div>
+                        </div>
+                    </div>
+                    <button onclick="toggleVoiceInput()" class="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-medium transition">
+                        完成输入
+                    </button>
+                </div>
+
+                <!-- Disclaimer Footer -->
+                <div class="mt-2 text-center">
+                    <p class="text-[10px] text-slate-400 flex items-center justify-center gap-1">
+                        <i data-lucide="alert-circle" class="w-3 h-3 text-amber-400"></i>
+                        AI提示：本回复仅供健康科普与分诊参考，不能替代线下医师诊断。急重症请立即就医。
+                    </p>
+                </div>
+            </div>
+
+        </main>
+
+        <!-- RIGHT SIDEBAR / HEALTH DASHBOARD (Desktop) -->
+        <aside id="right-panel" class="fixed xl:static inset-y-0 right-0 w-80 z-40 transform translate-x-full xl:translate-x-0 transition-transform duration-300 ease-in-out flex flex-col gap-4 shrink-0">
+            
+            <!-- Health Profile Card -->
+            <div class="glass-panel rounded-3xl p-5 shadow-soft">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                        <i data-lucide="user-check" class="w-4 h-4 text-teal-500"></i>
+                        患者实时健康档案
+                    </h3>
+                    <span class="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">指标正常</span>
+                </div>
+
+                <!-- Key Vitals Grid -->
+                <div class="grid grid-cols-2 gap-2.5 mb-4">
+                    <div class="p-3 rounded-2xl bg-white/60 border border-white/80 shadow-sm">
+                        <div class="flex items-center justify-between text-slate-400 text-[11px] mb-1">
+                            <span>心率</span>
+                            <i data-lucide="heart" class="w-3.5 h-3.5 text-rose-400"></i>
+                        </div>
+                        <div class="text-base font-bold text-slate-800">72 <span class="text-[10px] font-normal text-slate-400">bpm</span></div>
+                    </div>
+
+                    <div class="p-3 rounded-2xl bg-white/60 border border-white/80 shadow-sm">
+                        <div class="flex items-center justify-between text-slate-400 text-[11px] mb-1">
+                            <span>血压</span>
+                            <i data-lucide="activity" class="w-3.5 h-3.5 text-sky-400"></i>
+                        </div>
+                        <div class="text-base font-bold text-slate-800">118/78 <span class="text-[10px] font-normal text-slate-400">mmHg</span></div>
+                    </div>
+
+                    <div class="p-3 rounded-2xl bg-white/60 border border-white/80 shadow-sm">
+                        <div class="flex items-center justify-between text-slate-400 text-[11px] mb-1">
+                            <span>昨日睡眠</span>
+                            <i data-lucide="moon" class="w-3.5 h-3.5 text-indigo-400"></i>
+                        </div>
+                        <div class="text-base font-bold text-slate-800">7.2 <span class="text-[10px] font-normal text-slate-400">小时</span></div>
+                    </div>
+
+                    <div class="p-3 rounded-2xl bg-white/60 border border-white/80 shadow-sm">
+                        <div class="flex items-center justify-between text-slate-400 text-[11px] mb-1">
+                            <span>步数</span>
+                            <i data-lucide="footprints" class="w-3.5 h-3.5 text-emerald-400"></i>
+                        </div>
+                        <div class="text-base font-bold text-slate-800">6,420 <span class="text-[10px] font-normal text-slate-400">步</span></div>
+                    </div>
+                </div>
+
+                <!-- Chart Section -->
+                <div class="bg-white/50 rounded-2xl p-3 border border-white/80">
+                    <div class="text-[11px] font-medium text-slate-500 mb-2 flex justify-between items-center">
+                        <span>7天心率变化趋势</span>
+                        <span class="text-[10px] text-teal-600 font-normal">平均 74 bpm</span>
+                    </div>
+                    <div class="h-24 w-full">
+                        <canvas id="healthChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Smart Department Recommendation -->
+            <div class="glass-panel rounded-3xl p-5 shadow-soft flex-1 flex flex-col justify-between">
+                <div>
+                    <h3 class="font-bold text-slate-800 text-sm flex items-center gap-2 mb-3">
+                        <i data-lucide="map-pin" class="w-4 h-4 text-teal-500"></i>
+                        推荐就医流向
+                    </h3>
+                    
+                    <div id="dept-card" class="p-3.5 rounded-2xl bg-gradient-to-br from-teal-50 to-sky-50 border border-teal-100/80 mb-3">
+                        <div class="text-xs font-bold text-teal-800 flex items-center justify-between">
+                            <span>优先挂号科室：呼吸内科</span>
+                            <span class="text-[10px] bg-teal-200/60 text-teal-800 px-1.5 py-0.5 rounded">匹配度 92%</span>
+                        </div>
+                        <p class="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
+                            根据您描述的咳嗽与轻微发热，建议就近选择三甲医院呼吸内科或全科门诊就诊。
+                        </p>
+                    </div>
+
+                    <div class="space-y-2">
+                        <div class="text-[11px] font-semibold text-slate-400">附近推荐医院</div>
+                        <div class="flex items-center justify-between p-2 rounded-xl bg-white/60 text-xs">
+                            <span class="text-slate-700 font-medium">第一人民医院 (3A)</span>
+                            <span class="text-slate-400 text-[10px]">1.2 km</span>
+                        </div>
+                        <div class="flex items-center justify-between p-2 rounded-xl bg-white/60 text-xs">
+                            <span class="text-slate-700 font-medium">市中心医院 (3A)</span>
+                            <span class="text-slate-400 text-[10px]">2.8 km</span>
+                        </div>
+                    </div>
+                </div>
+
+                <button class="w-full py-2.5 rounded-2xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-semibold flex items-center justify-center gap-2 shadow-sm transition mt-4">
+                    <i data-lucide="calendar" class="w-3.5 h-3.5 text-teal-500"></i>
+                    一键预约挂号助手
+                </button>
+            </div>
+
+        </aside>
+
+    </div>
+
+    <script>
+        // Initialize Lucide Icons
+        lucide.createIcons();
+
+        // Chart Initialization
+        let healthChart;
+        function initChart() {
+            const ctx = document.getElementById('healthChart').getContext('2d');
+            
+            // Gradient fill
+            const gradient = ctx.createLinearGradient(0, 0, 0, 100);
+            gradient.addColorStop(0, 'rgba(20, 184, 166, 0.3)');
+            gradient.addColorStop(1, 'rgba(20, 184, 166, 0.0)');
+
+            healthChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
+                    datasets: [{
+                        data: [70, 75, 72, 68, 74, 78, 72],
+                        borderColor: '#14b8a6',
+                        borderWidth: 2,
+                        fill: true,
+                        backgroundColor: gradient,
+                        tension: 0.4,
+                        pointRadius: 3,
+                        pointBackgroundColor: '#14b8a6'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { font: { size: 9 }, color: '#94a3b8' } },
+                        y: { display: false }
+                    }
+                }
+            });
+        }
+
+        window.onload = function() {
+            initChart();
+        };
+
+        // State variables
+        let uploadedFile = null;
+        let isVoiceActive = false;
+
+        // Mobile drawer toggle
+        function toggleMobileSidebar() {
+            const sidebar = document.getElementById('left-sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            sidebar.classList.toggle('-translate-x-full');
+            overlay.classList.toggle('hidden');
+        }
+
+        function toggleHealthPanel() {
+            const panel = document.getElementById('right-panel');
+            panel.classList.toggle('translate-x-full');
+        }
+
+        // Mode Switching
+        function switchMode(btn, modeKey) {
+            document.querySelectorAll('.nav-mode-btn').forEach(b => {
+                b.classList.remove('active', 'bg-white/80', 'text-teal-600', 'shadow-sm', 'border', 'border-teal-100');
+                b.classList.add('text-slate-600');
+            });
+            btn.classList.add('active', 'bg-white/80', 'text-teal-600', 'shadow-sm', 'border', 'border-teal-100');
+            btn.classList.remove('text-slate-600');
+
+            const titleMap = {
+                'quick': '全科问诊助手在线',
+                'report': '体检报告智能解读模式',
+                'mind': '心理疏导与睡眠陪伴模式',
+                'medicine': '用药安全与相互作用查询'
+            };
+            document.getElementById('current-mode-title').innerText = titleMap[modeKey] || '全科问诊助手在线';
+
+            // Close mobile menu if open
+            const sidebar = document.getElementById('left-sidebar');
+            if (!sidebar.classList.contains('-translate-x-full') && window.innerWidth < 768) {
+                toggleMobileSidebar();
+            }
+        }
+
+        // Quick prompts click
+        function sendQuickPrompt(text) {
+            document.getElementById('user-input').value = text;
+            sendMessage();
+        }
+
+        // Handle File Upload preview
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                uploadedFile = file;
+                const container = document.getElementById('attachment-preview');
+                container.classList.remove('hidden');
+                container.innerHTML = `
+                    <div class="flex items-center gap-2 bg-teal-50 text-teal-700 px-3 py-1.5 rounded-xl border border-teal-200 text-xs shadow-sm">
+                        <i data-lucide="image" class="w-3.5 h-3.5"></i>
+                        <span class="max-w-[150px] truncate">${file.name}</span>
+                        <button onclick="removeFile()" class="hover:text-rose-500 ml-1">
+                            <i data-lucide="x" class="w-3.5 h-3.5"></i>
+                        </button>
+                    </div>
+                `;
+                lucide.createIcons();
+            }
+        }
+
+        function removeFile() {
+            uploadedFile = null;
+            document.getElementById('file-input').value = '';
+            document.getElementById('attachment-preview').classList.add('hidden');
+        }
+
+        // Voice Input Toggle
+        function toggleVoiceInput() {
+            isVoiceActive = !isVoiceActive;
+            const overlay = document.getElementById('voice-overlay');
+            if (isVoiceActive) {
+                overlay.classList.remove('hidden');
+                // Simulate auto finish voice after 3.5 seconds
+                setTimeout(() => {
+                    if (isVoiceActive) {
+                        toggleVoiceInput();
+                        document.getElementById('user-input').value = "我感觉喉咙有点干痛，晚上咳嗽得比较明显。";
+                    }
+                }, 3500);
+            } else {
+                overlay.classList.add('hidden');
+            }
+        }
+
+        // Keyboard handler
+        function handleKeyDown(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        }
+
+        // Main Send Message Flow
+        function sendMessage() {
+            const inputEl = document.getElementById('user-input');
+            const text = inputEl.value.trim();
+            
+            if (!text && !uploadedFile) return;
+
+            // Hide welcome card
+            const welcomeCard = document.getElementById('welcome-card');
+            if (welcomeCard) {
+                welcomeCard.classList.add('hidden');
+            }
+
+            const container = document.getElementById('messages-container');
+
+            // Render User Bubble
+            const userMsgId = 'user-' + Date.now();
+            let attachmentHTML = '';
+            if (uploadedFile) {
+                attachmentHTML = `<div class="mt-2 text-xs bg-white/20 p-2 rounded-lg flex items-center gap-2"><i data-lucide="file" class="w-3.5 h-3.5"></i> ${uploadedFile.name}</div>`;
+            }
+
+            const userHTML = `
+                <div id="${userMsgId}" class="flex justify-end items-start gap-3">
+                    <div class="max-w-[85%] sm:max-w-[75%] bg-gradient-to-tr from-teal-500 to-sky-500 text-white rounded-3xl rounded-tr-sm p-4 shadow-soft">
+                        <p class="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap">${escapeHTML(text)}</p>
+                        ${attachmentHTML}
+                    </div>
+                    <div class="w-8 h-8 rounded-2xl bg-gradient-to-tr from-rose-200 to-orange-100 flex items-center justify-center text-rose-600 font-semibold text-xs border border-white shadow-sm shrink-0">
+                        林
+                    </div>
+                </div>
+            `;
+            container.insertAdjacentHTML('beforeend', userHTML);
+            
+            // Clear inputs
+            inputEl.value = '';
+            removeFile();
+            scrollToBottom();
+
+            // Show AI Thinking Indicator
+            const aiMsgId = 'ai-' + Date.now();
+            const aiThinkingHTML = `
+                <div id="${aiMsgId}" class="flex justify-start items-start gap-3">
+                    <div class="w-8 h-8 rounded-2xl bg-gradient-to-tr from-teal-400 to-sky-300 text-white flex items-center justify-center shadow-md shadow-teal-200 shrink-0 mt-1">
+                        <i data-lucide="heart-pulse" class="w-4 h-4"></i>
+                    </div>
+                    <div class="max-w-[85%] sm:max-w-[75%] glass-card rounded-3xl rounded-tl-sm p-4 border border-white/80 shadow-card">
+                        <div class="flex items-center gap-2 text-xs text-teal-600 font-medium mb-2">
+                            <span class="flex h-2 w-2 rounded-full bg-teal-500 animate-ping"></span>
+                            灵犀 AI 正在分析您的症状...
+                        </div>
+                        <div id="${aiMsgId}-content" class="text-xs sm:text-sm text-slate-700 leading-relaxed typing-cursor"></div>
+                    </div>
+                </div>
+            `;
+            container.insertAdjacentHTML('beforeend', aiThinkingHTML);
+            lucide.createIcons();
+            scrollToBottom();
+
+            // Simulate AI Stream Typing Response
+            setTimeout(() => {
+                generateAIResponse(text, aiMsgId);
+            }, 800);
+        }
+
+        // Mock AI Intelligent Response Generator
+        function generateAIResponse(userInput, aiMsgId) {
+            const contentEl = document.getElementById(`${aiMsgId}-content`);
+            contentEl.parentElement.querySelector('.text-teal-600').innerHTML = '<i data-lucide="shield-check" class="w-3.5 h-3.5 inline"></i> 灵犀医疗 AI 智能解答';
+            
+            let responseText = "";
+            let showMedicalCard = false;
+
+            if (userInput.includes("咳嗽") || userInput.includes("低烧") || userInput.includes("发烧")) {
+                responseText = "收到您的描述。夜间咳嗽伴随低热通常可能由上呼吸道感染、急性支气管炎或咽喉炎引起。由于症状主要在夜间加重，建议保持室内湿度在50%-60%。\n\n为您生成了以下居家初步建议与注意清单：";
+                showMedicalCard = true;
+            } else if (userInput.includes("报告") || userInput.includes("体检")) {
+                responseText = "请将您的体检报告图片上传，或直接输入具体的异常指标（如：白细胞计数、甘油三酯、尿酸等数值）。我将为您对比参考范围进行详细科普解释。";
+            } else {
+                responseText = `收到您的咨询：“${userInput}”。整体来看，建议您注意休息，保证充足水分摄入。如果该症状持续超过3天或呈加重趋势，建议及时寻求线下诊疗。`;
+            }
+
+            // Stream Typing Simulation
+            let index = 0;
+            const timer = setInterval(() => {
+                if (index < responseText.length) {
+                    contentEl.innerText = responseText.substring(0, index + 1);
+                    index++;
+                    scrollToBottom();
+                } else {
+                    clearInterval(timer);
+                    contentEl.classList.remove('typing-cursor');
+
+                    // If conditions met, append structured Rich Medical Advice Card
+                    if (showMedicalCard) {
+                        appendMedicalAdviceCard(contentEl.parentElement);
+                        updateDepartmentCard("呼吸内科", "基于“咳嗽与低烧”匹配", "94%");
+                    }
+                    lucide.createIcons();
+                }
+            }, 25);
+        }
+
+        // Append Structured Rich Advice Card inside AI response
+        function appendMedicalAdviceCard(parentContainer) {
+            const cardHTML = `
+                <div class="mt-4 pt-3 border-t border-slate-100/80 space-y-3">
+                    <div class="p-3.5 rounded-2xl bg-macaron-mint border border-emerald-100 shadow-sm">
+                        <div class="text-xs font-bold text-emerald-800 flex items-center gap-1.5 mb-1.5">
+                            <i data-lucide="clipboard-list" class="w-4 h-4"></i>
+                            建议处置方案 (初步参考)
+                        </div>
+                        <ul class="text-xs text-slate-600 space-y-1 list-disc list-inside">
+                            <li>多饮温开水，可用淡盐水漱口缓解咽部不适</li>
+                            <li>监测体温（建议每4小时记录一次）</li>
+                            <li>若体温超过 38.5℃，可咨询医师后适量使用退热药物</li>
+                        </ul>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-2 text-xs">
+                        <div class="p-2.5 rounded-xl bg-sky-50 border border-sky-100 flex items-center gap-2">
+                            <i data-lucide="stethoscope" class="w-4 h-4 text-sky-500 shrink-0"></i>
+                            <div>
+                                <div class="font-semibold text-slate-700">建议挂号</div>
+                                <div class="text-[10px] text-slate-400">呼吸内科 / 全科</div>
+                            </div>
+                        </div>
+                        <div class="p-2.5 rounded-xl bg-amber-50 border border-amber-100 flex items-center gap-2">
+                            <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-500 shrink-0"></i>
+                            <div>
+                                <div class="font-semibold text-slate-700">预警指标</div>
+                                <div class="text-[10px] text-slate-400">持续高烧或呼吸急促</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            parentContainer.insertAdjacentHTML('beforeend', cardHTML);
+            scrollToBottom();
+        }
+
+        // Dynamically update right side panel department recommendation
+        function updateDepartmentCard(deptName, reason, matchPercent) {
+            const card = document.getElementById('dept-card');
+            if (card) {
+                card.innerHTML = `
+                    <div class="text-xs font-bold text-teal-800 flex items-center justify-between">
+                        <span>优先挂号科室：${deptName}</span>
+                        <span class="text-[10px] bg-teal-200/60 text-teal-800 px-1.5 py-0.5 rounded">匹配度 ${matchPercent}</span>
+                    </div>
+                    <p class="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
+                        ${reason}。建议前往就近三甲医院综合门诊进行进一步听诊与血常规检查。
+                    </p>
+                `;
+            }
+        }
+
+        function scrollToBottom() {
+            const container = document.getElementById('chat-messages');
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function resetChat() {
+            document.getElementById('messages-container').innerHTML = '';
+            const welcomeCard = document.getElementById('welcome-card');
+            if (welcomeCard) welcomeCard.classList.remove('hidden');
+        }
+
+        function escapeHTML(str) {
+            return str.replace(/[&<>'"]/g, 
+                tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+            );
+        }
+    </script>
+</body>
+</html>

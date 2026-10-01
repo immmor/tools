@@ -167,7 +167,7 @@ async function autoRenewUser(DB, user) {
   // 计算还有多久过期（毫秒）
   const timeUntilExpire = expireDate ? expireDate.getTime() - now.getTime() : Infinity;
   const oneDayInMs = 24 * 60 * 60 * 1000;
-  
+
   // 如果未开启自动续费，直接返回
   if (!user.auto_rewn) return null;
   
@@ -267,6 +267,14 @@ async function ensureCardColumn(DB) {
   try { await DB.prepare('ALTER TABLE user ADD COLUMN card_number TEXT').run(); } catch (e) {}
   try { await DB.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_user_card_number ON user (card_number)').run(); } catch (e) {}
   globalThis.__cardColReady = true;
+}
+
+// 懒加载额外流量字段（幂等）：月付桶 / 年付桶 各自独立，互不覆盖
+async function ensureBonusColumn(DB) {
+  try { await DB.prepare('ALTER TABLE user ADD COLUMN bonus_quota_monthly INTEGER DEFAULT 0').run(); } catch (e) {}
+  try { await DB.prepare('ALTER TABLE user ADD COLUMN bonus_expire_monthly TEXT').run(); } catch (e) {}
+  try { await DB.prepare('ALTER TABLE user ADD COLUMN bonus_quota_annual INTEGER DEFAULT 0').run(); } catch (e) {}
+  try { await DB.prepare('ALTER TABLE user ADD COLUMN bonus_expire_annual TEXT').run(); } catch (e) {}
 }
 
 // 懒加 p_token 列（幂等），生成新鉴权 token 并持久化，返回完整 token 串
@@ -1395,7 +1403,7 @@ export default {
           if (!user) {
             return resJson({ code: 404, msg: '用户不存在' }, 404);
           }
-          
+
           if (user.balance < vipPrice) {
             return resJson({ 
               code: 400, 
@@ -1502,6 +1510,113 @@ export default {
         }
       }
 
+      // ========== 增加流量接口 ==========
+      if (path === '/api/add-traffic' && request.method === 'PUT') {
+        try {
+          const params = await request.json();
+          const { username, price = 0, gb = 150, duration = 30, p_token } = params;
+
+          if (!username) return resJson({ code: 400, msg: '缺少username参数' }, 400);
+
+          // p_token 鉴权（校验有效性 + 归属）
+          const authToken = p_token || (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim();
+          if (!authToken) return resJson({ code: 401, msg: '缺少 p_token，请先登录' }, 401);
+          const tokenExp = Number(authToken.split('.')[1]);
+          if (!tokenExp || Date.now() > tokenExp) return resJson({ code: 401, msg: '登录已过期，请重新登录' }, 401);
+          const tokenUser = await DB.prepare('SELECT username FROM user WHERE p_token = ?').bind(authToken).first();
+          if (!tokenUser || tokenUser.username !== username) return resJson({ code: 403, msg: '无权操作该账号' }, 403);
+
+          await ensureBonusColumn(DB);
+
+          const addPrice = parseFloat(price);
+          const addMb = Math.round(parseFloat(gb) * 1024);
+
+          const user = await DB
+            .prepare('SELECT balance, v_expire_date, bonus_quota_monthly, bonus_expire_monthly, bonus_quota_annual, bonus_expire_annual, vorders FROM user WHERE username = ?')
+            .bind(username)
+            .first();
+
+          if (!user) return resJson({ code: 404, msg: '用户不存在' }, 404);
+
+          const now = new Date();
+          const expireDate = user.v_expire_date ? new Date(user.v_expire_date.replace(' ', 'T') + 'Z') : null;
+          // 增加流量必须依附于有效的月付/年付套餐，过期时间跟着当前 VIP 过期时间走
+          if (!expireDate || expireDate <= now) {
+            return resJson({ code: 400, msg: '请先开通有效的VIP套餐后再增加流量' }, 400);
+          }
+
+          if (user.balance < addPrice) {
+            return resJson({ code: 400, msg: '余额不足，请先充值', balance: user.balance, required: addPrice }, 400);
+          }
+
+          // 过期时间跟着当前界面所选套餐走：月付 30 天、年付 365 天（从购买当下起算）
+          const dur = parseInt(duration, 10) === 365 ? 365 : 30;
+          const isAnnual = dur === 365;
+          const bonusExpire = new Date(now.getTime() + dur * 24 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+
+          // 月/年独立两个流量桶，互不覆盖；购买时若桶已过期则先清零再累加
+          const qKey = isAnnual ? 'bonus_quota_annual' : 'bonus_quota_monthly';
+          const eKey = isAnnual ? 'bonus_expire_annual' : 'bonus_expire_monthly';
+          const curExpire = user[eKey];
+          const curQuota = parseInt(user[qKey], 10) || 0;
+          const expired = curExpire ? new Date(curExpire.replace(' ', 'T') + 'Z') <= now : true;
+          const newQuota = (expired ? 0 : curQuota) + addMb;
+
+          let vorders = [];
+          try { vorders = JSON.parse(user.vorders || '[]'); } catch (e) { vorders = []; }
+          const newOrder = {
+            id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+            type: 'traffic',
+            gb: parseFloat(gb),
+            duration: dur,
+            price: addPrice,
+            expire: bonusExpire,
+            created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+            method: 'balance',
+            status: 'success'
+          };
+          vorders.unshift(newOrder);
+          if (vorders.length > 50) vorders = vorders.slice(0, 50);
+          const vordersStr = JSON.stringify(vorders);
+
+          const result = await DB
+            .prepare(`UPDATE user SET balance = balance - ?, ${qKey} = ?, ${eKey} = ?, vorders = ? WHERE username = ?`)
+            .bind(addPrice, newQuota, bonusExpire, vordersStr, username)
+            .run();
+
+          if (result.success && result.meta.changes > 0) {
+            const nowTime = new Date().toISOString().slice(0, 19).replace('T', ' ');
+            await DB
+              .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
+              .bind('immmor', `用户 ${username} 增加流量成功！${gb}GB（${isAnnual ? '年付' : '月付'}），金额：${addPrice}元`, nowTime).run();
+
+            const updated = await DB
+              .prepare('SELECT balance, bonus_quota_monthly, bonus_expire_monthly, bonus_quota_annual, bonus_expire_annual, vorders FROM user WHERE username = ?')
+              .bind(username)
+              .first();
+
+            return resJson({
+              code: 200,
+              msg: '增加流量成功',
+              data: {
+                balance: updated.balance,
+                bonus_quota_monthly: updated.bonus_quota_monthly,
+                bonus_expire_monthly: updated.bonus_expire_monthly,
+                bonus_quota_annual: updated.bonus_quota_annual,
+                bonus_expire_annual: updated.bonus_expire_annual,
+                vorders: updated.vorders,
+                gb: parseFloat(gb)
+              }
+            });
+          } else {
+            return resJson({ code: 500, msg: '增加流量失败，请重试' }, 500);
+          }
+        } catch (err) {
+          console.error('增加流量错误:', err);
+          return resJson({ code: 500, msg: '增加流量失败', error: err.message }, 500);
+        }
+      }
+
       // ========== 问卷接口 ==========
       if (path === '/api/survey' && request.method === 'POST') {
         try {
@@ -1545,8 +1660,10 @@ export default {
           const username = url.searchParams.get('username');
           if (!username) return resJson({ code: 400, msg: '缺少username参数' }, 400);
 
+          await ensureBonusColumn(DB);
+
           let user = await DB
-            .prepare('SELECT username, v_expire_date, v_token, v_link_clash, v_link_v2ray, auto_rewn, balance, price_plan, monthly_quota, used_quota, quota_reset_date FROM user WHERE username = ?')
+            .prepare('SELECT username, v_expire_date, v_token, v_link_clash, v_link_v2ray, auto_rewn, balance, price_plan, monthly_quota, used_quota, quota_reset_date, bonus_quota_monthly, bonus_expire_monthly, bonus_quota_annual, bonus_expire_annual FROM user WHERE username = ?')
             .bind(username)
             .first();
 
@@ -1563,6 +1680,8 @@ export default {
               username: user.username, v_expire_date: user.v_expire_date, v_token: user.v_token,
               v_link_clash: user.v_link_clash, v_link_v2ray: user.v_link_v2ray,
               monthly_quota: user.monthly_quota, used_quota: user.used_quota, quota_reset_date: user.quota_reset_date,
+              bonus_quota_monthly: user.bonus_quota_monthly, bonus_expire_monthly: user.bonus_expire_monthly,
+              bonus_quota_annual: user.bonus_quota_annual, bonus_expire_annual: user.bonus_expire_annual,
               is_vip_valid: isVipValid, days_remaining: daysRemaining, auto_renew: !!user.auto_rewn
             }
           });

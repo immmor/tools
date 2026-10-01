@@ -379,6 +379,16 @@
             --neon-orange: #ffaa00;
         }
 
+        details > summary { list-style: none; }
+        details > summary::-webkit-details-marker { display: none; }
+
+        .vip-extra-toggle {
+            display: inline-block;
+            font-size: 1.15em;
+            transition: transform 0.2s ease;
+        }
+        details[open] .vip-extra-toggle { transform: rotate(45deg); }
+
         .limited-badge {
             position: absolute;
             top: -8px;
@@ -1547,6 +1557,15 @@
             text-shadow: 0 0 8px var(--neon-red);
             transform: scale(1.25);
             background-color: rgba(255, 0, 60, 0.08);
+        }
+
+        /* VIP 套餐价格：与整行同字号，仅用更亮配色做强调 */
+        .vip-plan-price {
+            font-size: 1em;
+            font-weight: 800;
+            color: var(--neon-green);
+            text-shadow: 0 0 12px rgba(0, 255, 65, 0.7);
+            letter-spacing: 0.5px;
         }
         @keyframes amountPulse {
             0%, 100% { transform: scale(1); text-shadow: 0 0 15px rgba(255, 170, 0, 0.7); }
@@ -3001,6 +3020,55 @@
             }
         };
 
+        // ==================== 增加流量功能 ====================
+        const addTraffic = async (username, price = 10.00, duration = 30) => {
+            const addGb = 150;
+            const confirmMsg = (translations[currentLang]?.alert_confirm_add_traffic || '确定要增加 {gb}GB 流量吗？将从余额扣除 ¥{price}，有效期跟随当前VIP到期时间。')
+                .replace('{gb}', addGb).replace('{price}', price.toFixed(2));
+            if (!confirm(confirmMsg)) return;
+
+            try {
+                const savedUser = JSON.parse(localStorage.getItem('userInfo') || '{}');
+                const pToken = savedUser.p_token || '';
+                const response = await fetch('https://api.funbua.uk/api/add-traffic', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(pToken ? { 'Authorization': 'Bearer ' + pToken } : {})
+                    },
+                    body: JSON.stringify({ username, price, gb: addGb, duration, p_token: pToken })
+                });
+                const data = await response.json();
+
+                if (response.ok && data.code === 200) {
+                    alert(translations[currentLang]?.alert_add_traffic_success || `增加 ${addGb}GB 流量成功！`);
+                    const savedUserInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
+                    savedUserInfo.balance = data.data.balance;
+                    if (data.data.vorders) {
+                        try {
+                            savedUserInfo.vorders = typeof data.data.vorders === 'string' ? JSON.parse(data.data.vorders) : data.data.vorders;
+                        } catch (e) {
+                            console.error('解析购买记录失败:', e);
+                        }
+                    }
+                    localStorage.setItem('userInfo', JSON.stringify(savedUserInfo));
+                    if (typeof userInfo !== 'undefined' && userInfo?.username === savedUserInfo.username) {
+                        userInfo.balance = savedUserInfo.balance;
+                        userInfo.vorders = savedUserInfo.vorders;
+                    }
+                    document.getElementById('vip-modal')?.remove();
+                    showVipNodes(duration);
+                } else {
+                    const failed = translations[currentLang]?.alert_add_traffic_failed || '增加流量失败';
+                    alert(`${failed}：${data.msg}`);
+                }
+            } catch (error) {
+                console.error('增加流量失败详情:', error);
+                const networkErr = translations[currentLang]?.alert_network_error?.replace('{error}', error.message) || '网络错误';
+                alert(networkErr);
+            }
+        };
+
         // ==================== VIP节点模块 ====================
         const showVipNodes = async (duration = 30) => {
             const userInfo = JSON.parse(localStorage.getItem('userInfo') || 'null');
@@ -3034,7 +3102,7 @@
                                 <div class="flex justify-between items-start mb-3">
                                     <div>
                                         <h2 class="text-xl md:text-2xl font-black uppercase" data-i18n="vip_nodes_title">VIP节点</h2>
-                                        <div class="text-xs text-zinc-500 mt-1">${duration === 30 ? (dict.vip_plan_monthly || '月付') : (dict.vip_plan_annual || '年付')} ${dict.vip_plan_suffix || '套餐'} (<span id="vip-plan-days" data-base="${duration}"><span class="vip-plan-num">${vipInfo.auto_renew ? duration + 2 : duration}</span>${duration === 30 ? (dict.vip_quota_reset || '30 天').replace(/\d+/g, '') : (dict.vip_quota_reset_annual || '365 天').replace(/\d+/g, '')}</span>) • ¥${price.toFixed(2)}</div>
+                                        <div class="text-base md:text-lg font-bold text-[var(--neon-orange)] mt-2" style="text-shadow: 0 0 10px rgba(255,170,0,0.5)">${duration === 30 ? (dict.vip_plan_monthly || '月付') : (dict.vip_plan_annual || '年付')} ${dict.vip_plan_suffix || '套餐'} (<span id="vip-plan-days" data-base="${duration}"><span class="vip-plan-num">${vipInfo.auto_renew ? duration + 2 : duration}</span>${duration === 30 ? (dict.vip_quota_reset || '30 天').replace(/\d+/g, '') : (dict.vip_quota_reset_annual || '365 天').replace(/\d+/g, '')}</span>) • <span class="vip-plan-price">¥${price.toFixed(2)}</span></div>
                                         <div class="text-[10px] text-zinc-500" data-i18n="vip_price_fluctuate">*价格会随着服务器维护成本而有所波动，请互相理解*</div>
                                     </div>
                                     <button onclick="this.closest('.fixed').remove()" class="text-zinc-500 hover:text-white">
@@ -3052,6 +3120,18 @@
                                                 <div><span data-i18n="vip_valid_until_label">有效期至</span>: ${new Date(vipInfo.v_expire_date).toLocaleDateString()}</div>
                                                 <div><span data-i18n="vip_remaining_days_label">剩余天数</span>: ${vipInfo.days_remaining}</div>
                                                 <div><span data-i18n="vip_available_quota">可用流量</span>: ${(vipInfo.monthly_quota || 153600) / 1024}GB(<span data-i18n="vip_quota_reset">30天重置</span>)</div>
+                                                <details class="mt-0">
+                                                    <summary class="cursor-pointer select-none text-sm font-bold text-[var(--neon-orange)] flex items-center justify-center gap-1"><span class="vip-extra-toggle">+</span><span data-i18n="vip_extra_traffic">增加额外流量</span></summary>
+                                                    <div class="text-center px-2 md:px-3 pt-1 pb-1">
+                                                        <div class="text-sm text-[var(--neon-orange)] space-y-1">
+                                                            <div><span data-i18n="vip_extra_traffic_monthly">月额外流量</span>: ${((vipInfo.bonus_quota_monthly || 0) / 1024).toFixed(0)}GB${vipInfo.bonus_expire_monthly ? '（过期: ' + new Date(vipInfo.bonus_expire_monthly).toLocaleDateString() + '）' : ''}</div>
+                                                            <div><span data-i18n="vip_extra_traffic_annual">年额外流量</span>: ${((vipInfo.bonus_quota_annual || 0) / 1024).toFixed(0)}GB${vipInfo.bonus_expire_annual ? '（过期: ' + new Date(vipInfo.bonus_expire_annual).toLocaleDateString() + '）' : ''}</div>
+                                                        </div>
+                                                        <button onclick="addTraffic('${userInfo.username}', ${price}, ${duration})" class="mt-1 w-full bg-[var(--neon-orange)] text-black py-2 font-bold hover:opacity-90">
+                                                            ${dict.vip_add_traffic_btn ? dict.vip_add_traffic_btn.replace('{price}', price.toFixed(2)) : '+150GB 流量 · ¥' + price.toFixed(2)}
+                                                        </button>
+                                                    </div>
+                                                </details>
                                                 <div><span data-i18n="vip_max_devices">可用设备</span>: 3</div>
                                                 <div class="flex items-center justify-center gap-2">
                                                     <span data-i18n="vip_auto_renew">到期续购(余额扣款)</span>

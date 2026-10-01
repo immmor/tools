@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CarePulse AI - 智慧医疗健康助手</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        mint: {
+                            50: '#f0fdf4',
+                            100: '#dcfce7',
+                            200: '#bbf7d0',
+                            400: '#4ade80',
+                            500: '#22c55e',
+                            600: '#16a34a',
+                            700: '#15803d',
+                        },
+                        tealish: {
+                            50: '#f0fdfa',
+                            100: '#ccfbf1',
+                            500: '#14b8a6',
+                            600: '#0d9488',
+                        },
+                        skysoft: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0ea5e9',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Outfit', 'Noto Sans SC', 'sans-serif'],
+                    },
+                    boxShadow: {
+                        'soft': '0 10px 30px -5px rgba(16, 185, 129, 0.08), 0 4px 12px -2px rgba(0, 0, 0, 0.03)',
+                        'card': '0 8px 20px -4px rgba(0, 0, 0, 0.04)',
+                        'glow': '0 0 20px rgba(34, 197, 94, 0.25)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Outfit', 'Noto Sans SC', sans-serif;
+            background: radial-gradient(1100px 560px at 100% -5%, #ecfdf5 0%, #f7faf9 48%);
+        }
+        
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.7);
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 5px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #e2e8f0;
+            border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #cbd5e1;
+        }
+
+        /* 波浪音效动画 */
+        .wave-bar {
+            animation: wave 1.2s ease-in-out infinite alternate;
+        }
+        @keyframes wave {
+            0% { height: 4px; }
+            100% { height: 24px; }
+        }
+        .wave-bar:nth-child(2) { animation-delay: 0.2s; }
+        .wave-bar:nth-child(3) { animation-delay: 0.4s; }
+        .wave-bar:nth-child(4) { animation-delay: 0.1s; }
+        .wave-bar:nth-child(5) { animation-delay: 0.3s; }
+
+        /* 打字动画指示器 */
+        .dot-flashing {
+            position: relative;
+            width: 6px;
+            height: 6px;
+            border-radius: 5px;
+            background-color: #10B981;
+            color: #10B981;
+            animation: dot-flashing 1s infinite alternate;
+            animation-delay: 0.5s;
+        }
+        .dot-flashing::before, .dot-flashing::after {
+            content: "";
+            display: inline-block;
+            position: absolute;
+            top: 0;
+            width: 6px;
+            height: 6px;
+            border-radius: 5px;
+            background-color: #10B981;
+            color: #10B981;
+        }
+        .dot-flashing::before {
+            left: -10px;
+            animation: dot-flashing 1s infinite alternate;
+            animation-delay: 0s;
+        }
+        .dot-flashing::after {
+            left: 10px;
+            animation: dot-flashing 1s infinite alternate;
+            animation-delay: 1s;
+        }
+        @keyframes dot-flashing {
+            0% { background-color: #10B981; }
+            50%, 100% { background-color: #dcfce7; }
+        }
+
+        /* 消息入场动画 */
+        .msg-in { animation: msg-in .42s cubic-bezier(.21,1.02,.73,1) both; }
+        @keyframes msg-in {
+            from { opacity: 0; transform: translateY(12px) scale(.99); }
+            to { opacity: 1; transform: none; }
+        }
+        @media (prefers-reduced-motion: reduce) { .msg-in { animation: none; } }
+
+        /* 建议卡片悬浮微交互 */
+        .suggest-card { transition: transform .2s ease, box-shadow .2s ease, background-color .2s ease; }
+        .suggest-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 22px -8px rgba(16,185,129,.18);
+        }
+    </style>
+</head>
+<body class="h-full text-slate-700 antialiased overflow-hidden selection:bg-mint-100 selection:text-mint-700">
+
+    <div class="flex h-full w-full bg-[#F4F9F6] p-0 md:p-4 lg:p-6 gap-6">
+
+        <!-- 侧边栏 Navigation (Desktop) -->
+        <aside class="hidden md:flex flex-col w-20 lg:w-64 bg-white/90 backdrop-blur-md rounded-3xl p-5 shadow-soft border border-emerald-50/80 justify-between shrink-0 transition-all duration-300">
+            <div class="space-y-8">
+                <!-- Logo -->
+                <div class="flex items-center gap-3.5 px-2">
+                    <div class="w-11 h-11 rounded-2xl bg-gradient-to-tr from-mint-500 to-tealish-500 flex items-center justify-center text-white shadow-glow">
+                        <i class="fa-solid font-bold fa-heart-pulse text-xl"></i>
+                    </div>
+                    <div class="hidden lg:block">
+                        <h1 class="font-bold text-lg text-slate-800 leading-none">CarePulse</h1>
+                        <span class="text-xs font-medium text-emerald-600 tracking-wider">AI 智能医疗中心</span>
+                    </div>
+                </div>
+
+                <!-- Nav Items -->
+                <nav class="space-y-2">
+                    <a href="#" onclick="switchTab('consult')" id="nav-consult" class="nav-btn active flex items-center gap-4 px-4 py-3.5 rounded-2xl bg-mint-50 text-mint-600 font-semibold transition-all shadow-sm">
+                        <i class="fa-solid fa-user-doctor text-lg"></i>
+                        <span class="hidden lg:inline text-sm">AI 在线问诊</span>
+                    </a>
+                    <a href="#" onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-btn flex items-center gap-4 px-4 py-3.5 rounded-2xl text-slate-500 hover:bg-slate-50 hover:text-slate-800 transition-all">
+                        <i class="fa-solid fa-chart-pie text-lg"></i>
+                        <span class="hidden lg:inline text-sm">健康数据看板</span>
+                    </a>
+                    <a href="#" onclick="switchTab('records')" id="nav-records" class="nav-btn flex items-center gap-4 px-4 py-3.5 rounded-2xl text-slate-500 hover:bg-slate-50 hover:text-slate-800 transition-all">
+                        <i class="fa-solid fa-file-medical text-lg"></i>
+                        <span class="hidden lg:inline text-sm">电子档案 / 报告</span>
+                    </a>
+                    <a href="#" onclick="switchTab('doctors')" id="nav-doctors" class="nav-btn flex items-center gap-4 px-4 py-3.5 rounded-2xl text-slate-500 hover:bg-slate-50 hover:text-slate-800 transition-all">
+                        <i class="fa-solid fa-stethoscope text-lg"></i>
+                        <span class="hidden lg:inline text-sm">名医预约</span>
+                    </a>
+                </nav>
+            </div>
+
+            <!-- User Info Sidebar Bottom -->
+            <div class="pt-4 border-t border-slate-100 flex items-center justify-between">
+                <div class="flex items-center gap-3 overflow-hidden">
+                    <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150" alt="Avatar" class="w-10 h-10 rounded-full object-cover ring-2 ring-mint-200 shrink-0">
+                    <div class="hidden lg:block truncate">
+                        <p class="text-sm font-semibold text-slate-800 truncate">林晨 医生</p>
+                        <p class="text-xs text-slate-400 truncate">VIP 黄金会员</p>
+                    </div>
+                </div>
+                <button class="hidden lg:block text-slate-400 hover:text-slate-600 p-2">
+                    <i class="fa-solid fa-arrow-right-from-bracket"></i>
+                </button>
+            </div>
+        </aside>
+
+        <!-- 主内容区 Content Area -->
+        <main class="flex-1 flex flex-col h-full overflow-hidden bg-white/60 md:bg-transparent rounded-none md:rounded-3xl">
+            
+            <!-- Header Header -->
+            <header class="h-16 md:h-20 flex items-center justify-between px-4 md:px-6 shrink-0 border-b md:border-b-0 border-slate-100 bg-white/80 md:bg-transparent backdrop-blur-md">
+                <div class="flex items-center gap-3">
+                    <button id="mobileMenuBtn" onclick="toggleMobileMenu()" class="md:hidden text-slate-600 p-2 rounded-xl bg-slate-100 hover:bg-slate-200">
+                        <i class="fa-solid fa-bars text-lg"></i>
+                    </button>
+                    <div>
+                        <h2 id="pageTitle" class="text-lg md:text-xl font-bold text-slate-800">全能 AI 医疗咨询</h2>
+                        <p class="text-xs text-slate-400 hidden sm:block">实时解答·智能分诊·隐私加密保护</p>
+                    </div>
+                </div>
+
+                <!-- Status Badges & Quick Tools -->
+                <div class="flex items-center gap-3">
+                    <div class="hidden sm:flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-50 border border-emerald-200/60 text-emerald-700 text-xs font-medium">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 -ml-4"></span>
+                        AI 医生诊室在线
+                    </div>
+
+                    <button onclick="showToast('无新通知')" class="w-10 h-10 rounded-2xl bg-white shadow-soft flex items-center justify-center text-slate-600 hover:text-mint-600 transition-colors relative">
+                        <i class="fa-regular fa-bell"></i>
+                        <span class="absolute top-2.5 right-2.5 w-2 h-2 bg-rose-500 rounded-full"></span>
+                    </button>
+
+                    <div class="md:hidden flex items-center">
+                        <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150" class="w-9 h-9 rounded-full object-cover ring-2 ring-mint-300">
+                    </div>
+                </div>
+            </header>
+
+            <!-- VIEW 1: AI CONSULTATION (默认 View) -->
+            <div id="view-consult" class="view-panel flex-1 flex flex-col lg:flex-row gap-6 p-2 md:p-0 overflow-y-auto lg:overflow-hidden pb-24 md:pb-0">
+                
+                <!-- Chat Window Container -->
+                <div class="flex-1 flex flex-col bg-white rounded-3xl shadow-soft border border-slate-100/80 overflow-hidden relative min-h-[55vh] lg:min-h-0">
+                    
+                    <!-- Chat Top Bar -->
+                    <div class="px-6 py-4 bg-gradient-to-r from-mint-50/50 to-white border-b border-slate-100 flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div class="relative">
+                                <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-mint-400 to-tealish-500 flex items-center justify-center text-white shadow-md">
+                                    <i class="fa-solid fa-robot text-lg"></i>
+                                </div>
+                                <span class="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-500 border-2 border-white rounded-full"></span>
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                                    CarePulse AI 助手
+                                    <span class="text-[10px] font-normal bg-mint-100 text-mint-700 px-2 py-0.5 rounded-full">GPT-4 Medical</span>
+                                </h3>
+                                <p class="text-xs text-slate-400">已帮您关联最新体检报告及全天心率数据</p>
+                            </div>
+                        </div>
+
+                        <button onclick="clearChatHistory()" class="text-xs text-slate-400 hover:text-rose-500 flex items-center gap-1.5 px-3 py-1.5 rounded-xl hover:bg-slate-50 transition-colors">
+                            <i class="fa-solid fa-rotate-right"></i>
+                            <span class="hidden sm:inline">清空记录</span>
+                        </button>
+                    </div>
+
+                    <!-- Chat Messages List -->
+                    <div id="chatMessages" class="flex-1 p-4 md:p-6 overflow-y-auto space-y-6 custom-scrollbar">
+                        
+                        <!-- AI Greeting Message -->
+                        <div class="flex items-start gap-3 max-w-2xl msg-in">
+                            <div class="w-8 h-8 rounded-xl bg-mint-500 text-white flex items-center justify-center text-sm shrink-0 shadow-sm mt-1">
+                                <i class="fa-solid fa-robot"></i>
+                            </div>
+                            <div class="space-y-3">
+                                <div class="bg-slate-50 border border-slate-100/80 rounded-2xl rounded-tl-none p-4 text-sm text-slate-700 leading-relaxed shadow-card">
+                                    您好，林晨先生！我是您的 AI 全科医疗顾问。我看到您今天的睡眠恢复评分为 <span class="font-semibold text-emerald-600">88分</span>，心率指标正常。请问您今天感觉身体有什么不适，或者有什么健康问题需要咨询吗？
+                                </div>
+                                
+                                <!-- Preset Suggestion Cards -->
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                                    <button onclick="sendQuickPrompt('我最近晚上容易偏头痛，伴有轻微恶心，可能是什么原因？')" class="text-left p-3 rounded-2xl bg-emerald-50/50 hover:bg-emerald-50 border border-emerald-100/60 text-xs text-emerald-900 transition-all suggest-card group flex items-center justify-between">
+                                        <span>🧠 偏头痛与睡眠质量分析</span>
+                                        <i class="fa-solid fa-chevron-right text-emerald-400 group-hover:translate-x-1 transition-transform"></i>
+                                    </button>
+                                    <button onclick="sendQuickPrompt('帮我解读一下上周的血常规报告指标')" class="text-left p-3 rounded-2xl bg-skysoft-50/60 hover:bg-skysoft-100/60 border border-skysoft-100 text-xs text-slate-700 transition-all suggest-card group flex items-center justify-between">
+                                        <span>📊 智能解读血常规报告</span>
+                                        <i class="fa-solid fa-chevron-right text-sky-400 group-hover:translate-x-1 transition-transform"></i>
+                                    </button>
+                                    <button onclick="sendQuickPrompt('皮肤突然起红疹并伴有痒感，怎么处理？')" class="text-left p-3 rounded-2xl bg-amber-50/60 hover:bg-amber-100/60 border border-amber-100 text-xs text-amber-900 transition-all suggest-card group flex items-center justify-between">
+                                        <span>🔍 皮肤过敏症状自诊</span>
+                                        <i class="fa-solid fa-chevron-right text-amber-400 group-hover:translate-x-1 transition-transform"></i>
+                                    </button>
+                                    <button onclick="sendQuickPrompt('感冒期间用药有什么忌口和用药顺序建议？')" class="text-left p-3 rounded-2xl bg-tealish-50/60 hover:bg-tealish-100/60 border border-tealish-100 text-xs text-teal-900 transition-all suggest-card group flex items-center justify-between">
+                                        <span>💊 常用感冒与处方药提示</span>
+                                        <i class="fa-solid fa-chevron-right text-teal-400 group-hover:translate-x-1 transition-transform"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Streaming Typing Indicator Placeholder -->
+                    <div id="typingIndicator" class="hidden px-6 py-3 flex items-center gap-3 text-xs text-slate-400 bg-slate-50/50 border-t border-slate-100">
+                        <div class="w-6 h-6 rounded-lg bg-mint-500 text-white flex items-center justify-center text-xs">
+                            <i class="fa-solid fa-robot"></i>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span>CarePulse AI 正在分析医学数据库并生成解答</span>
+                            <div class="dot-flashing ml-4"></div>
+                        </div>
+                    </div>
+
+                    <!-- Voice Recording Overlay -->
+                    <div id="voiceOverlay" class="hidden absolute inset-x-0 bottom-24 mx-6 p-4 rounded-2xl bg-slate-900/90 backdrop-blur-md text-white flex items-center justify-between z-20 shadow-2xl transition-all">
+                        <div class="flex items-center gap-4">
+                            <div class="w-10 h-10 rounded-xl bg-rose-500/20 border border-rose-500/40 text-rose-400 flex items-center justify-center animate-pulse">
+                                <i class="fa-solid fa-microphone"></i>
+                            </div>
+                            <div>
+                                <p class="text-sm font-semibold">正在倾听您的症状描述...</p>
+                                <p class="text-xs text-slate-400">请保持环境安静，说出您的不适感受</p>
+                            </div>
+                        </div>
+
+                        <!-- Audio Waves Visualizer -->
+                        <div class="flex items-center gap-1.5 h-8 px-4">
+                            <div class="w-1 bg-mint-400 rounded-full wave-bar"></div>
+                            <div class="w-1 bg-mint-400 rounded-full wave-bar"></div>
+                            <div class="w-1 bg-mint-400 rounded-full wave-bar"></div>
+                            <div class="w-1 bg-mint-400 rounded-full wave-bar"></div>
+                            <div class="w-1 bg-mint-400 rounded-full wave-bar"></div>
+                        </div>
+
+                        <button onclick="stopVoiceRecording()" class="px-4 py-2 rounded-xl bg-mint-500 hover:bg-mint-600 text-xs font-semibold text-white transition-colors">
+                            完成录音
+                        </button>
+                    </div>
+
+                    <!-- Input Bar -->
+                    <div class="p-3 md:p-4 border-t border-slate-100 bg-white">
+                        <div class="flex items-end gap-2 bg-slate-50/80 p-2 rounded-2xl border border-slate-200/70 focus-within:border-mint-500 focus-within:ring-2 focus-within:ring-mint-100 transition-all">
+                            
+                            <!-- Upload Button -->
+                            <button onclick="triggerFileUpload()" class="p-2.5 text-slate-400 hover:text-slate-600 hover:bg-white rounded-xl transition-all" title="上传报告或处方照片">
+                                <i class="fa-solid fa-paperclip text-lg"></i>
+                            </button>
+                            <input type="file" id="fileInput" class="hidden" accept="image/*,.pdf" onchange="handleFileSelect(event)">
+
+                            <!-- Voice Button -->
+                            <button onclick="startVoiceRecording()" id="voiceBtn" class="p-2.5 text-slate-400 hover:text-mint-600 hover:bg-white rounded-xl transition-all" title="语音描述">
+                                <i class="fa-solid fa-microphone text-lg"></i>
+                            </button>
+
+                            <!-- Text Area -->
+                            <textarea id="userInput" rows="1" placeholder="请详细描述您的症状（如发病时间、痛感强度...）" class="flex-1 bg-transparent border-0 resize-none outline-none text-sm text-slate-800 placeholder-slate-400 p-2 max-h-32 custom-scrollbar" onkeydown="handleKeyPress(event)" oninput="autoGrow(this)"></textarea>
+
+                            <!-- Send Button -->
+                            <button onclick="sendMessage()" class="p-3 bg-mint-500 hover:bg-mint-600 text-white rounded-xl font-medium shadow-md hover:shadow-glow transition-all flex items-center justify-center shrink-0">
+                                <i class="fa-solid fa-paper-plane"></i>
+                            </button>
+                        </div>
+                        <div class="flex items-center justify-between px-2 pt-2 text-[11px] text-slate-400">
+                            <span>* AI 提供健康参考，急诊或重症请及时就医</span>
+                            <span>按 Enter 发送</span>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Right Side Widgets (Health Summary & Patient Status) -->
+                <div class="w-full lg:w-80 flex flex-col gap-5 overflow-y-auto custom-scrollbar shrink-0">
+                    
+                    <!-- Health Score Gauge Card -->
+                    <div class="bg-gradient-to-br from-mint-500 to-tealish-600 rounded-3xl p-5 text-white shadow-soft relative overflow-hidden">
+                        <div class="absolute -right-4 -bottom-4 w-32 h-32 bg-white/10 rounded-full blur-2xl pointer-events-none"></div>
+                        <div class="flex items-center justify-between mb-4">
+                            <span class="text-xs font-medium text-mint-100 tracking-wider">今日健康指数评估</span>
+                            <span class="text-[10px] bg-white/20 backdrop-blur-md px-2.5 py-1 rounded-full">良好</span>
+                        </div>
+                        
+                        <div class="flex items-baseline gap-2 mb-2">
+                            <span class="text-4xl font-bold">92</span>
+                            <span class="text-xs text-mint-100">/ 100 分</span>
+                        </div>
+
+                        <div class="w-full bg-black/20 rounded-full h-2 mb-4 overflow-hidden">
+                            <div class="bg-white h-full rounded-full w-[92%] transition-all duration-1000"></div>
+                        </div>
+
+                        <p class="text-xs text-mint-100/90 leading-relaxed">
+                            基于您绑定的智能手环数据，您的静息心率与血压稳健。注意午后补水。
+                        </p>
+                    </div>
+
+                    <!-- Vital Metrics Grid -->
+                    <div class="bg-white rounded-3xl p-5 shadow-soft border border-slate-100 space-y-4">
+                        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                            <h4 class="font-bold text-slate-800 text-sm">生理指标快览</h4>
+                            <span class="text-[11px] text-mint-600 bg-mint-50 px-2 py-0.5 rounded-md font-medium">实时同步</span>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3">
+                            <!-- Heart Rate -->
+                            <div class="p-3 rounded-2xl bg-rose-50/60 border border-rose-100/80">
+                                <div class="flex items-center gap-2 text-rose-500 text-xs mb-1">
+                                    <i class="fa-solid fa-heart-pulse"></i>
+                                    <span>静息心率</span>
+                                </div>
+                                <div class="text-lg font-bold text-slate-800">72 <span class="text-xs font-normal text-slate-400">bpm</span></div>
+                            </div>
+
+                            <!-- Blood Pressure -->
+                            <div class="p-3 rounded-2xl bg-skysoft-50/80 border border-skysoft-100">
+                                <div class="flex items-center gap-2 text-sky-500 text-xs mb-1">
+                                    <i class="fa-solid fa-gauge-high"></i>
+                                    <span>血压参考</span>
+                                </div>
+                                <div class="text-lg font-bold text-slate-800">118/78 <span class="text-xs font-normal text-slate-400">mmHg</span></div>
+                            </div>
+
+                            <!-- Sleep -->
+                            <div class="p-3 rounded-2xl bg-indigo-50/60 border border-indigo-100/80">
+                                <div class="flex items-center gap-2 text-indigo-500 text-xs mb-1">
+                                    <i class="fa-solid fa-moon"></i>
+                                    <span>夜间睡眠</span>
+                                </div>
+                                <div class="text-lg font-bold text-slate-800">7<span class="text-xs font-normal text-slate-400">h</span> 45<span class="text-xs font-normal text-slate-400">m</span></div>
+                            </div>
+
+                            <!-- SpO2 -->
+                            <div class="p-3 rounded-2xl bg-tealish-50/80 border border-tealish-100">
+                                <div class="flex items-center gap-2 text-tealish-600 text-xs mb-1">
+                                    <i class="fa-solid fa-lungs"></i>
+                                    <span>血氧饱和度</span>
+                                </div>
+                                <div class="text-lg font-bold text-slate-800">99<span class="text-xs font-normal text-slate-400">%</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Recommended Specialist -->
+                    <div class="bg-white rounded-3xl p-5 shadow-soft border border-slate-100">
+                        <div class="flex items-center justify-between mb-4">
+                            <h4 class="font-bold text-slate-800 text-sm">为你匹配的三甲专家</h4>
+                            <a href="#" onclick="switchTab('doctors')" class="text-xs text-mint-600 font-medium hover:underline">查看全部</a>
+                        </div>
+
+                        <div class="flex items-center gap-3.5 p-3 rounded-2xl bg-slate-50 border border-slate-100">
+                            <img src="https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=150" alt="Doctor" class="w-12 h-12 rounded-2xl object-cover shrink-0">
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-bold text-slate-800 truncate">张华 主任医师</p>
+                                <p class="text-xs text-slate-400 truncate">三甲华山医院 · 神经内科</p>
+                                <div class="flex items-center gap-1 mt-1">
+                                    <i class="fa-solid fa-star text-amber-400 text-[10px]"></i>
+                                    <span class="text-xs font-semibold text-slate-700">4.9</span>
+                                    <span class="text-[10px] text-slate-400">(2,100+ 次诊疗)</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button onclick="bookDoctor('张华 主任医师')" class="w-full mt-3 py-2.5 rounded-xl bg-mint-50 hover:bg-mint-100 text-mint-700 font-semibold text-xs transition-colors">
+                            预约线上极速复诊
+                        </button>
+                    </div>
+
+                </div>
+
+            </div>
+
+            <!-- VIEW 2: DASHBOARD (健康数据看板) -->
+            <div id="view-dashboard" class="view-panel hidden flex-1 p-4 md:p-6 pb-24 md:pb-6 bg-white rounded-3xl shadow-soft border border-slate-100 overflow-y-auto custom-scrollbar">
+                <div class="max-w-4xl mx-auto space-y-6">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="text-xl font-bold text-slate-800">个人健康分析报告</h3>
+                            <p class="text-xs text-slate-400">近30天健康趋势与设备监测整合</p>
+                        </div>
+                        <span class="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold">状态良好</span>
+                    </div>
+
+                    <!-- Metrics Charts Cards Mock -->
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <div class="p-5 rounded-2xl bg-mint-50/50 border border-mint-100">
+                            <p class="text-xs text-slate-500 mb-1">平均心率变化</p>
+                            <h4 class="text-2xl font-bold text-slate-800">74 BPM</h4>
+                            <div class="mt-4 h-16 flex items-end gap-1.5">
+                                <div class="bg-mint-400 h-[60%] flex-1 rounded-t-sm"></div>
+                                <div class="bg-mint-400 h-[80%] flex-1 rounded-t-sm"></div>
+                                <div class="bg-mint-500 h-[100%] flex-1 rounded-t-sm"></div>
+                                <div class="bg-mint-400 h-[70%] flex-1 rounded-t-sm"></div>
+                                <div class="bg-mint-300 h-[50%] flex-1 rounded-t-sm"></div>
+                            </div>
+                        </div>
+
+                        <div class="p-5 rounded-2xl bg-skysoft-50/50 border border-skysoft-100">
+                            <p class="text-xs text-slate-500 mb-1">深度睡眠比例</p>
+                            <h4 class="text-2xl font-bold text-slate-800">28.5 %</h4>
+                            <div class="mt-4 h-16 flex items-end gap-1.5">
+                                <div class="bg-sky-400 h-[40%] flex-1 rounded-t-sm"></div>
+                                <div class="bg-sky-400 h-[60%] flex-1 rounded-t-sm"></div>
+                                <div class="bg-sky-500 h-[90%] flex-1 rounded-t-sm"></div>
+                                <div class="bg-sky-400 h-[75%] flex-1 rounded-t-sm"></div>
+                                <div class="bg-sky-300 h-[65%] flex-1 rounded-t-sm"></div>
+                            </div>
+                        </div>
+
+                        <div class="p-5 rounded-2xl bg-amber-50/50 border border-amber-100">
+                            <p class="text-xs text-slate-500 mb-1">每日步数目标</p>
+                            <h4 class="text-2xl font-bold text-slate-800">8,420 步</h4>
+                            <div class="mt-4 h-16 flex items-end gap-1.5">
+                                <div class="bg-amber-400 h-[80%] flex-1 rounded-t-sm"></div>
+                                <div class="bg-amber-400 h-[90%] flex-1 rounded-t-sm"></div>
+                                <div class="bg-amber-500 h-[60%] flex-1 rounded-t-sm"></div>
+                                <div class="bg-amber-400 h-[100%] flex-1 rounded-t-sm"></div>
+                                <div class="bg-amber-300 h-[85%] flex-1 rounded-t-sm"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Comprehensive AI Summary -->
+                    <div class="p-6 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3">
+                        <h4 class="font-bold text-slate-800 flex items-center gap-2">
+                            <i class="fa-solid fa-wand-magic-sparkles text-mint-500"></i>
+                            AI 综合评语与调理建议
+                        </h4>
+                        <p class="text-sm text-slate-600 leading-relaxed">
+                            本月体征数据整体平稳。心率变异率（HRV）处于正常水平，提示近期心理压力适中。建议继续保持规律的无氧与有氧运动组合，并注意夜间深睡眠时间的维护。
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW 3: RECORDS (电子档案) -->
+            <div id="view-records" class="view-panel hidden flex-1 p-4 md:p-6 pb-24 md:pb-6 bg-white rounded-3xl shadow-soft border border-slate-100 overflow-y-auto custom-scrollbar">
+                <div class="max-w-4xl mx-auto space-y-6">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-xl font-bold text-slate-800">健康档案与检查报告</h3>
+                        <button onclick="triggerFileUpload()" class="px-4 py-2 rounded-xl bg-mint-500 text-white text-xs font-semibold hover:bg-mint-600 transition-colors flex items-center gap-2">
+                            <i class="fa-solid fa-plus"></i> 上传新报告
+                        </button>
+                    </div>
+
+                    <div class="space-y-3">
+                        <div class="p-4 rounded-2xl border border-slate-100 hover:border-mint-200 bg-slate-50/50 flex items-center justify-between transition-all">
+                            <div class="flex items-center gap-4">
+                                <div class="w-12 h-12 rounded-xl bg-skysoft-100 text-sky-600 flex items-center justify-center text-xl">
+                                    <i class="fa-solid fa-file-waveform"></i>
+                                </div>
+                                <div>
+                                    <h4 class="font-bold text-slate-800 text-sm">2026年度全面体检报告</h4>
+                                    <p class="text-xs text-slate-400">瑞金医院体检中心 · 2026-08-15</p>
+                                </div>
+                            </div>
+                            <span class="text-xs text-mint-600 bg-mint-50 font-medium px-3 py-1 rounded-full">AI 智能分析已完成</span>
+                        </div>
+
+                        <div class="p-4 rounded-2xl border border-slate-100 hover:border-mint-200 bg-slate-50/50 flex items-center justify-between transition-all">
+                            <div class="flex items-center gap-4">
+                                <div class="w-12 h-12 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center text-xl">
+                                    <i class="fa-solid fa-pills"></i>
+                                </div>
+                                <div>
+                                    <h4 class="font-bold text-slate-800 text-sm">皮肤科线上电子处方</h4>
+                                    <p class="text-xs text-slate-400"> CarePulse 诊疗中心 · 2026-09-02</p>
+                                </div>
+                            </div>
+                            <span class="text-xs text-slate-500 bg-slate-100 font-medium px-3 py-1 rounded-full">已归档</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW 4: DOCTORS (名医预约) -->
+            <div id="view-doctors" class="view-panel hidden flex-1 p-4 md:p-6 pb-24 md:pb-6 bg-white rounded-3xl shadow-soft border border-slate-100 overflow-y-auto custom-scrollbar">
+                <div class="max-w-4xl mx-auto space-y-6">
+                    <h3 class="text-xl font-bold text-slate-800">特邀知名专家门诊</h3>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="p-5 rounded-2xl border border-slate-100 bg-slate-50/50 flex gap-4">
+                            <img src="https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&q=80&w=150" class="w-16 h-16 rounded-2xl object-cover shrink-0">
+                            <div class="flex-1 space-y-1">
+                                <h4 class="font-bold text-slate-800 text-base">李秋华 教授</h4>
+                                <p class="text-xs text-slate-500">中山医院 · 呼吸内科主任</p>
+                                <p class="text-xs text-slate-400">擅长：慢阻肺、慢性咳嗽及呼吸道过敏调理</p>
+                                <button onclick="bookDoctor('李秋华 教授')" class="mt-2 px-4 py-1.5 rounded-xl bg-mint-500 text-white text-xs font-semibold hover:bg-mint-600 transition-colors">
+                                    立即预约
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="p-5 rounded-2xl border border-slate-100 bg-slate-50/50 flex gap-4">
+                            <img src="https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&q=80&w=150" class="w-16 h-16 rounded-2xl object-cover shrink-0">
+                            <div class="flex-1 space-y-1">
+                                <h4 class="font-bold text-slate-800 text-base">张华 主任医师</h4>
+                                <p class="text-xs text-slate-500">华山医院 · 神经内科</p>
+                                <p class="text-xs text-slate-400">擅长：偏头痛、睡眠障碍及神经性疼痛诊治</p>
+                                <button onclick="bookDoctor('张华 主任医师')" class="mt-2 px-4 py-1.5 rounded-xl bg-mint-500 text-white text-xs font-semibold hover:bg-mint-600 transition-colors">
+                                    立即预约
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+
+    </div>
+
+    <!-- 移动端底部 Bottom Navigation (Mobile) -->
+    <div class="md:hidden fixed bottom-0 inset-x-0 bg-white/95 backdrop-blur-md border-t border-slate-100 flex justify-around items-center py-2 px-4 z-30 shadow-2xl">
+        <button onclick="switchTab('consult')" id="mob-consult" class="mob-btn flex flex-col items-center gap-1 text-mint-600 font-semibold">
+            <i class="fa-solid fa-user-doctor text-lg"></i>
+            <span class="text-[10px]">问诊</span>
+        </button>
+        <button onclick="switchTab('dashboard')" id="mob-dashboard" class="mob-btn flex flex-col items-center gap-1 text-slate-400">
+            <i class="fa-solid fa-chart-pie text-lg"></i>
+            <span class="text-[10px]">看板</span>
+        </button>
+        <button onclick="switchTab('records')" id="mob-records" class="mob-btn flex flex-col items-center gap-1 text-slate-400">
+            <i class="fa-solid fa-file-medical text-lg"></i>
+            <span class="text-[10px]">档案</span>
+        </button>
+        <button onclick="switchTab('doctors')" id="mob-doctors" class="mob-btn flex flex-col items-center gap-1 text-slate-400">
+            <i class="fa-solid fa-stethoscope text-lg"></i>
+            <span class="text-[10px]">专家</span>
+        </button>
+    </div>
+
+    <!-- Global Toast Popup -->
+    <div id="toast" class="fixed top-6 left-1/2 -translate-x-1/2 bg-slate-900/90 text-white text-xs px-5 py-3 rounded-2xl shadow-xl backdrop-blur-md flex items-center gap-2 transition-all opacity-0 pointer-events-none z-50">
+        <i class="fa-solid fa-circle-check text-emerald-400"></i>
+        <span id="toastText">操作成功</span>
+    </div>
+
+    <script>
+        // 预设 AI 模拟回复数据库
+        const aiKnowledgeBase = {
+            "偏头痛": {
+                text: "根据您描述的偏头痛与恶心感，可能属于**紧张性头痛**或**偏头痛发作**。这常与近期睡眠质量波动、眼疲劳或颈椎紧张相关。",
+                card: {
+                    type: "Symptom Assessment",
+                    title: "分诊与建议方案",
+                    severity: "低至中度风险",
+                    severityColor: "text-amber-600 bg-amber-50",
+                    tips: [
+                        "避免强光与高噪音环境，适当温敷颈部",
+                        "可保持环境通风，补充 300-500ml 饮用水",
+                        "若持续超过24小时或伴随视物模糊，建议预约神经内科"
+                    ]
+                }
+            },
+            "血常规": {
+                text: "已读取您关联的血常规数据：红细胞与白细胞计数均在正常参考值范围内，无明显感染或贫血迹象。",
+                card: {
+                    type: "Report Analysis",
+                    title: "血常规核心指标评估",
+                    severity: "指标正常",
+                    severityColor: "text-emerald-600 bg-emerald-50",
+                    tips: [
+                        "白细胞计数: 6.2 ×10^9/L (正常)",
+                        "血红蛋白: 145 g/L (正常)",
+                        "建议保持现有良好作息与均衡饮食"
+                    ]
+                }
+            },
+            "默认": {
+                text: "我已收到您的健康咨询描述。AI 正在根据临床医学数据库分析您的症状特征...",
+                card: {
+                    type: "Health Tip",
+                    title: "初步日常健康建议",
+                    severity: "日常关注",
+                    severityColor: "text-sky-600 bg-sky-50",
+                    tips: [
+                        "保持充足水分摄入与规律休息",
+                        "密切观察症状是否有加重趋势",
+                        "必要时随时通过本平台预约对症门诊"
+                    ]
+                }
+            }
+        };
+
+        // 切换 View Tab
+        function switchTab(tabId) {
+            // 隐藏所有 Views
+            document.querySelectorAll('.view-panel').forEach(panel => panel.classList.add('hidden'));
+            
+            // 展现目标 View
+            const targetView = document.getElementById(`view-${tabId}`);
+            if (targetView) targetView.classList.remove('hidden');
+
+            // 更新 Sidebar 样式
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('bg-mint-50', 'text-mint-600', 'font-semibold');
+                btn.classList.add('text-slate-500');
+            });
+            const activeNav = document.getElementById(`nav-${tabId}`);
+            if (activeNav) {
+                activeNav.classList.add('bg-mint-50', 'text-mint-600', 'font-semibold');
+                activeNav.classList.remove('text-slate-500');
+            }
+
+            // 更新移动端 Bottom Nav 样式
+            document.querySelectorAll('.mob-btn').forEach(btn => {
+                btn.classList.remove('text-mint-600', 'font-semibold');
+                btn.classList.add('text-slate-400');
+            });
+            const activeMob = document.getElementById(`mob-${tabId}`);
+            if (activeMob) {
+                activeMob.classList.add('text-mint-600', 'font-semibold');
+                activeMob.classList.remove('text-slate-400');
+            }
+
+            // 更新 Header 标题
+            const titles = {
+                'consult': '全能 AI 医疗咨询',
+                'dashboard': '健康数据看板',
+                'records': '电子档案 / 报告',
+                'doctors': '三甲名医预约'
+            };
+            document.getElementById('pageTitle').textContent = titles[tabId] || ' CarePulse AI';
+        }
+
+        // 发送快捷 Prompt
+        function sendQuickPrompt(promptText) {
+            const input = document.getElementById('userInput');
+            input.value = promptText;
+            sendMessage();
+        }
+
+        // 处理键盘 Enter 发送
+        function handleKeyPress(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        }
+
+        // 发送消息核心逻辑
+        function sendMessage() {
+            const input = document.getElementById('userInput');
+            const messageText = input.value.trim();
+            if (!messageText) return;
+
+            // 1. 渲染用户消息
+            appendUserMessage(messageText);
+            input.value = '';
+            input.style.height = 'auto';
+
+            // 2. 显示 AI 正在输入指示器
+            const typingIndicator = document.getElementById('typingIndicator');
+            typingIndicator.classList.remove('hidden');
+            scrollToBottom();
+
+            // 3. 模拟延迟后回复 AI 结果
+            setTimeout(() => {
+                typingIndicator.classList.add('hidden');
+                generateAIResponse(messageText);
+            }, 1400);
+        }
+
+        // 渲染用户消息
+        function appendUserMessage(text) {
+            const chatMessages = document.getElementById('chatMessages');
+            const userMsgHTML = `
+                <div class="flex items-start justify-end gap-3 max-w-2xl ml-auto msg-in">
+                    <div class="bg-mint-500 text-white rounded-2xl rounded-tr-none p-4 text-sm leading-relaxed shadow-sm">
+                        ${escapeHtml(text)}
+                    </div>
+                    <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=150" class="w-8 h-8 rounded-xl object-cover shrink-0 mt-1 ring-2 ring-mint-200">
+                </div>
+            `;
+            chatMessages.insertAdjacentHTML('beforeend', userMsgHTML);
+            scrollToBottom();
+        }
+
+        // 生成 AI 回复
+        function generateAIResponse(userQuery) {
+            const chatMessages = document.getElementById('chatMessages');
+            
+            // 匹配简易知识库
+            let match = aiKnowledgeBase["默认"];
+            if (userQuery.includes("头痛") || userQuery.includes("恶心")) {
+                match = aiKnowledgeBase["偏头痛"];
+            } else if (userQuery.includes("报告") || userQuery.includes("血常规")) {
+                match = aiKnowledgeBase["血常规"];
+            }
+
+            const aiMsgHTML = `
+                <div class="flex items-start gap-3 max-w-2xl msg-in">
+                    <div class="w-8 h-8 rounded-xl bg-mint-500 text-white flex items-center justify-center text-sm shrink-0 shadow-sm mt-1">
+                        <i class="fa-solid fa-robot"></i>
+                    </div>
+                    <div class="space-y-3 flex-1">
+                        <div class="bg-slate-50 border border-slate-100/80 rounded-2xl rounded-tl-none p-4 text-sm text-slate-700 leading-relaxed shadow-card">
+                            ${match.text}
+                        </div>
+
+                        <!-- Structured Health Card -->
+                        <div class="p-4 rounded-2xl bg-white border border-slate-100 shadow-soft space-y-3">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                                    <i class="fa-solid fa-file-medical text-mint-500"></i>
+                                    ${match.card.title}
+                                </span>
+                                <span class="text-[10px] font-semibold px-2.5 py-0.5 rounded-full ${match.card.severityColor}">
+                                    ${match.card.severity}
+                                </span>
+                            </div>
+                            <ul class="space-y-1.5 text-xs text-slate-600">
+                                ${match.card.tips.map(tip => `<li class="flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-mint-400"></span>${tip}</li>`).join('')}
+                            </ul>
+                            <div class="pt-2 border-t border-slate-50 flex justify-end">
+                                <button onclick="showToast('已为您生成PDF健康小结')" class="text-[11px] text-mint-600 hover:text-mint-700 font-medium">导出建议卡片 &rarr;</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            chatMessages.insertAdjacentHTML('beforeend', aiMsgHTML);
+            scrollToBottom();
+        }
+
+        // 滚动到底部
+        function scrollToBottom() {
+            const chatMessages = document.getElementById('chatMessages');
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // 清空对话
+        function clearChatHistory() {
+            const chatMessages = document.getElementById('chatMessages');
+            chatMessages.innerHTML = `
+                <div class="flex items-start gap-3 max-w-2xl msg-in">
+                    <div class="w-8 h-8 rounded-xl bg-mint-500 text-white flex items-center justify-center text-sm shrink-0 shadow-sm mt-1">
+                        <i class="fa-solid fa-robot"></i>
+                    </div>
+                    <div class="bg-slate-50 border border-slate-100/80 rounded-2xl rounded-tl-none p-4 text-sm text-slate-700 leading-relaxed shadow-card">
+                        对话记录已清空。请随时输入您的最新症状或问题。
+                    </div>
+                </div>
+            `;
+            showToast('对话记录已清空');
+        }
+
+        // 模拟语音录音
+        function startVoiceRecording() {
+            document.getElementById('voiceOverlay').classList.remove('hidden');
+        }
+        function stopVoiceRecording() {
+            document.getElementById('voiceOverlay').classList.add('hidden');
+            sendQuickPrompt('我感觉喉咙有点干痒，伴有轻微低烧');
+        }
+
+        // 模拟文件上传
+        function triggerFileUpload() {
+            document.getElementById('fileInput').click();
+        }
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                showToast(`已成功接收文件: ${file.name}`);
+                setTimeout(() => {
+                    sendQuickPrompt(`帮我分析这份刚上传的医学报告：${file.name}`);
+                }, 800);
+            }
+        }
+
+        // 预约医生 Popup
+        function bookDoctor(doctorName) {
+            showToast(`预约申请已发送给 ${doctorName}，助理稍后会与您联系`);
+        }
+
+        // Toast 消息提示
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            const toastText = document.getElementById('toastText');
+            toastText.textContent = message;
+            
+            toast.classList.remove('opacity-0', 'pointer-events-none');
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'pointer-events-none');
+            }, 2500);
+        }
+
+        // 输入框自适应高度
+        function autoGrow(el) {
+            el.style.height = 'auto';
+            el.style.height = Math.min(el.scrollHeight, 128) + 'px';
+        }
+
+        // 安全字符串转义
+        function escapeHtml(str) {
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+    </script>
+</body>
+</html>
