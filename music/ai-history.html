@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>人工智能发展史 · 音视频</title>
+<style>
+:root{--bg:#070b1a;--ink:#e8ecf5;--cy:#5ee7ff;--am:#ffb454;--dim:#8d98b8}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%;background:var(--bg);color:var(--ink);overflow:hidden;font-family:"PingFang SC","Microsoft YaHei","Noto Sans SC",sans-serif}
+canvas{position:fixed;inset:0;width:100%;height:100%}
+#txt{position:fixed;left:6vw;right:6vw;top:12vh;max-width:min(760px,36vw);transition:opacity .6s,transform .6s}
+#txt.out{opacity:0;transform:translateY(12px)}
+#yr{font:700 clamp(56px,13vw,150px)/1 "Noto Serif SC","Songti SC",Georgia,serif;color:var(--am);letter-spacing:-.02em}
+#tt{font:600 clamp(24px,4.4vw,44px)/1.25 "Noto Serif SC","Songti SC",serif;margin:.3em 0 .4em}
+#ds{font-size:clamp(15px,2vw,20px);line-height:1.8;color:#c5cde2;max-width:34em}
+#bar{position:fixed;left:6vw;right:6vw;bottom:9vh;height:28px;cursor:pointer}
+#bar i{position:absolute;top:13px;height:2px;left:0;right:0;background:#26304f}
+#bar b{position:absolute;top:12px;height:4px;left:0;width:0;background:var(--cy);border-radius:2px}
+#bar s{position:absolute;top:9px;width:2px;height:10px;background:#3a4670}
+#bar s.on{background:var(--am)}
+#ctl{position:fixed;left:6vw;bottom:2.5vh;display:flex;gap:10px}
+button{font:inherit;font-size:14px;color:var(--ink);background:#121a36;border:1px solid #2b365c;border-radius:6px;padding:8px 14px;cursor:pointer}
+button:hover{border-color:var(--cy)}button:focus-visible{outline:2px solid var(--cy)}
+button.on{border-color:var(--am);color:var(--am)}
+#start{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;z-index:9;text-align:center;padding:20px}
+#start h1{font:700 clamp(34px,7vw,72px)/1.15 "Noto Serif SC","Songti SC",serif}
+#start p{color:var(--dim)}
+#start button{font-size:18px;padding:14px 34px;border-color:var(--cy);color:var(--cy)}
+#start.hide{display:none}
+@media(max-width:700px){#txt{max-width:none;top:6vh}#yr{font-size:clamp(44px,12vw,70px)}#ds{line-height:1.6}}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="txt"><div id="yr"></div><div id="tt"></div><div id="ds"></div></div>
+<div id="bar"><i></i><b id="pg"></b></div>
+<div id="ctl">
+  <button id="bp">暂停</button><button id="br">重播</button><button id="bm">静音</button><button id="bv">旁白：关</button>
+</div>
+<div id="start">
+  <h1>人工智能发展史</h1>
+  <p>1950 – 今天 · 约 80 秒 · 音乐由浏览器实时合成</p>
+  <button id="go">开始播放</button>
+</div>
+<script>
+const S=[
+["1950","图灵测试","艾伦·图灵发表《计算机器与智能》，提出：如果机器的对话让人无法分辨，它就算会思考。"],
+["1956","人工智能诞生","达特茅斯会议上，麦卡锡等人第一次使用“人工智能”一词，这门学科从此有了名字。"],
+["1966","ELIZA","MIT 的 ELIZA 用简单的模式匹配扮演心理咨询师，第一次让人对着机器倾诉。"],
+["1974","第一次寒冬","算力不足、期望过高，经费大幅削减。随后专家系统兴起，又在 80 年代末再度遇冷。"],
+["1997","深蓝胜卡斯帕罗夫","IBM 深蓝战胜国际象棋世界冠军，暴力搜索加上人工设计的评估函数，走到了顶峰。"],
+["2006","深度学习复兴","辛顿提出逐层预训练深度信念网络，多层神经网络重新被认真对待。"],
+["2012","AlexNet","AlexNet 在 ImageNet 上大幅领先，GPU 加大数据加深度网络，开启了新的时代。"],
+["2016","AlphaGo","AlphaGo 以 4:1 击败李世石，强化学习与深度网络解决了围棋这个“不可能”的问题。"],
+["2017","Transformer","《Attention Is All You Need》发表，自注意力机制成为后来几乎所有大模型的基础。"],
+["2022","ChatGPT","ChatGPT 发布，两个月用户过亿，AI 第一次以对话的形式走进每个人的日常。"],
+["2023","大模型时代","多模态、长上下文、推理与智能体接连出现。AI 开始写代码、做研究、使用工具。"]
+];
+const D=7.5, N=S.length, TOTAL=D*N;
+const $=id=>document.getElementById(id);
+const cv=$('cv'),g=cv.getContext('2d');
+let W,H,dpr;
+function rs(){dpr=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;cv.width=W*dpr;cv.height=H*dpr;g.setTransform(dpr,0,0,dpr,0,0)}
+addEventListener('resize',rs);rs();
+// timeline ticks
+S.forEach((_,i)=>{const s=document.createElement('s');s.style.left=(i/N*100)+'%';s.id='k'+i;$('bar').appendChild(s)});
+
+// ---------- audio ----------
+let ctx,master,noiseBuf,t0=0,next=0,step=0,timer=null,muted=false,speak=false,paused=false,ended=false,started=false;
+const CH=[{r:110,m:[0,3,7]},{r:87.31,m:[0,4,7]},{r:130.81,m:[0,4,7]},{r:98,m:[0,4,7]}];
+const fq=(r,s)=>r*Math.pow(2,s/12);
+function tone(f,t,d,type,v,filt){
+  const o=ctx.createOscillator(),e=ctx.createGain();o.type=type;o.frequency.value=f;
+  e.gain.setValueAtTime(0.0001,t);e.gain.linearRampToValueAtTime(v,t+Math.min(.03,d/3));e.gain.exponentialRampToValueAtTime(0.0001,t+d);
+  let n=o;if(filt){const q=ctx.createBiquadFilter();q.type='lowpass';q.frequency.value=filt;o.connect(q);n=q}
+  n.connect(e);e.connect(master);o.start(t);o.stop(t+d+.05);
+}
+function kick(t){const o=ctx.createOscillator(),e=ctx.createGain();o.frequency.setValueAtTime(130,t);o.frequency.exponentialRampToValueAtTime(40,t+.15);
+  e.gain.setValueAtTime(.55,t);e.gain.exponentialRampToValueAtTime(.001,t+.22);o.connect(e);e.connect(master);o.start(t);o.stop(t+.25)}
+function hat(t,v){const s=ctx.createBufferSource(),f=ctx.createBiquadFilter(),e=ctx.createGain();s.buffer=noiseBuf;f.type='highpass';f.frequency.value=7000;
+  e.gain.setValueAtTime(v,t);e.gain.exponentialRampToValueAtTime(.001,t+.05);s.connect(f);f.connect(e);e.connect(master);s.start(t);s.stop(t+.06)}
+function sceneAt(time){return Math.max(0,Math.min(N-1,Math.floor((time-t0)/D)))}
+function sched(){
+  while(next<ctx.currentTime+.25){
+    const idx=sceneAt(next);
+    if(next-t0>=TOTAL){ if(next-t0>TOTAL+3){clearInterval(timer);return} }
+    const bpm=72+idx*5,sd=60/bpm/2,bar=Math.floor(step/8)%4,sp=step%8,c=CH[bar];
+    if(next-t0<TOTAL){
+      // early eras: 8-bit square blips; later: warm triangles / saw pads
+      const arp=[0,1,2,1,2,1,2,1][sp];
+      const f=fq(c.r*(idx<4?4:2),c.m[arp]);
+      if(idx<5) tone(f,next,sd*.9,'square',.05,2400);
+      else tone(f,next,sd*1.6,'triangle',.12,3200);
+      if(idx>=2&&sp%4==0) tone(fq(c.r,-12)*2,next,sd*3.5,'sine',.2);
+      if(idx>=3&&sp==0) c.m.forEach(m=>tone(fq(c.r*2,m),next,sd*8,idx<7?'triangle':'sawtooth',idx<7?.07:.035,900+idx*220));
+      if(idx>=5&&sp%2==0) hat(next,.05+(sp%4==2?.04:0));
+      if(idx>=6&&sp%4==0) kick(next);
+      if(idx>=8&&sp==4) tone(fq(c.r*8,c.m[2]),next,sd*5,'sine',.06);
+      if(idx==N-1&&sp==0) tone(fq(c.r*4,12),next,sd*6,'sine',.08);
+    }
+    next+=sd;step++;
+  }
+}
+function whoosh(){ // scene-change sweep
+  if(!ctx||muted)return;const t=ctx.currentTime,s=ctx.createBufferSource(),f=ctx.createBiquadFilter(),e=ctx.createGain();
+  s.buffer=noiseBuf;f.type='bandpass';f.Q.value=2;f.frequency.setValueAtTime(300,t);f.frequency.exponentialRampToValueAtTime(5000,t+.7);
+  e.gain.setValueAtTime(.0001,t);e.gain.linearRampToValueAtTime(.12,t+.3);e.gain.exponentialRampToValueAtTime(.0001,t+.8);
+  s.connect(f);f.connect(e);e.connect(master);s.start(t);s.stop(t+.85);
+}
+function init(){
+  ctx=new (window.AudioContext||window.webkitAudioContext)();
+  const comp=ctx.createDynamicsCompressor();master=ctx.createGain();master.gain.value=.8;master.connect(comp);comp.connect(ctx.destination);
+  noiseBuf=ctx.createBuffer(1,ctx.sampleRate,ctx.sampleRate);const d=noiseBuf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
+}
+function play(from=0){
+  if(!ctx)init();ctx.resume();paused=false;ended=false;started=true;$('bp').textContent='暂停';
+  t0=ctx.currentTime-from;next=ctx.currentTime+.05;step=0;lastIdx=-1;
+  clearInterval(timer);timer=setInterval(sched,50);
+}
+
+// ---------- scene text ----------
+let lastIdx=-1;
+function show(i){
+  const el=$('txt');el.classList.add('out');
+  setTimeout(()=>{$('yr').textContent=S[i][0];$('tt').textContent=S[i][1];$('ds').textContent=S[i][2];el.classList.remove('out')},350);
+  S.forEach((_,k)=>$('k'+k).classList.toggle('on',k<=i));
+  whoosh();
+  if(speak&&'speechSynthesis' in window){speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(S[i][1]+'。'+S[i][2]);u.lang='zh-CN';u.rate=1.1;speechSynthesis.speak(u)}
+}
+
+// ---------- visuals ----------
+const BG=[['#0a1020','#5ee7ff'],['#0b0a1c','#ffd37a'],['#02100a','#4dff88'],['#0a1522','#9fd8ff'],['#15110a','#e8c27a'],['#0d0a1e','#b18cff'],['#0a1418','#ffb454'],['#130d08','#d9b36a'],['#0a0f1f','#6aa8ff'],['#071a18','#5ef2c0'],['#08091c','#ff8ad8']];
+const FONT='"PingFang SC","Microsoft YaHei","Noto Sans SC",sans-serif';
+const ease=x=>x<0?0:x>1?1:x*x*(3-2*x);
+const rnd=k=>{const x=Math.sin(k*127.1+311.7)*43758.5453;return x-Math.floor(x)};
+const txt=(s,x,y,z,c,al,f)=>{g.font=z+'px '+(f||FONT);g.fillStyle=c;g.textAlign=al||'left';g.textBaseline='middle';g.fillText(s,x,y)};
+const typ=(s,t,sp)=>s.slice(0,Math.max(0,Math.floor(t*(sp||12))));
+const rr=(x,y,w,h,r)=>{g.beginPath();g.roundRect(x,y,w,h,r)};
+const AIP=(()=>{const c=document.createElement('canvas');c.width=300;c.height=120;const x=c.getContext('2d');x.font='bold 110px Georgia,serif';x.textAlign='center';x.textBaseline='middle';x.fillText('AI',150,62);
+  const d=x.getImageData(0,0,300,120).data,p=[];for(let y=0;y<120;y+=4)for(let a=0;a<300;a+=4)if(d[(y*300+a)*4+3]>128)p.push([a/300,y/120]);return p})();
+const zz=v=>Math.max(13,v.w*.032);
+
+const SC=[
+// 1950 图灵测试：两个看不见的对话者 + 图灵机纸带
+(st,T,v,A)=>{
+ const bw=v.w*.34,bh=v.h*.3,y=v.y+v.h*.04,k0=Math.floor(st*.8)%2;
+ [['A',v.x+v.w*.03],['B',v.x+v.w*.63]].forEach(([n,x],k)=>{
+  g.strokeStyle=A;g.lineWidth=2;rr(x,y,bw,bh,10);g.stroke();txt(n,x+14,y+18,16,A);
+  for(let i=0;i<3;i++){g.fillStyle=k==k0?A:'#2a3558';g.beginPath();g.arc(x+bw/2-18+i*18,y+bh/2-(k==k0?Math.abs(Math.sin(T*6+i))*8:0),4,0,6.3);g.fill()}});
+ g.save();g.translate(v.cx,y+bh/2);g.rotate(Math.sin(T)*.15);txt('?',0,0,Math.min(v.w,v.h)*.28,A,'center','Georgia,serif');g.restore();
+ txt('哪一个是人，哪一个是机器？',v.cx,y+bh+34,zz(v)*1.1,'#c5cde2','center');
+ const cs=v.w/12,ty=v.y+v.h*.72,off=(T*28)%cs,base=Math.floor(T*28/cs);
+ for(let i=-1;i<13;i++){const x=v.x+i*cs-off;g.strokeStyle='#33406b';g.lineWidth=1;g.strokeRect(x,ty,cs,cs);txt(rnd(base+i)>.5?'1':'0',x+cs/2,ty+cs/2,cs*.5,'#8d98b8','center')}
+ g.strokeStyle=A;g.lineWidth=3;g.strokeRect(v.x+cs*5.5,ty-6,cs,cs+12);
+},
+// 1956 达特茅斯：星点汇聚成 “AI”
+(st,T,v,A)=>{
+ for(let k=0;k<70;k++){g.fillStyle='rgba(255,255,255,'+(.2+.5*Math.abs(Math.sin(T*.8+k)))+')';g.fillRect(rnd(k)*W,rnd(k+9)*H,2,2)}
+ const e=ease(st/3.6),th=Math.min(v.w*.8*.4,v.h*.6),tw=th/.4;
+ AIP.forEach((p,k)=>{const sx=v.x+rnd(k)*v.w*1.2-v.w*.1,sy=v.y+rnd(k+500)*v.h,tx=v.cx-tw/2+p[0]*tw,ty=v.cy-th/2+p[1]*th;
+  g.fillStyle=A;g.globalAlpha=.4+.6*e;g.beginPath();g.arc(sx+(tx-sx)*e+Math.sin(T*2+k)*(1-e)*14,sy+(ty-sy)*e,2.6,0,6.3);g.fill()});
+ g.globalAlpha=1;txt('达特茅斯学院 · 1956 暑期研讨会',v.cx,v.y+v.h*.86,zz(v)*1.1,'#c5cde2','center');
+},
+// 1966 ELIZA：绿色荧光终端
+(st,T,v,A)=>{
+ const f="'Courier New','PingFang SC','Microsoft YaHei',monospace",z=Math.max(14,Math.min(22,v.w*.042));
+ const L=[['你','我最近很难过。'],['ELIZA','为什么你会觉得难过？'],['你','因为我和母亲吵架了。'],['ELIZA','和你的母亲有关？多说一点。']],ts=[.4,1.9,3.4,5],last=ts.filter(t=>st>t).length-1;
+ g.fillStyle='#03180b';rr(v.x,v.y,v.w,v.h*.8,18);g.fill();g.strokeStyle=A;g.lineWidth=2;g.stroke();
+ g.shadowColor=A;g.shadowBlur=10;
+ L.forEach((l,i)=>{if(st>ts[i]){let s=typ(l[1],st-ts[i],11);if(i==last&&Math.floor(T*2)%2==0)s+='█';txt(l[0]+'> '+s,v.x+22,v.y+z*2+i*z*2.2,z,l[0]=='你'?A:'#d8ffe6','left',f)}});
+ g.shadowBlur=0;g.fillStyle='rgba(0,0,0,.28)';for(let y=v.y+4;y<v.y+v.h*.8-4;y+=4)g.fillRect(v.x+3,y,v.w-6,2);
+},
+// 1974 寒冬：飘雪 + 经费曲线
+(st,T,v,A)=>{
+ for(let k=0;k<110;k++){const x=(rnd(k)*W+Math.sin(T*.7+k)*24+W)%W,y=(rnd(k+7)*H+T*(24+rnd(k+3)*40))%H;g.fillStyle='rgba(220,240,255,'+(.25+rnd(k+2)*.5)+')';g.beginPath();g.arc(x,y,1+rnd(k+5)*2,0,6.3);g.fill()}
+ const X=v.x+v.w*.06,Y=v.y+v.h*.1,w=v.w*.88,h=v.h*.6,P=[.1,.45,.9,.5,.12,.22,.55,.38,.1],e=ease(st/5.5);
+ const f=u=>{const q=u*(P.length-1),i=Math.min(P.length-2,Math.floor(q));return P[i]+(P[i+1]-P[i])*(q-i)};
+ g.strokeStyle='#33406b';g.lineWidth=1;g.beginPath();g.moveTo(X,Y);g.lineTo(X,Y+h);g.lineTo(X+w,Y+h);g.stroke();
+ g.beginPath();g.moveTo(X,Y+h);for(let i=0;i<=100*e;i++){const u=i/100;g.lineTo(X+u*w,Y+h-f(u)*h)}
+ g.strokeStyle=A;g.lineWidth=3;g.stroke();g.lineTo(X+e*w,Y+h);g.closePath();g.fillStyle='rgba(159,216,255,.13)';g.fill();
+ txt('研究经费',X+8,Y-8,zz(v),A);
+ if(e>.5)txt('寒冬',X+w*.5,Y+h-f(.5)*h+24,zz(v)*1.4,'#fff','center');
+ if(e>.9)txt('专家系统短暂回暖，随后再度冷却',v.cx,Y+h+36,zz(v),'#8d98b8','center');
+},
+// 1997 深蓝：棋盘 + 搜索树
+(st,T,v,A)=>{
+ const s=Math.min(v.w*.46,v.h*.78),bx=v.x,by=v.y+v.h*.04,c=s/8;
+ for(let i=0;i<8;i++)for(let j=0;j<8;j++){g.fillStyle=(i+j)%2?'#3a2f1c':'#c9a96a';g.fillRect(bx+i*c,by+j*c,c,c)}
+ [[4,7,'♔'],[3,0,'♚'],[2,4,'♞'],[5,3,'♝'],[6,6,'♜'],[1,2,'♟'],[4,2,'♛']].forEach(p=>txt(p[2],bx+p[0]*c+c/2,by+p[1]*c+c/2+2,c*.8,'#111','center','serif'));
+ const hl=Math.floor(st*1.3)%8;g.strokeStyle=A;g.lineWidth=3;g.strokeRect(bx+hl*c+1,by+((hl*3)%8)*c+1,c-2,c-2);
+ const d=Math.min(5,1+Math.floor(st*1.1));
+ const tree=(x,y,a,l,k)=>{if(k>d)return;for(let q=-1;q<=1;q++){const aa=a+q*(.7/k),x2=x+Math.cos(aa)*l,y2=y+Math.sin(aa)*l;
+  g.strokeStyle=A;g.globalAlpha=.25+.1*(5-k);g.lineWidth=1.2;g.beginPath();g.moveTo(x,y);g.lineTo(x2,y2);g.stroke();g.globalAlpha=1;g.fillStyle=A;g.beginPath();g.arc(x2,y2,2,0,6.3);g.fill();tree(x2,y2,aa,l*.74,k+1)}};
+ tree(bx+s+v.w*.03,by+s/2,0,(v.w-s)*.26,1);
+ txt('每秒评估约 2 亿个局面',v.cx,by+s+30,zz(v)*1.1,'#c5cde2','center');
+},
+// 2006 深度学习：逐层堆叠，边缘 → 形状 → 人脸
+(st,T,v,A)=>{
+ const ls=['边缘','形状','人脸'],tw=Math.min(v.w/10,v.h/5);
+ for(let j=0;j<3;j++){const a=ease((st-j*1.8)/.9);if(a<=0)continue;g.globalAlpha=a;
+  const y=v.y+v.h*(.78-j*.3)+(1-a)*20,n=8-j*2;
+  txt('第 '+(j+1)+' 层 · '+ls[j],v.x+4,y-tw*.8,zz(v),A);
+  for(let i=0;i<n;i++){const x=v.cx-(n-1)*tw*.65+i*tw*1.3;
+   g.fillStyle='rgba(177,140,255,.14)';rr(x-tw/2,y-tw/2,tw,tw,8);g.fill();g.strokeStyle=A;g.lineWidth=2;g.save();g.translate(x,y);
+   if(j==0){g.rotate(i*.4+Math.sin(T+i)*.1);g.beginPath();g.moveTo(-tw*.3,0);g.lineTo(tw*.3,0);g.stroke()}
+   else if(j==1){g.beginPath();if(i%3==0)g.arc(0,0,tw*.28,0,6.3);else if(i%3==1)g.rect(-tw*.25,-tw*.25,tw*.5,tw*.5);else{g.moveTo(0,-tw*.3);g.lineTo(tw*.3,tw*.25);g.lineTo(-tw*.3,tw*.25);g.closePath()}g.stroke()}
+   else{g.beginPath();g.arc(0,0,tw*.3,0,6.3);g.stroke();g.fillStyle=A;g.fillRect(-tw*.12,-tw*.08,3,3);g.fillRect(tw*.1,-tw*.08,3,3);g.beginPath();g.arc(0,tw*.02,tw*.12,.2,2.9);g.stroke()}
+   g.restore()}
+  g.globalAlpha=1}
+},
+// 2012 AlexNet：图像识别扫描 + 错误率
+(st,T,v,A)=>{
+ const cols=5,rows=3,gx=v.w/cols,tw=gx*.9,gy=v.h*.21,th=v.h*.18,lb=['猫','狗','汽车','花','船','鸟','钟','杯子'],sx=ease(st/5)*v.w*1.05;
+ for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){const k=r*cols+c,x=v.x+c*gx,y=v.y+r*gy,cx=x+tw/2,cy=y+th/2,z=th*.26;
+  g.fillStyle='hsl('+rnd(k)*360+',35%,22%)';rr(x,y,tw,th,8);g.fill();
+  g.fillStyle='hsl('+rnd(k)*360+',70%,62%)';g.beginPath();
+  if(k%3==0)g.arc(cx,cy,z,0,6.3);else if(k%3==1)g.rect(cx-z,cy-z,z*2,z*2);else{g.moveTo(cx,cy-z);g.lineTo(cx+z,cy+z);g.lineTo(cx-z,cy+z);g.closePath()}g.fill();
+  if(sx>c*gx+tw*.5){g.strokeStyle=A;g.lineWidth=2;g.strokeRect(cx-z-5,cy-z-5,z*2+10,z*2+10);txt(lb[k%8]+' '+(90+Math.floor(rnd(k+4)*9))+'%',x+6,y+th-9,Math.max(11,tw*.12),A)}}
+ g.fillStyle=A;g.globalAlpha=.5;g.fillRect(v.x+sx,v.y-4,3,gy*rows);g.globalAlpha=1;
+ const by=v.y+gy*rows+8,bw=v.w*.55,z=zz(v);
+ txt('Top-5 错误率',v.x,by+8,z,'#c5cde2');
+ g.fillStyle='#4a5680';g.fillRect(v.x,by+22,bw*26/30,14);txt('26%',v.x+bw*26/30+8,by+29,z,'#8d98b8');
+ g.fillStyle=A;g.fillRect(v.x,by+44,bw*15/30*ease((st-4)/2),14);if(st>5)txt('15%',v.x+bw*.5+8,by+51,z,A);
+},
+// 2016 AlphaGo：棋盘 + 第 37 手
+(st,T,v,A)=>{
+ const s=Math.min(v.w,v.h*.92),c=s/18,bx=v.cx-s/2,by=v.cy-s/2;
+ g.fillStyle='#c79a52';rr(bx-c,by-c,s+2*c,s+2*c,6);g.fill();
+ g.strokeStyle='#3b2a12';g.lineWidth=1;g.beginPath();for(let i=0;i<19;i++){g.moveTo(bx+i*c,by);g.lineTo(bx+i*c,by+s);g.moveTo(bx,by+i*c);g.lineTo(bx+s,by+i*c)}g.stroke();
+ const seen={};let k=0,n=0;
+ while(n<70&&k<400){const x=Math.floor(rnd(k*2+1)*19),y=Math.floor(rnd(k*2+2)*19),key=x*19+y;k++;if(seen[key]||key==4*19+14)continue;seen[key]=1;
+  if(st>n*.07){const a=ease((st-n*.07)/.3);g.fillStyle=n%2?'#f2f2f2':'#111';g.beginPath();g.arc(bx+x*c,by+y*c,c*.46*a,0,6.3);g.fill()}n++}
+ if(st>4.6){const p=ease((st-4.6)/.5),px=bx+4*c,py=by+14*c;
+  g.fillStyle='#111';g.beginPath();g.arc(px,py,c*.46*p,0,6.3);g.fill();
+  g.strokeStyle='#ff4d4d';g.lineWidth=3;g.beginPath();g.arc(px,py,c*(.8+.4*Math.sin(T*5)),0,6.3);g.stroke();
+  txt('第 37 手',px+c*1.6,py,Math.max(14,c*.9),'#c0281c','left');}
+},
+// 2017 Transformer：注意力连线 + 热力图
+(st,T,v,A)=>{
+ const tk=['小猫','坐在','垫子','上','因为','它','很累'],n=7,ty=v.y+v.h*.36,gx=v.w/n,foc=Math.floor(st*.9)%n;
+ const m=(i,j)=>.1+.9*Math.pow(Math.sin(i*1.7+j*2.3+T*.3)*.5+.5,3);
+ tk.forEach((s,i)=>{const x=v.x+gx*(i+.5);g.fillStyle=i==foc?A:'#1b2548';rr(x-gx*.42,ty-16,gx*.84,32,8);g.fill();txt(s,x,ty,Math.max(12,gx*.27),i==foc?'#08111f':'#e8ecf5','center')});
+ for(let j=0;j<n;j++){if(j==foc)continue;const x1=v.x+gx*(foc+.5),x2=v.x+gx*(j+.5),w=m(foc,j),h=Math.min(Math.abs(x2-x1)*.4,v.h*.28);
+  g.strokeStyle=A;g.globalAlpha=.2+.8*w;g.lineWidth=1+w*6;g.beginPath();g.moveTo(x1,ty-18);g.quadraticCurveTo((x1+x2)/2,ty-18-h*2,x2,ty-18);g.stroke()}
+ g.globalAlpha=1;
+ const cs=Math.min(gx*.5,v.h*.07),hx=v.cx-cs*n/2,hy=ty+44;
+ for(let i=0;i<n;i++)for(let j=0;j<n;j++){g.fillStyle=A;g.globalAlpha=.08+.85*m(i,j);g.fillRect(hx+j*cs,hy+i*cs,cs-2,cs-2)}
+ g.globalAlpha=1;g.strokeStyle='#fff';g.lineWidth=2;g.strokeRect(hx-2,hy+foc*cs-2,cs*n+2,cs);
+ txt('自注意力：每个词都在看其他所有词',v.cx,hy+cs*n+22,zz(v),'#8d98b8','center');
+},
+// 2022 ChatGPT：对话流式输出 + 用户数
+(st,T,v,A)=>{
+ const z=Math.max(14,Math.min(22,v.w*.04)),bw=v.w*.8,a=['两个粒子一旦纠缠，','测量其中一个，','另一个的状态就同时确定。'],full=a.join('');
+ g.fillStyle='#0d3a34';rr(v.x+v.w-bw,v.y,bw,z*2.6,14);g.fill();txt(typ('用三句话讲讲量子纠缠',st-.2,10),v.x+v.w-bw+16,v.y+z*1.3,z,'#e8ecf5');
+ g.fillStyle='#10201d';rr(v.x,v.y+z*3.4,bw,z*5.2,14);g.fill();g.strokeStyle=A;g.lineWidth=1;g.stroke();
+ const s=typ(full,st-1.6,14);let off=0;a.forEach((l,i)=>{txt(s.slice(off,off+l.length),v.x+16,v.y+z*4.6+i*z*1.5,z,'#e8ecf5');off+=l.length});
+ const e=ease((st-2.8)/4);txt(e.toFixed(2)+' 亿',v.cx,v.y+v.h*.74,Math.min(v.w*.16,v.h*.2),A,'center','Georgia,serif');
+ g.fillStyle='#1b2f2c';g.fillRect(v.x+v.w*.1,v.y+v.h*.88,v.w*.8,6);g.fillStyle=A;g.fillRect(v.x+v.w*.1,v.y+v.h*.88,v.w*.8*e,6);
+ txt('月活用户 · 发布后约两个月',v.cx,v.y+v.h*.95,zz(v),'#8d98b8','center');
+},
+// 2023 大模型：多模态环绕核心
+(st,T,v,A)=>{
+ const rx=v.w*.4,ry=v.h*.3,tg=['文本','图像','音频','视频','代码','工具'];
+ g.strokeStyle='rgba(255,138,216,.25)';g.lineWidth=1;g.beginPath();g.ellipse(v.cx,v.cy,rx,ry,0,0,6.3);g.stroke();g.beginPath();g.ellipse(v.cx,v.cy,rx*.62,ry*.62,0,0,6.3);g.stroke();
+ for(let r=0;r<3;r++){const p=(T*.5+r/3)%1;g.strokeStyle=A;g.globalAlpha=(1-p)*.5;g.beginPath();g.arc(v.cx,v.cy,p*rx*.7,0,6.3);g.stroke()}g.globalAlpha=1;
+ const gr=g.createRadialGradient(v.cx,v.cy,0,v.cx,v.cy,ry*.55);gr.addColorStop(0,A);gr.addColorStop(1,'rgba(255,138,216,0)');g.fillStyle=gr;g.beginPath();g.arc(v.cx,v.cy,ry*.55,0,6.3);g.fill();
+ txt('大模型',v.cx,v.cy,Math.max(16,ry*.24),'#08091c','center');
+ tg.forEach((s,k)=>{const a=T*.5+k*1.047,e=ease((st-k*.3)/.6),q=.62+.38*(k%2),x=v.cx+Math.cos(a)*rx*q,y=v.cy+Math.sin(a)*ry*q,z=Math.max(13,v.w*.035);
+  g.font=z+'px '+FONT;const w=g.measureText(s).width+24;g.globalAlpha=e;g.fillStyle='#1b1540';rr(x-w/2,y-z,w,z*2,z);g.fill();g.strokeStyle=A;g.lineWidth=1.5;g.stroke();txt(s,x,y,z,'#fff','center');
+  const p=(T*.6+k*.17)%1;g.fillStyle=A;g.beginPath();g.arc(x+(v.cx-x)*p,y+(v.cy-y)*p,2.5,0,6.3);g.fill();g.globalAlpha=1});
+}];
+
+function draw(T,idx){
+ const [bg,A]=BG[idx],st=T-idx*D,m=W<700,v={x:m?W*.06:W*.42,y:m?H*.46:H*.12,w:m?W*.88:W*.54,h:m?H*.36:H*.66};
+ v.cx=v.x+v.w/2;v.cy=v.y+v.h/2;
+ g.fillStyle=bg;g.fillRect(0,0,W,H);
+ const gr=g.createRadialGradient(v.cx,v.cy,0,v.cx,v.cy,Math.max(W,H)*.6);gr.addColorStop(0,A+'30');gr.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=gr;g.fillRect(0,0,W,H);
+ SC[idx](st,T,v,A);
+ g.globalAlpha=1-ease(st/.8);g.fillStyle=bg;g.fillRect(0,0,W,H);g.globalAlpha=1;
+}
+function frame(){
+  requestAnimationFrame(frame);
+  if(!started){draw(0.0,0);return}
+  let t=ctx.currentTime-t0;
+  if(t>=TOTAL&&!ended){ended=true;speechSynthesis&&speechSynthesis.cancel();$('bp').textContent='已结束'}
+  t=Math.min(t,TOTAL-.001);const idx=Math.min(N-1,Math.floor(t/D));
+  if(idx!==lastIdx){lastIdx=idx;show(idx)}
+  $('pg').style.width=(t/TOTAL*100)+'%';
+  draw(t,idx);
+}
+frame();
+
+// ---------- controls ----------
+$('go').onclick=()=>{$('start').classList.add('hide');play(0)};
+$('br').onclick=()=>{if(started)play(0)};
+$('bp').onclick=()=>{
+  if(!started||ended)return;
+  if(paused){ctx.resume();paused=false;$('bp').textContent='暂停'}else{ctx.suspend();paused=true;$('bp').textContent='继续'}
+};
+$('bm').onclick=()=>{muted=!muted;if(master)master.gain.value=muted?0:.8;$('bm').classList.toggle('on',muted);$('bm').textContent=muted?'取消静音':'静音'};
+$('bv').onclick=()=>{speak=!speak;$('bv').classList.toggle('on',speak);$('bv').textContent='旁白：'+(speak?'开':'关');
+  if(speak&&started&&lastIdx>=0&&'speechSynthesis' in window){const u=new SpeechSynthesisUtterance(S[lastIdx][1]+'。'+S[lastIdx][2]);u.lang='zh-CN';u.rate=1.1;speechSynthesis.speak(u)}else if('speechSynthesis' in window)speechSynthesis.cancel()};
+$('bar').onclick=e=>{if(!started)return;const r=$('bar').getBoundingClientRect();play(Math.max(0,Math.min(.999,(e.clientX-r.left)/r.width))*TOTAL)};
+addEventListener('keydown',e=>{if(e.code==='Space'&&started){e.preventDefault();$('bp').click()}});
+</script>
+</body>
+</html>
