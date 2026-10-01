@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>中国近代史 · 音视频</title>
+<style>
+:root{--bg:#0c0810;--ink:#f3ece0;--cy:#e8b04a;--am:#ff5a4a;--dim:#9a8f7e}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%;background:var(--bg);color:var(--ink);overflow:hidden;font-family:"Songti SC","Noto Serif SC","STSong","PingFang SC",serif}
+canvas{position:fixed;inset:0;width:100%;height:100%}
+#txt{position:fixed;left:6vw;right:6vw;top:12vh;max-width:min(760px,36vw);transition:opacity .6s,transform .6s}
+#txt.out{opacity:0;transform:translateY(12px)}
+#yr{font:700 clamp(56px,13vw,150px)/1 "Songti SC","STSong",Georgia,serif;color:var(--am);letter-spacing:-.02em}
+#tt{font:600 clamp(24px,4.4vw,44px)/1.25 "Songti SC","STSong",serif;margin:.3em 0 .4em}
+#ds{font-size:clamp(15px,2vw,20px);line-height:1.8;color:#d8cdb8;max-width:34em}
+#bar{position:fixed;left:6vw;right:6vw;bottom:9vh;height:28px;cursor:pointer}
+#bar i{position:absolute;top:13px;height:2px;left:0;right:0;background:#3a2f28}
+#bar b{position:absolute;top:12px;height:4px;left:0;width:0;background:var(--cy);border-radius:2px}
+#bar s{position:absolute;top:9px;width:2px;height:10px;background:#5a4a3a}
+#bar s.on{background:var(--am)}
+#ctl{position:fixed;left:6vw;bottom:2.5vh;display:flex;gap:10px}
+button{font:inherit;font-size:14px;color:var(--ink);background:#16110d;border:1px solid #4a3a2a;border-radius:6px;padding:8px 14px;cursor:pointer}
+button:hover{border-color:var(--cy)}button:focus-visible{outline:2px solid var(--cy)}
+button.on{border-color:var(--am);color:var(--am)}
+#start{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;z-index:9;text-align:center;padding:20px}
+#start h1{font:700 clamp(34px,7vw,72px)/1.15 "Songti SC","STSong",serif}
+#start p{color:var(--dim)}
+#start button{font-size:18px;padding:14px 34px;border-color:var(--cy);color:var(--cy)}
+#start.hide{display:none}
+@media(max-width:700px){#txt{max-width:none;top:6vh}#yr{font-size:clamp(44px,12vw,70px)}#ds{line-height:1.6}}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="txt"><div id="yr"></div><div id="tt"></div><div id="ds"></div></div>
+<div id="bar"><i></i><b id="pg"></b></div>
+<div id="ctl">
+  <button id="bp">暂停</button><button id="br">重播</button><button id="bm">静音</button><button id="bv">旁白：关</button>
+</div>
+<div id="start">
+  <h1>中国近代史</h1>
+  <p>1840 – 1949 · 约 80 秒 · 国风音由浏览器实时合成</p>
+  <button id="go">开始播放</button>
+</div>
+<script>
+const S=[
+["1840","鸦片战争","英国炮舰打破闭关锁国，南京条约签订，千年变局自此开端。"],
+["1851","太平天国","洪秀全在广西起事，一场席卷南中国的农民战争持续十余年。"],
+["1861","洋务运动","师夷长技以自强，近代工厂、学堂与海军在变局中艰难起步。"],
+["1894","甲午战争","北洋水师覆没于黄海，马关条约刺痛人心，救亡图存迫在眉睫。"],
+["1898","戊戌变法","维新派推动百日变法，却如流星划过，很快归于沉寂。"],
+["1900","庚子国变","义和团兴起、八国联军入京，山河再遭劫难。"],
+["1911","辛亥革命","武昌一声枪响，两千年帝制落幕，共和初现曙光。"],
+["1919","五四运动","青年走上街头，外争主权、内除国贼，新思潮奔涌而来。"],
+["1921","红船启航","嘉兴南湖的一叶红船，载着一个政党悄然诞生。"],
+["1937","全民抗战","卢沟桥畔烽火燃起，中华儿女浴血十四年。"],
+["1949","新中国成立","天安门城楼上的一声宣告，中国人民从此站起来了。"]
+];
+const D=7.5, N=S.length, TOTAL=D*N;
+const $=id=>document.getElementById(id);
+const cv=$('cv'),g=cv.getContext('2d');
+let W,H,dpr;
+function rs(){dpr=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;cv.width=W*dpr;cv.height=H*dpr;g.setTransform(dpr,0,0,dpr,0,0)}
+addEventListener('resize',rs);rs();
+S.forEach((_,i)=>{const s=document.createElement('s');s.style.left=(i/N*100)+'%';s.id='k'+i;$('bar').appendChild(s)});
+
+// ---------- audio（国风：五声音阶 + 古筝拨弦 + 钟磬 + 低音持续） ----------
+let ctx,master,noiseBuf,t0=0,next=0,step=0,timer=null,muted=false,speak=false,paused=false,ended=false,started=false;
+const SCALE=[261.63,293.66,329.63,392.0,440.0,523.25,587.33,659.25]; // 宫商角徵羽 两个八度
+const BASS=[130.81,146.83,196.0,164.81];                              // 每小节根音
+function pluck(f,t,d,v){ // 古筝式拨弦
+  const o=ctx.createOscillator(),e=ctx.createGain();o.type='triangle';o.frequency.value=f;
+  e.gain.setValueAtTime(0.0001,t);e.gain.exponentialRampToValueAtTime(v,t+.005);e.gain.exponentialRampToValueAtTime(0.0001,t+d);
+  o.connect(e);e.connect(master);o.start(t);o.stop(t+d+.05);
+}
+function bell(f,t,v){ // 钟磬
+  const o=ctx.createOscillator(),e=ctx.createGain();o.type='sine';o.frequency.value=f;
+  e.gain.setValueAtTime(0.0001,t);e.gain.exponentialRampToValueAtTime(v,t+.01);e.gain.exponentialRampToValueAtTime(0.0001,t+1.6);
+  o.connect(e);e.connect(master);o.start(t);o.stop(t+1.7);
+}
+function taiko(t){ // 太鼓
+  const o=ctx.createOscillator(),e=ctx.createGain();o.frequency.setValueAtTime(110,t);o.frequency.exponentialRampToValueAtTime(38,t+.18);
+  e.gain.setValueAtTime(.5,t);e.gain.exponentialRampToValueAtTime(.001,t+.3);o.connect(e);e.connect(master);o.start(t);o.stop(t+.32);
+}
+function block(t,v){ // 梆子
+  const s=ctx.createBufferSource(),f=ctx.createBiquadFilter(),e=ctx.createGain();s.buffer=noiseBuf;f.type='bandpass';f.frequency.value=2200;f.Q.value=4;
+  e.gain.setValueAtTime(v,t);e.gain.exponentialRampToValueAtTime(.001,t+.06);s.connect(f);f.connect(e);e.connect(master);s.start(t);s.stop(t+.07);
+}
+function sceneAt(time){return Math.max(0,Math.min(N-1,Math.floor((time-t0)/D)))}
+function sched(){
+  while(next<ctx.currentTime+.25){
+    const idx=sceneAt(next);
+    if(next-t0>=TOTAL){ if(next-t0>TOTAL+3){clearInterval(timer);return} }
+    const bpm=58+idx*3,sd=60/bpm/2,bar=Math.floor(step/8)%4,sp=step%8;
+    if(next-t0<TOTAL){
+      const root=BASS[bar];
+      const pat=[0,2,4,2,3,2,1,0][sp];
+      pluck(SCALE[pat],next,idx<6?sd*1.4:sd*1.0,idx<4?.10:.13);   // 旋律：五声音阶拨弦
+      if(sp==0||sp==4) pluck(root/2,next,sd*2,.10);                // 低音
+      if(sp==0) bell(root*2,next,idx>=9?.10:idx<3?.05:.07);        // 句首钟磬
+      if(idx>=5&&sp%4==0) taiko(next);                             // 革命年代起加入太鼓
+      if(idx>=7&&sp%2==0) block(next,.12);                        // 梆子点拍
+      if(idx>=9&&sp==2) bell(root*4,next,.08);                    // 建国：高音钟磬
+    }
+    next+=sd;step++;
+  }
+}
+function whoosh(){ // 转场：一缕风声
+  if(!ctx||muted)return;const t=ctx.currentTime,s=ctx.createBufferSource(),f=ctx.createBiquadFilter(),e=ctx.createGain();
+  s.buffer=noiseBuf;f.type='bandpass';f.Q.value=1.2;f.frequency.setValueAtTime(200,t);f.frequency.exponentialRampToValueAtTime(1200,t+.7);
+  e.gain.setValueAtTime(.0001,t);e.gain.linearRampToValueAtTime(.07,t+.3);e.gain.exponentialRampToValueAtTime(.0001,t+.8);
+  s.connect(f);f.connect(e);e.connect(master);s.start(t);s.stop(t+.85);
+}
+function init(){
+  ctx=new (window.AudioContext||window.webkitAudioContext)();
+  const comp=ctx.createDynamicsCompressor();master=ctx.createGain();master.gain.value=.8;master.connect(comp);comp.connect(ctx.destination);
+  noiseBuf=ctx.createBuffer(1,ctx.sampleRate,ctx.sampleRate);const d=noiseBuf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
+  [65.41,98.0].forEach(r=>{const o=ctx.createOscillator(),e=ctx.createGain();o.type='sine';o.frequency.value=r;e.gain.value=.05;o.connect(e);e.connect(master);o.start()}); // 低音持续
+}
+function play(from=0){
+  if(!ctx)init();ctx.resume();paused=false;ended=false;started=true;$('bp').textContent='暂停';
+  t0=ctx.currentTime-from;next=ctx.currentTime+.05;step=0;lastIdx=-1;
+  clearInterval(timer);timer=setInterval(sched,50);
+}
+
+// ---------- scene text ----------
+let lastIdx=-1;
+function show(i){
+  const el=$('txt');el.classList.add('out');
+  setTimeout(()=>{$('yr').textContent=S[i][0];$('tt').textContent=S[i][1];$('ds').textContent=S[i][2];el.classList.remove('out')},350);
+  S.forEach((_,k)=>$('k'+k).classList.toggle('on',k<=i));
+  whoosh();
+  if(speak&&'speechSynthesis' in window){speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(S[i][1]+'。'+S[i][2]);u.lang='zh-CN';u.rate=1.0;speechSynthesis.speak(u)}
+}
+
+// ---------- visuals（水墨 / 国风，配色随年代转暖） ----------
+const BG=[['#1a0f12','#c98a5a'],['#1a1608','#e8c84a'],['#0e1418','#7fd0c8'],['#0a1622','#7fb0e0'],['#14110a','#d8b46a'],['#1a0e0e','#d06a6a'],['#160f0a','#e0a040'],['#0e1410','#8fd07a'],['#100a14','#e85a5a'],['#1a0c0c','#e07a4a'],['#1a0808','#ffd24a']];
+const FONT='"Songti SC","STSong","Noto Serif SC",serif';
+const ease=x=>x<0?0:x>1?1:x*x*(3-2*x);
+const rnd=k=>{const x=Math.sin(k*127.1+311.7)*43758.5453;return x-Math.floor(x)};
+const txt=(s,x,y,z,c,al,f)=>{g.font=z+'px '+(f||FONT);g.fillStyle=c;g.textAlign=al||'left';g.textBaseline='middle';g.fillText(s,x,y)};
+const rr=(x,y,w,h,r)=>{g.beginPath();g.roundRect(x,y,w,h,r)};
+const zz=v=>Math.max(13,v.w*.032);
+const star=(x,y,r,c)=>{g.fillStyle=c;g.beginPath();for(let i=0;i<10;i++){const a=-1.57+i*6.283/10,rad=i%2?r*.45:r;g.lineTo(x+Math.cos(a)*rad,y+Math.sin(a)*rad)}g.closePath();g.fill()};
+
+const SC=[
+// 1840 鸦片战争：炮舰、硝烟与鸦片箱
+(st,T,v,A)=>{
+  const sea=v.y+v.h*.7;g.fillStyle='#16202a';g.fillRect(v.x,sea,v.w,v.h+v.y-sea);
+  const sx=v.x+v.w*.66;
+  g.fillStyle='#0c1014';g.beginPath();g.moveTo(sx,sea-4);g.lineTo(sx+70,sea-4);g.lineTo(sx+55,sea-30);g.lineTo(sx+15,sea-30);g.closePath();g.fill();
+  g.fillRect(sx+30,sea-60,4,30);
+  g.fillStyle='#101820';g.beginPath();g.moveTo(sx+32,sea-58);g.lineTo(sx+70,sea-40);g.lineTo(sx+32,sea-36);g.closePath();g.fill();
+  if(rnd(Math.floor(T*3))>.5){g.fillStyle='rgba(255,180,80,.7)';g.beginPath();g.arc(sx,sea-6,8+Math.abs(Math.sin(T*8))*4,0,6.3);g.fill()}
+  for(let k=0;k<8;k++){const x=sx-10-(T*30+k*20)%80,y=sea-30-k*6;g.fillStyle='rgba(180,180,190,'+(.2+Math.abs(Math.sin(T*2+k))*.2)+')';g.beginPath();g.arc(x,y,5+rnd(k)*5,0,6.3);g.fill()}
+  const cx=v.x+v.w*.14,cy=sea+20;g.fillStyle='#3a2a14';g.fillRect(cx,cy,46,30);g.strokeStyle=A;g.lineWidth=2;g.strokeRect(cx,cy,46,30);txt('鸦片',cx+23,cy+15,zz(v)*.9,A,'center');
+  txt('闭关锁国的大门被炮火打开',v.cx,v.y+v.h*.95,zz(v),'#d8cdb8','center');
+},
+// 1851 太平天国：旌旗与营寨
+(st,T,v,A)=>{
+  const px=v.cx,top=v.y+v.h*.2;g.strokeStyle='#6b5a3a';g.lineWidth=4;g.beginPath();g.moveTo(px,v.y+v.h*.9);g.lineTo(px,top);g.stroke();
+  const bw=v.w*.42,bh=v.h*.32,e=ease(st/3);
+  g.fillStyle=A;g.globalAlpha=.75;g.fillRect(px,top,bw*e,bh);g.globalAlpha=1;
+  if(e>.5)txt('太平天国',px+bw*.25,top+bh*.5,Math.min(bw*.18,bh*.4),'#1a0808','center');
+  for(let i=0;i<4;i++){const tx=v.x+v.w*.1+i*v.w*.2,ty=v.y+v.h*.8;g.fillStyle='#5a4a2a';g.beginPath();g.moveTo(tx,ty);g.lineTo(tx+24,ty);g.lineTo(tx+12,ty-18);g.closePath();g.fill()}
+  txt('一场席卷南中国的农民战争',v.cx,v.y+v.h*.95,zz(v),'#d8cdb8','center');
+},
+// 1861 洋务运动：齿轮与蒸汽轮船
+(st,T,v,A)=>{
+  const cx=v.cx,cy=v.cy,r=Math.min(v.w,v.h)*.22;
+  const gear=(x,y,r,rot)=>{g.strokeStyle=A;g.lineWidth=3;g.beginPath();for(let i=0;i<12;i++){const a=rot+i*6.283/12;g.lineTo(x+Math.cos(a)*r,y+Math.sin(a)*r)}g.closePath();g.stroke();g.beginPath();g.arc(x,y,r*.4,0,6.3);g.stroke()};
+  gear(cx-r*.8,cy,r*.7,T);gear(cx+r*.5,cy+r*.3,r*.5,-T*1.3);gear(cx+r*.2,cy-r*.5,r*.4,T*1.6);
+  const sy=v.y+v.h*.86;g.fillStyle='#3a4554';g.fillRect(v.x+v.w*.2,sy-14,v.w*.6,14);g.fillRect(v.x+v.w*.4,sy-34,10,22);
+  g.fillStyle='rgba(200,200,210,'+(.3+Math.abs(Math.sin(T*3))*.2)+')';g.beginPath();g.arc(v.x+v.w*.45,sy-40,8,0,6.3);g.fill();
+  txt('师夷长技 · 近代工业起步',v.cx,v.y+v.h*.95,zz(v),'#d8cdb8','center');
+},
+// 1894 甲午战争：黄海波涛与覆没
+(st,T,v,A)=>{
+  const sea=v.y+v.h*.66;g.fillStyle='#0a1a24';g.fillRect(v.x,sea,v.w,v.h+v.y-sea);
+  g.strokeStyle=A;g.lineWidth=2;g.beginPath();for(let x=v.x;x<=v.x+v.w;x+=6){const y=sea+Math.sin(x*.04+T*3)*6;if(x==v.x)g.moveTo(x,y);else g.lineTo(x,y)}g.stroke();
+  const s1=v.x+v.w*.3;g.fillStyle='#1a2630';g.fillRect(s1,sea-16,60,12);g.fillRect(s1+26,sea-30,6,16);
+  const s2=v.x+v.w*.66;g.fillStyle='#10171e';g.fillRect(s2,sea-14,56,12);
+  if(rnd(Math.floor(T*4))>.4){g.fillStyle='rgba(255,120,60,'+(.6+Math.abs(Math.sin(T*9))*.3)+')';g.beginPath();g.arc(s2+28,sea-18,10+Math.abs(Math.sin(T*7))*6,0,6.3);g.fill()}
+  txt('北洋水师覆没 · 马关条约',v.cx,v.y+v.h*.92,zz(v),'#d8cdb8','center');
+},
+// 1898 戊戌变法：奏折闪现又消散
+(st,T,v,A)=>{
+  const e=ease(st/2);g.globalAlpha=e;
+  const pw=v.w*.5,ph=v.h*.6,px=v.cx-pw/2,py=v.cy-ph/2;
+  g.fillStyle='#efe6cf';rr(px,py,pw,ph,6);g.fill();g.strokeStyle='#b89b6a';g.lineWidth=2;g.stroke();
+  g.fillStyle='#6a3a2a';for(let i=0;i<6;i++)g.fillRect(px+pw*.12,py+ph*.18+i*ph*.1,pw*.7,3);
+  g.globalAlpha=1;txt('变法维新',px+pw/2,py+ph*.09,zz(v)*1.1,'#6a3a2a','center');
+  const fade=Math.max(0,1-(st-3)/2);g.globalAlpha=fade;txt('百日而终',v.cx,v.y+v.h*.9,zz(v)*1.1,A,'center');g.globalAlpha=1;
+},
+// 1900 庚子国变：城墙与多面旗帜
+(st,T,v,A)=>{
+  const wy=v.y+v.h*.6;g.fillStyle='#2a2118';g.fillRect(v.x,wy,v.w,v.h+v.y-wy);
+  for(let x=v.x;x<v.x+v.w;x+=24)g.fillRect(x,wy-12,14,12);
+  g.fillStyle='#1a140e';g.fillRect(v.cx-22,wy+10,44,v.h+v.y-wy-10);
+  const cols=['#c0392b','#2980b9','#27ae60','#f1c40f','#8e44ad','#16a085','#e67e22','#c0392b'];
+  for(let i=0;i<8;i++){const e=ease((st-i*.2)/1);if(e<=0)continue;
+    const fx=v.x+v.w*(.95-i*.09)-(1-e)*v.w*.4,fy=wy-30-Math.sin(T*2+i)*4;
+    g.strokeStyle='#888';g.lineWidth=2;g.beginPath();g.moveTo(fx,fy+30);g.lineTo(fx,fy);g.stroke();g.fillStyle=cols[i];g.fillRect(fx,fy,18,12)}
+  txt('八国联军 · 山河再遭劫难',v.cx,v.y+v.h*.93,zz(v),'#d8cdb8','center');
+},
+// 1911 辛亥革命：十八星旗与破晓
+(st,T,v,A)=>{
+  const e=ease(st/3),fw=v.w*.4,fh=v.h*.5,fx=v.cx-fw/2,fy=v.y+v.h*.18;
+  g.fillStyle=A;g.globalAlpha=.85;g.fillRect(fx,fy,fw*e,fh);g.globalAlpha=1;
+  if(e>.4){g.fillStyle='#1a0808';let n=0;for(let r=0;r<3&&n<18;r++)for(let c=0;c<6&&n<18;c++){n++;g.beginPath();g.arc(fx+fw*(c+.5)/6,fy+fh*(r+.5)/3,3,0,6.3);g.fill()}}
+  g.strokeStyle='#ffd24a';g.lineWidth=2;const cx=v.cx;for(let i=0;i<12;i++){const a=i*6.283/12+T*.2;g.beginPath();g.moveTo(cx,fy);g.lineTo(cx+Math.cos(a)*v.w*.12,fy+Math.sin(a)*v.w*.12);g.stroke()}
+  txt('武昌起义 · 两千年帝制终结',v.cx,v.y+v.h*.92,zz(v),'#d8cdb8','center');
+},
+// 1919 五四运动：青年游行
+(st,T,v,A)=>{
+  const y=v.y+v.h*.7;g.fillStyle='#1a241a';g.fillRect(v.x,y,v.w,v.h+v.y-y);
+  const span=v.w*.85;
+  for(let i=0;i<7;i++){const base=(i*v.w*.12)-(T*30),px=v.x+v.w*.05+(((base%span)+span)%span),bob=Math.sin(T*6+i)*3;
+    g.fillStyle='#2a2a2a';g.fillRect(px-4,y-26+bob,8,20);g.beginPath();g.arc(px,y-30+bob,5,0,6.3);g.fill();
+    g.strokeStyle=A;g.lineWidth=2;g.beginPath();g.moveTo(px,y-40+bob);g.lineTo(px+18,y-46+bob);g.stroke();g.fillStyle=A;g.fillRect(px+18,y-52+bob,16,12)}
+  txt('外争主权，内除国贼',v.cx,v.y+v.h*.9,zz(v)*1.1,A,'center');
+},
+// 1921 红船启航：南湖烟水
+(st,T,v,A)=>{
+  const ly=v.y+v.h*.62;g.fillStyle='#0c1820';g.fillRect(v.x,ly,v.w,v.h+v.y-ly);
+  g.strokeStyle='rgba(150,180,200,.3)';g.lineWidth=1;for(let i=0;i<4;i++){g.beginPath();g.moveTo(v.x,ly+10+i*14);g.lineTo(v.x+v.w,ly+10+i*14+Math.sin(T*2+i)*3);g.stroke()}
+  const bx=v.cx,by=ly+24+Math.sin(T)*3;
+  g.fillStyle='#7a1a1a';g.beginPath();g.moveTo(bx-50,by);g.lineTo(bx+50,by);g.lineTo(bx+38,by+16);g.lineTo(bx-38,by+16);g.closePath();g.fill();
+  g.fillStyle='#5a1010';g.fillRect(bx-30,by-22,40,22);
+  star(bx-10,by-33,9,'#ffd24a');
+  txt('南湖红船 · 一个政党诞生',v.cx,v.y+v.h*.92,zz(v),'#d8cdb8','center');
+},
+// 1937 全民抗战：长城烽火
+(st,T,v,A)=>{
+  g.strokeStyle=A;g.lineWidth=4;g.beginPath();for(let x=v.x;x<=v.x+v.w;x+=8){const y=v.y+v.h*.5+Math.sin((x-v.x)/v.w*3.14)*v.h*.12;if(x==v.x)g.moveTo(x,y);else g.lineTo(x,y)}g.stroke();
+  const tx=v.x+v.w*.5,ty=v.y+v.h*.5-Math.sin(1.57)*v.h*.12;
+  g.fillStyle='#3a2a1a';g.fillRect(tx-12,ty-20,24,20);
+  const fl=8+Math.abs(Math.sin(T*8))*8;g.fillStyle='rgba(255,140,50,'+(.6+Math.abs(Math.sin(T*10))*.3)+')';g.beginPath();g.moveTo(tx-8,ty-20);g.lineTo(tx+8,ty-20);g.lineTo(tx,ty-20-fl);g.closePath();g.fill();
+  for(let k=0;k<6;k++){const x=v.x+rnd(k)*v.w,y=v.y+rnd(k+3)*v.h*.4;if(rnd(k+Math.floor(T*3))>.6){g.fillStyle='rgba(255,80,60,.7)';g.beginPath();g.arc(x,y,3,0,6.3);g.fill()}}
+  txt('全民抗战 · 十四年浴血',v.cx,v.y+v.h*.92,zz(v),'#d8cdb8','center');
+},
+// 1949 新中国成立：天安门与五星红旗
+(st,T,v,A)=>{
+  const px=v.cx+v.w*.2,top=v.y+v.h*.2;
+  g.strokeStyle='#cfcfcf';g.lineWidth=4;g.beginPath();g.moveTo(px,v.y+v.h*.85);g.lineTo(px,top);g.stroke();
+  const e=ease(st/4),fh=v.h*.3,fw=fh*.66,fy=top+(1-e)*v.h*.25;
+  g.fillStyle='#d11f1f';g.fillRect(px,fy,fw,fh);
+  star(px+fw*.18,fy+fh*.2,fh*.12,'#ffd24a');
+  for(let i=0;i<4;i++){const a=-0.6+i*0.5;star(px+fw*.5+Math.cos(a)*fh*.22,fy+fh*.12+Math.sin(a)*fh*.22,fh*.05,'#ffd24a')}
+  const gx=v.x+v.w*.1,gy=v.y+v.h*.7,gw=v.w*.8,gh=v.h*.18;
+  g.fillStyle='#b8352e';rr(gx,gy,gw,gh,4);g.fill();
+  g.fillStyle='#8e231e';for(let i=0;i<5;i++)g.fillRect(gx+gw*(.1+i*.18),gy+gh*.3,gw*.06,gh*.5);
+  g.fillStyle='#e8c27a';g.fillRect(gx,gy-10,gw,10);
+  txt('中国人民站起来了',v.cx,v.y+v.h*.96,zz(v)*1.2,A,'center');
+}];
+
+function drawSeal(yr){
+  const s=Math.min(58,W*.07),x=W-s-22,y=22;
+  g.save();g.fillStyle='rgba(200,40,40,.92)';g.beginPath();g.roundRect(x,y,s,s,8);g.fill();
+  g.fillStyle='#fff';g.font='bold '+(s*.27)+'px '+FONT;g.textAlign='center';g.textBaseline='middle';g.fillText(yr,x+s/2,y+s/2);
+  g.restore();
+}
+function draw(T,idx){
+  const [bg,A]=BG[idx],st=T-idx*D,m=W<700,v={x:m?W*.06:W*.42,y:m?H*.46:H*.12,w:m?W*.88:W*.54,h:m?H*.36:H*.66};
+  v.cx=v.x+v.w/2;v.cy=v.y+v.h/2;
+  g.fillStyle=bg;g.fillRect(0,0,W,H);
+  const gr=g.createRadialGradient(v.cx,v.cy,0,v.cx,v.cy,Math.max(W,H)*.6);gr.addColorStop(0,A+'30');gr.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=gr;g.fillRect(0,0,W,H);
+  g.globalAlpha=1;SC[idx](st,T,v,A);
+  drawSeal(S[idx][0]);
+  g.globalAlpha=1-ease(st/.8);g.fillStyle=bg;g.fillRect(0,0,W,H);g.globalAlpha=1;
+}
+function frame(){
+  requestAnimationFrame(frame);
+  if(!started){draw(0.0,0);return}
+  let t=ctx.currentTime-t0;
+  if(t>=TOTAL&&!ended){ended=true;speechSynthesis&&speechSynthesis.cancel();$('bp').textContent='已结束'}
+  t=Math.min(t,TOTAL-.001);const idx=Math.min(N-1,Math.floor(t/D));
+  if(idx!==lastIdx){lastIdx=idx;show(idx)}
+  $('pg').style.width=(t/TOTAL*100)+'%';
+  draw(t,idx);
+}
+frame();
+
+// ---------- controls ----------
+$('go').onclick=()=>{$('start').classList.add('hide');play(0)};
+$('br').onclick=()=>{if(started)play(0)};
+$('bp').onclick=()=>{
+  if(!started||ended)return;
+  if(paused){ctx.resume();paused=false;$('bp').textContent='暂停'}else{ctx.suspend();paused=true;$('bp').textContent='继续'}
+};
+$('bm').onclick=()=>{muted=!muted;if(master)master.gain.value=muted?0:.8;$('bm').classList.toggle('on',muted);$('bm').textContent=muted?'取消静音':'静音'};
+$('bv').onclick=()=>{speak=!speak;$('bv').classList.toggle('on',speak);$('bv').textContent='旁白：'+(speak?'开':'关');
+  if(speak&&started&&lastIdx>=0&&'speechSynthesis' in window){const u=new SpeechSynthesisUtterance(S[lastIdx][1]+'。'+S[lastIdx][2]);u.lang='zh-CN';u.rate=1.0;speechSynthesis.speak(u)}else if('speechSynthesis' in window)speechSynthesis.cancel()};
+$('bar').onclick=e=>{if(!started)return;const r=$('bar').getBoundingClientRect();play(Math.max(0,Math.min(.999,(e.clientX-r.left)/r.width))*TOTAL)};
+addEventListener('keydown',e=>{if(e.code==='Space'&&started){e.preventDefault();$('bp').click()}});
+</script>
+</body>
+</html>

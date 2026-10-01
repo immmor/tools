@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>美国发展史 · 音视频</title>
+<style>
+:root{--bg:#070b1a;--ink:#e8ecf5;--cy:#5ee7ff;--am:#ffb454;--dim:#8d98b8}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%;background:var(--bg);color:var(--ink);overflow:hidden;font-family:"PingFang SC","Microsoft YaHei","Noto Sans SC",sans-serif}
+canvas{position:fixed;inset:0;width:100%;height:100%}
+#txt{position:fixed;left:6vw;right:6vw;top:12vh;max-width:min(760px,36vw);transition:opacity .6s,transform .6s}
+#txt.out{opacity:0;transform:translateY(12px)}
+#yr{font:700 clamp(56px,13vw,150px)/1 "Noto Serif SC","Songti SC",Georgia,serif;color:var(--am);letter-spacing:-.02em}
+#tt{font:600 clamp(24px,4.4vw,44px)/1.25 "Noto Serif SC","Songti SC",serif;margin:.3em 0 .4em}
+#ds{font-size:clamp(15px,2vw,20px);line-height:1.8;color:#c5cde2;max-width:34em}
+#bar{position:fixed;left:6vw;right:6vw;bottom:9vh;height:28px;cursor:pointer}
+#bar i{position:absolute;top:13px;height:2px;left:0;right:0;background:#26304f}
+#bar b{position:absolute;top:12px;height:4px;left:0;width:0;background:var(--cy);border-radius:2px}
+#bar s{position:absolute;top:9px;width:2px;height:10px;background:#3a4670}
+#bar s.on{background:var(--am)}
+#ctl{position:fixed;left:6vw;bottom:2.5vh;display:flex;gap:10px}
+button{font:inherit;font-size:14px;color:var(--ink);background:#121a36;border:1px solid #2b365c;border-radius:6px;padding:8px 14px;cursor:pointer}
+button:hover{border-color:var(--cy)}button:focus-visible{outline:2px solid var(--cy)}
+button.on{border-color:var(--am);color:var(--am)}
+#start{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;z-index:9;text-align:center;padding:20px}
+#start h1{font:700 clamp(34px,7vw,72px)/1.15 "Noto Serif SC","Songti SC",serif}
+#start p{color:var(--dim)}
+#start button{font-size:18px;padding:14px 34px;border-color:var(--cy);color:var(--cy)}
+#start.hide{display:none}
+@media(max-width:700px){#txt{max-width:none;top:6vh}#yr{font-size:clamp(44px,12vw,70px)}#ds{line-height:1.6}}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="txt"><div id="yr"></div><div id="tt"></div><div id="ds"></div></div>
+<div id="bar"><i></i><b id="pg"></b></div>
+<div id="ctl">
+  <button id="bp">暂停</button><button id="br">重播</button><button id="bm">静音</button><button id="bv">旁白：关</button>
+</div>
+<div id="start">
+  <h1>美国发展史</h1>
+  <p>1607 – 今天 · 约 80 秒 · 音乐由浏览器实时合成</p>
+  <button id="go">开始播放</button>
+</div>
+<script>
+const S=[
+["1607","詹姆斯敦","英国在弗吉尼亚建立北美第一座永久殖民地，殖民时代就此开端。"],
+["1776","独立宣言","十三个殖民地发表《独立宣言》，宣告脱离英国，人人生而平等。"],
+["1787","美国宪法","各州代表在费城制定宪法，确立三权分立的联邦政府。"],
+["1803","路易斯安那购地","美国从法国手中购得大片西部土地，国土面积一举翻倍。"],
+["1861","南北战争","北方与南方因奴隶制与州权开战，四年血战重塑了国家。"],
+["1869","横贯大陆铁路","两条铁路在犹他接轨，金道钉连通了东西海岸。"],
+["1929","大萧条","华尔街股市崩盘，危机席卷全球，数百万家庭陷入贫困。"],
+["1941","卷入二战","珍珠港遭袭后，美国加入第二次世界大战，成为关键力量。"],
+["1969","登上月球","阿波罗 11 号将宇航员送上月球，人类首次踏足另一天体。"],
+["1990","信息时代","万维网诞生，互联网把世界连成巨网，重塑日常生活。"],
+["2020","超级大国","从移民殖民地到科技强国，美国持续塑造全球政治与文化。"]
+];
+const D=7.5, N=S.length, TOTAL=D*N;
+const $=id=>document.getElementById(id);
+const cv=$('cv'),g=cv.getContext('2d');
+let W,H,dpr;
+function rs(){dpr=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;cv.width=W*dpr;cv.height=H*dpr;g.setTransform(dpr,0,0,dpr,0,0)}
+addEventListener('resize',rs);rs();
+// timeline ticks
+S.forEach((_,i)=>{const s=document.createElement('s');s.style.left=(i/N*100)+'%';s.id='k'+i;$('bar').appendChild(s)});
+
+// ---------- audio ----------
+let ctx,master,noiseBuf,t0=0,next=0,step=0,timer=null,muted=false,speak=false,paused=false,ended=false,started=false;
+const CH=[{r:110,m:[0,3,7]},{r:87.31,m:[0,4,7]},{r:130.81,m:[0,4,7]},{r:98,m:[0,4,7]}];
+const fq=(r,s)=>r*Math.pow(2,s/12);
+function tone(f,t,d,type,v,filt){
+  const o=ctx.createOscillator(),e=ctx.createGain();o.type=type;o.frequency.value=f;
+  e.gain.setValueAtTime(0.0001,t);e.gain.linearRampToValueAtTime(v,t+Math.min(.03,d/3));e.gain.exponentialRampToValueAtTime(0.0001,t+d);
+  let n=o;if(filt){const q=ctx.createBiquadFilter();q.type='lowpass';q.frequency.value=filt;o.connect(q);n=q}
+  n.connect(e);e.connect(master);o.start(t);o.stop(t+d+.05);
+}
+function kick(t){const o=ctx.createOscillator(),e=ctx.createGain();o.frequency.setValueAtTime(130,t);o.frequency.exponentialRampToValueAtTime(40,t+.15);
+  e.gain.setValueAtTime(.55,t);e.gain.exponentialRampToValueAtTime(.001,t+.22);o.connect(e);e.connect(master);o.start(t);o.stop(t+.25)}
+function hat(t,v){const s=ctx.createBufferSource(),f=ctx.createBiquadFilter(),e=ctx.createGain();s.buffer=noiseBuf;f.type='highpass';f.frequency.value=7000;
+  e.gain.setValueAtTime(v,t);e.gain.exponentialRampToValueAtTime(.001,t+.05);s.connect(f);f.connect(e);e.connect(master);s.start(t);s.stop(t+.06)}
+function sceneAt(time){return Math.max(0,Math.min(N-1,Math.floor((time-t0)/D)))}
+function sched(){
+  while(next<ctx.currentTime+.25){
+    const idx=sceneAt(next);
+    if(next-t0>=TOTAL){ if(next-t0>TOTAL+3){clearInterval(timer);return} }
+    const bpm=72+idx*5,sd=60/bpm/2,bar=Math.floor(step/8)%4,sp=step%8,c=CH[bar];
+    if(next-t0<TOTAL){
+      const arp=[0,1,2,1,2,1,2,1][sp];
+      const f=fq(c.r*(idx<4?4:2),c.m[arp]);
+      if(idx<5) tone(f,next,sd*.9,'square',.05,2400);
+      else tone(f,next,sd*1.6,'triangle',.12,3200);
+      if(idx>=2&&sp%4==0) tone(fq(c.r,-12)*2,next,sd*3.5,'sine',.2);
+      if(idx>=3&&sp==0) c.m.forEach(m=>tone(fq(c.r*2,m),next,sd*8,idx<7?'triangle':'sawtooth',idx<7?.07:.035,900+idx*220));
+      if(idx>=5&&sp%2==0) hat(next,.05+(sp%4==2?.04:0));
+      if(idx>=6&&sp%4==0) kick(next);
+      if(idx>=8&&sp==4) tone(fq(c.r*8,c.m[2]),next,sd*5,'sine',.06);
+      if(idx==N-1&&sp==0) tone(fq(c.r*4,12),next,sd*6,'sine',.08);
+    }
+    next+=sd;step++;
+  }
+}
+function whoosh(){
+  if(!ctx||muted)return;const t=ctx.currentTime,s=ctx.createBufferSource(),f=ctx.createBiquadFilter(),e=ctx.createGain();
+  s.buffer=noiseBuf;f.type='bandpass';f.Q.value=2;f.frequency.setValueAtTime(300,t);f.frequency.exponentialRampToValueAtTime(5000,t+.7);
+  e.gain.setValueAtTime(.0001,t);e.gain.linearRampToValueAtTime(.12,t+.3);e.gain.exponentialRampToValueAtTime(.0001,t+.8);
+  s.connect(f);f.connect(e);e.connect(master);s.start(t);s.stop(t+.85);
+}
+function init(){
+  ctx=new (window.AudioContext||window.webkitAudioContext)();
+  const comp=ctx.createDynamicsCompressor();master=ctx.createGain();master.gain.value=.8;master.connect(comp);comp.connect(ctx.destination);
+  noiseBuf=ctx.createBuffer(1,ctx.sampleRate,ctx.sampleRate);const d=noiseBuf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
+}
+function play(from=0){
+  if(!ctx)init();ctx.resume();paused=false;ended=false;started=true;$('bp').textContent='暂停';
+  t0=ctx.currentTime-from;next=ctx.currentTime+.05;step=0;lastIdx=-1;
+  clearInterval(timer);timer=setInterval(sched,50);
+}
+
+// ---------- scene text ----------
+let lastIdx=-1;
+function show(i){
+  const el=$('txt');el.classList.add('out');
+  setTimeout(()=>{$('yr').textContent=S[i][0];$('tt').textContent=S[i][1];$('ds').textContent=S[i][2];el.classList.remove('out')},350);
+  S.forEach((_,k)=>$('k'+k).classList.toggle('on',k<=i));
+  whoosh();
+  if(speak&&'speechSynthesis' in window){speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(S[i][1]+'。'+S[i][2]);u.lang='zh-CN';u.rate=1.1;speechSynthesis.speak(u)}
+}
+
+// ---------- visuals ----------
+const BG=[['#0a1422','#9fd8ff'],['#1a140a','#ffd37a'],['#0d1426','#aac4ff'],['#0a1a16','#5ef2c0'],['#1a0e0e','#ff7a7a'],['#1a140a','#e8c27a'],['#0e0e14','#9aa0c0'],['#150f08','#ffb454'],['#070912','#cfd6ff'],['#0a1018','#5ee7ff'],['#0a0f1e','#8ad8ff']];
+const FONT='"PingFang SC","Microsoft YaHei","Noto Sans SC",sans-serif';
+const ease=x=>x<0?0:x>1?1:x*x*(3-2*x);
+const rnd=k=>{const x=Math.sin(k*127.1+311.7)*43758.5453;return x-Math.floor(x)};
+const txt=(s,x,y,z,c,al,f)=>{g.font=z+'px '+(f||FONT);g.fillStyle=c;g.textAlign=al||'left';g.textBaseline='middle';g.fillText(s,x,y)};
+const typ=(s,t,sp)=>s.slice(0,Math.max(0,Math.floor(t*(sp||12))));
+const rr=(x,y,w,h,r)=>{g.beginPath();g.roundRect(x,y,w,h,r)};
+const zz=v=>Math.max(13,v.w*.032);
+
+const SC=[
+// 1607 詹姆斯敦：三艘帆船抵岸 + 海岸定居点
+(st,T,v,A)=>{
+  const sea=v.y+v.h*.62;
+  g.fillStyle='#0a3a4a';g.fillRect(v.x,sea,v.w,v.h+v.y-sea);
+  g.strokeStyle=A;g.lineWidth=2;g.beginPath();
+  for(let x=v.x;x<=v.x+v.w;x+=6){const y=sea+Math.sin(x*.03+T*2)*4;if(x==v.x)g.moveTo(x,y);else g.lineTo(x,y)}g.stroke();
+  [.18,.5,.82].forEach((p,k)=>{const x=v.x+v.w*p,y=sea-10-Math.sin(T*2+k)*4;
+    g.fillStyle='#e9e2cf';g.beginPath();g.moveTo(x-14,y-26);g.lineTo(x+14,y-26);g.lineTo(x,y-14);g.closePath();g.fill();
+    g.strokeStyle='#d8cfb0';g.lineWidth=2;g.beginPath();g.moveTo(x,y-26);g.lineTo(x,y-2);g.stroke();
+    g.beginPath();g.moveTo(x,y-22);g.lineTo(x+18,y-14);g.lineTo(x,y-10);g.closePath();g.fill();
+    g.fillStyle=A;g.beginPath();g.arc(x,y-14,2.5,0,6.3);g.fill()});
+  g.fillStyle='#2a3a22';g.fillRect(v.x,v.y+v.h*.7,v.w*.42,v.h*.3);
+  for(let i=0;i<3;i++){const hx=v.x+12+i*22,hy=v.y+v.h*.84;g.fillStyle='#6b5a3a';g.beginPath();g.moveTo(hx,hy);g.lineTo(hx+14,hy);g.lineTo(hx+7,hy-12);g.closePath();g.fill()}
+  txt('抵达新大陆的第一座殖民地',v.cx,v.y+v.h*.96,zz(v),'#c5cde2','center');
+},
+// 1776 独立宣言：羊皮卷 + 羽笔 + 十三星
+(st,T,v,A)=>{
+  const pw=v.w*.62,ph=v.h*.6,px=v.cx-pw/2,py=v.cy-ph/2;
+  g.fillStyle='#e9dcc0';rr(px,py,pw,ph,6);g.fill();
+  g.strokeStyle='#b89b6a';g.lineWidth=2;g.stroke();
+  g.fillStyle='#5a4a2a';
+  for(let i=0;i<7;i++){const a=ease((st-i*.5)/.6);if(a<=0)continue;g.globalAlpha=a;g.fillRect(px+pw*.1,py+ph*.2+i*ph*.09,pw*.72*a,3);}g.globalAlpha=1;
+  txt('独立宣言',px+pw/2,py+ph*.1,zz(v)*1.1,'#3a2a10','center');
+  const R=Math.min(v.w,v.h)*.46;
+  for(let i=0;i<13;i++){const a=i/13*6.3+T*.1,x=v.cx+Math.cos(a)*R,y=v.cy+Math.sin(a)*R*.62;g.fillStyle=A;g.beginPath();g.arc(x,y,2.5,0,6.3);g.fill()}
+  g.strokeStyle='#3a2a10';g.lineWidth=2;g.beginPath();g.moveTo(px+pw*.82,py+ph*.82);g.lineTo(px+pw*.96,py+ph*.58);g.stroke();
+  txt('人人生而平等',v.cx,py+ph+24,zz(v),'#c5cde2','center');
+},
+// 1787 宪法：国会山立柱 + 山花
+(st,T,v,A)=>{
+  const n=6,cw=v.w*.6/n,gx=v.cx-v.w*.3;
+  for(let i=0;i<n;i++){const e=ease((st-i*.3)/.7);if(e<=0)continue;
+    const x=gx+i*cw+cw*.15,h=v.h*.5*(.4+.6*e);
+    g.fillStyle=A;g.globalAlpha=.5+.5*e;rr(x,v.y+v.h*.82-h,cw*.7,h,4);g.fill();g.globalAlpha=1;
+    g.fillStyle='#d8cfb0';g.fillRect(x-2,v.y+v.h*.82-h-8,cw*.7+4,8);
+  }
+  g.fillStyle='#cbb98f';g.beginPath();g.moveTo(gx-6,v.y+v.h*.82-v.h*.5);g.lineTo(v.cx,v.y+v.h*.82-v.h*.62);g.lineTo(gx+v.w*.6+6,v.y+v.h*.82-v.h*.5);g.fill();
+  g.fillStyle=A;txt('CONSTITUTION',v.cx,v.y+v.h*.18,zz(v)*1.05,'#08111f','center');
+  txt('一部沿用至今的宪法',v.cx,v.y+v.h*.96,zz(v),'#8d98b8','center');
+},
+// 1803 路易斯安那购地：版图向西扩张
+(st,T,v,A)=>{
+  const mapX=v.x+v.w*.05,mapY=v.y+v.h*.1,mapW=v.w*.9,mapH=v.h*.7;
+  g.strokeStyle='#3a4670';g.lineWidth=1;g.strokeRect(mapX,mapY,mapW,mapH);
+  const e=ease(st/5),fw=mapW*e;
+  g.fillStyle='rgba(94,242,192,.18)';g.fillRect(mapX,mapY,fw,mapH);
+  g.strokeStyle=A;g.lineWidth=3;g.beginPath();g.moveTo(mapX+fw,mapY);g.lineTo(mapX+fw,mapY+mapH);g.stroke();
+  txt('领土翻倍',mapX+fw+8,mapY+mapH/2,zz(v)*1.1,A);
+  g.setLineDash([6,6]);g.strokeStyle=A;g.globalAlpha=.6;g.beginPath();g.moveTo(mapX+mapW*e,v.y+v.h*.5+Math.sin(T*3)*4);g.lineTo(mapX+mapW,v.y+v.h*.5);g.stroke();g.setLineDash([]);g.globalAlpha=1;
+  txt('从大西洋一直延伸到密西西比河',v.cx,v.y+v.h*.92,zz(v),'#8d98b8','center');
+},
+// 1861 南北战争：分裂的版图 + 交火
+(st,T,v,A)=>{
+  const mid=v.x+v.w*.5;
+  g.fillStyle='rgba(120,160,255,.16)';g.fillRect(v.x,v.y,v.w*.5,v.h*.8);
+  g.fillStyle='rgba(150,150,160,.14)';g.fillRect(mid,v.y,v.w*.5,v.h*.8);
+  g.strokeStyle=A;g.lineWidth=3;g.setLineDash([8,6]);g.beginPath();g.moveTo(mid,v.y);g.lineTo(mid,v.y+v.h*.8);g.stroke();g.setLineDash([]);
+  txt('北',v.x+v.w*.25,v.y+v.h*.4,zz(v)*1.6,'#9fd8ff','center');
+  txt('南',v.x+v.w*.75,v.y+v.h*.4,zz(v)*1.6,'#c0c0c8','center');
+  for(let k=0;k<7;k++){const x=v.x+rnd(k)*v.w,y=v.y+rnd(k+3)*v.h*.8;
+    if(rnd(k+Math.floor(T*2))>.5){g.fillStyle='rgba(255,80,80,'+(.4+Math.abs(Math.sin(T*4+k))*.5)+')';g.beginPath();g.arc(x,y,4+rnd(k)*4,0,6.3);g.fill()}}
+  txt('一场撕裂国家的战争',v.cx,v.y+v.h*.93,zz(v),'#c5cde2','center');
+},
+// 1869 横贯大陆铁路：两条铁轨汇于金道钉
+(st,T,v,A)=>{
+  const y0=v.y+v.h*.7,cx=v.cx,cy=v.y+v.h*.3;
+  g.strokeStyle='#e8c27a';g.lineWidth=4;g.beginPath();g.moveTo(v.x+v.w*.1,y0);g.lineTo(cx,cy);g.stroke();
+  g.beginPath();g.moveTo(v.x+v.w*.9,y0);g.lineTo(cx,cy);g.stroke();
+  for(let i=0;i<10;i++){const t=i/10;const x1=v.x+v.w*.1+(cx-(v.x+v.w*.1))*t,y1=y0+(cy-y0)*t;const x2=v.x+v.w*.9+(cx-(v.x+v.w*.9))*t,y2=y0+(cy-y0)*t;
+    g.strokeStyle='#6b5a3a';g.lineWidth=2;g.beginPath();g.moveTo(x1,y1);g.lineTo(x2,y2);g.stroke()}
+  const e=ease(st/4);g.fillStyle=A;g.globalAlpha=e;g.beginPath();g.arc(cx,cy,6+Math.sin(T*4)*2,0,6.3);g.fill();g.globalAlpha=1;
+  txt('金道钉 · 东西海岸贯通',v.cx,v.y+v.h*.95,zz(v),'#c5cde2','center');
+},
+// 1929 大萧条：崩盘的股市曲线
+(st,T,v,A)=>{
+  const X=v.x+v.w*.08,Y=v.y+v.h*.1,w=v.w*.84,h=v.h*.6;
+  g.strokeStyle='#3a4670';g.lineWidth=1;g.beginPath();g.moveTo(X,Y);g.lineTo(X,Y+h);g.lineTo(X+w,Y+h);g.stroke();
+  const P=[0,0,0,.1,.05,.2,.1,-.1,.3,-.2,-.6,-1];
+  const e=ease(st/5),f=u=>{const q=u*(P.length-1),i=Math.min(P.length-2,Math.floor(q));return P[i]+(P[i+1]-P[i])*(q-i)};
+  g.beginPath();g.moveTo(X,Y+h);for(let i=0;i<=100*e;i++){const u=i/100;g.lineTo(X+u*w,Y+h-f(u)*h*1.1)}g.strokeStyle=A;g.lineWidth=3;g.stroke();
+  for(let k=0;k<12;k++){const y=Y+((T*40+k*30)%(h+40));if(y<Y+h){g.fillStyle='rgba(255,90,90,'+(.3+.4*Math.abs(Math.sin(T*3+k)))+')';g.fillRect(v.x+v.w*.6+rnd(k)*v.w*.3,y,3,3)}}
+  txt('黑色星期二 · 股市崩盘',v.cx,v.y+v.h*.9,zz(v),'#c5cde2','center');
+},
+// 1941 卷入二战：地球 + 五角星 + 战火
+(st,T,v,A)=>{
+  const cx=v.cx,cy=v.cy,r=Math.min(v.w,v.h)*.3;
+  g.strokeStyle=A;g.lineWidth=2;g.beginPath();g.arc(cx,cy,r,0,6.3);g.stroke();
+  for(let i=-2;i<=2;i++){g.globalAlpha=.4;g.beginPath();g.ellipse(cx,cy,r,Math.abs(i)*r*.4+1,0,0,6.3);g.stroke();}g.globalAlpha=1;
+  const sr=r*.5;g.fillStyle=A;g.beginPath();for(let i=0;i<10;i++){const a=-1.57+i*6.283/10,rad=i%2?sr*.45:sr;g.lineTo(cx+Math.cos(a)*rad,cy+Math.sin(a)*rad)}g.closePath();g.fill();
+  for(let k=0;k<5;k++){const a=T*.5+k*1.3,x=cx+Math.cos(a)*r,y=cy+Math.sin(a)*r;g.fillStyle='rgba(255,90,90,'+(.4+.4*Math.abs(Math.sin(T*4+k)))+')';g.beginPath();g.arc(x,y,3,0,6.3);g.fill()}
+  txt('珍珠港 · 加入第二次世界大战',v.cx,v.y+v.h*.92,zz(v),'#c5cde2','center');
+},
+// 1969 登月：火箭升空 + 月球上的星条旗
+(st,T,v,A)=>{
+  const mx=v.x+v.w*.74,my=v.y+v.h*.42,mr=Math.min(v.w,v.h)*.26;
+  g.fillStyle='#d8d8e0';g.beginPath();g.arc(mx,my,mr,0,6.3);g.fill();
+  g.fillStyle='rgba(120,120,140,.4)';for(let k=0;k<20;k++){g.beginPath();g.arc(mx+(rnd(k)-.5)*mr*1.8,my+(rnd(k+5)-.5)*mr*1.8,2+rnd(k+9)*4,0,6.3);g.fill()}
+  const e=ease((st-1.2)/3);g.globalAlpha=e;
+  g.fillStyle='#e8ecf5';g.fillRect(mx-mr*.45,my-mr*.35,2,mr*.55);
+  g.fillStyle=A;g.fillRect(mx-mr*.45,my-mr*.35,mr*.32,mr*.17);
+  g.globalAlpha=1;
+  const ry=v.y+v.h*.82-Math.min(st,5)/5*(v.h*.5),rx=v.x+v.w*.26;
+  g.fillStyle='#dfe6f2';g.beginPath();g.moveTo(rx,ry-32);g.lineTo(rx-10,ry);g.lineTo(rx+10,ry);g.closePath();g.fill();
+  g.fillStyle=A;g.fillRect(rx-4,ry-3,8,7);
+  g.fillStyle='rgba(255,160,60,'+(.6+Math.abs(Math.sin(T*8))*.3)+')';g.beginPath();g.moveTo(rx-5,ry);g.lineTo(rx+5,ry);g.lineTo(rx,ry+12+Math.abs(Math.sin(T*10))*10);g.closePath();g.fill();
+  txt('人类首次踏上月球',v.cx,v.y+v.h*.95,zz(v),'#c5cde2','center');
+},
+// 1990 信息时代：万维网节点网络
+(st,T,v,A)=>{
+  const nodes=[];for(let k=0;k<16;k++){const a=k/16*6.3+1;nodes.push([v.cx+Math.cos(a)*v.w*.36,v.cy+Math.sin(a)*v.h*.36,k])}
+  nodes.push([v.cx,v.cy,-1]);
+  g.strokeStyle=A;g.lineWidth=1;
+  for(let i=0;i<nodes.length;i++)for(let j=i+1;j<nodes.length;j++){const d=Math.hypot(nodes[i][0]-nodes[j][0],nodes[i][1]-nodes[j][1]);
+    if(d<v.w*.28){g.globalAlpha=.15+Math.abs(Math.sin(T+i+j))*.2;g.beginPath();g.moveTo(nodes[i][0],nodes[i][1]);g.lineTo(nodes[j][0],nodes[j][1]);g.stroke()}}
+  g.globalAlpha=1;
+  nodes.forEach((n,k)=>{const e=ease((st-k*.2)/.6);g.fillStyle=A;g.globalAlpha=e;g.beginPath();g.arc(n[0],n[1],k<0?7:4+Math.sin(T*3+k)*1.5,0,6.3);g.fill()});
+  g.globalAlpha=1;txt('WWW · 信息时代',v.cx,v.y+v.h*.92,zz(v),'#c5cde2','center');
+},
+// 2020 超级大国：城市天际线 + 环绕的卫星
+(st,T,v,A)=>{
+  const baseY=v.y+v.h*.8,hs=[.5,.7,.4,.9,.6,.8,.55,.75,.45,.65],bw=v.w/hs.length;
+  for(let i=0;i<hs.length;i++){const h=v.h*.7*hs[i]*ease((st-i*.2)/.7);g.fillStyle=A;g.globalAlpha=.6;rr(v.x+i*bw+2,baseY-h,bw-4,h,3);g.fill();g.globalAlpha=1;
+    g.fillStyle='rgba(255,255,255,.3)';for(let y=baseY-h+6;y<baseY-6;y+=8)for(let x=v.x+i*bw+6;x<v.x+(i+1)*bw-6;x+=8)g.fillRect(x,y,3,3)}
+  for(let k=0;k<6;k++){const a=T*.6+k*1.05,x=v.cx+Math.cos(a)*v.w*.42,y=v.cy+Math.sin(a)*v.h*.3;g.fillStyle=A;g.beginPath();g.arc(x,y,2.5,0,6.3);g.fill()}
+  txt('超级大国 · 走向未来',v.cx,v.y+v.h*.95,zz(v),'#c5cde2','center');
+}];
+
+function draw(T,idx){
+  const [bg,A]=BG[idx],st=T-idx*D,m=W<700,v={x:m?W*.06:W*.42,y:m?H*.46:H*.12,w:m?W*.88:W*.54,h:m?H*.36:H*.66};
+  v.cx=v.x+v.w/2;v.cy=v.y+v.h/2;
+  g.fillStyle=bg;g.fillRect(0,0,W,H);
+  const gr=g.createRadialGradient(v.cx,v.cy,0,v.cx,v.cy,Math.max(W,H)*.6);gr.addColorStop(0,A+'30');gr.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=gr;g.fillRect(0,0,W,H);
+  SC[idx](st,T,v,A);
+  g.globalAlpha=1-ease(st/.8);g.fillStyle=bg;g.fillRect(0,0,W,H);g.globalAlpha=1;
+}
+function frame(){
+  requestAnimationFrame(frame);
+  if(!started){draw(0.0,0);return}
+  let t=ctx.currentTime-t0;
+  if(t>=TOTAL&&!ended){ended=true;speechSynthesis&&speechSynthesis.cancel();$('bp').textContent='已结束'}
+  t=Math.min(t,TOTAL-.001);const idx=Math.min(N-1,Math.floor(t/D));
+  if(idx!==lastIdx){lastIdx=idx;show(idx)}
+  $('pg').style.width=(t/TOTAL*100)+'%';
+  draw(t,idx);
+}
+frame();
+
+// ---------- controls ----------
+$('go').onclick=()=>{$('start').classList.add('hide');play(0)};
+$('br').onclick=()=>{if(started)play(0)};
+$('bp').onclick=()=>{
+  if(!started||ended)return;
+  if(paused){ctx.resume();paused=false;$('bp').textContent='暂停'}else{ctx.suspend();paused=true;$('bp').textContent='继续'}
+};
+$('bm').onclick=()=>{muted=!muted;if(master)master.gain.value=muted?0:.8;$('bm').classList.toggle('on',muted);$('bm').textContent=muted?'取消静音':'静音'};
+$('bv').onclick=()=>{speak=!speak;$('bv').classList.toggle('on',speak);$('bv').textContent='旁白：'+(speak?'开':'关');
+  if(speak&&started&&lastIdx>=0&&'speechSynthesis' in window){const u=new SpeechSynthesisUtterance(S[lastIdx][1]+'。'+S[lastIdx][2]);u.lang='zh-CN';u.rate=1.1;speechSynthesis.speak(u)}else if('speechSynthesis' in window)speechSynthesis.cancel()};
+$('bar').onclick=e=>{if(!started)return;const r=$('bar').getBoundingClientRect();play(Math.max(0,Math.min(.999,(e.clientX-r.left)/r.width))*TOTAL)};
+addEventListener('keydown',e=>{if(e.code==='Space'&&started){e.preventDefault();$('bp').click()}});
+</script>
+</body>
+</html>
