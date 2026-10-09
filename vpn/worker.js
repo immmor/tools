@@ -5,6 +5,23 @@ const t = (d) => JSON.stringify(Object.fromEntries(LK.map(k => [k, d[k] ?? '']))
 const NP = { cn:'[系统通知]', en:'[System Notification]', jp:'[システム通知]', kr:'[시스템 알림]', es:'[Notificación del Sistema]', vi:'[Thông báo Hệ thống]', ar:'[إشعار النظام]', ru:'[Системное уведомление]' };
 const nt = (d) => t(Object.fromEntries(LK.map(k => [k, `${NP[k]} ${d[k] ?? ''}`])));
 
+// 给管理员(immmor)推送外部通知：POST 表单（title/body/group/ttl）。不依赖 ctx，调用处直接 await
+const notifyAdmin = async (title, body) => {
+  const url = 'https://notify.funbua.uk/W6qUt6AoVEN6nQYVnNnuQq';
+  const form = new URLSearchParams();
+  form.set('title', title);
+  form.set('body', body);
+  form.set('group', 'Phantom');
+  form.set('ttl', '600');
+  try {
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: form.toString(),
+    });
+  } catch (e) {}
+};
+
 function fbChoiceLabel(_match, choice) {
   const map = { a: '主胜', draw: '平局', b: '客胜' };
   return map[choice] || choice;
@@ -242,6 +259,7 @@ async function autoRenewUser(DB, user) {
     
     // 给管理员发送通知（仅中文）
     await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)').bind('immmor', `用户 ${user.username} 自动续费VIP成功！金额：${pr}元，天数：${actualDays}天（含自动续费赠送2天）`, nowStr).run();
+    await notifyAdmin('VIP自动续费', `用户 ${user.username} 自动续费VIP成功！金额：${pr}元，天数：${actualDays}天（含自动续费赠送2天）`);
     
     return { username: user.username, amount: pr, days: actualDays };
   }
@@ -521,6 +539,7 @@ export default {
 
           const nowStr = new Date().toISOString().slice(0, 19).replace('T', ' ');
           await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)').bind('immmor', `用户 ${email} 点击了获取验证码`, nowStr).run();
+          await notifyAdmin('获取验证码', `用户 ${email} 点击了获取验证码`);
 
           return resJson({ success: true, message: '验证码已发送到您的邮箱！' });
         } catch (e) {
@@ -695,6 +714,7 @@ export default {
                   ru: `Пользователь ${inviterUser.username} успешно пригласил ${username} зарегистрироваться`
                 }), now)
                 .run();
+              await notifyAdmin('邀请注册', `用户 ${inviterUser.username} 成功邀请了 ${username} 注册`);
             }
           }
         }
@@ -776,6 +796,7 @@ export default {
             .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
             .bind('immmor', msg, now)
             .run();
+          await notifyAdmin('新用户注册', `用户 ${username} 通过${verifyMethod.cn}注册成功！`);
 
           await DB
             .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
@@ -1470,6 +1491,7 @@ export default {
               .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
               .bind('immmor', msg, nowTime)
               .run();
+            await notifyAdmin('开通VIP', `用户 ${username} 开通VIP成功！金额：${vipPrice}元，天数：${duration}天`);
             
             // 邀请返现：被邀请人每开通一笔 VIP 订单（月或年），按阶梯比例给邀请人生成待审核返现记录
             await grantRebate(DB, username, vipPrice, isYearly, newOrder.id);
@@ -1590,6 +1612,7 @@ export default {
             await DB
               .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
               .bind('immmor', `用户 ${username} 增加流量成功！${gb}GB（${isAnnual ? '年付' : '月付'}），金额：${addPrice}元`, nowTime).run();
+              await notifyAdmin('增加流量', `用户 ${username} 增加流量成功！${gb}GB（${isAnnual ? '年付' : '月付'}），金额：${addPrice}元`);
 
             const updated = await DB
               .prepare('SELECT balance, bonus_quota_monthly, bonus_expire_monthly, bonus_quota_annual, bonus_expire_annual, vorders FROM user WHERE username = ?')
@@ -1841,6 +1864,7 @@ export default {
           const msgTime = new Date().toISOString().slice(0, 19).replace('T', ' ');
           await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
             .bind('immmor', `💰 用户 ${from} 向 ${to} 转账 ¥${amt}`, msgTime).run();
+          await notifyAdmin('用户转账', `💰 用户 ${from} 向 ${to} 转账 ¥${amt}`);
 
           return resJson({ code: 200, msg: '转账成功', from, to, amount: amt });
         } catch (err) {
@@ -2733,6 +2757,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
               .run();
             
             if (result.success) {
+              await notifyAdmin('用户私信', `有用户向 ${username} 发送了私信：${content}`);
               return resJson({
                 code: 200,
                 msg: '发送成功',
@@ -2774,6 +2799,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
               totalInserted += batch.length;
             }
 
+            await notifyAdmin('群发消息', `向 ${target} 群发了消息（${totalInserted}人）：${content}`);
             return resJson({ code: 200, msg: '发送成功', data: { total: totalInserted, content, target } });
           }
         } catch (err) {
@@ -3248,6 +3274,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           const resultLabel = fbChoiceLabel(matches[idx], result);
           await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
             .bind('immmor', `⚽ 竞猜开奖！${matches[idx].teamA} vs ${matches[idx].teamB} → 结果：${resultLabel}，派奖 ¥${totalPayout}，中奖 ${winCount} 人`, now).run();
+            await notifyAdmin('竞猜开奖', `⚽ 竞猜开奖！${matches[idx].teamA} vs ${matches[idx].teamB} → 结果：${resultLabel}，派奖 ¥${totalPayout}，中奖 ${winCount} 人`);
 
           return resJson({
             success: true,
@@ -3772,6 +3799,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           const methodLabel = method === 'wechat' ? '微信' : (method === 'alipay' ? '支付宝' : (cryptoLabelMap[method] || '数字货币'));
           await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
             .bind('immmor', `💰 新的提现申请！用户 ${username} 申请提现 ¥${withdrawAmount.toFixed(2)}（${methodLabel}）`, msgNow).run();
+          await notifyAdmin('提现申请', `💰 新的提现申请！用户 ${username} 申请提现 ¥${withdrawAmount.toFixed(2)}（${methodLabel}）`);
 
           // 持久化收款码/账号，供下次提现自动填充（避免每次都要重新上传）
           try {
@@ -4307,6 +4335,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
         const now = new Date().toISOString().slice(0,19).replace('T',' ');
         const totalAmount = results.reduce((sum, r) => sum + r.amount, 0);
         await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)').bind('immmor', `定时任务执行完成！共续费 ${results.length} 个用户，总金额 ¥${totalAmount}`, now).run();
+        await notifyAdmin('自动续费汇总', `定时任务执行完成！共续费 ${results.length} 个用户，总金额 ¥${totalAmount}`);
       }
 
       // 定时任务顺带请求一次外部订单接口（与现有定时任务同频）
