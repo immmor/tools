@@ -9,12 +9,12 @@
  *   GET  /api/me?username=&password=                        返回 {balance,keys}
  *   GET  /api/keys?username=&password=                      列出密钥
  *
- * 对话接口（OpenAI 兼容）：
+ * 对话接口（OpenAI 兼容；Claude 走轻量翻译）：
  *   POST /v1/chat/completions   Authorization: Bearer <key>   支持 stream
  *   GET  /v1/models
  *
  * 配置：KV 绑定 AIHUB；Secrets: OPENAI_KEY / DEEPSEEK_KEY /
- *       DASHSCOPE_KEY / ZHIPU_KEY / MOONSHOT_KEY
+ *       DASHSCOPE_KEY / ZHIPU_KEY / MOONSHOT_KEY / ANTHROPIC_KEY
  * ---------------------------------------------------------------------------
  */
 
@@ -24,6 +24,7 @@ const PROVIDERS = {
   qwen:     { url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions', key: 'DASHSCOPE_KEY' },
   glm:      { url: 'https://open.bigmodel.cn/api/paas/v4/chat/completions',      key: 'ZHIPU_KEY' },
   moonshot: { url: 'https://api.moonshot.cn/v1/chat/completions',                key: 'MOONSHOT_KEY' },
+  anthropic:{ url: 'https://api.anthropic.com/v1/messages',                      key: 'ANTHROPIC_KEY' },
 };
 
 function providerOf(model) {
@@ -33,6 +34,7 @@ function providerOf(model) {
   if (model.startsWith('qwen')) return 'qwen';
   if (model.startsWith('glm')) return 'glm';
   if (model.startsWith('moonshot')) return 'moonshot';
+  if (model.startsWith('claude')) return 'anthropic';
   return null;
 }
 
@@ -51,6 +53,9 @@ const PRICING = {
   'glm-4-flash': { in: 0, out: 0.1 },
   'moonshot-v1-8k': { in: 12, out: 12 },
   'moonshot-v1-128k': { in: 60, out: 60 },
+  'claude-3-5-sonnet': { in: 3, out: 15, usd: true },
+  'claude-3-5-haiku': { in: 0.8, out: 4, usd: true },
+  'claude-3-opus': { in: 15, out: 75, usd: true },
 };
 const RATE = 7.2;
 
@@ -144,6 +149,53 @@ async function me(env, url) {
 }
 
 // ---- 对话代理 ----
+// Claude（Anthropic）与 OpenAI 格式不同，做轻量翻译：请求抽 system、补 max_tokens；
+// 响应把 Anthropic 的 content[] / usage 映射回 OpenAI 结构，流式把其 SSE 转成 OpenAI SSE。
+function toAnthropic(body) {
+  const msgs = body.messages || [];
+  const system = msgs.filter((m) => m.role === 'system').map((m) => m.content).join('\n');
+  const messages = msgs.filter((m) => m.role !== 'system').map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content }));
+  const p = { model: body.model, messages, max_tokens: body.max_tokens ?? 4096, stream: !!body.stream };
+  if (system) p.system = system;
+  if (body.temperature != null) p.temperature = body.temperature;
+  return p;
+}
+const mapStop = (r) => ({ end_turn: 'stop', stop_sequence: 'stop', max_tokens: 'length', tool_use: 'tool_calls' }[r] || 'stop');
+
+function anthropicStream(up, model, bill) {
+  const reader = up.body.getReader();
+  const dec = new TextDecoder();
+  const enc = new TextEncoder();
+  let buf = '', started = false, inputTokens = 0;
+  const chunk = (delta, extra = {}) => 'data: ' + JSON.stringify({
+    id: 'chatcmpl-' + Date.now(), object: 'chat.completion.chunk',
+    created: Math.floor(Date.now() / 1000), model, choices: [{ index: 0, delta }], ...extra,
+  }) + '\n\n';
+  return new Response(new ReadableStream({
+    async pull(controller) {
+      const { done, value } = await reader.read();
+      if (done) { controller.enqueue(enc.encode('data: [DONE]\n\n')); controller.close(); return; }
+      buf += dec.decode(value, { stream: true });
+      const parts = buf.split('\n'); buf = parts.pop();
+      for (const raw of parts) {
+        const line = raw.trim();
+        if (!line.startsWith('data:')) continue;
+        const d = line.slice(5).trim();
+        if (!d) continue;
+        let ev; try { ev = JSON.parse(d); } catch { continue; }
+        if (ev.type === 'message_start') { inputTokens = ev.message?.usage?.input_tokens || 0; if (!started) { controller.enqueue(enc.encode(chunk({ role: 'assistant' }))); started = true; } }
+        else if (ev.type === 'content_block_delta' && ev.delta?.type === 'text_delta') { controller.enqueue(enc.encode(chunk({ content: ev.delta.text }))); }
+        else if (ev.type === 'message_delta') {
+          const out = ev.usage?.output_tokens || 0;
+          bill({ prompt_tokens: inputTokens, completion_tokens: out });
+          controller.enqueue(enc.encode(chunk({}, { finish_reason: mapStop(ev.delta?.stop_reason), usage: { prompt_tokens: inputTokens, completion_tokens: out, total_tokens: inputTokens + out } })));
+        }
+      }
+    },
+    cancel() { reader.cancel(); },
+  }), { status: 200, headers: { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache', ...CORS } });
+}
+
 async function chat(env, ctx, request, body) {
   const m = (request.headers.get('authorization') || '').match(/^Bearer\s+(.+)$/i);
   if (!m) return fail(401, '缺少 API Key');
@@ -158,12 +210,17 @@ async function chat(env, ctx, request, body) {
   const upstreamKey = env[provider.key];
   if (!upstreamKey) return fail(503, '厂商未配置密钥');
 
-  const upBody = { ...body };
-  if (body.stream) upBody.stream_options = { include_usage: true };
+  const isAnthropic = pname === 'anthropic';
+  const upBody = isAnthropic ? toAnthropic(body) : { ...body };
+  if (!isAnthropic && body.stream) upBody.stream_options = { include_usage: true };
+
+  const headers = { 'content-type': 'application/json' };
+  if (isAnthropic) { headers['x-api-key'] = upstreamKey; headers['anthropic-version'] = '2023-06-01'; }
+  else headers['authorization'] = 'Bearer ' + upstreamKey;
 
   const up = await fetch(provider.url, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', authorization: 'Bearer ' + upstreamKey },
+    headers,
     body: JSON.stringify(upBody),
   }).catch(() => null);
   if (!up) return fail(502, '上游连接失败');
@@ -184,6 +241,7 @@ async function chat(env, ctx, request, body) {
   };
 
   if (body.stream) {
+    if (isAnthropic) return anthropicStream(up, body.model, bill);
     const reader = up.body.getReader();
     const decoder = new TextDecoder();
     let buf = '';
@@ -204,6 +262,20 @@ async function chat(env, ctx, request, body) {
     return new Response(stream, {
       status: 200,
       headers: { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-cache', ...CORS },
+    });
+  }
+
+  if (isAnthropic) {
+    const a = await up.json().catch(() => null);
+    if (!a) return fail(502, 'Anthropic 返回无法解析');
+    const text = (a.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
+    const u = a.usage || {};
+    bill({ prompt_tokens: u.input_tokens || 0, completion_tokens: u.output_tokens || 0 });
+    return json({
+      id: a.id || 'chatcmpl-' + Date.now(), object: 'chat.completion',
+      created: Math.floor(Date.now() / 1000), model: body.model,
+      choices: [{ index: 0, message: { role: 'assistant', content: text }, finish_reason: mapStop(a.stop_reason) }],
+      usage: { prompt_tokens: u.input_tokens || 0, completion_tokens: u.output_tokens || 0, total_tokens: (u.input_tokens || 0) + (u.output_tokens || 0) },
     });
   }
 
