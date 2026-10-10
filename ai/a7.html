@@ -649,11 +649,6 @@ echo $resp;</code></pre>
                 { n:'moonshot-v1-8k', in:'¥12', out:'¥12' },
                 { n:'moonshot-v1-128k', in:'¥60', out:'¥60' },
             ]},
-            { pic:'OL', name:'Ollama', sub:'本地模型', on:true, models:[
-                { n:'llama3', in:'免费', out:'免费' },
-                { n:'qwen2.5', in:'免费', out:'免费' },
-                { n:'mistral', in:'免费', out:'免费' },
-            ]},
         ];
         const mg = document.getElementById('modelGrid');
         MODELS.forEach(m=>{
@@ -725,59 +720,72 @@ echo $resp;</code></pre>
             });
         })();
 
-        // ===== 密钥管理（本地生成 + localStorage） =====
-        const KEY_STORE = 'aihub_keys';
-        const PREFIX = 'sk-aihub-';
-        function loadKeys(){
-            try { return JSON.parse(localStorage.getItem(KEY_STORE)) || []; }
-            catch(e){ return []; }
+        // ===== 账号 / 密钥：对接后端网关（AI HUB） =====
+        const API = location.origin; // 网关地址；若页面与网关不同源，改成你的域名，如 'https://aihub.immmor.com'
+
+        const SESSION_KEY = 'aihub_session';
+        function getSession(){ try { return JSON.parse(localStorage.getItem(SESSION_KEY)); } catch(e){ return null; } }
+        function setSession(s){ localStorage.setItem(SESSION_KEY, JSON.stringify(s)); }
+        function clearSession(){ localStorage.removeItem(SESSION_KEY); }
+
+        let meTab = 'login';
+        let meData = null; // 缓存 /api/me 返回
+
+        async function api(path, opts){
+            const res = await fetch(API + path, opts);
+            const data = await res.json().catch(()=>({}));
+            if(!res.ok) throw new Error(data.error || ('请求失败 ' + res.status));
+            return data;
         }
-        function saveKeys(arr){ localStorage.setItem(KEY_STORE, JSON.stringify(arr)); }
-        function randToken(n){
-            const c = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
-            let s=''; for(let i=0;i<n;i++) s += c[Math.floor(Math.random()*c.length)];
-            return s;
+
+        function login(){
+            const n = document.getElementById('loginName').value.trim();
+            const p = document.getElementById('loginPass').value;
+            if(!n || !p){ toast('用户名和密码都得填'); return; }
+            api('/api/login', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({username:n, password:p}) })
+                .then(()=>{ setSession({username:n, password:p}); meRender(); toast('登录成功'); })
+                .catch(e=> toast(e.message));
         }
-        function genKey(){
+        function register(){
+            const n = document.getElementById('regName').value.trim();
+            const p = document.getElementById('regPass').value;
+            const p2 = document.getElementById('regPass2').value;
+            if(!n || !p){ toast('用户名和密码都得填'); return; }
+            if(p !== p2){ toast('两次密码不一致'); return; }
+            api('/api/register', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({username:n, password:p}) })
+                .then(()=>{ setSession({username:n, password:p}); meRender(); toast('注册成功，送你 ¥20 体验金'); })
+                .catch(e=> toast(e.message));
+        }
+        async function recharge(){
+            const a = parseFloat(document.getElementById('rcAmount').value);
+            if(!(a > 0)){ toast('输入个有效的金额'); return; }
+            const s = getSession(); if(!s) return;
+            try {
+                await api('/api/recharge', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({username:s.username, password:s.password, amount:a}) });
+                meRender(); toast('已充值 ¥'+a);
+            } catch(e){ toast(e.message); }
+        }
+        function quickRc(x){ const el = document.getElementById('rcAmount'); if(el) el.value = x; recharge(); }
+
+        async function genKey(){
+            const s = getSession(); if(!s) return;
             const nameEl = document.getElementById('meKeyName');
-            const name = nameEl.value.trim() || ('密钥-' + (loadKeys().length+1));
-            const full = PREFIX + randToken(32);
-            const arr = loadKeys();
-            arr.unshift({ name, key: full, created: new Date().toLocaleString('zh-CN') });
-            saveKeys(arr);
-            nameEl.value='';
-            renderKeys();
-            toast('已生成：'+full.slice(0,16)+'…');
+            const name = nameEl.value.trim();
+            try {
+                const r = await api('/api/keys', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({username:s.username, password:s.password, name}) });
+                nameEl.value=''; meRender(); toast('已生成：'+r.key.slice(0,16)+'…');
+            } catch(e){ toast(e.message); }
         }
-        function copyKey(k){
-            navigator.clipboard.writeText(k);
-            toast('密钥已复制');
-        }
-        function delKey(k){
+        async function delKey(k){
+            const s = getSession(); if(!s) return;
             if(!confirm('确定删掉这把密钥？删了就找不回来了。')) return;
-            saveKeys(loadKeys().filter(x=>x.key!==k));
-            renderKeys();
+            try {
+                await api('/api/keys/delete', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({username:s.username, password:s.password, key:k}) });
+                meRender();
+            } catch(e){ toast(e.message); }
         }
-        function renderKeys(){
-            const arr = loadKeys();
-            const box = document.getElementById('meKeyList');
-            const count = document.getElementById('meKeyCount');
-            if(!box || !count) return;
-            count.textContent = '共 ' + arr.length + ' 个密钥';
-            if(!arr.length){ box.innerHTML = '<div class="key-empty">还没密钥，上面输个名字点「生成密钥」就有一把了。</div>'; return; }
-            box.innerHTML = arr.map(x=>`
-                <div class="key-row">
-                    <div class="key-name">${esc(x.name)}<small>创建于 ${x.created}</small></div>
-                    <div class="key-val">
-                        <span class="mask" data-full="${x.key}">${maskKey(x.key)}</span>
-                        <span class="eye" onclick="toggleKey(this)">👁</span>
-                    </div>
-                    <div class="key-actions">
-                        <button onclick="copyKey('${x.key}')">复制</button>
-                        <button class="del" onclick="delKey('${x.key}')">删除</button>
-                    </div>
-                </div>`).join('');
-        }
+        function copyKey(k){ navigator.clipboard.writeText(k); toast('密钥已复制'); }
+
         function maskKey(k){ return k.slice(0,12) + '••••••••••••' + k.slice(-4); }
         function toggleKey(eye){
             const mask = eye.previousElementSibling;
@@ -796,55 +804,26 @@ echo $resp;</code></pre>
             clearTimeout(toastTimer); toastTimer = setTimeout(()=>t.style.opacity='0', 2200);
         }
 
-        // ===== 我的 / 账号（本地演示：登录 / 注册 / 充值） =====
-        const USERS_KEY = 'aihub_users';
-        const SESSION_KEY = 'aihub_session';
-        let meTab = 'login';
-        function loadUsers(){ try { return JSON.parse(localStorage.getItem(USERS_KEY)) || {}; } catch(e){ return {}; } }
-        function saveUsers(o){ localStorage.setItem(USERS_KEY, JSON.stringify(o)); }
-        function curName(){ return localStorage.getItem(SESSION_KEY); }
-        function login(){
-            const n = document.getElementById('loginName').value.trim();
-            const p = document.getElementById('loginPass').value;
-            const u = loadUsers()[n];
-            if(!u){ toast('账号不存在，先去注册'); return; }
-            if(u.pass !== p){ toast('密码不对'); return; }
-            localStorage.setItem(SESSION_KEY, n); meRender(); toast('登录成功');
-        }
-        function register(){
-            const n = document.getElementById('regName').value.trim();
-            const p = document.getElementById('regPass').value;
-            const p2 = document.getElementById('regPass2').value;
-            if(!n || !p){ toast('用户名和密码都得填'); return; }
-            if(p !== p2){ toast('两次密码不一致'); return; }
-            const us = loadUsers();
-            if(us[n]){ toast('这个用户名已经被占了'); return; }
-            us[n] = { pass:p, balance:20 };
-            saveUsers(us); localStorage.setItem(SESSION_KEY, n); meRender(); toast('注册成功，送你 ¥20 体验金');
-        }
-        function recharge(){
-            const a = parseFloat(document.getElementById('rcAmount').value);
-            if(!(a > 0)){ toast('输入个有效的金额'); return; }
-            const us = loadUsers(); const n = curName();
-            us[n].balance = (us[n].balance || 0) + a; saveUsers(us); meRender(); toast('已充值 ¥' + a);
-        }
-        function quickRc(x){
-            const us = loadUsers(); const n = curName();
-            us[n].balance = (us[n].balance || 0) + x; saveUsers(us); meRender(); toast('已充值 ¥' + x);
-        }
-        function logout(){ localStorage.removeItem(SESSION_KEY); meRender(); toast('已退出'); }
-        function meRender(){
+        function logout(){ clearSession(); meRender(); toast('已退出'); }
+
+        async function meRender(){
             const wrap = document.getElementById('meWrap');
             if(!wrap) return;
-            const n = curName();
-            const loggedIn = !!(n && loadUsers()[n]);
+            const s = getSession();
+            if(s){
+                try {
+                    meData = await api('/api/me?username='+encodeURIComponent(s.username)+'&password='+encodeURIComponent(s.password));
+                } catch(e){ clearSession(); meRender(); toast(e.message); return; }
+            } else { meData = null; }
+
+            const loggedIn = !!meData;
             wrap.className = 'me-wrap ' + (loggedIn ? 'me-logged' : 'me-guest');
             if(loggedIn){
-                const bal = loadUsers()[n].balance;
+                const bal = meData.balance;
                 wrap.innerHTML = `
                     <div class="me-card">
                         <div class="me-top">
-                            <div><div class="me-label">当前登录</div><div class="me-name">${esc(n)}</div></div>
+                            <div><div class="me-label">当前登录</div><div class="me-name">${esc(s.username)}</div></div>
                             <button class="form-btn ghost" onclick="logout()">退出</button>
                         </div>
                         <div class="me-balance-box">
@@ -876,7 +855,7 @@ echo $resp;</code></pre>
                         <div class="key-list" id="meKeyList"></div>
                         <p class="key-meta">
                             调用方式：在请求头带上 <b>Authorization: Bearer 你的密钥</b> 即可（与「文档」示例一致），平台按实际 token 用量从余额扣费。<br>
-                            注意：当前为前端演示，账号、余额与密钥均仅保存在你本机浏览器，未连接真实服务端；正式上线需配套后端做鉴权与计费。
+                            账号、余额与密钥由 AI HUB 后端统一保管，本页仅作展示与操作入口。
                         </p>
                     </div>`;
                 renderKeys();
@@ -901,10 +880,30 @@ echo $resp;</code></pre>
                             <div class="form-hint">注册即送 ¥20 体验金</div>
                         </div>
                     </div>`;
-                // 控制注册表单显隐
                 const forms = wrap.querySelectorAll('.me-form');
                 if(meTab==='reg'){ forms[0].classList.add('hidden'); forms[1].classList.remove('hidden'); }
             }
+        }
+
+        function renderKeys(){
+            const arr = (meData && meData.keys) || [];
+            const box = document.getElementById('meKeyList');
+            const count = document.getElementById('meKeyCount');
+            if(!box || !count) return;
+            count.textContent = '共 ' + arr.length + ' 个密钥';
+            if(!arr.length){ box.innerHTML = '<div class="key-empty">还没密钥，上面输个名字点「生成密钥」就有一把了。</div>'; return; }
+            box.innerHTML = arr.map(x=>`
+                <div class="key-row">
+                    <div class="key-name">${esc(x.name)}<small>创建于 ${esc(x.created)}</small></div>
+                    <div class="key-val">
+                        <span class="mask" data-full="${esc(x.key)}">${maskKey(x.key)}</span>
+                        <span class="eye" onclick="toggleKey(this)">👁</span>
+                    </div>
+                    <div class="key-actions">
+                        <button onclick="copyKey('${esc(x.key)}')">复制</button>
+                        <button class="del" onclick="delKey('${esc(x.key)}')">删除</button>
+                    </div>
+                </div>`).join('');
         }
 
         // 切到「我的」界面时刷新
