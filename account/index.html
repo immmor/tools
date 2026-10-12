@@ -510,8 +510,9 @@
         // 综合「出售/求购 + 搜索 + 分类」过滤后渲染
         function applyFilter() {
             const keyword = document.getElementById('searchInput').value.toLowerCase();
+            // 有搜索词时全局检索（忽略当前分类）；无搜索词时按分类筛选
             const match = acc =>
-                (currentCategory === 0 || acc.category === currentCategory) &&
+                (keyword === '' ? (currentCategory === 0 || acc.category === currentCategory) : true) &&
                 (acc.name.toLowerCase().includes(keyword) || acc.description.toLowerCase().includes(keyword));
             renderList = (currentTab === 'sell' ? allAccounts : allMarketAccounts).filter(match);
             visibleCount = RENDER_LIMIT;   // 每次筛选从头加载前 N 条
@@ -668,13 +669,15 @@
         // 分类筛选栏
         function renderCategories() {
             const bar = document.getElementById('categoryBar');
+            const kw = document.getElementById('searchInput').value.trim();
+            const activeCat = kw ? 0 : currentCategory;   // 搜索全局时高亮「全部」，选中分类状态保留
             const counts = {};
             allAccounts.forEach(a => { counts[a.category] = (counts[a.category] || 0) + 1; });
             const ids = Object.keys(counts).map(Number).sort((a, b) => a - b);
             const cats = [{ id: 0, name: '全部' }]
                 .concat(ids.map(id => ({ id, name: CATEGORY_NAMES[id] || ('分类 ' + id) })));
             bar.innerHTML = cats.map(c => `
-                <button class="tab-btn ${c.id === currentCategory ? 'active' : ''}" data-cat="${c.id}">
+                <button class="tab-btn ${c.id === activeCat ? 'active' : ''}" data-cat="${c.id}">
                     ${c.name} <span class="opacity-50">${c.id === 0 ? allAccounts.length : counts[c.id]}</span>
                 </button>
             `).join('');
@@ -701,7 +704,16 @@
             applyFilter();
         });
 
-        document.getElementById('searchInput').addEventListener('input', applyFilter);
+        // 搜索：输入防抖（250ms），结果刷新后回到顶部便于查看
+        let searchTimer = null;
+        document.getElementById('searchInput').addEventListener('input', () => {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(() => {
+                renderCategories();   // 刷新分类栏高亮（搜索时显示「全部」）
+                window.scrollTo({ top: 0, behavior: 'auto' });
+                applyFilter();
+            }, 250);
+        });
 
         const loginModal = document.getElementById('loginModal');
         const loginBtn = document.getElementById('loginBtn');
