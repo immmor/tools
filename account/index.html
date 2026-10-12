@@ -203,7 +203,6 @@
 
         /* 响应式调整 */
         @media (max-width: 768px) {
-            .grid-broken { grid-template-cols: 1fr; }
             .vertical-label { display: none; }
             .offset-1 { margin-top: 0 !important; }
             .offset-2 { margin-top: 0 !important; }
@@ -377,7 +376,13 @@
     </div>
 
     <div class="mb-10 flex justify-center enter" style="animation-delay: 0.25s">
-        <input type="text" id="searchInput" placeholder="搜索..." class="w-full md:w-80 px-4 py-2 border border-gray-200 text-sm focus:outline-none focus:border-black transition-colors">
+        <div class="relative w-full md:w-80">
+            <input type="text" id="searchInput" placeholder="搜索..." class="w-full px-4 py-2 pr-20 border border-gray-200 text-sm focus:outline-none focus:border-black transition-colors">
+            <div id="searchMeta" class="hidden absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2 text-xs text-gray-400 select-none">
+                <span id="searchCount"></span>
+                <button id="searchClear" type="button" class="w-5 h-5 flex items-center justify-center rounded-full hover:bg-gray-200 hover:text-black transition-colors" title="清除搜索">✕</button>
+            </div>
+        </div>
     </div>
 
     <aside id="categoryBar" class="flex flex-col gap-2"></aside>
@@ -509,7 +514,8 @@
 
         // 综合「出售/求购 + 搜索 + 分类」过滤后渲染
         function applyFilter() {
-            const keyword = document.getElementById('searchInput').value.toLowerCase();
+            const rawKw = document.getElementById('searchInput').value.trim();
+            const keyword = rawKw.toLowerCase();
             // 有搜索词时全局检索（忽略当前分类）；无搜索词时按分类筛选
             const match = acc =>
                 (keyword === '' ? (currentCategory === 0 || acc.category === currentCategory) : true) &&
@@ -517,6 +523,14 @@
             renderList = (currentTab === 'sell' ? allAccounts : allMarketAccounts).filter(match);
             visibleCount = RENDER_LIMIT;   // 每次筛选从头加载前 N 条
             renderFirst();
+            // 输入框右侧显示结果数与关闭按钮
+            const meta = document.getElementById('searchMeta');
+            if (rawKw) {
+                document.getElementById('searchCount').textContent = renderList.length + ' 条';
+                meta.classList.remove('hidden');
+            } else {
+                meta.classList.add('hidden');
+            }
         }
 
         // 重新筛选：清空并加载第一批
@@ -585,7 +599,12 @@
             if (renderList.length === 0) {
                 const s = document.createElement('div');
                 s.id = 'loadSentinel';
-                s.className = 'col-span-full flex justify-center py-10 text-sm text-gray-400';
+                s.className = 'py-16 text-sm text-gray-400';
+                // 内联样式优先级最高，覆盖 .grid-broken > div 的 50% 限制
+                s.style.flex = '0 0 100%';
+                s.style.maxWidth = '100%';
+                s.style.width = '100%';
+                s.style.textAlign = 'center';
                 s.textContent = '没有找到相关商品';
                 main.appendChild(s);
                 return;
@@ -593,7 +612,10 @@
             if (visibleCount < renderList.length) {
                 const s = document.createElement('div');
                 s.id = 'loadSentinel';
-                s.className = 'col-span-full flex justify-center py-6 text-sm text-gray-400';
+                s.className = 'flex justify-center py-6 text-sm text-gray-400';
+                s.style.flex = '0 0 100%';
+                s.style.maxWidth = '100%';
+                s.style.width = '100%';
                 s.textContent = '加载中…';
                 main.appendChild(s);
             }
@@ -713,6 +735,16 @@
                 window.scrollTo({ top: 0, behavior: 'auto' });
                 applyFilter();
             }, 250);
+        });
+
+        // 关闭按钮：清空搜索并恢复
+        document.getElementById('searchClear').addEventListener('click', () => {
+            const input = document.getElementById('searchInput');
+            input.value = '';
+            document.getElementById('searchMeta').classList.add('hidden');
+            renderCategories();
+            applyFilter();
+            input.focus();
         });
 
         const loginModal = document.getElementById('loginModal');
