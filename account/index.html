@@ -282,6 +282,111 @@
             #categoryBar .tab-btn:hover { transform: none; box-shadow: none; border-color: #e5e5e5; }
         }
 
+        /* 左侧通知走马灯（桌面竖向滚动，小屏转顶部横向） */
+        #noticeBar {
+            position: fixed;
+            left: 5rem;               /* 让开左侧竖排站点名 vertical-label（left:2rem），间距更大 */
+            top: 50%;
+            transform: translateY(-50%);
+            width: 2.4rem;            /* 窄条：仅一列竖排文字 */
+            z-index: 10;
+            background: #fff;
+            border: 1px solid #eee;
+            box-shadow: 0 6px 24px -10px rgba(0,0,0,.18);
+        }
+        #noticeBar .notice-title {
+            writing-mode: vertical-rl;
+            text-orientation: upright;
+            font-size: 12px;
+            font-weight: bold;
+            letter-spacing: .15em;
+            padding: 0.6rem 0.3rem;
+            border-bottom: 1px solid #f0f0f0;
+            color: #111;
+            text-align: center;
+            width: max-content;
+            margin: 0 auto;            /* 物理左右 margin 居中 → 窄条内左右居中（不受书写模式影响） */
+        }
+        #noticeBar .notice-view {
+            height: 28rem;
+            overflow: hidden;
+            position: relative;
+        }
+        #noticeBar .notice-track { animation: noticeUp 22s linear infinite; }
+        #noticeBar .notice-item {
+            writing-mode: vertical-rl;
+            text-orientation: upright;
+            padding: 0.6rem 0.3rem;
+            font-size: 12px;
+            line-height: 1.5;
+            color: #555;
+            border-bottom: 1px solid #f5f5f5;
+            text-align: center;          /* 竖排文字在列内上下居中 */
+            white-space: nowrap;         /* 竖排不换行：单列，从上往下 */
+            width: max-content;          /* 收缩到文字宽度 */
+            margin: 0 auto;              /* 物理左右 margin 居中 → 窄条内左右居中（不受书写模式影响） */
+        }
+        #noticeBar .notice-item b { color: #111; }
+        @keyframes noticeUp {
+            from { transform: translateY(0); }
+            to   { transform: translateY(-50%); }
+        }
+
+        @media (max-width: 1023px) {
+            #searchWrap { margin-bottom: 1.5rem; }   /* 移动端：搜索与下方横版通知栏间距 */
+            #noticeBar {
+                position: static;
+                transform: none;
+                width: 100%;
+                margin: 0 0 1.25rem;
+                border: none;
+                border-bottom: 1px solid #eee;
+                box-shadow: none;
+                flex-direction: row;          /* 标题与滚动内容同一行，不单独占一行 */
+                align-items: center;
+            }
+            #noticeBar .notice-title {
+                writing-mode: horizontal-tb;
+                text-orientation: mixed;
+                padding: 0.5rem 0.75rem;
+                text-align: left;
+                width: auto;
+                margin: 0;
+                flex: 0 0 auto;
+                white-space: nowrap;
+            }
+            #noticeBar .notice-view {
+                height: auto;
+                overflow: hidden;
+                white-space: nowrap;
+                flex: 1;                      /* 占满剩余宽度，标题在左、滚动在右 */
+                min-width: 0;
+            }
+            #noticeBar .notice-track {
+                display: flex;
+                flex-direction: row;
+                width: max-content;
+                animation: noticeLeft 22s linear infinite;
+            }
+            #noticeBar .notice-item {
+                writing-mode: horizontal-tb;
+                text-orientation: mixed;
+                white-space: nowrap;
+                flex: 0 0 auto;
+                border-bottom: none;
+                border-right: 1px solid #f0f0f0;
+                padding: 0.5rem 0.75rem;
+                text-align: left;
+                width: max-content;
+                margin: 0;              /* 移动端横排：取消 auto margin，保持单行 */
+            }
+        }
+        @keyframes noticeLeft {
+            from { transform: translateX(0); }
+            to   { transform: translateX(-50%); }
+        }
+
+
         .market-card {
             background: #fff;
             border: 1px solid #eee;
@@ -375,7 +480,7 @@
         </div>
     </div>
 
-    <div class="mb-10 flex justify-center enter" style="animation-delay: 0.25s">
+    <div id="searchWrap" class="mb-10 flex justify-center enter" style="animation-delay: 0.25s">
         <div class="relative w-full md:w-80">
             <input type="text" id="searchInput" placeholder="搜索..." class="w-full px-4 py-2 pr-20 border border-gray-200 text-sm focus:outline-none focus:border-black transition-colors">
             <div id="searchMeta" class="hidden absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2 text-xs text-gray-400 select-none">
@@ -384,6 +489,13 @@
             </div>
         </div>
     </div>
+
+    <aside id="noticeBar" class="flex flex-col">
+        <div class="notice-title">通知</div>
+        <div class="notice-view">
+            <div class="notice-track" id="noticeTrack"></div>
+        </div>
+    </aside>
 
     <aside id="categoryBar" class="flex flex-col gap-2"></aside>
 
@@ -746,6 +858,19 @@
             applyFilter();
             input.focus();
         });
+
+        // 左侧通知走马灯：内容复制一份，配合 -50% 动画实现无缝循环
+        const NOTICES = [
+            '新上架 <b>Netflix / Spotify</b>  Premium 账号，库存充足',
+            '每日 <b>20:00</b> 准时补货，敬请关注',
+            '支持批量采购，联系客服享专属折扣',
+            '<b>Disney+</b> 限时 9 折，售完即止',
+            '交易请走平台，谨防私下交易诈骗'
+        ];
+        (function renderNotices() {
+            const html = NOTICES.map(n => '<div class="notice-item">' + n + '</div>').join('');
+            document.getElementById('noticeTrack').innerHTML = html + html;
+        })();
 
         const loginModal = document.getElementById('loginModal');
         const loginBtn = document.getElementById('loginBtn');
