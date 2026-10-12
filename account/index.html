@@ -480,6 +480,9 @@
         let allMarketAccounts = [];
         let currentTab = 'sell';
         let currentCategory = 0;   // 0 = 全部
+        let renderList = [];       // 当前筛选后的完整结果
+        let visibleCount = 0;      // 已渲染条数
+        const RENDER_LIMIT = 60;   // 单次最多渲染条数，避免几千条卡顿
 
         // 分类名称映射（数据里只有 category_id，已知的补上中文名，未知的回退为「分类 N」）
         const CATEGORY_NAMES = {
@@ -509,11 +512,16 @@
             const match = acc =>
                 (currentCategory === 0 || acc.category === currentCategory) &&
                 (acc.name.toLowerCase().includes(keyword) || acc.description.toLowerCase().includes(keyword));
-            if (currentTab === 'sell') {
-                renderAccounts(allAccounts.filter(match));
-            } else {
-                renderMarket(allMarketAccounts.filter(match));
-            }
+            renderList = (currentTab === 'sell' ? allAccounts : allMarketAccounts).filter(match);
+            visibleCount = RENDER_LIMIT;   // 每次筛选从头显示前 N 条
+            renderVisible();
+        }
+
+        // 分批渲染：只画前 visibleCount 条，剩余用「加载更多」按需展开
+        function renderVisible() {
+            const slice = renderList.slice(0, visibleCount);
+            if (currentTab === 'sell') renderAccounts(slice, renderList.length);
+            else renderMarket(slice, renderList.length);
         }
 
         // 余额数字滚动动画
@@ -533,7 +541,7 @@
             requestAnimationFrame(tick);
         }
 
-        function renderAccounts(accounts) {
+        function renderAccounts(accounts, total) {
             const main = document.querySelector('main');
             main.innerHTML = '';
             accounts.forEach((acc, i) => {
@@ -556,9 +564,10 @@
                 `;
                 main.appendChild(div);
             });
+            appendLoadMore(main, accounts.length, total);
         }
 
-        function renderMarket(accounts) {
+        function renderMarket(accounts, total) {
             const main = document.querySelector('main');
             main.innerHTML = '';
             accounts.forEach((acc, i) => {
@@ -580,6 +589,23 @@
                     </div>
                 `;
                 main.appendChild(div);
+            });
+            appendLoadMore(main, accounts.length, total);
+        }
+
+        // 结果超过单次上限时，追加提示与「加载更多」按钮
+        function appendLoadMore(main, shown, total) {
+            if (shown >= total) return;
+            const wrap = document.createElement('div');
+            wrap.className = 'col-span-full flex flex-col items-center gap-3 py-6 text-sm text-gray-400';
+            wrap.innerHTML = `
+                <span>仅显示前 ${shown} 条，共 ${total} 条（请用搜索 / 分类缩小范围）</span>
+                <button id="loadMoreBtn" class="px-5 py-2 border border-black text-black text-xs hover:bg-black hover:text-white transition-colors">加载更多</button>
+            `;
+            main.appendChild(wrap);
+            document.getElementById('loadMoreBtn').addEventListener('click', () => {
+                visibleCount += RENDER_LIMIT;
+                renderVisible();
             });
         }
 
