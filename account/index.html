@@ -482,7 +482,8 @@
         let currentCategory = 0;   // 0 = 全部
         let renderList = [];       // 当前筛选后的完整结果
         let visibleCount = 0;      // 已渲染条数
-        const RENDER_LIMIT = 60;   // 单次最多渲染条数，避免几千条卡顿
+        let renderedCount = 0;     // 已追加到 DOM 的条数（用于动画延迟）
+        const RENDER_LIMIT = 10;   // 每次加载 10 条，滚动到底再追加
 
         // 分类名称映射（数据里只有 category_id，已知的补上中文名，未知的回退为「分类 N」）
         const CATEGORY_NAMES = {
@@ -513,16 +514,111 @@
                 (currentCategory === 0 || acc.category === currentCategory) &&
                 (acc.name.toLowerCase().includes(keyword) || acc.description.toLowerCase().includes(keyword));
             renderList = (currentTab === 'sell' ? allAccounts : allMarketAccounts).filter(match);
-            visibleCount = RENDER_LIMIT;   // 每次筛选从头显示前 N 条
-            renderVisible();
+            visibleCount = RENDER_LIMIT;   // 每次筛选从头加载前 N 条
+            renderFirst();
         }
 
-        // 分批渲染：只画前 visibleCount 条，剩余用「加载更多」按需展开
-        function renderVisible() {
-            const slice = renderList.slice(0, visibleCount);
-            if (currentTab === 'sell') renderAccounts(slice, renderList.length);
-            else renderMarket(slice, renderList.length);
+        // 重新筛选：清空并加载第一批
+        function renderFirst() {
+            const main = document.querySelector('main');
+            main.innerHTML = '';
+            renderedCount = 0;
+            appendBatch(renderList.slice(0, visibleCount));
+            updateSentinel();
+            fillViewport();   // 列表不够长时自动填满首屏
         }
+
+        // 追加下一批（滚动到底触发）
+        function loadMore() {
+            if (visibleCount >= renderList.length) return;
+            visibleCount = Math.min(visibleCount + RENDER_LIMIT, renderList.length);
+            appendBatch(renderList.slice(renderedCount, visibleCount));
+            updateSentinel();
+        }
+
+        // 追加卡片（按当前 tab 区分样式），错峰用本批内序号，避免后续批次延迟累积
+        function appendBatch(list) {
+            const main = document.querySelector('main');
+            list.forEach((acc, j) => {
+                const div = document.createElement('div');
+                const inner = currentTab === 'sell' ? `
+                    <div class="item-card" style="animation: cardIn 0.5s cubic-bezier(0.2,0.8,0.2,1) both; animation-delay: ${j * 0.03}s;">
+                        <div class="card-thumb">${acc.cover ? '<img src="' + acc.cover + '" alt="" loading="lazy" onerror="this.remove()">' : ''}</div>
+                        <div class="card-content">
+                            <h3 class="text-base font-bold mb-1 line-clamp-2">${acc.name}</h3>
+                            <p class="text-xs text-gray-400 mb-2 leading-relaxed line-clamp-2">${acc.description}</p>
+                            <div class="flex justify-between items-center">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[10px] uppercase tracking-widest font-bold">库存：${acc.stock}</span>
+                                    <span class="price-tag mono">${acc.price}</span>
+                                </div>
+                                <button class="text-xs border-b border-black pb-1 hover:text-gray-400 transition-colors buy-btn" data-name="${acc.name}" data-price="${acc.price}">购买</button>
+                            </div>
+                        </div>
+                    </div>` : `
+                    <div class="market-card" style="animation: cardIn 0.5s cubic-bezier(0.2,0.8,0.2,1) both; animation-delay: ${j * 0.03}s;">
+                        <div class="card-thumb">${acc.cover ? '<img src="' + acc.cover + '" alt="" loading="lazy" onerror="this.remove()">' : ''}</div>
+                        <div class="card-content">
+                            <h3 class="text-base font-bold mb-1 line-clamp-2">${acc.name}</h3>
+                            <p class="text-xs text-gray-400 mb-2 leading-relaxed line-clamp-2">${acc.description}</p>
+                            <div class="flex justify-between items-center">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[10px] uppercase tracking-widest font-bold">${acc.contact}</span>
+                                    <span class="want-tag mono">¥${acc.price}</span>
+                                </div>
+                                <button class="text-xs border-b border-black pb-1 hover:text-gray-400 transition-colors" onclick="showContact('${acc.name}', '${acc.price}')">联系 ↗</button>
+                            </div>
+                        </div>
+                    </div>`;
+                div.innerHTML = inner;
+                main.appendChild(div);
+                renderedCount++;
+            });
+        }
+
+        // 底部哨兵：还有更多则显示「加载中」，否则清除；无结果给提示
+        function updateSentinel() {
+            const main = document.querySelector('main');
+            const old = document.getElementById('loadSentinel');
+            if (old) old.remove();
+            if (renderList.length === 0) {
+                const s = document.createElement('div');
+                s.id = 'loadSentinel';
+                s.className = 'col-span-full flex justify-center py-10 text-sm text-gray-400';
+                s.textContent = '没有找到相关商品';
+                main.appendChild(s);
+                return;
+            }
+            if (visibleCount < renderList.length) {
+                const s = document.createElement('div');
+                s.id = 'loadSentinel';
+                s.className = 'col-span-full flex justify-center py-6 text-sm text-gray-400';
+                s.textContent = '加载中…';
+                main.appendChild(s);
+            }
+        }
+
+        // 首屏若列表太短（哨兵已在视口内），自动补足到一屏多一点
+        function fillViewport() {
+            let guard = 0;
+            while (visibleCount < renderList.length && guard < 20) {
+                const s = document.getElementById('loadSentinel');
+                if (!s) break;
+                if (s.getBoundingClientRect().top > window.innerHeight + 120) break;
+                loadMore();
+                guard++;
+            }
+        }
+
+        // 滚动 / 缩放时，哨兵进入视口附近就追加下一批（fillViewport 内部平铺循环补足）
+        function onScroll() {
+            if (visibleCount >= renderList.length) return;
+            const s = document.getElementById('loadSentinel');
+            if (!s) return;
+            if (s.getBoundingClientRect().top < window.innerHeight + 200) fillViewport();
+        }
+        window.addEventListener('scroll', onScroll, { passive: true });
+        window.addEventListener('resize', onScroll);
 
         // 余额数字滚动动画
         function animateBalance(target) {
@@ -539,74 +635,6 @@
                 else el.dataset.val = target;
             }
             requestAnimationFrame(tick);
-        }
-
-        function renderAccounts(accounts, total) {
-            const main = document.querySelector('main');
-            main.innerHTML = '';
-            accounts.forEach((acc, i) => {
-                const div = document.createElement('div');
-                div.innerHTML = `
-                    <div class="item-card" style="animation: cardIn 0.5s cubic-bezier(0.2,0.8,0.2,1) both; animation-delay: ${i * 0.04}s;">
-                        <div class="card-thumb">${acc.cover ? '<img src="' + acc.cover + '" alt="" loading="lazy" onerror="this.remove()">' : ''}</div>
-                        <div class="card-content">
-                            <h3 class="text-base font-bold mb-1 line-clamp-2">${acc.name}</h3>
-                            <p class="text-xs text-gray-400 mb-2 leading-relaxed line-clamp-2">${acc.description}</p>
-                            <div class="flex justify-between items-center">
-                                <div class="flex items-center gap-2">
-                                    <span class="text-[10px] uppercase tracking-widest font-bold">库存：${acc.stock}</span>
-                                    <span class="price-tag mono">${acc.price}</span>
-                                </div>
-                                <button class="text-xs border-b border-black pb-1 hover:text-gray-400 transition-colors buy-btn" data-name="${acc.name}" data-price="${acc.price}">购买</button>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                main.appendChild(div);
-            });
-            appendLoadMore(main, accounts.length, total);
-        }
-
-        function renderMarket(accounts, total) {
-            const main = document.querySelector('main');
-            main.innerHTML = '';
-            accounts.forEach((acc, i) => {
-                const div = document.createElement('div');
-                div.innerHTML = `
-                    <div class="market-card" style="animation: cardIn 0.5s cubic-bezier(0.2,0.8,0.2,1) both; animation-delay: ${i * 0.04}s;">
-                        <div class="card-thumb">${acc.cover ? '<img src="' + acc.cover + '" alt="" loading="lazy" onerror="this.remove()">' : ''}</div>
-                        <div class="card-content">
-                            <h3 class="text-base font-bold mb-1 line-clamp-2">${acc.name}</h3>
-                            <p class="text-xs text-gray-400 mb-2 leading-relaxed line-clamp-2">${acc.description}</p>
-                            <div class="flex justify-between items-center">
-                                <div class="flex items-center gap-2">
-                                    <span class="text-[10px] uppercase tracking-widest font-bold">${acc.contact}</span>
-                                    <span class="want-tag mono">¥${acc.price}</span>
-                                </div>
-                                <button class="text-xs border-b border-black pb-1 hover:text-gray-400 transition-colors" onclick="showContact('${acc.name}', '${acc.price}')">联系 ↗</button>
-                            </div>
-                        </div>
-                    </div>
-                `;
-                main.appendChild(div);
-            });
-            appendLoadMore(main, accounts.length, total);
-        }
-
-        // 结果超过单次上限时，追加提示与「加载更多」按钮
-        function appendLoadMore(main, shown, total) {
-            if (shown >= total) return;
-            const wrap = document.createElement('div');
-            wrap.className = 'col-span-full flex flex-col items-center gap-3 py-6 text-sm text-gray-400';
-            wrap.innerHTML = `
-                <span>仅显示前 ${shown} 条，共 ${total} 条（请用搜索 / 分类缩小范围）</span>
-                <button id="loadMoreBtn" class="px-5 py-2 border border-black text-black text-xs hover:bg-black hover:text-white transition-colors">加载更多</button>
-            `;
-            main.appendChild(wrap);
-            document.getElementById('loadMoreBtn').addEventListener('click', () => {
-                visibleCount += RENDER_LIMIT;
-                renderVisible();
-            });
         }
 
         // 加载真实数据：talangya/data.json（由 hao.js 从 talangya.com 抓取）
