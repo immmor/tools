@@ -164,9 +164,7 @@ document.addEventListener('DOMContentLoaded', () => {
             div.id = 'support-typing-indicator';
             div.className = 'flex gap-3 support-bot-message';
             div.innerHTML = `
-                <div class="w-8 h-8 rounded-full bg-[var(--neon-blue)] flex items-center justify-center text-black text-xs font-bold shrink-0">
-                    <i data-lucide="headphones" class="w-4 h-4"></i>
-                </div>
+                <img src="static/cs.webp" alt="客服" class="w-8 h-8 rounded-full object-cover shrink-0">
                 <div class="max-w-[80%]">
                     <div class="support-bubble px-4 py-3 text-sm flex gap-1">
                         <span class="w-2 h-2 bg-zinc-500 rounded-full animate-bounce" style="animation-delay: ${Math.random() * 200}ms"></span>
@@ -224,9 +222,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const div = document.createElement('div');
             div.className = 'flex gap-3 support-bot-message';
             div.innerHTML = `
-                <div class="w-8 h-8 rounded-full bg-[var(--neon-blue)] flex items-center justify-center text-black text-xs font-bold shrink-0">
-                    <i data-lucide="headphones" class="w-4 h-4"></i>
-                </div>
+                <img src="static/cs.webp" alt="客服" class="w-8 h-8 rounded-full object-cover shrink-0">
                 <div class="max-w-[80%] js-bubble-wrap">
                     <div class="support-bubble px-4 py-3 text-sm"></div>
                 </div>
@@ -417,9 +413,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 `;
             } else if (isSupport) {
                 div.innerHTML = `
-                    <div class="w-8 h-8 rounded-full bg-[var(--neon-blue)] flex items-center justify-center text-black text-xs font-bold shrink-0">
-                        <i data-lucide="headphones" class="w-4 h-4"></i>
-                    </div>
+                    <img src="static/cs.webp" alt="客服" class="w-8 h-8 rounded-full object-cover shrink-0">
                     <div class="max-w-[80%] js-bubble-wrap">
                         <span style="display:inline-block;font-size:10px;color:var(--neon-blue);opacity:.75;margin-bottom:4px;">客服</span>
                         <div class="support-bubble px-4 py-3 text-sm bg-[#22c55e26] border border-[#22c55e80]">${text}</div>
@@ -427,9 +421,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 `;
             } else {
                 div.innerHTML = `
-                    <div class="w-8 h-8 rounded-full bg-[var(--neon-blue)] flex items-center justify-center text-black text-xs font-bold shrink-0">
-                        <i data-lucide="headphones" class="w-4 h-4"></i>
-                    </div>
+                    <img src="static/cs.webp" alt="客服" class="w-8 h-8 rounded-full object-cover shrink-0">
                     <div class="max-w-[80%] js-bubble-wrap">
                         <div class="support-bubble px-4 py-3 text-sm">${text}</div>
                     </div>
@@ -459,9 +451,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const div = document.createElement('div');
             div.className = 'flex gap-3 support-bot-message';
             div.innerHTML = `
-                <div class="w-8 h-8 rounded-full bg-[var(--neon-blue)] flex items-center justify-center text-black text-xs font-bold shrink-0">
-                    <i data-lucide="headphones" class="w-4 h-4"></i>
-                </div>
+                <img src="static/cs.webp" alt="客服" class="w-8 h-8 rounded-full object-cover shrink-0">
                 <div class="max-w-[80%] js-bubble-wrap">
                     <div class="support-bubble px-4 py-3 text-sm">
                         <span class="support-related-label">${moreInfoLabel}</span>
