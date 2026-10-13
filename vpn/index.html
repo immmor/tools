@@ -766,11 +766,11 @@
         }
         /* 消息列表：必读/需确认 整条背景色（用自定义类，避免 Tailwind 任意值透明度在 CDN 下失效） */
         .notif-must-read {
-            border: 2px solid var(--neon-orange);
+            border: 2px solid rgba(255, 255, 255, 0.45);
             background: rgba(255, 170, 0, 0.15);
         }
         .notif-must-input {
-            border: 2px solid var(--neon-blue);
+            border: 2px solid rgba(255, 255, 255, 0.45);
             background: rgba(0, 243, 255, 0.15);
         }
         .forced-unread .forced-confirm {
@@ -4749,7 +4749,8 @@
                         });
                         const data = await resp.json();
                         if (data.success && data.ticket) {
-                            const url = `https://funbua.uk/vpay?ticket=${encodeURIComponent(data.ticket)}&lang=${encodeURIComponent(lang)}`;
+                            const theme = document.body.classList.contains('theme-light') ? 'light' : 'dark';
+                            const url = `https://funbua.uk/vpay?ticket=${encodeURIComponent(data.ticket)}&lang=${encodeURIComponent(lang)}&theme=${theme}`;
                             window.location.href = url;
                             return;
                         }
@@ -4757,7 +4758,7 @@
                         console.error('获取授权码失败', err);
                     }
                     // 失败则退回直接打开充值页（手动登录）
-                    window.location.href = `https://funbua.uk/vpay?lang=${encodeURIComponent(lang)}`;
+                    window.location.href = `https://funbua.uk/vpay?lang=${encodeURIComponent(lang)}&theme=${document.body.classList.contains('theme-light') ? 'light' : 'dark'}`;
                 }
             };
 
@@ -7007,25 +7008,23 @@
                 if (window.lucide) window.lucide.createIcons();
             }
 
-            // 用户显式选择的主题：登录态优先存 userInfo.theme（随登录有效时间）；
-            // 未登录则用 sessionStorage 记住本次会话的选择（不跨会话持久化）
+            // 用户显式选择的主题：优先用 localStorage('theme')（两页共享、跨会话持久）；
+            // 其次用登录账号偏好 userInfo.theme；都没有则回退时区时间（见 initTheme）
             function getManualTheme() {
+                try {
+                    var t = localStorage.getItem('theme');
+                    if (t === 'light' || t === 'dark') return t;
+                } catch (e) {}
                 var u = getLoginUser();
                 if (isLoggedIn() && u.theme) return u.theme;
-                try {
-                    var s = sessionStorage.getItem('theme_manual');
-                    if (s) return s;
-                } catch (e) {}
                 return null;
             }
             function setManualTheme(theme) {
+                try { localStorage.setItem('theme', theme); } catch (e) {}
                 var u = getLoginUser();
                 if (isLoggedIn()) {
                     u.theme = theme;
                     localStorage.setItem('userInfo', JSON.stringify(u));
-                    try { sessionStorage.removeItem('theme_manual'); } catch (e) {}
-                } else {
-                    try { sessionStorage.setItem('theme_manual', theme); } catch (e) {}
                 }
             }
 
@@ -7050,6 +7049,21 @@
                     if (light !== currentLight()) apply(light);
                 }
             }, 10000);
+        })();
+
+        // 跳转到 vpay 时携带当前主题参数，使其与本站主题同步
+        (function () {
+            var links = document.querySelectorAll('a.js-recharge, #recharge-btn');
+            Array.prototype.forEach.call(links, function (a) {
+                a.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    var theme = document.body.classList.contains('theme-light') ? 'light' : 'dark';
+                    var base = a.getAttribute('href');
+                    if (!base) return;
+                    var sep = base.indexOf('?') > -1 ? '&' : '?';
+                    window.location.href = base + sep + 'theme=' + theme;
+                });
+            });
         })();
     </script>
 
