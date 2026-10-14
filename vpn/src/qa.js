@@ -18,15 +18,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 客服列表（均为女性，打开时随机挑选一位）
         const AGENTS = [
-            { 'zh-CN': '皮皮', 'en-US': 'Pipi', 'ja-JP': 'ピピ', 'ko-KR': '피피', 'ru-RU': 'Пипи', 'es-ES': 'Pipi', 'vi-VN': 'Pipi', 'ar-SA': 'بيبي' },
-            { 'zh-CN': '小艾', 'en-US': 'Ivy', 'ja-JP': 'アイ', 'ko-KR': '아이', 'ru-RU': 'Айви', 'es-ES': 'Ivy', 'vi-VN': 'Ivy', 'ar-SA': 'آيفي' },
-            { 'zh-CN': '婷婷', 'en-US': 'Tina', 'ja-JP': 'ティナ', 'ko-KR': '티나', 'ru-RU': 'Тина', 'es-ES': 'Tina', 'vi-VN': 'Tina', 'ar-SA': 'تينا' },
-            { 'zh-CN': '璐璐', 'en-US': 'Lulu', 'ja-JP': 'ルル', 'ko-KR': '루루', 'ru-RU': 'Лулу', 'es-ES': 'Lulu', 'vi-VN': 'Lulu', 'ar-SA': 'لولو' },
-            { 'zh-CN': '安娜', 'en-US': 'Anna', 'ja-JP': 'アンナ', 'ko-KR': '안나', 'ru-RU': 'Анна', 'es-ES': 'Anna', 'vi-VN': 'Anna', 'ar-SA': 'آنا' }
+            { avatar: 'static/cs1.webp', 'zh-CN': '皮皮', 'en-US': 'Pipi', 'ja-JP': 'ピピ', 'ko-KR': '피피', 'ru-RU': 'Пипи', 'es-ES': 'Pipi', 'vi-VN': 'Pipi', 'ar-SA': 'بيبي' },
+            { avatar: 'static/cs2.webp', 'zh-CN': '小艾', 'en-US': 'Ivy', 'ja-JP': 'アイ', 'ko-KR': '아이', 'ru-RU': 'Айви', 'es-ES': 'Ivy', 'vi-VN': 'Ivy', 'ar-SA': 'آيفي' },
+            { avatar: 'static/cs3.webp', 'zh-CN': '婷婷', 'en-US': 'Tina', 'ja-JP': 'ティナ', 'ko-KR': '티나', 'ru-RU': 'Тина', 'es-ES': 'Tina', 'vi-VN': 'Tina', 'ar-SA': 'تينا' },
+            { avatar: 'static/cs4.webp', 'zh-CN': '璐璐', 'en-US': 'Lulu', 'ja-JP': 'ルル', 'ko-KR': '루루', 'ru-RU': 'Лулу', 'es-ES': 'Lulu', 'vi-VN': 'Lulu', 'ar-SA': 'لولو' },
+            { avatar: 'static/cs5.webp', 'zh-CN': '安娜', 'en-US': 'Anna', 'ja-JP': 'アンナ', 'ko-KR': '안나', 'ru-RU': 'Анна', 'es-ES': 'Anna', 'vi-VN': 'Anna', 'ar-SA': 'آ나' }
         ];
         let currentAgentIndex = 0;
         const pickAgent = () => { currentAgentIndex = Math.floor(Math.random() * AGENTS.length); };
         const agentName = (lang) => { const a = AGENTS[currentAgentIndex]; return a ? (a[lang] || a['zh-CN']) : ''; };
+        const agentAvatar = () => { const a = AGENTS[currentAgentIndex]; return (a && a.avatar) || 'static/cs1.webp'; };
         const TITLE_TEMPLATES = {
             'zh-CN': '客服{name}', 'en-US': 'Support {name}', 'ja-JP': 'サポート・{name}',
             'ko-KR': '고객지원 {name}', 'ru-RU': 'Поддержка {name}', 'es-ES': 'Soporte {name}',
@@ -34,9 +35,12 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         const setTitleForAgent = () => {
             const el = document.getElementById('support-modal-title');
-            if (!el) return;
-            const lang = window.currentLang || 'zh-CN';
-            el.textContent = (TITLE_TEMPLATES[lang] || TITLE_TEMPLATES['zh-CN']).replace('{name}', agentName(lang));
+            if (el) {
+                const lang = window.currentLang || 'zh-CN';
+                el.textContent = (TITLE_TEMPLATES[lang] || TITLE_TEMPLATES['zh-CN']).replace('{name}', agentName(lang));
+            }
+            const avatarEl = document.getElementById('support-agent-avatar');
+            if (avatarEl) avatarEl.src = agentAvatar();
         };
         // 页面加载时随机分配一位客服；刷新页面前保持不变（不在 openModal 内重挑）
         pickAgent();
@@ -189,7 +193,7 @@ document.addEventListener('DOMContentLoaded', () => {
             div.id = 'support-typing-indicator';
             div.className = 'flex gap-3 support-bot-message';
             div.innerHTML = `
-                <img src="static/cs.webp" alt="客服" class="w-8 h-8 rounded-full object-cover shrink-0">
+                <img src="${agentAvatar()}" alt="客服" class="w-8 h-8 rounded-full object-cover shrink-0">
                 <div class="max-w-[80%]">
                     <div class="support-bubble px-4 py-3 text-sm flex gap-1">
                         <span class="w-2 h-2 bg-zinc-500 rounded-full animate-bounce" style="animation-delay: ${Math.random() * 200}ms"></span>
@@ -247,7 +251,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const div = document.createElement('div');
             div.className = 'flex gap-3 support-bot-message';
             div.innerHTML = `
-                <img src="static/cs.webp" alt="客服" class="w-8 h-8 rounded-full object-cover shrink-0">
+                <img src="${agentAvatar()}" alt="客服" class="w-8 h-8 rounded-full object-cover shrink-0">
                 <div class="max-w-[80%] js-bubble-wrap">
                     <div class="support-bubble px-4 py-3 text-sm"></div>
                 </div>
@@ -438,7 +442,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 `;
             } else if (isSupport) {
                 div.innerHTML = `
-                    <img src="static/cs.webp" alt="客服" class="w-8 h-8 rounded-full object-cover shrink-0">
+                    <img src="${agentAvatar()}" alt="客服" class="w-8 h-8 rounded-full object-cover shrink-0">
                     <div class="max-w-[80%] js-bubble-wrap">
                         <span style="display:inline-block;font-size:10px;color:var(--neon-blue);opacity:.75;margin-bottom:4px;">客服</span>
                         <div class="support-bubble px-4 py-3 text-sm bg-[#22c55e26] border border-[#22c55e80]">${text}</div>
@@ -446,7 +450,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 `;
             } else {
                 div.innerHTML = `
-                    <img src="static/cs.webp" alt="客服" class="w-8 h-8 rounded-full object-cover shrink-0">
+                    <img src="${agentAvatar()}" alt="客服" class="w-8 h-8 rounded-full object-cover shrink-0">
                     <div class="max-w-[80%] js-bubble-wrap">
                         <div class="support-bubble px-4 py-3 text-sm">${text}</div>
                     </div>
@@ -476,7 +480,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const div = document.createElement('div');
             div.className = 'flex gap-3 support-bot-message';
             div.innerHTML = `
-                <img src="static/cs.webp" alt="客服" class="w-8 h-8 rounded-full object-cover shrink-0">
+                <img src="${agentAvatar()}" alt="客服" class="w-8 h-8 rounded-full object-cover shrink-0">
                 <div class="max-w-[80%] js-bubble-wrap">
                     <div class="support-bubble px-4 py-3 text-sm">
                         <span class="support-related-label">${moreInfoLabel}</span>
