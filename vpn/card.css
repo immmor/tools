@@ -1,0 +1,316 @@
+/* 专属信用卡模态框 */
+.card-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.9);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  z-index: 10000;
+  backdrop-filter: blur(5px);
+}
+
+.card-modal.show {
+  display: flex;
+}
+
+/* 舞台：只负责尺寸与 3D 透视，卡片的外观全部画在 .card-face 上 */
+.cyber-card {
+  width: 350px;
+  max-width: 90vw;
+  height: 220px;
+  position: relative;
+  perspective: 1200px;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+@keyframes holographic {
+  0% { transform: translateX(-33%); }
+  100% { transform: translateX(33%); }
+}
+
+/* 描边流光：只动第一层（描边），第二层（卡底）保持不动 */
+@keyframes borderGlow {
+  0% { background-position: 0% 50%, 0 0; }
+  50% { background-position: 100% 50%, 0 0; }
+  100% { background-position: 0% 50%, 0 0; }
+}
+
+@keyframes cardPulse {
+  0%, 100% {
+    box-shadow: 0 0 30px var(--tier-glow, rgba(0, 242, 255, 0.3)), 0 0 60px var(--tier-glow-soft, rgba(255, 0, 255, 0.2)),
+                inset 0 0 60px var(--tier-glow-soft, rgba(0, 242, 255, 0.1)), 0 20px 40px rgba(0, 0, 0, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 50px var(--tier-glow-strong, rgba(0, 242, 255, 0.5)), 0 0 80px var(--tier-glow, rgba(255, 0, 255, 0.4)),
+                inset 0 0 80px var(--tier-glow-soft, rgba(0, 242, 255, 0.15)), 0 25px 50px rgba(0, 0, 0, 0.5);
+  }
+}
+
+.cyber-card .card-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.cyber-card .card-section-top {
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cyber-card .card-number {
+  font-family: 'Courier New', monospace;
+  font-size: 24px;
+  color: #fff;
+  letter-spacing: 3px;
+  text-shadow:
+    0 0 10px rgba(255, 255, 255, 0.5),
+    0 0 20px var(--tier-glow, rgba(0, 242, 255, 0.3)),
+    0 2px 3px rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.cyber-card .card-number span {
+  display: inline-block;
+  min-width: 60px;
+  text-align: center;
+}
+
+.cyber-card .card-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  width: 100%;
+}
+
+.cyber-card .card-holder {
+  text-align: left;
+}
+
+.cyber-card .card-holder-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.6);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 4px;
+}
+
+.cyber-card .card-holder-name {
+  font-family: 'Courier New', monospace;
+  font-size: 16px;
+  color: #fff;
+  letter-spacing: 1px;
+  text-shadow: 0 0 10px var(--tier-glow, rgba(0, 242, 255, 0.3));
+}
+
+.cyber-card .card-expiry {
+  text-align: right;
+}
+
+.cyber-card .card-expiry-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.6);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 4px;
+}
+
+.cyber-card .card-expiry-date {
+  font-family: 'Courier New', monospace;
+  font-size: 16px;
+  color: #fff;
+  letter-spacing: 1px;
+  text-shadow: 0 0 10px var(--tier-glow, rgba(0, 242, 255, 0.3));
+}
+
+.card-logo {
+  width: 60px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card-text {
+  font-family: 'Courier New', monospace;
+  font-size: 20px;
+  color: #fff;
+  text-transform: lowercase;
+  letter-spacing: 2px;
+  opacity: 0.9;
+  text-shadow: 0 0 10px var(--tier-glow, rgba(0, 242, 255, 0.3));
+}
+
+/* 底部提示 */
+.card-modal-footer {
+  position: absolute;
+  bottom: 30px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+}
+
+/* ===================== 翻面 ===================== */
+
+/* 旋转体：整张卡（底色 / 描边 / 光晕 / 内容）一起翻 */
+.card-flip {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  transform-style: preserve-3d;
+  transition: transform 0.85s cubic-bezier(0.4, 0.15, 0.2, 1);
+  will-change: transform;
+}
+
+.cyber-card.flipped .card-flip {
+  transform: rotateY(180deg);
+}
+
+/* 每一面都是一张完整的卡片：底色 + 渐变描边 + 呼吸光晕 */
+.card-face {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  box-sizing: border-box;
+  padding: 20px 30px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-around;
+  align-items: center;
+  overflow: hidden;
+  border: 2px solid transparent;
+  border-radius: 20px;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  background-image:
+    linear-gradient(45deg, var(--tier-color, #00f2ff), rgba(255, 255, 255, 0.7), var(--tier-color, #00f2ff), rgba(255, 255, 255, 0.7)),
+    var(--tier-card-bg-solid, linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%));
+  background-origin: border-box, padding-box;
+  background-clip: border-box, padding-box;
+  background-size: 400% 400%, 100% 100%;
+  animation: borderGlow 8s linear infinite, cardPulse 3s ease-in-out infinite;
+}
+
+/* 全息光泽：裁剪在卡片圆角内 */
+.card-face::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 300%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.1) 25%,
+    var(--tier-glow, rgba(0, 242, 255, 0.15)) 50%,
+    var(--tier-glow-soft, rgba(255, 0, 255, 0.15)) 75%,
+    transparent 100%
+  );
+  animation: holographic 5s linear infinite;
+  pointer-events: none;
+}
+
+/* ===================== 背面：站内小装饰卡 ===================== */
+
+.card-back {
+  justify-content: space-between;
+  padding: 26px 30px;
+  transform: rotateY(180deg);
+}
+
+.card-back-tier {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--tier-color, #ffffff);
+  text-shadow: 0 0 14px var(--tier-glow, rgba(0, 242, 255, 0.35));
+}
+
+.card-back-mark {
+  width: 52px;
+  height: 76px;
+  color: var(--tier-color, #ffffff);
+  opacity: 0.45;
+  filter: drop-shadow(0 0 14px var(--tier-glow, rgba(0, 242, 255, 0.4)));
+  animation: markBreath 5s ease-in-out infinite;
+}
+
+@keyframes markBreath {
+  0%, 100% { opacity: 0.38; transform: translateY(-2px) scale(0.98); }
+  50% { opacity: 0.6; transform: translateY(2px) scale(1.02); }
+}
+
+.card-back .card-text {
+  font-size: 15px;
+  opacity: 0.75;
+}
+
+/* 翻面提示 */
+.card-flip-hint {
+  position: fixed;
+  bottom: 26px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: rgba(255, 255, 255, 0.45);
+  pointer-events: none;
+}
+
+/* ===================== 白天模式 ===================== */
+/* 弹窗遮罩：白天转浅，不再压黑全屏 */
+body.theme-light .card-modal {
+  background: rgba(255, 255, 255, 0.82);
+}
+
+/* 卡面：覆盖深色卡底（真正画背景的层），描边流光保留 tier 色但调淡 */
+body.theme-light .card-face {
+  background-image:
+    linear-gradient(45deg, var(--tier-color, #00b8d4), rgba(0, 0, 0, 0.15), var(--tier-color, #00b8d4), rgba(0, 0, 0, 0.15)),
+    var(--tier-card-bg-light, linear-gradient(135deg, #ffffff 0%, #f3f4f8 50%, #e9ebf2 100%));
+}
+
+/* 卡面文字：白字改深字，去掉霓虹投影 */
+body.theme-light .cyber-card .card-number,
+body.theme-light .cyber-card .card-holder-name,
+body.theme-light .cyber-card .card-expiry-date,
+body.theme-light .card-text,
+body.theme-light .card-back-tier {
+  color: #1a1c23;
+  text-shadow: none;
+}
+
+body.theme-light .cyber-card .card-holder-label,
+body.theme-light .cyber-card .card-expiry-label {
+  color: rgba(0, 0, 0, 0.55);
+}
+
+body.theme-light .card-logo svg path {
+  stroke: var(--tier-color, #00b8d4);
+}
+
+body.theme-light .card-back-mark {
+  color: var(--tier-color, #00b8d4);
+  filter: none;
+  opacity: 0.6;
+}
+
+body.theme-light .card-flip-hint {
+  color: rgba(0, 0, 0, 0.5);
+}

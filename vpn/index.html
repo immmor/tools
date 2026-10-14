@@ -579,6 +579,26 @@
             background: linear-gradient(135deg, rgba(255,255,255,0.97), rgba(245,243,236,0.97)) !important;
             border-color: #e2dfd6 !important;
         }
+        /* 白天模式下游戏 Tab：悬停态为浅底+橙边+橙字（轻微提示） */
+        body.theme-light .game-tab:hover {
+            background: rgba(255,255,255,0.1);
+            border-color: var(--neon-orange);
+            color: var(--neon-orange);
+            box-shadow: none;
+        }
+        /* 选中态：恢复之前的橙色高亮（橙底+橙边+橙字+橙光晕），与原始 .game-tab-active 一致 */
+        body.theme-light .game-tab.game-tab-active {
+            background: rgba(255,170,0,0.15);
+            border-color: var(--neon-orange);
+            color: var(--neon-orange);
+            box-shadow: 0 0 15px rgba(255,170,0,0.2);
+        }
+        /* 未选中 tab：浅色游戏区上加深，避免白透明底/边看不清 */
+        body.theme-light .game-tab {
+            background: rgba(0,0,0,0.05);
+            border-color: rgba(0,0,0,0.12);
+            color: #5f5c56;
+        }
         body.theme-light .slot-reels {
             background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(245,243,236,0.95)) !important;
         }
@@ -617,6 +637,11 @@
         body.theme-light #auth-modal h2 { color: #2b2823; }
         body.theme-light #auth-modal .text-white { color: #2b2823 !important; }
         body.theme-light #auth-modal .text-white\/85 { color: rgba(43,40,35,0.85) !important; }
+        /* 注册验证方式选项卡：白天白底下，选中/悬停的白字改为深色，避免太白看不见 */
+        body.theme-light #auth-modal .reg-verify-tab-active,
+        body.theme-light #auth-modal .reg-verify-tab:hover {
+            color: #1f1f22;
+        }
 
         .glitch-text {
             position: relative;
@@ -633,7 +658,7 @@
         .cyber-card {
             background: rgba(15, 15, 15, 0.9);
             border: 1px solid #333;
-            clip-path: polygon(0 0, 92% 0, 100% 20px, 100% 100%, 8% 100%, 0 94%);
+            /* clip-path: polygon(0 0, 92% 0, 100% 20px, 100% 100%, 8% 100%, 0 94%); */
             transition: all 0.3s;
             position: relative;
         }
@@ -722,7 +747,7 @@
         .dropdown-menu {
             background: rgba(15, 15, 15, 0.98);
             border: 1px solid #333;
-            clip-path: polygon(0 0, 95% 0, 100% 15px, 100% 100%, 5% 100%, 0 92%);
+            /* clip-path: polygon(0 0, 95% 0, 100% 15px, 100% 100%, 5% 100%, 0 92%); */
         }
 
         .dropdown-item {
@@ -766,11 +791,9 @@
         }
         /* 消息列表：必读/需确认 整条背景色（用自定义类，避免 Tailwind 任意值透明度在 CDN 下失效） */
         .notif-must-read {
-            border: 2px solid rgba(255, 255, 255, 0.45);
             background: rgba(255, 170, 0, 0.15);
         }
         .notif-must-input {
-            border: 2px solid rgba(255, 255, 255, 0.45);
             background: rgba(0, 243, 255, 0.15);
         }
         .forced-unread .forced-confirm {
@@ -3232,22 +3255,28 @@
                     const vipV2rayUrl = `https://api.funbua.uk/vip/v2ray?v=${encodeURIComponent(vipInfo.v_token)}`;
                     
                     const dict = translations[currentLang] || {};
+                    const girlImg = vipInfo.is_vip_valid ? 'static/beautyh1.webp' : 'static/beautyh2.webp';
                     const html = `
                         <div class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" id="vip-modal">
-                            <div class="cyber-card p-6 md:p-8 max-w-md w-full max-h-[80vh] overflow-y-auto">
-                                <div class="flex justify-between items-start mb-3">
-                                    <div>
-                                        <h2 class="text-xl md:text-2xl font-black uppercase" data-i18n="vip_nodes_title">VIP节点</h2>
-                                        <div class="text-base md:text-lg font-bold text-[var(--neon-orange)] mt-2" style="text-shadow: 0 0 10px rgba(255,170,0,0.5)">${duration === 30 ? (dict.vip_plan_monthly || '月付') : (dict.vip_plan_annual || '年付')} ${dict.vip_plan_suffix || '套餐'} (<span id="vip-plan-days" data-base="${duration}"><span class="vip-plan-num">${vipInfo.auto_renew ? duration + 2 : duration}</span>${duration === 30 ? (dict.vip_quota_reset || '30 天').replace(/\d+/g, '') : (dict.vip_quota_reset_annual || '365 天').replace(/\d+/g, '')}</span>) • <span class="vip-plan-price">¥${price.toFixed(2)}</span></div>
-                                        <div class="text-[10px] text-zinc-500" data-i18n="vip_price_fluctuate">*价格会随着服务器维护成本而有所波动，请互相理解*</div>
+                            <div class="cyber-card p-0 max-w-md w-full max-h-[80vh] overflow-y-auto">
+                                <div class="relative">
+                                    <img src="${girlImg}" alt="VIP 美女" class="w-full h-52 md:h-60 object-cover" onload="tintVipTitle(this)">
+                                    <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent"></div>
+                                    <div class="absolute inset-x-0 bottom-0 p-4 flex justify-between items-end">
+                                        <div>
+                                            <h2 class="text-xl md:text-2xl font-black uppercase drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" data-i18n="vip_nodes_title">VIP节点</h2>
+                                            <div class="text-sm md:text-base font-bold text-[var(--neon-orange)] mt-1 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" style="text-shadow: 0 0 10px rgba(255,170,0,0.5)">${duration === 30 ? (dict.vip_plan_monthly || '月付') : (dict.vip_plan_annual || '年付')} ${dict.vip_plan_suffix || '套餐'} (<span id="vip-plan-days" data-base="${duration}"><span class="vip-plan-num">${vipInfo.auto_renew ? duration + 2 : duration}</span>${duration === 30 ? (dict.vip_quota_reset || '30 天').replace(/\d+/g, '') : (dict.vip_quota_reset_annual || '365 天').replace(/\d+/g, '')}</span>) • <span class="vip-plan-price">¥${price.toFixed(2)}</span></div>
+                                            <div class="text-[10px] text-white/70" data-i18n="vip_price_fluctuate">*价格会随着服务器维护成本而有所波动，请互相理解*</div>
+                                        </div>
+                                        <button onclick="this.closest('.fixed').remove()" class="text-white/90 hover:text-white bg-black/40 rounded-full p-1 backdrop-blur shrink-0">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                                            </svg>
+                                        </button>
                                     </div>
-                                    <button onclick="this.closest('.fixed').remove()" class="text-zinc-500 hover:text-white">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                            <line x1="18" y1="6" x2="6" y2="18"></line>
-                                            <line x1="6" y1="6" x2="18" y2="18"></line>
-                                        </svg>
-                                    </button>
                                 </div>
+                                <div class="p-6 md:p-8">
                                 <div class="mb-2 md:mb-3 p-2 md:p-3 bg-zinc-900 rounded border border-zinc-700">
                                     <div class="text-center">
                                         <div class="text-lg font-bold text-[var(--neon-blue)] mb-2" data-i18n="vip_status">VIP状态</div>
@@ -3319,11 +3348,14 @@
                                         ${dict.nav_recharge || '充值'}
                                     </a>
                                 </div>
+                                </div>
                             </div>
                         </div>
                     `;
 
                     document.body.insertAdjacentHTML('beforeend', html);
+                    const _vipImg = document.querySelector('#vip-modal img');
+                    if (_vipImg && _vipImg.complete) tintVipTitle(_vipImg);
                     document.getElementById('vip-modal').querySelectorAll('[data-i18n]').forEach(el => {
                         const key = el.getAttribute('data-i18n');
                         if (dict[key]) el.textContent = dict[key];
@@ -3336,6 +3368,37 @@
                 console.error('VIP状态查询失败:', error);
                 const networkError = translations[currentLang]?.network_error || '网络错误，请稍后重试';
                 alert(networkError);
+            }
+        };
+
+        const tintVipTitle = (img) => {
+            const title = document.querySelector('#vip-modal h2[data-i18n="vip_nodes_title"]');
+            if (!title) return;
+            const w = 16, h = 16;
+            const c = document.createElement('canvas');
+            c.width = w; c.height = h;
+            const ctx = c.getContext('2d');
+            try {
+                ctx.drawImage(img, 0, 0, w, h);
+                const data = ctx.getImageData(0, 0, w, h).data;
+                let r = 0, g = 0, b = 0, n = 0;
+                for (let i = 0; i < data.length; i += 4) {
+                    r += data[i]; g += data[i + 1]; b += data[i + 2]; n++;
+                }
+                r /= 255 * n; g /= 255 * n; b /= 255 * n;
+                const max = Math.max(r, g, b), min = Math.min(r, g, b);
+                let hue = 0;
+                if (max !== min) {
+                    const d = max - min;
+                    if (max === r) hue = (g - b) / d + (g < b ? 6 : 0);
+                    else if (max === g) hue = (b - r) / d + 2;
+                    else hue = (r - g) / d + 4;
+                    hue *= 60;
+                }
+                const compHue = (hue + 180) % 360;
+                title.style.color = `hsl(${Math.round(compHue)}, 85%, 68%)`;
+            } catch (e) {
+                title.style.color = '#ffffff';
             }
         };
 
@@ -4253,10 +4316,10 @@
                     const forced = meta.type !== 'normal';
                     const isMustInputUnread = forced && meta.type === 'must_input' && !notif.is_read;
                     const div = document.createElement('div');
-                    div.className = 'px-4 py-3 notification-item relative transition-colors'
+                    div.className = 'px-4 py-3 notification-item relative transition-colors border-b border-zinc-800/50'
                         + (forced
                             ? (meta.type === 'must_input' ? ' notif-must-input' : ' notif-must-read')
-                            : ' border-b border-zinc-800/50')
+                            : '')
                         + ((!notif.is_read && !isMustInputUnread) ? ' hover:bg-zinc-800/50 cursor-pointer' : '');
                     const badge = forced
                         ? (meta.type === 'must_input'
@@ -7004,7 +7067,7 @@
             }
             function apply(light) {
                 document.body.classList.toggle('theme-light', !!light);
-                btn.innerHTML = '<i data-lucide="' + (light ? 'moon' : 'sun') + '" class="w-4 h-4"></i>';
+                btn.innerHTML = '<i data-lucide="' + (light ? 'sun' : 'moon') + '" class="w-4 h-4"></i>';
                 if (window.lucide) window.lucide.createIcons();
             }
 
