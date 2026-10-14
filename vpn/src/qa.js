@@ -16,6 +16,31 @@ document.addEventListener('DOMContentLoaded', () => {
         const sendBtn = document.getElementById('support-send');
         const suggestionsContainer = document.getElementById('support-suggestions');
 
+        // 客服列表（均为女性，打开时随机挑选一位）
+        const AGENTS = [
+            { 'zh-CN': '皮皮', 'en-US': 'Pipi', 'ja-JP': 'ピピ', 'ko-KR': '피피', 'ru-RU': 'Пипи', 'es-ES': 'Pipi', 'vi-VN': 'Pipi', 'ar-SA': 'بيبي' },
+            { 'zh-CN': '小艾', 'en-US': 'Ivy', 'ja-JP': 'アイ', 'ko-KR': '아이', 'ru-RU': 'Айви', 'es-ES': 'Ivy', 'vi-VN': 'Ivy', 'ar-SA': 'آيفي' },
+            { 'zh-CN': '婷婷', 'en-US': 'Tina', 'ja-JP': 'ティナ', 'ko-KR': '티나', 'ru-RU': 'Тина', 'es-ES': 'Tina', 'vi-VN': 'Tina', 'ar-SA': 'تينا' },
+            { 'zh-CN': '璐璐', 'en-US': 'Lulu', 'ja-JP': 'ルル', 'ko-KR': '루루', 'ru-RU': 'Лулу', 'es-ES': 'Lulu', 'vi-VN': 'Lulu', 'ar-SA': 'لولو' },
+            { 'zh-CN': '安娜', 'en-US': 'Anna', 'ja-JP': 'アンナ', 'ko-KR': '안나', 'ru-RU': 'Анна', 'es-ES': 'Anna', 'vi-VN': 'Anna', 'ar-SA': 'آنا' }
+        ];
+        let currentAgentIndex = 0;
+        const pickAgent = () => { currentAgentIndex = Math.floor(Math.random() * AGENTS.length); };
+        const agentName = (lang) => { const a = AGENTS[currentAgentIndex]; return a ? (a[lang] || a['zh-CN']) : ''; };
+        const TITLE_TEMPLATES = {
+            'zh-CN': '客服{name}', 'en-US': 'Support {name}', 'ja-JP': 'サポート・{name}',
+            'ko-KR': '고객지원 {name}', 'ru-RU': 'Поддержка {name}', 'es-ES': 'Soporte {name}',
+            'vi-VN': 'Hỗ trợ {name}', 'ar-SA': 'الدعم {name}'
+        };
+        const setTitleForAgent = () => {
+            const el = document.getElementById('support-modal-title');
+            if (!el) return;
+            const lang = window.currentLang || 'zh-CN';
+            el.textContent = (TITLE_TEMPLATES[lang] || TITLE_TEMPLATES['zh-CN']).replace('{name}', agentName(lang));
+        };
+        // 页面加载时随机分配一位客服；刷新页面前保持不变（不在 openModal 内重挑）
+        pickAgent();
+
         const loadQuestions = async () => {
             try {
                 const lang = window.currentLang || 'zh-CN';
@@ -697,12 +722,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const openModal = () => {
             modal.classList.remove('hidden');
             if (window.lucide) lucide.createIcons();
-            // 给静态欢迎语（第一条自动消息）填充当前时间
-            const welcomeTimeEl = document.getElementById('support-welcome-time');
-            if (welcomeTimeEl) welcomeTimeEl.textContent = fmtClock(new Date());
+            // 刷新标题（客服在页面加载时已随机选定，此处不重挑）
+            setTitleForAgent();
             const currentLang = window.currentLang || 'zh-CN';
             if (questions.length === 0 || loadedLang !== currentLang) {
                 loadQuestions();
+            }
+            // 仅在首次打开时生成欢迎语，之后保留聊天记录
+            if (messagesContainer.childElementCount === 0) {
+                showWelcome();
             }
             resetIdleTimer();
             // 若今天已留言过，重新打开时继续监听客服回复；否则不主动拉取历史消息
@@ -730,12 +758,16 @@ document.addEventListener('DOMContentLoaded', () => {
             stopReplyPolling();
         };
 
+        const showWelcome = async () => {
+            const lang = window.currentLang || 'zh-CN';
+            const welcomeMsg = (window.translations && window.translations[lang]?.support_welcome) || '您好！欢迎来到 PHANTOM VPN 客服中心。我是您的智能客服助手{name}，有什么可以帮助您的吗？';
+            await addBotMessageStream(welcomeMsg.replace(/\{name\}/g, agentName(lang)));
+        };
         const updateLanguage = async () => {
             questions = [];
             messagesContainer.innerHTML = '';
             loadQuestions();
-            const welcomeMsg = (window.translations && window.translations[window.currentLang]?.support_welcome) || '您好！欢迎来到 PHANTOM VPN 客服中心。我是您的智能客服助手，有什么可以帮助您的吗？';
-            await addBotMessageStream(welcomeMsg);
+            await showWelcome();
         };
 
         closeBtn?.addEventListener('click', closeModal);
@@ -749,6 +781,7 @@ document.addEventListener('DOMContentLoaded', () => {
         input?.addEventListener('input', resetIdleTimer);
 
         document.addEventListener('languageChanged', () => {
+            setTitleForAgent();
             if (!modal.classList.contains('hidden')) {
                 updateLanguage();
             } else {
