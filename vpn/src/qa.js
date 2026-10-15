@@ -318,24 +318,31 @@ document.addEventListener('DOMContentLoaded', () => {
             const text = await fillPricePlaceholders(rawText);
             isBotReplying = true;
             setInputEnabled(false);
-            // 始终显示「思考中」动画，并随机思考 1–3 秒后再开始输出
-            showTypingIndicator();
+            let div = document.getElementById('support-typing-indicator');
+            if (!div) showTypingIndicator();
             await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
-            removeTypingIndicator();
-            const div = document.createElement('div');
-            div.className = 'flex gap-3 support-bot-message';
-            div.innerHTML = `
-                <img src="${agentAvatar()}" alt="客服" class="w-8 h-8 rounded-full object-cover shrink-0">
-                <div class="max-w-[80%] js-bubble-wrap">
-                    <div class="support-bubble px-4 py-3 text-sm"></div>
-                </div>
-            `;
-            messagesContainer.appendChild(div);
+            div = document.getElementById('support-typing-indicator');
+            let bubble;
+            if (div) {
+                div.removeAttribute('id');
+                div.className = 'flex gap-3 support-bot-message';
+                bubble = div.querySelector('.support-bubble');
+                if (bubble) { bubble.className = 'support-bubble px-4 py-3 text-sm'; bubble.textContent = ''; }
+            } else {
+                div = document.createElement('div');
+                div.className = 'flex gap-3 support-bot-message';
+                div.innerHTML = `
+                    <img src="${agentAvatar()}" alt="客服" class="w-8 h-8 rounded-full object-cover shrink-0">
+                    <div class="max-w-[80%] js-bubble-wrap">
+                        <div class="support-bubble px-4 py-3 text-sm"></div>
+                    </div>
+                `;
+                bubble = div.querySelector('.support-bubble');
+                messagesContainer.appendChild(div);
+            }
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
             if (window.lucide) lucide.createIcons();
             appendMsgTime(div, new Date());
-
-            const bubble = div.querySelector('.support-bubble');
             await typeWriter(bubble, text, 30 + Math.random() * 20);
 
             if (action && (action.label || (action.buttons && action.buttons.length))) {
