@@ -265,6 +265,22 @@ document.addEventListener('DOMContentLoaded', () => {
         // 按动作类型查知识库条目（价格/下单问答随 questions-*.json 走，各语种各写各的）
         const findKnowledgeByType = (type) => questions.find(q => q && q.action && typeof q.action === 'object' && q.action.type === type);
 
+        // 下单成功后，在客服对话里回复 VIP 有效期与剩余天数
+        const replyVipStatusAfterOrder = async (username) => {
+            try {
+                const res = await fetch(`https://api.funbua.uk/api/vip-status?username=${encodeURIComponent(username)}`);
+                const data = await res.json();
+                const info = data && data.data;
+                if (!info || !info.is_vip_valid) return;
+                const days = Math.max(0, Math.round(Number(info.days_remaining || 0)));
+                const expire = info.v_expire_date || '';
+                const lang = window.currentLang || 'zh-CN';
+                const tpl = (window.translations && window.translations[lang]?.order_success_vip)
+                    || '✅ 下单成功！您的 VIP 有效期至 {expire}，剩余 {days} 天。';
+                await addBotMessageStream(tpl.replace('{expire}', expire).replace('{days}', days));
+            } catch (e) { /* 静默 */ }
+        };
+
         // 对话内直接下单：从余额扣费开通/续费 VIP（复用 index.html 的 openVip，含登录校验、二次确认、购买记录），不跳转页面
         const placeOrder = async (duration) => {
             const user = JSON.parse(localStorage.getItem('userInfo') || 'null');
@@ -275,7 +291,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const d = Number(duration) === 365 ? 365 : 30;
             const plan = await fetchPricePlan();
             const price = Number((d === 365 ? (plan && plan.annual_discount) : (plan && plan.monthly_discount)) || (d === 365 ? 100 : 10));
-            if (typeof openVip === 'function') await openVip(user.username, d, price);
+            if (typeof openVip === 'function') {
+                const ok = await openVip(user.username, d, price);
+                if (ok) await replyVipStatusAfterOrder(user.username);
+            }
         };
 
         // 可提现金额：与用户名下拉框一致，取自 /api/get-user -> min(balance, game_winnings)
