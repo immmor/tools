@@ -5,9 +5,17 @@ document.addEventListener('DOMContentLoaded', () => {
         let idleTimer = null;
         let isLeaveMessageMode = false;
         let isBotReplying = false;
-        // 回复期间仅禁用发送按钮；输入框保持可聚焦/可输入（不禁用，避免失焦）
+        // 回复期间仅禁用发送按钮（变橙色，禁止重复发送）；输入框保持可聚焦/可输入（不禁用，避免失焦）
         const setInputEnabled = (enabled) => {
             if (sendBtn) sendBtn.disabled = !enabled;
+        };
+        // 发送动画：图标飞向右上角缩小消失后弹回（随每次发送播放，与回复状态无关）
+        const playSendFly = () => {
+            if (!sendBtn) return;
+            sendBtn.classList.remove('fly');
+            void sendBtn.offsetWidth; // 强制 reflow，连续发送时动画可重播
+            sendBtn.classList.add('fly');
+            sendBtn.addEventListener('animationend', () => sendBtn.classList.remove('fly'), { once: true });
         };
         const modal = document.getElementById('support-modal');
         const closeBtn = document.getElementById('support-close');
@@ -224,6 +232,52 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         };
 
+        // ===== 套餐价格：知识库不写死价格，问价时从接口动态取（与首页 loadPricePlan 同源）=====
+        let cachedPlan = null;
+        const fetchPricePlan = async () => {
+            if (cachedPlan) return cachedPlan;
+            const local = (window.userInfo && window.userInfo.pricePlan)
+                || (JSON.parse(localStorage.getItem('userInfo') || '{}') || {}).pricePlan;
+            if (local) { cachedPlan = local; return local; }
+            try {
+                const res = await fetch(`${API_BASE}/api/price-plan`);
+                const data = await res.json();
+                if (data && data.code === 200 && data.data) { cachedPlan = data.data; return data.data; }
+            } catch (e) { /* 静默，用兜底价 */ }
+            return null;
+        };
+
+        // {monthly_price} 等占位符 -> 当前实际价格（问答文案在各语种 questions-*.json 里）
+        const fillPricePlaceholders = async (text) => {
+            if (!/\{[a-z_]+\}/.test(text || '')) return text;
+            const plan = await fetchPricePlan();
+            const f = (v, d) => Number(v || d).toFixed(2);
+            const P = {
+                monthly_price: f(plan && plan.monthly_discount, 10),
+                monthly_original: f(plan && plan.monthly_original, 12),
+                annual_price: f(plan && plan.annual_discount, 100),
+                annual_original: f(plan && plan.annual_original, 144),
+                savings: f(plan && plan.savings, 44),
+            };
+            return String(text).replace(/\{([a-z_]+)\}/g, (m, k) => (k in P ? P[k] : m));
+        };
+
+        // 按动作类型查知识库条目（价格/下单问答随 questions-*.json 走，各语种各写各的）
+        const findKnowledgeByType = (type) => questions.find(q => q && q.action && typeof q.action === 'object' && q.action.type === type);
+
+        // 对话内直接下单：从余额扣费开通/续费 VIP（复用 index.html 的 openVip，含登录校验、二次确认、购买记录），不跳转页面
+        const placeOrder = async (duration) => {
+            const user = JSON.parse(localStorage.getItem('userInfo') || 'null');
+            if (!user) {
+                document.getElementById('auth-toggle')?.click();
+                return;
+            }
+            const d = Number(duration) === 365 ? 365 : 30;
+            const plan = await fetchPricePlan();
+            const price = Number((d === 365 ? (plan && plan.annual_discount) : (plan && plan.monthly_discount)) || (d === 365 ? 100 : 10));
+            if (typeof openVip === 'function') await openVip(user.username, d, price);
+        };
+
         // 可提现金额：与用户名下拉框一致，取自 /api/get-user -> min(balance, game_winnings)
         const fetchWithdrawable = async () => {
             const userInfo = window.userInfo || JSON.parse(localStorage.getItem('userInfo') || '{}');
@@ -241,7 +295,8 @@ document.addEventListener('DOMContentLoaded', () => {
             return 0;
         };
 
-        const addBotMessageStream = async (text, action) => {
+        const addBotMessageStream = async (rawText, action) => {
+            const text = await fillPricePlaceholders(rawText);
             isBotReplying = true;
             setInputEnabled(false);
             // 始终显示「思考中」动画，并随机思考 1–3 秒后再开始输出
@@ -264,7 +319,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const bubble = div.querySelector('.support-bubble');
             await typeWriter(bubble, text, 30 + Math.random() * 20);
 
-            if (action && action.label) {
+            if (action && (action.label || (action.buttons && action.buttons.length))) {
                 if (action.type === 'openWithdraw') {
                     const amt = await fetchWithdrawable();
                     const amtLabel = (window.translations && window.translations[window.currentLang]?.withdrawable_label) || '可提现';
@@ -273,20 +328,33 @@ document.addEventListener('DOMContentLoaded', () => {
                     amtEl.textContent = `${amtLabel}：¥${amt.toFixed(2)}`;
                     bubble.appendChild(amtEl);
                 }
-                const btn = document.createElement('button');
-                btn.className = 'support-action-btn mt-3';
-                btn.textContent = action.label;
-                const handler = getActionHandler(action.type);
-                if (handler) btn.onclick = handler;
-                bubble.appendChild(btn);
+                // 下单类：渲染多个并排按钮（如月付/年付各一个）；其余仍为单按钮
+                const list = (action.buttons && action.buttons.length)
+                    ? action.buttons
+                    : [{ duration: action.duration, label: action.label }];
+                const wrap = document.createElement('div');
+                wrap.className = 'flex gap-2 mt-3';
+                for (const b of list) {
+                    const btn = document.createElement('button');
+                    btn.className = 'support-action-btn';
+                    btn.style.cssText = 'flex:1;width:auto;margin-top:0;';
+                    btn.textContent = await fillPricePlaceholders(b.label || '');
+                    const handler = getActionHandler(action.type, b);
+                    if (handler) btn.onclick = handler;
+                    wrap.appendChild(btn);
+                }
+                bubble.appendChild(wrap);
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
             }
             isBotReplying = false;
             setInputEnabled(true);
         };
 
-        const getActionHandler = (actionType) => {
+        const getActionHandler = (actionType, action) => {
             switch (actionType) {
+                case 'openOrder':
+                case 'showPrice':
+                    return () => placeOrder((action && action.duration) || 30);
                 case 'openRecharge':
                     return () => {
                         const userInfo = window.userInfo || JSON.parse(localStorage.getItem('userInfo') || '{}');
@@ -496,6 +564,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const handleSuggestionClick = async (questionData) => {
             if (isBotReplying) return;
+            playSendFly();
             addMessage('user', questionData.question);
             await addBotMessageStream(questionData.answer, questionData.action);
         };
@@ -643,7 +712,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (isBotReplying) return;
             const text = input.value.trim();
             if (!text) return;
-            
+
+            playSendFly();
             addMessage('user', text);
             input.value = '';
             resetIdleTimer();
@@ -697,6 +767,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             
+            // 问价 / 下单意图：命中后从知识库取对应条目（文案在 questions-*.json），价格占位符动态填充
+            const isPriceIntent = /多少钱|价格|售价|定价|费用|什么价|多少块|\bprice\b|\bcost\b|\bhow much\b/i.test(text);
+            const isOrderIntent = /下单|我要买|立即买|马上买|直接买|\border\b|\bbuy now\b|\bpurchase\b/i.test(text);
+            if (isPriceIntent || isOrderIntent) {
+                const entry = findKnowledgeByType(isOrderIntent ? 'openOrder' : 'showPrice')
+                    || findKnowledgeByType('showPrice') || findKnowledgeByType('openOrder');
+                if (entry) {
+                    // 月付/年付两个下单按钮，点击直接扣费续费，不跳转 VIP 页面
+                    await addBotMessageStream(entry.answer, entry.action);
+                    return;
+                }
+                // 知识库未配该语种条目时回落到兜底匹配
+            }
+
             const results = matchQuestions(text);
             // 高置信度阈值：分数过低视为未命中，避免噪声误答
             const HIT_THRESHOLD = 6;

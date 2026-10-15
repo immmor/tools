@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TS 视频播放器</title>
+
+  <!-- MPEG-TS 播放库，需要联网加载 -->
+  <script src="https://cdn.jsdelivr.net/npm/mpegts.js@1.7.3/dist/mpegts.js"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #0b1020;
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 24px;
+    }
+
+    .app {
+      width: 100%;
+      max-width: 920px;
+    }
+
+    h1 {
+      font-size: 25px;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      color: #94a3b8;
+      margin-bottom: 24px;
+      font-size: 14px;
+    }
+
+    .dropzone {
+      border: 2px dashed #334155;
+      border-radius: 16px;
+      padding: 28px 16px;
+      text-align: center;
+      background: #111827;
+      cursor: pointer;
+      transition: border-color .2s, background .2s;
+      margin-bottom: 18px;
+    }
+
+    .dropzone:hover,
+    .dropzone.dragover {
+      border-color: #60a5fa;
+      background: #17243a;
+    }
+
+    .upload-icon {
+      font-size: 36px;
+      margin-bottom: 10px;
+    }
+
+    .dropzone p {
+      margin: 7px 0;
+    }
+
+    .hint {
+      font-size: 12px;
+      color: #94a3b8;
+    }
+
+    .video-box {
+      position: relative;
+      background: #000;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid #263247;
+    }
+
+    video {
+      width: 100%;
+      display: block;
+      max-height: 65vh;
+      min-height: 220px;
+      background: #000;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    button, .file-button {
+      border: 1px solid #334155;
+      background: #1e293b;
+      color: #f8fafc;
+      border-radius: 9px;
+      padding: 10px 15px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    button:hover, .file-button:hover {
+      background: #334155;
+    }
+
+    .primary {
+      background: #2563eb;
+      border-color: #2563eb;
+    }
+
+    .primary:hover {
+      background: #1d4ed8;
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    .info {
+      margin-top: 18px;
+      padding: 15px;
+      border-radius: 12px;
+      background: #111827;
+      border: 1px solid #263247;
+      line-height: 1.7;
+      font-size: 13px;
+      overflow-wrap: anywhere;
+    }
+
+    .status {
+      color: #93c5fd;
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+
+    .error {
+      color: #fca5a5;
+    }
+
+    .muted {
+      color: #94a3b8;
+    }
+
+    .tips {
+      color: #cbd5e1;
+      font-size: 13px;
+      line-height: 1.8;
+      margin-top: 20px;
+    }
+
+    @media (max-width: 600px) {
+      body {
+        padding: 14px;
+      }
+
+      h1 {
+        font-size: 21px;
+      }
+
+      video {
+        min-height: 180px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="app">
+    <h1>🎬 TS 视频播放器</h1>
+    <div class="subtitle">
+      本地视频播放 · 无需上传视频 · 支持 MPEG-TS 尝试解码
+    </div>
+
+    <label class="dropzone" id="dropzone" for="fileInput">
+      <div class="upload-icon">📁</div>
+      <p><strong>点击选择 TS 视频文件</strong></p>
+      <p class="hint">也可以把本地文件拖到这里</p>
+      <p class="hint">视频只在你的浏览器中处理</p>
+    </label>
+
+    <input
+      id="fileInput"
+      type="file"
+      accept=".ts,.m2ts,.mts,.mp4,.webm,.mov,video/*"
+    >
+
+    <div class="video-box">
+      <video
+        id="video"
+        controls
+        playsinline
+        preload="metadata"
+      ></video>
+    </div>
+
+    <div class="controls">
+      <button class="primary" id="playBtn">▶ 播放</button>
+      <button id="pauseBtn">⏸ 暂停</button>
+      <button id="backBtn">↶ 后退 10 秒</button>
+      <button id="forwardBtn">前进 10 秒 ↷</button>
+      <button id="fullscreenBtn">⛶ 全屏</button>
+      <button id="stopBtn">■ 停止</button>
+    </div>
+
+    <div class="info">
+      <div id="status" class="status">等待选择视频文件</div>
+      <div id="fileInfo" class="muted">尚未选择文件</div>
+      <div id="durationInfo" class="muted"></div>
+      <div id="errorInfo" class="error"></div>
+    </div>
+
+    <div class="tips">
+      <strong>使用说明</strong><br>
+      1. 点击上方区域选择本地 TS 文件。<br>
+      2. 播放失败时，播放器会尝试切换到 MPEG-TS 解码方式。<br>
+      3. 如果仍然失败，可能是编码不兼容、文件不完整或文件本身不是有效的视频流。<br>
+      4. MPEG-TS 播放库需要联网加载。此页面不会把视频上传到服务器。
+    </div>
+  </main>
+
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const video = document.getElementById('video');
+    const dropzone = document.getElementById('dropzone');
+
+    const statusEl = document.getElementById('status');
+    const fileInfo = document.getElementById('fileInfo');
+    const durationInfo = document.getElementById('durationInfo');
+    const errorInfo = document.getElementById('errorInfo');
+
+    let currentFile = null;
+    let currentUrl = null;
+    let player = null;
+    let fallbackTried = false;
+    let mode = '';
+
+    function setStatus(message, isError = false) {
+      statusEl.textContent = message;
+      statusEl.className = isError ? 'status error' : 'status';
+    }
+
+    function formatSize(bytes) {
+      if (bytes < 1024 * 1024) {
+        return (bytes / 1024).toFixed(1) + ' KB';
+      }
+      return (bytes / 1024 / 1024).toFixed(2) + ' MB';
+    }
+
+    function formatTime(seconds) {
+      if (!Number.isFinite(seconds)) return '--:--';
+
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      const s = Math.floor(seconds % 60);
+
+      return h > 0
+        ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+        : `${m}:${String(s).padStart(2, '0')}`;
+    }
+
+    function destroyPlayer() {
+      if (player) {
+        try {
+          player.pause();
+          player.unload();
+          player.detachMediaElement();
+          player.destroy();
+        } catch (e) {
+          console.warn('播放器清理异常', e);
+        }
+        player = null;
+      }
+
+      video.onerror = null;
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+
+      if (currentUrl) {
+        URL.revokeObjectURL(currentUrl);
+        currentUrl = null;
+      }
+    }
+
+    function showFile(file) {
+      destroyPlayer();
+
+      currentFile = file;
+      fallbackTried = false;
+      mode = '';
+
+      errorInfo.textContent = '';
+      durationInfo.textContent = '';
+
+      fileInfo.textContent =
+        `文件名：${file.name} · 大小：${formatSize(file.size)} · 类型：${file.type || '浏览器未识别'}`;
+
+      currentUrl = URL.createObjectURL(file);
+
+      const isTs = /\.(ts|m2ts|mts)$/i.test(file.name);
+
+      if (isTs) {
+        startNativeWithFallback();
+      } else {
+        startNative();
+      }
+    }
+
+    function startNative() {
+      mode = 'native';
+      video.onerror = onNativeError;
+      video.src = currentUrl;
+      video.load();
+
+      setStatus('正在加载视频……');
+    }
+
+    function startNativeWithFallback() {
+      mode = 'native';
+      video.onerror = onNativeError;
+      video.src = currentUrl;
+      video.load();
+
+      setStatus('正在尝试浏览器原生播放……');
+    }
+
+    function onNativeError() {
+      if (fallbackTried) {
+        showError(
+          '浏览器无法解码该视频。可能是视频编码不支持、文件不完整，或文件不是有效的 TS 视频。'
+        );
+        return;
+      }
+
+      fallbackTried = true;
+      video.onerror = null;
+
+      if (!window.mpegts || !mpegts.isSupported()) {
+        showError(
+          '原生播放失败，且 MPEG-TS 播放库不可用。请确认网络正常，并检查视频文件。'
+        );
+        return;
+      }
+
+      setStatus('原生播放失败，正在尝试 MPEG-TS 解码……');
+
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+
+      try {
+        player = mpegts.createPlayer({
+          type: 'mpegts',
+          isLive: false,
+          url: currentUrl
+        });
+
+        mode = 'mpegts';
+
+        player.on(mpegts.Events.ERROR, (type, detail, info) => {
+          console.error('MPEG-TS 播放错误:', type, detail, info);
+
+          showError(
+            `MPEG-TS 播放失败：${type} / ${detail}。建议检查编码或文件完整性。`
+          );
+        });
+
+        player.attachMediaElement(video);
+        player.load();
+
+        setStatus('视频已交给 MPEG-TS 播放器，请点击播放。');
+      } catch (e) {
+        console.error(e);
+        showError('无法初始化 MPEG-TS 播放器：' + e.message);
+      }
+    }
+
+    function showError(message) {
+      setStatus('播放失败', true);
+      errorInfo.textContent = message;
+    }
+
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files[0];
+      if (file) showFile(file);
+    });
+
+    dropzone.addEventListener('dragover', e => {
+      e.preventDefault();
+      dropzone.classList.add('dragover');
+    });
+
+    dropzone.addEventListener('dragleave', () => {
+      dropzone.classList.remove('dragover');
+    });
+
+    dropzone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropzone.classList.remove('dragover');
+
+      const file = e.dataTransfer.files[0];
+      if (file) showFile(file);
+    });
+
+    document.getElementById('playBtn').addEventListener('click', async () => {
+      if (!currentFile) {
+        setStatus('请先选择视频文件');
+        return;
+      }
+
+      try {
+        await video.play();
+        setStatus('正在播放 · ' + (mode === 'mpegts' ? 'MPEG-TS 模式' : '原生模式'));
+      } catch (e) {
+        setStatus('无法开始播放，请检查文件或点击视频内的播放按钮', true);
+        errorInfo.textContent = e.message || '';
+      }
+    });
+
+    document.getElementById('pauseBtn').addEventListener('click', () => {
+      video.pause();
+      setStatus('已暂停');
+    });
+
+    document.getElementById('backBtn').addEventListener('click', () => {
+      if (Number.isFinite(video.duration)) {
+        video.currentTime = Math.max(0, video.currentTime - 10);
+      }
+    });
+
+    document.getElementById('forwardBtn').addEventListener('click', () => {
+      if (Number.isFinite(video.duration)) {
+        video.currentTime = Math.min(video.duration, video.currentTime + 10);
+      }
+    });
+
+    document.getElementById('fullscreenBtn').addEventListener('click', async () => {
+      try {
+        if (video.requestFullscreen) {
+          await video.requestFullscreen();
+        } else if (video.webkitEnterFullscreen) {
+          video.webkitEnterFullscreen();
+        }
+      } catch (e) {
+        console.warn('无法进入全屏', e);
+      }
+    });
+
+    document.getElementById('stopBtn').addEventListener('click', () => {
+      destroyPlayer();
+      currentFile = null;
+      fallbackTried = false;
+      mode = '';
+
+      fileInfo.textContent = '尚未选择文件';
+      durationInfo.textContent = '';
+      errorInfo.textContent = '';
+
+      setStatus('已停止播放');
+    });
+
+    video.addEventListener('loadedmetadata', () => {
+      durationInfo.textContent =
+        `视频时长：${formatTime(video.duration)} · 视频尺寸：${video.videoWidth || '?'} × ${video.videoHeight || '?'}`;
+
+      if (mode === 'native') {
+        setStatus('视频已加载，可以点击播放');
+      }
+    });
+
+    video.addEventListener('playing', () => {
+      setStatus('正在播放');
+      errorInfo.textContent = '';
+    });
+
+    video.addEventListener('ended', () => {
+      setStatus('播放结束');
+    });
+
+    video.addEventListener('waiting', () => {
+      if (!video.error) setStatus('正在缓冲……');
+    });
+
+    video.addEventListener('error', () => {
+      if (mode === 'native' && !fallbackTried) {
+        // 交给 onNativeError 处理
+        return;
+      }
+
+      if (video.error) {
+        console.error(
+          'HTMLMediaElement error code:',
+          video.error.code,
+          video.error.message
+        );
+      }
+    });
+
+    window.addEventListener('beforeunload', () => {
+      if (player) {
+        try {
+          player.destroy();
+        } catch (e) {}
+      }
+      if (currentUrl) URL.revokeObjectURL(currentUrl);
+    });
+  </script>
+</body>
+</html>
