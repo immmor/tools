@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PHANTOM AI - 智能对话助手</title>
+    <meta name="description" content="PHANTOM AI 智能对话助手，基于 PHANTOM 协议安全加密的 AI 服务。">
+
+    <link rel="icon" type="image/svg+xml" href="static/phantom-favicon.svg">
+    <link rel="apple-touch-icon" href="static/phantom-favicon.svg">
+
+    <!-- 与 index.html 完全一致的外部依赖 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap');
+
+        :root {
+            --neon-green: #00ff41;
+            --neon-red: #ff003c;
+            --neon-blue: #00f3ff;
+            --neon-orange: #ffaa00;
+        }
+
+        body {
+            background-color: #050505;
+            color: #fff;
+            font-family: 'JetBrains Mono', monospace;
+            overflow: hidden;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        body.theme-light {
+            background-color: #f5f3ec;
+            color: #1a1a1a;
+        }
+
+        #matrix-bg {
+            position: fixed;
+            top: 0; left: 0; z-index: -1;
+            opacity: 0.15;
+            filter: blur(1px);
+        }
+        body.theme-light #matrix-bg { display: none; }
+
+        /* ===== 主题切换按钮 ===== */
+        #theme-toggle-btn { color: #fff; transition: opacity 0.2s; }
+        #theme-toggle-btn:hover { opacity: 0.8; }
+        body.theme-light #theme-toggle-btn { color: #1a1a1a; }
+
+        /* ===== 通用卡片 ===== */
+        .cyber-card {
+            background: rgba(15, 15, 15, 0.9);
+            border: 1px solid #333;
+            transition: all 0.3s;
+            position: relative;
+        }
+        .cyber-card:hover {
+            border-color: var(--neon-green);
+            box-shadow: 0 0 20px rgba(0, 255, 65, 0.2);
+        }
+
+        .btn-cyber {
+            background: transparent;
+            border: 1px solid var(--neon-blue);
+            color: var(--neon-blue);
+            padding: 10px 13px;
+            position: relative;
+            transition: 0.2s;
+            text-transform: uppercase;
+            font-weight: 800;
+            letter-spacing: 2px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            cursor: pointer;
+        }
+        .btn-cyber:hover {
+            background: var(--neon-blue);
+            color: #000;
+            box-shadow: 0 0 15px var(--neon-blue);
+        }
+
+        .glitch-text {
+            position: relative;
+            animation: glitch 3s infinite;
+        }
+        @keyframes glitch {
+            0%   { text-shadow: 2px 0 var(--neon-red), -2px 0 var(--neon-blue); }
+            2%   { text-shadow: -3px 0 var(--neon-red), 3px 0 var(--neon-blue); }
+            4%   { text-shadow: 2px 0 var(--neon-red), -2px 0 var(--neon-blue); }
+            100% { text-shadow: 2px 0 var(--neon-red), -2px 0 var(--neon-blue); }
+        }
+
+        /* ===== 聊天消息 ===== */
+        .msg-row { display: flex; gap: 10px; margin-bottom: 18px; align-items: flex-start; }
+        .msg-row.user { flex-direction: row-reverse; }
+        .msg-avatar {
+            width: 34px; height: 34px; flex-shrink: 0;
+            border-radius: 6px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 18px;
+        }
+        .msg-avatar.ai { border: 1px solid var(--neon-blue); color: var(--neon-blue); }
+        .msg-avatar.user { border: 1px solid var(--neon-green); color: var(--neon-green); }
+
+        .msg-bubble {
+            max-width: min(78%, 680px);
+            padding: 12px 14px;
+            border-radius: 8px;
+            font-size: 14px;
+            line-height: 1.7;
+            word-break: break-word;
+            border: 1px solid #333;
+            background: rgba(15,15,15,0.85);
+        }
+        .msg-row.ai .msg-bubble {
+            border-left: 3px solid var(--neon-blue);
+            border-top-left-radius: 2px;
+        }
+        .msg-row.user .msg-bubble {
+            border-right: 3px solid var(--neon-green);
+            border-top-right-radius: 2px;
+            background: rgba(0, 255, 65, 0.06);
+        }
+
+        .msg-bubble pre {
+            background: #000;
+            border: 1px solid #2a2a2a;
+            padding: 10px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 8px 0;
+            font-size: 13px;
+        }
+        .msg-bubble code {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--neon-orange);
+        }
+        .msg-bubble pre code { color: #fff; }
+
+        /* 打字光标 */
+        .typing-cursor::after {
+            content: '▋';
+            color: var(--neon-blue);
+            animation: blink 1s steps(1) infinite;
+            margin-left: 2px;
+        }
+        @keyframes blink { 50% { opacity: 0; } }
+
+        /* 打字中三点 */
+        .dot-typing { display: inline-flex; gap: 4px; align-items: center; }
+        .dot-typing span {
+            width: 6px; height: 6px; border-radius: 50%;
+            background: var(--neon-blue);
+            animation: dot-bounce 1.2s infinite ease-in-out;
+        }
+        .dot-typing span:nth-child(2) { animation-delay: 0.2s; }
+        .dot-typing span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes dot-bounce {
+            0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+            40% { transform: scale(1); opacity: 1; }
+        }
+
+        /* 建议问题 chip */
+        .suggest-chip {
+            border: 1px solid #333;
+            background: rgba(15,15,15,0.6);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            color: var(--neon-blue);
+            cursor: pointer;
+            transition: 0.2s;
+            text-align: left;
+        }
+        .suggest-chip:hover {
+            border-color: var(--neon-blue);
+            box-shadow: 0 0 12px rgba(0,243,255,0.25);
+            color: #fff;
+        }
+
+        .sidebar-item {
+            border: 1px solid #2a2a2a;
+            border-radius: 6px;
+            padding: 10px 12px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: 0.2s;
+            display: flex; align-items: center; gap: 8px;
+            color: #cfccc3;
+        }
+        .sidebar-item:hover, .sidebar-item.active {
+            border-color: var(--neon-blue);
+            color: var(--neon-blue);
+            background: rgba(0,243,255,0.06);
+        }
+
+        /* 滚动条 */
+        .scroll-thin::-webkit-scrollbar { width: 6px; }
+        .scroll-thin::-webkit-scrollbar-track { background: transparent; }
+        .scroll-thin::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+        .scroll-thin::-webkit-scrollbar-thumb:hover { background: var(--neon-blue); }
+
+        /* ===== 白天主题适配 ===== */
+        body.theme-light .cyber-card { background: rgba(255,255,255,0.96); border-color: #e2dfd6; }
+        body.theme-light .msg-bubble { background: rgba(255,255,255,0.85); border-color: #e2dfd6; color: #1f1f22; }
+        body.theme-light .msg-row.user .msg-bubble { background: rgba(0,255,65,0.08); }
+        body.theme-light .msg-bubble pre { background: #f3f1ec; border-color: #d8d5cc; }
+        body.theme-light .msg-bubble code { color: #b86a00; }
+        body.theme-light .msg-bubble pre code { color: #1f1f22; }
+        body.theme-light .suggest-chip { background: rgba(255,255,255,0.7); border-color: #d8d5cc; }
+        body.theme-light .sidebar-item { border-color: #d8d5cc; color: #5f5c56; background: rgba(255,255,255,0.6); }
+        body.theme-light .sidebar-item:hover, body.theme-light .sidebar-item.active { color: var(--neon-blue); background: rgba(0,243,255,0.06); }
+        body.theme-light .text-dim { color: #5f5c56 !important; }
+        body.theme-light .border-channel { border-color: #e2dfd6 !important; }
+    </style>
+</head>
+<body>
+    <!-- 矩阵背景，与首页一致 -->
+    <canvas id="matrix-bg"></canvas>
+
+    <!-- 顶部导航，与首页视觉风格一致 -->
+    <nav class="p-4 md:p-6 flex justify-between items-center relative z-[100] max-w-7xl mx-auto border-channel" style="border-bottom:1px solid #222;">
+        <div class="flex items-center gap-3">
+            <img src="static/phantom-icon.svg" alt="PHANTOM" class="h-9 w-auto">
+            <div>
+                <div class="text-lg font-black glitch-text tracking-wider">PHANTOM <span class="text-[var(--neon-blue)]">AI</span></div>
+                <div class="text-[10px] text-dim text-zinc-500 tracking-widest">SECURE · ENCRYPTED · ASSISTANT</div>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <button id="new-chat-btn" class="btn-cyber !py-2 !px-3 !text-[11px] !tracking-widest hidden md:inline-flex">
+                <i data-lucide="plus" class="w-3.5 h-3.5"></i> 新对话
+            </button>
+            <button id="theme-toggle-btn" class="flex items-center transition-colors" title="切换主题">
+                <i data-lucide="moon" class="w-4 h-4"></i>
+            </button>
+        </div>
+    </nav>
+
+    <!-- 主体：侧边栏 + 对话区 -->
+    <main class="max-w-7xl mx-auto px-3 md:px-6 pt-4 h-[calc(100vh-84px)] md:h-[calc(100vh-92px)] flex gap-4">
+        <!-- 侧边栏 -->
+        <aside class="hidden md:flex flex-col w-60 shrink-0 gap-2">
+            <button id="new-chat-btn-2" class="btn-cyber justify-center mb-2 !py-2.5">
+                <i data-lucide="plus" class="w-4 h-4"></i> 新建对话
+            </button>
+            <div class="text-[10px] text-zinc-500 uppercase tracking-widest px-1 mb-1">历史会话</div>
+            <div id="history-list" class="flex flex-col gap-1.5 flex-1 overflow-y-auto scroll-thin pr-1">
+                <div class="text-xs text-zinc-600 text-center py-6" id="history-empty">暂无历史会话</div>
+            </div>
+            <div class="text-[10px] text-zinc-600 px-1 pt-2 border-t border-zinc-800 leading-relaxed">
+                ⚡ 模型：PHANTOM-GPT · 全程 AES-256 加密
+            </div>
+        </aside>
+
+        <!-- 对话区 -->
+        <section class="cyber-card flex-1 flex flex-col overflow-hidden border-channel" style="border-radius:10px;">
+            <!-- 顶部标题条 -->
+            <div class="flex items-center justify-between px-4 py-3 border-b border-zinc-800 shrink-0">
+                <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full" style="background:var(--neon-green);box-shadow:0 0 8px var(--neon-green);"></span>
+                    <span class="text-sm font-bold">PHANTOM AI 助手</span>
+                    <span class="text-[10px] text-zinc-500">在线</span>
+                </div>
+                <button id="clear-btn" class="text-zinc-500 hover:text-[var(--neon-red)] transition-colors p-1" title="清空对话">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+            </div>
+
+            <!-- 消息列表 -->
+            <div id="messages" class="flex-1 overflow-y-auto scroll-thin px-4 py-5 space-y-1">
+                <!-- 欢迎语 -->
+                <div class="msg-row ai">
+                    <div class="msg-avatar ai"><i data-lucide="bot" class="w-5 h-5"></i></div>
+                    <div class="msg-bubble">
+                        你好，我是 <b class="text-[var(--neon-blue)]">PHANTOM AI</b> 🛡️<br>
+                        我可以帮你解答关于 VPN 协议、节点选择、客户端配置、账号与套餐、隐私安全等问题，也可以陪你正常聊天。<br>
+                        下方有一些常见话题，直接点击或输入你的问题即可开始。
+                    </div>
+                </div>
+            </div>
+
+            <!-- 建议问题（移动端显示） -->
+            <div id="suggest-mobile" class="md:hidden px-4 pb-2 flex gap-2 overflow-x-auto scroll-thin shrink-0"></div>
+
+            <!-- 输入区 -->
+            <div class="border-t border-zinc-800 p-3 shrink-0">
+                <div class="flex items-end gap-2">
+                    <textarea id="input" rows="1" placeholder="输入消息给 PHANTOM AI..."
+                        class="flex-1 resize-none bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-[var(--neon-blue)] scroll-thin max-h-32"
+                        style="background:rgba(0,0,0,0.5);"></textarea>
+                    <button id="send-btn" class="btn-cyber !py-3 !px-4 h-[42px]">
+                        <i data-lucide="send" class="w-4 h-4"></i>
+                    </button>
+                </div>
+                <div class="text-[10px] text-zinc-600 mt-1.5 px-1">
+                    内容由 AI 生成，仅供参考。PHANTOM 不记录任何对话日志。
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 移动端底部新对话（小屏时侧栏隐藏，这里提供入口） -->
+    <button id="new-chat-mobile" class="md:hidden fixed bottom-24 right-4 z-50 btn-cyber !px-3 !py-2 !text-[11px] !rounded-full shadow-lg" style="box-shadow:0 0 15px rgba(0,243,255,0.3);">
+        <i data-lucide="plus" class="w-3.5 h-3.5"></i> 新对话
+    </button>
+
+    <script>
+        // ==================== 矩阵背景（与首页完全一致） ====================
+        (() => {
+            const canvas = document.getElementById('matrix-bg');
+            const ctx = canvas.getContext('2d');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*()*&^";
+            const fontSize = 16;
+            const columns = Math.floor(canvas.width / fontSize);
+            const drops = Array(columns).fill(1);
+            setInterval(() => {
+                ctx.fillStyle = "rgba(0, 0, 0, 0.05)";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = "#0F0";
+                ctx.font = `${fontSize}px monospace`;
+                drops.forEach((y, i) => {
+                    const text = chars[Math.floor(Math.random() * chars.length)];
+                    ctx.fillText(text, i * fontSize, y * fontSize);
+                    if (y * fontSize > canvas.height && Math.random() > 0.975) drops[i] = 0;
+                    drops[i]++;
+                });
+            }, 33);
+        })();
+
+        // ==================== 主题切换（与首页一致） ====================
+        (function () {
+            var btn = document.getElementById('theme-toggle-btn');
+            function timeIsLight() { var h = new Date().getHours(); return h >= 7 && h < 18; }
+            function currentLight() { return document.body.classList.contains('theme-light'); }
+            function apply(light) {
+                document.body.classList.toggle('theme-light', !!light);
+                btn.innerHTML = '<i data-lucide="' + (light ? 'sun' : 'moon') + '" class="w-4 h-4"></i>';
+                if (window.lucide) window.lucide.createIcons();
+            }
+            apply(timeIsLight());
+            btn.addEventListener('click', function () {
+                var light = !currentLight();
+                apply(light);
+                try { localStorage.setItem('theme', light ? 'light' : 'dark'); } catch (e) {}
+            });
+        })();
+
+        // ==================== 图标初始化 ====================
+        if (window.lucide) lucide.createIcons();
+
+        // ==================== AI 对话逻辑 ====================
+        const messagesEl = document.getElementById('messages');
+        const inputEl = document.getElementById('input');
+        const sendBtn = document.getElementById('send-btn');
+        const clearBtn = document.getElementById('clear-btn');
+        const suggestMobile = document.getElementById('suggest-mobile');
+
+        const SUGGESTIONS = [
+            "Clash 和 V2Ray 有什么区别？",
+            "如何导入节点配置？",
+            "推荐哪个节点延迟最低？",
+            "你们支持哪些客户端？",
+            "隐私和日志政策是怎样的？"
+        ];
+
+        // 移动端建议 chips
+        SUGGESTIONS.forEach(s => {
+            const b = document.createElement('button');
+            b.className = 'suggest-chip whitespace-nowrap';
+            b.textContent = s;
+            b.onclick = () => sendMessage(s);
+            suggestMobile.appendChild(b);
+        });
+
+        // 自动调整输入框高度
+        inputEl.addEventListener('input', () => {
+            inputEl.style.height = 'auto';
+            inputEl.style.height = Math.min(inputEl.scrollHeight, 128) + 'px';
+        });
+        inputEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+        });
+        sendBtn.addEventListener('click', () => sendMessage());
+        clearBtn.addEventListener('click', () => { messagesEl.innerHTML = ''; });
+        ['new-chat-btn', 'new-chat-btn-2', 'new-chat-mobile'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('click', () => { messagesEl.innerHTML = ''; inputEl.focus(); });
+        });
+
+        function escapeHtml(str) {
+            return str.replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+        }
+
+        function addMessage(role, text, streaming) {
+            const row = document.createElement('div');
+            row.className = 'msg-row ' + role;
+            const avatar = role === 'ai'
+                ? '<div class="msg-avatar ai"><i data-lucide="bot" class="w-5 h-5"></i></div>'
+                : '<div class="msg-avatar user"><i data-lucide="user" class="w-5 h-5"></i></div>';
+            const bubble = document.createElement('div');
+            bubble.className = 'msg-bubble';
+            if (streaming) bubble.classList.add('typing-cursor');
+            row.innerHTML = avatar;
+            row.appendChild(bubble);
+            messagesEl.appendChild(row);
+            if (window.lucide) lucide.createIcons();
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+            return bubble;
+        }
+
+        function showTyping() {
+            const row = document.createElement('div');
+            row.className = 'msg-row ai';
+            row.id = 'typing-row';
+            row.innerHTML = '<div class="msg-avatar ai"><i data-lucide="bot" class="w-5 h-5"></i></div>'
+                + '<div class="msg-bubble"><span class="dot-typing"><span></span><span></span><span></span></span></div>';
+            messagesEl.appendChild(row);
+            if (window.lucide) lucide.createIcons();
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+        }
+        function removeTyping() {
+            const t = document.getElementById('typing-row');
+            if (t) t.remove();
+        }
+
+        // 模拟流式输出（实际接入时把这里替换为真实 API 调用）
+        async function callAI(userText) {
+            const t = userText.toLowerCase();
+            let reply;
+            if (t.includes('clash') && t.includes('v2ray') || t.includes('区别')) {
+                reply = "**Clash 与 V2Ray 的区别：**\n\n- **Clash**：基于规则的代理客户端，支持订阅、分流、负载均衡，适合多节点灵活切换，配合图形界面体验最好。\n- **V2Ray（Xray）**：更底层的代理核心，协议丰富（VMess / VLESS / Trojan），性能与抗封锁能力强。\n\n如果你追求“开箱即用 + 规则分流”，推荐 Clash；追求极致稳定与协议灵活，推荐 V2Ray。PHANTOM 两种配置都提供。";
+            } else if (t.includes('导入') || t.includes('配置') || t.includes('订阅')) {
+                reply = "**导入节点配置步骤：**\n\n1. 登录后在 VIP 页面复制 **订阅链接** 或下载 `.yaml` / `.json` 配置文件；\n2. 打开客户端 → 点击「订阅 / Profiles / 配置」；\n3. 粘贴订阅链接或导入本地文件；\n4. 更新订阅后选择节点并启用系统代理即可。\n\n需要我针对某个具体客户端（Windows / macOS / iOS / Android）详细说明吗？";
+            } else if (t.includes('节点') || t.includes('延迟') || t.includes('延迟') || t.includes('哪个')) {
+                reply = "**节点选择建议：**\n\n- 追求最低延迟：优先选 **香港 / 日本 / 新加坡**（通常 40–90ms）；\n- 追求大带宽下载：可选 **美国 / 加拿大 / 德国**（200Mbps+）；\n- 游戏用户：建议香港 / 日本节点，并开启“游戏模式”分流。\n\n所有节点均为 AES-256 / XChaCha20 加密，可在客户端内测速后择优使用。";
+            } else if (t.includes('客户端') || t.includes('支持') || t.includes('平台') || t.includes('windows') || t.includes('mac') || t.includes('ios') || t.includes('android')) {
+                reply = "**支持的平台 / 客户端：**\n\n- Windows：Clash for Windows / NekoBox\n- macOS：ClashX / Stash\n- iOS：Shadowrocket / Stash\n- Android：Clash for Android / v2rayNG\n\n下载页面提供对应安装包与导入教程。需要我发下载入口吗？";
+            } else if (t.includes('隐私') || t.includes('日志') || t.includes('安全') || t.includes('加密')) {
+                reply = "**隐私与安全：**\n\n- 采用 **零日志政策**，不记录浏览历史、连接时间、IP 等敏感信息；\n- 加密标准：**AES-256** 与 **XChaCha20**；\n- 基础设施由 Google Cloud / AWS / Cloudflare 提供高可用支撑。\n\n你的对话也不会被留存，请放心使用。";
+            } else if (t.includes('套餐') || t.includes('价格') || t.includes('购买') || t.includes('多少钱')) {
+                reply = "**套餐概览：**\n\n- 月付套餐：适合短期 / 体验；\n- 年付套餐：相比月付约省 44%；\n- 注册即送免费节点包，无需付费即可体验。\n\n具体价格以下单页实时显示为准。需要我帮你对比各套餐吗？";
+            } else if (t.includes('你好') || t.includes('hi') || t.includes('hello') || t.includes('在吗')) {
+                reply = "你好！我是 PHANTOM AI 助手 🛡️ 有什么可以帮你的？无论是 VPN 使用问题，还是日常聊天，我都在。";
+            } else {
+                reply = "收到 ✅ 我是 PHANTOM 智能助手。关于你的问题，我可以提供 VPN 协议、节点、客户端配置、账号套餐与隐私安全方面的解答。\n\n如果你愿意补充更多细节（比如使用的设备、遇到的具体现象），我可以给出更精准的建议。需要我先从常见问题开始介绍吗？";
+            }
+            return reply;
+        }
+
+        let busy = false;
+        async function sendMessage(override) {
+            if (busy) return;
+            const text = (override || inputEl.value).trim();
+            if (!text) return;
+            busy = true;
+
+            // 用户消息
+            addMessage('user', escapeHtml(text), false);
+            inputEl.value = '';
+            inputEl.style.height = 'auto';
+
+            // 打字中
+            showTyping();
+
+            const reply = await callAI(text);
+            await new Promise(r => setTimeout(r, 350));
+            removeTyping();
+
+            // 流式输出（按字符）
+            const bubble = addMessage('ai', '', true);
+            let i = 0;
+            const speed = 12;
+            await new Promise(resolve => {
+                const timer = setInterval(() => {
+                    i += 1;
+                    bubble.innerHTML = formatMarkdown(reply.slice(0, i));
+                    messagesEl.scrollTop = messagesEl.scrollHeight;
+                    if (i >= reply.length) { clearInterval(timer); resolve(); }
+                }, speed);
+            });
+            bubble.classList.remove('typing-cursor');
+            bubble.innerHTML = formatMarkdown(reply);
+            busy = false;
+        }
+
+        // 极简 markdown：标题 / 加粗 / 列表 / 行内 code / 代码块
+        function formatMarkdown(src) {
+            const lines = src.split('\n');
+            let html = '', inCode = false;
+            for (let raw of lines) {
+                if (raw.startsWith('```')) { inCode = !inCode; html += inCode ? '<pre><code>' : '</code></pre>'; continue; }
+                if (inCode) { html += escapeHtml(raw) + '\n'; continue; }
+                let line = escapeHtml(raw);
+                line = line.replace(/\*\*(.+?)\*\*/g, '<b class="text-[var(--neon-orange)]">$1</b>');
+                line = line.replace(/`([^`]+?)`/g, '<code>$1</code>');
+                if (/^[-*]\s+/.test(line)) { html += '<div>• ' + line.replace(/^[-*]\s+/, '') + '</div>'; }
+                else if (/^\d+\.\s+/.test(line)) { html += '<div>' + line + '</div>'; }
+                else if (/^#{1,3}\s+/.test(line)) { html += '<div class="font-bold text-[var(--neon-blue)] my-1">' + line.replace(/^#{1,3}\s+/, '') + '</div>'; }
+                else { html += line ? line + '<br>' : '<br>'; }
+            }
+            return html;
+        }
+
+        inputEl.focus();
+    </script>
+</body>
+</html>

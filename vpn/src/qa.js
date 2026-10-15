@@ -50,6 +50,18 @@ document.addEventListener('DOMContentLoaded', () => {
             const avatarEl = document.getElementById('support-agent-avatar');
             if (avatarEl) avatarEl.src = agentAvatar();
         };
+        // 客服思考中：标题栏名字下方显示「正在输入。。。」，随语种切换
+        const TYPING_TEMPLATES = {
+            'zh-CN': '正在输入。。。', 'en-US': 'typing...', 'ja-JP': '入力中...',
+            'ko-KR': '입력 중...', 'ru-RU': 'печатает...', 'es-ES': 'escribiendo...',
+            'vi-VN': 'đang nhập...', 'ar-SA': 'يكتب...'
+        };
+        const setTyping = (on) => {
+            const el = document.getElementById('support-agent-status');
+            if (!el) return;
+            el.textContent = (TYPING_TEMPLATES[window.currentLang] || TYPING_TEMPLATES['zh-CN']);
+            el.classList.toggle('hidden', !on);
+        };
         // 页面加载时随机分配一位客服；刷新页面前保持不变（不在 openModal 内重挑）
         pickAgent();
 
@@ -318,6 +330,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const text = await fillPricePlaceholders(rawText);
             isBotReplying = true;
             setInputEnabled(false);
+            setTyping(true);
             let div = document.getElementById('support-typing-indicator');
             if (!div) showTypingIndicator();
             await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 2000));
@@ -343,6 +356,7 @@ document.addEventListener('DOMContentLoaded', () => {
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
             if (window.lucide) lucide.createIcons();
             appendMsgTime(div, new Date());
+            setTyping(false); // 思考结束、开始回复即隐藏
             await typeWriter(bubble, text, 30 + Math.random() * 20);
 
             if (action && (action.label || (action.buttons && action.buttons.length))) {
@@ -868,6 +882,7 @@ document.addEventListener('DOMContentLoaded', () => {
             isLeaveMessageMode = false;
             isBotReplying = false;
             setInputEnabled(true);
+            setTyping(false);
             input.placeholder = '';
             stopReplyPolling();
         };
