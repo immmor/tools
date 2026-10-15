@@ -3045,26 +3045,33 @@
     <script>
         lucide.createIcons();
 
-        // 登录弹窗图片点击轮换：桌面竖版 beautyv1-v3，手机横版 beautyh1-h3
-        function initAuthHeroSwitcher() {
-            var hero = document.querySelector('#auth-modal .auth-hero');
-            if (!hero) return;
-            var desktop = document.getElementById('auth-hero-img-desktop');
-            var mobile = document.getElementById('auth-hero-img-mobile');
-            var lists = {
+        // 登录弹窗图片：每次打开随机一张，点击顺序切换
+        (function () {
+            const lists = {
                 desktop: ['static/beautyv1.webp', 'static/beautyv2.webp', 'static/beautyv3.webp'],
                 mobile: ['static/beautyh1.webp', 'static/beautyh2.webp', 'static/beautyh3.webp']
             };
-            var idx = { desktop: 0, mobile: 0 };
-            hero.style.cursor = 'pointer';
-            hero.addEventListener('click', function () {
-                var isDesktop = window.matchMedia('(min-width: 768px)').matches;
-                var key = isDesktop ? 'desktop' : 'mobile';
-                idx[key] = (idx[key] + 1) % lists[key].length;
-                (isDesktop ? desktop : mobile).src = lists[key][idx[key]];
-            });
-        }
-        initAuthHeroSwitcher();
+            const idx = { desktop: 0, mobile: 0 };
+            const setImg = (key) => {
+                const el = document.getElementById(key === 'desktop' ? 'auth-hero-img-desktop' : 'auth-hero-img-mobile');
+                if (el) el.src = lists[key][idx[key]];
+            };
+            const hero = document.querySelector('#auth-modal .auth-hero');
+            if (hero) {
+                hero.style.cursor = 'pointer';
+                hero.addEventListener('click', () => {
+                    const key = window.matchMedia('(min-width: 768px)').matches ? 'desktop' : 'mobile';
+                    idx[key] = (idx[key] + 1) % lists[key].length;
+                    setImg(key);
+                });
+            }
+            window.randomizeAuthHero = () => {
+                for (const key in lists) {
+                    idx[key] = Math.floor(Math.random() * lists[key].length);
+                    setImg(key);
+                }
+            };
+        })();
 
         // ==================== 静态资源预加载（首屏即开始缓存，避免弹窗打开时才请求） ====================
         (() => {
@@ -3250,7 +3257,7 @@
                     const vipV2rayUrl = `https://api.funbua.uk/vip/v2ray?v=${encodeURIComponent(vipInfo.v_token)}`;
                     
                     const dict = translations[currentLang] || {};
-                    const girlImg = vipInfo.is_vip_valid ? 'static/beautyh1.webp' : 'static/beautynviph1.jpg';
+                    const girlImg = vipInfo.is_vip_valid ? 'static/beautyh4.jpeg' : 'static/beautynviph1.jpg';
                     const html = `
                         <div class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4" id="vip-modal">
                             <div class="cyber-card p-0 max-w-md w-full max-h-[80vh] overflow-y-auto">
@@ -3955,6 +3962,7 @@
             const openModal = () => {
                 isLogin = true;
                 els.modal.classList.remove('hidden');
+                if (window.randomizeAuthHero) window.randomizeAuthHero();
                 els.inviteCodeContainer.classList.add('hidden');
                 els.confirmPassContainer.classList.add('hidden');
                 els.forgotPwdContainer.classList.add('hidden');
