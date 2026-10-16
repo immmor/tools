@@ -59,9 +59,14 @@ def run_workflow(upload_file_id):
     response = requests.post(url, headers=headers, json=payload)
     response.raise_for_status()
     result = response.json()
+    # print(result)
+    # print(type(result))
+    result = result['data']['outputs']['output']
+    print(result)
+    print(type(result))
 
     print("\n[工作流执行完成]")
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    # print(json.dumps(result, ensure_ascii=False, indent=2))
     return result
 
 
