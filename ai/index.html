@@ -308,7 +308,7 @@
         .mc-top h4 { font-size: 17px; letter-spacing: .5px; }
         .mc-top .sub { font-size: 11px; color: #888; margin-top: 3px; }
         .mc-models { list-style: none; display: flex; flex-direction: column; gap: 10px; margin-bottom: 0; min-height: 160px; max-height: 214px; overflow-y: auto; }
-        .mc-models li { display: flex; flex-direction: column; gap: 8px; padding: 12px 13px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; transition: background .2s; }
+        .mc-models li { display: flex; flex-direction: column; gap: 8px; padding: 12px 13px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; cursor: pointer; transition: background .2s; }
         .mc-models li:hover { background: rgba(255,215,0,0.05); }
         .mc-models::-webkit-scrollbar { width: 6px; }
         .mc-models::-webkit-scrollbar-thumb { background: rgba(255,215,0,0.3); border-radius: 6px; }
@@ -320,8 +320,11 @@
         .mc-row { display: flex; align-items: center; gap: 10px; }
         .mc-tag, .mc-ctx { margin-left: auto; font-size: 10.5px; color: var(--primary-yellow); opacity: .75; white-space: nowrap; }
         .cat-badge { font-size: 10px; color: #aaa; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.14); padding: 2px 7px; border-radius: 6px; flex-shrink: 0; white-space: nowrap; }
-        .model-filters { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 30px; }
-        .mf-chip { padding: 8px 16px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.03); color: #aaa; font-size: 13px; cursor: pointer; transition: .2s; }
+        .model-search { margin-top: 30px; }
+        .model-search input { width: 100%; background: var(--card-bg); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; color: #fff; padding: 12px 16px; font-size: 14px; outline: none; }
+        .model-search input:focus { border-color: rgba(255,215,0,0.45); }
+        .model-filters { display: flex; flex-wrap: nowrap; gap: 10px; margin-top: 16px; overflow-x: auto; scroll-behavior: smooth; }
+        .mf-chip { flex-shrink: 0; white-space: nowrap; padding: 8px 16px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.03); color: #aaa; font-size: 13px; cursor: pointer; transition: .2s; }
         .mf-chip:hover { color: #ddd; border-color: rgba(255,215,0,0.3); }
         .mf-chip.active { background: rgba(255,215,0,0.12); color: var(--primary-yellow); border-color: rgba(255,215,0,0.35); }
         .mf-chip b { font-weight: 700; margin-left: 6px; font-size: 11px; opacity: .7; }
@@ -519,6 +522,9 @@
             <p class="section-sub">所有模型一个价目表，按每百万 tokens 计费（入=输入 / 出=输出）。开一个 AI HUB 账号就能直接调，不用每家单独签约、分别付费，挑个性价比合适的上手。</p>
         </div>
 
+        <div class="model-search">
+            <input id="modelSearch" type="text" placeholder="搜索模型，如 deepseek、豆包、rerank…">
+        </div>
         <div class="model-filters" id="modelFilters"></div>
         <div class="model-grid" id="modelGrid"></div>
     </section>
@@ -639,11 +645,11 @@ echo $resp;</code></pre>
             { k:'all', label:'全部' },
             { k:'chat', label:'对话' },
             { k:'multi', label:'多模态' },
-            { k:'emb', label:'Embedding' },
+            { k:'emb', label:'嵌入' },
             { k:'image', label:'图像' },
             { k:'video', label:'视频' },
             { k:'audio', label:'语音' },
-            { k:'decision', label:'决策模型' },
+            { k:'decision', label:'决策' },
             { k:'3d', label:'3D' },
             { k:'rerank', label:'重排' },
         ];
@@ -656,7 +662,6 @@ echo $resp;</code></pre>
                 { n:'text-embedding-3-small', cat:'emb', c:'1536 维', in:'$0.02', out:'—' },
                 { n:'text-embedding-3-large', cat:'emb', c:'3072 维', in:'$0.13', out:'—' },
                 { n:'dall-e-3', cat:'image', c:'1024²', in:'¥0.3/张', out:'—' },
-                { n:'sora', cat:'video', c:'最长 20s', in:'按秒计费', out:'—' },
                 { n:'whisper-1', cat:'audio', c:'多语言', in:'¥0.45/分钟', out:'—' },
             ]},
             { pic:'CL', name:'Claude', sub:'Anthropic', on:true, models:[
@@ -726,8 +731,12 @@ echo $resp;</code></pre>
         function renderGrid(){
             const mg = document.getElementById('modelGrid');
             mg.innerHTML = '';
+            const kw = (document.getElementById('modelSearch')?.value || '').trim().toLowerCase();
             MODELS.forEach(m => {
-                const items = m.models.filter(x => curCat === 'all' || x.cat === curCat);
+                const items = m.models.filter(x =>
+                    (curCat === 'all' || x.cat === curCat) &&
+                    (!kw || x.n.toLowerCase().includes(kw) || m.name.toLowerCase().includes(kw))
+                );
                 if (!items.length) return;
                 const card = document.createElement('div'); card.className='model-card';
                 card.innerHTML = `
@@ -735,7 +744,7 @@ echo $resp;</code></pre>
                         <div><h4>${m.name}</h4><div class="sub">${m.sub}</div></div>
                     </div>
                     <ul class="mc-models">${items.map(x=>`
-                        <li>
+                        <li data-name="${esc(x.n)}" onclick="copyModel(this.dataset.name)">
                             <div class="mc-row">
                                 <span class="mc-name" title="${x.n}">${x.n}</span>
                                 <span class="cat-badge">${CAT_LABEL[x.cat]}</span>
@@ -753,6 +762,9 @@ echo $resp;</code></pre>
         }
         renderFilters();
         renderGrid();
+
+        const modelSearch = document.getElementById('modelSearch');
+        if(modelSearch) modelSearch.addEventListener('input', renderGrid);
 
         // 首页：动态模型总数
         const totalModels = MODELS.reduce((s, m) => s + m.models.length, 0);
@@ -871,6 +883,7 @@ echo $resp;</code></pre>
             } catch(e){ toast(e.message); }
         }
         function copyKey(k){ navigator.clipboard.writeText(k); toast('密钥已复制'); }
+        function copyModel(n){ navigator.clipboard.writeText(n); toast('已复制：' + n); }
 
         function maskKey(k){ return k.slice(0,12) + '••••••••••••' + k.slice(-4); }
         function toggleKey(eye){
