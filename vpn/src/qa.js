@@ -21,6 +21,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const closeBtn = document.getElementById('support-close');
         const messagesContainer = document.getElementById('support-messages');
         const input = document.getElementById('support-input');
+        const fab = document.getElementById('support-fab');
+        const fabBtn = document.getElementById('support-fab-btn');
+        const fabClose = document.getElementById('support-fab-close');
+        const fabAvatar = document.getElementById('support-fab-avatar');
+        let closeTimer = null;
         const sendBtn = document.getElementById('support-send');
         const suggestionsContainer = document.getElementById('support-suggestions');
 
@@ -848,7 +853,16 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         const openModal = () => {
+            if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
+            // 若悬浮窗可见，则从悬浮窗位置飞回（丝滑动画）；否则直接居中显示
+            const fabVisible = fab && !fab.classList.contains('hidden');
             modal.classList.remove('hidden');
+            if (fabVisible) {
+                modal.classList.add('shrunk');
+                void modal.offsetWidth;
+                requestAnimationFrame(() => modal.classList.remove('shrunk'));
+                hideFab();
+            }
             if (window.lucide) lucide.createIcons();
             // 刷新标题（客服在页面加载时已随机选定，此处不重挑）
             setTitleForAgent();
@@ -877,7 +891,6 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         const closeModal = () => {
-            modal.classList.add('hidden');
             if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
             isLeaveMessageMode = false;
             isBotReplying = false;
@@ -885,6 +898,43 @@ document.addEventListener('DOMContentLoaded', () => {
             setTyping(false);
             input.placeholder = '';
             stopReplyPolling();
+            if (!modal.classList.contains('hidden')) {
+                // 缩小飞向右边悬浮窗，动画结束后再隐藏弹窗
+                modal.classList.add('shrunk');
+                showFab();
+                closeTimer = setTimeout(() => {
+                    modal.classList.add('hidden');
+                    modal.classList.remove('shrunk');
+                }, 470);
+            }
+        };
+
+        // 显示右侧客服悬浮窗（关闭客服后）；同步当前客服头像，并默认隐藏关闭按钮
+        const showFab = () => {
+            if (!fab) return;
+            if (fabAvatar) fabAvatar.src = agentAvatar();
+            if (fabClose) fabClose.classList.add('hidden');
+            fab.classList.remove('hidden');
+            if (fabBtn) {
+                fabBtn.classList.remove('fab-pop');
+                void fabBtn.offsetWidth;
+                fabBtn.classList.add('fab-pop');
+            }
+        };
+
+        // 收起悬浮窗（缩回动画后隐藏）
+        const hideFab = () => {
+            if (!fab || fab.classList.contains('hidden')) return;
+            if (fabBtn) {
+                fabBtn.classList.remove('fab-pop');
+                fabBtn.classList.add('fab-hide');
+                setTimeout(() => {
+                    fab.classList.add('hidden');
+                    if (fabBtn) fabBtn.classList.remove('fab-hide');
+                }, 300);
+            } else {
+                fab.classList.add('hidden');
+            }
         };
 
         const showWelcome = async () => {
@@ -902,6 +952,57 @@ document.addEventListener('DOMContentLoaded', () => {
         closeBtn?.addEventListener('click', closeModal);
         modal?.addEventListener('click', (e) => {
             if (e.target === modal) closeModal();
+        });
+
+        // 悬浮窗：第一次点击展开关闭按钮；再次点击恢复客服界面（拖动后不触发）
+        let suppressClick = false;
+        fabBtn?.addEventListener('click', () => {
+            if (suppressClick) { suppressClick = false; return; }
+            if (fabClose.classList.contains('hidden')) {
+                fabClose.classList.remove('hidden');
+                fabClose.classList.remove('fab-pop-left');
+                void fabClose.offsetWidth;
+                fabClose.classList.add('fab-pop-left');
+            } else {
+                fabClose.classList.add('hidden');
+                openModal();
+            }
+        });
+        // 拖拽悬浮窗（拖动超过阈值则不视为点击）
+        let dragging = false, moved = false, lx = 0, ly = 0;
+        fabBtn?.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            dragging = true; moved = false;
+            const r = fab.getBoundingClientRect();
+            fab.style.left = r.left + 'px'; fab.style.top = r.top + 'px';
+            fab.style.right = 'auto'; fab.style.bottom = 'auto'; fab.style.transform = 'none';
+            lx = e.clientX; ly = e.clientY;
+            fabBtn.setPointerCapture(e.pointerId);
+        });
+        fabBtn?.addEventListener('pointermove', (e) => {
+            if (!dragging) return;
+            const dx = e.clientX - lx, dy = e.clientY - ly;
+            if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved = true;
+            const r = fab.getBoundingClientRect();
+            fab.style.left = Math.max(0, Math.min(window.innerWidth - r.width, r.left + dx)) + 'px';
+            fab.style.top = Math.max(0, Math.min(window.innerHeight - r.height, r.top + dy)) + 'px';
+            lx = e.clientX; ly = e.clientY;
+        });
+        fabBtn?.addEventListener('pointerup', (e) => {
+            if (!dragging) return;
+            dragging = false;
+            fabBtn.releasePointerCapture(e.pointerId);
+            if (moved) suppressClick = true;
+        });
+        // 关闭按钮：收起悬浮窗（不再显示）
+        fabClose?.addEventListener('click', (e) => {
+            e.stopPropagation();
+            hideFab();
+        });
+        // 点击悬浮窗以外的区域，收起关闭按钮
+        document.addEventListener('click', (e) => {
+            if (!fab || fab.classList.contains('hidden') || fabClose.classList.contains('hidden')) return;
+            if (!fab.contains(e.target)) fabClose.classList.add('hidden');
         });
         sendBtn?.addEventListener('click', handleSend);
         input?.addEventListener('keypress', (e) => {
