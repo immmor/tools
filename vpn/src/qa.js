@@ -25,6 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const fabBtn = document.getElementById('support-fab-btn');
         const fabClose = document.getElementById('support-fab-close');
         const fabAvatar = document.getElementById('support-fab-avatar');
+        const supportCard = modal.querySelector('.cyber-card');
         let closeTimer = null;
         const sendBtn = document.getElementById('support-send');
         const suggestionsContainer = document.getElementById('support-suggestions');
@@ -852,15 +853,32 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
 
+        // 把卡片缩小并平移到悬浮按钮当前位置（无论被拖到哪）
+        const flyToFab = () => {
+            const cr = supportCard.getBoundingClientRect();
+            const fr = fabBtn.getBoundingClientRect();
+            const dx = (fr.left + fr.width / 2) - (cr.left + cr.width / 2);
+            const dy = (fr.top + fr.height / 2) - (cr.top + cr.height / 2);
+            const s = Math.min(44 / cr.width, 44 / cr.height);
+            supportCard.style.transformOrigin = 'center center';
+            supportCard.style.transform = `translate(${dx}px, ${dy}px) scale(${s})`;
+            supportCard.style.opacity = '0';
+        };
+
         const openModal = () => {
             if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; }
-            // 若悬浮窗可见，则从悬浮窗位置飞回（丝滑动画）；否则直接居中显示
+            // 若悬浮窗可见，则从悬浮窗当前位置飞回（丝滑动画）；否则直接居中显示
             const fabVisible = fab && !fab.classList.contains('hidden');
             modal.classList.remove('hidden');
             if (fabVisible) {
-                modal.classList.add('shrunk');
-                void modal.offsetWidth;
-                requestAnimationFrame(() => modal.classList.remove('shrunk'));
+                supportCard.style.transition = 'none';
+                flyToFab();
+                void supportCard.offsetWidth;
+                supportCard.style.transition = '';
+                requestAnimationFrame(() => {
+                    supportCard.style.transform = 'none';
+                    supportCard.style.opacity = '1';
+                });
                 hideFab();
             }
             if (window.lucide) lucide.createIcons();
