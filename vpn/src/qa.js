@@ -940,6 +940,16 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
 
+        // 根据悬浮窗水平位置决定关闭按钮在左/右，避免贴边出界
+        const positionFabClose = () => {
+            const r = fabBtn.getBoundingClientRect();
+            const onLeft = (r.left + r.width / 2) < window.innerWidth / 2;
+            fabClose.classList.toggle('right-full', !onLeft);
+            fabClose.classList.toggle('mr-2', !onLeft);
+            fabClose.classList.toggle('left-full', onLeft);
+            fabClose.classList.toggle('ml-2', onLeft);
+        };
+
         // 收起悬浮窗（缩回动画后隐藏）
         const hideFab = () => {
             if (!fab || fab.classList.contains('hidden')) return;
@@ -978,6 +988,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (suppressClick) { suppressClick = false; return; }
             if (fabClose.classList.contains('hidden')) {
                 fabClose.classList.remove('hidden');
+                positionFabClose();
                 fabClose.classList.remove('fab-pop-left');
                 void fabClose.offsetWidth;
                 fabClose.classList.add('fab-pop-left');
@@ -1002,15 +1013,19 @@ document.addEventListener('DOMContentLoaded', () => {
             const dx = e.clientX - lx, dy = e.clientY - ly;
             if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved = true;
             const r = fab.getBoundingClientRect();
-            fab.style.left = Math.max(0, Math.min(window.innerWidth - r.width, r.left + dx)) + 'px';
-            fab.style.top = Math.max(0, Math.min(window.innerHeight - r.height, r.top + dy)) + 'px';
+            const FM = 16;
+            fab.style.left = Math.max(FM, Math.min(window.innerWidth - r.width - FM, r.left + dx)) + 'px';
+            fab.style.top = Math.max(FM, Math.min(window.innerHeight - r.height - FM, r.top + dy)) + 'px';
             lx = e.clientX; ly = e.clientY;
         });
         fabBtn?.addEventListener('pointerup', (e) => {
             if (!dragging) return;
             dragging = false;
             fabBtn.releasePointerCapture(e.pointerId);
-            if (moved) suppressClick = true;
+            if (moved) {
+                suppressClick = true;
+                if (!fabClose.classList.contains('hidden')) positionFabClose();
+            }
         });
         // 关闭按钮：收起悬浮窗（不再显示）
         fabClose?.addEventListener('click', (e) => {
