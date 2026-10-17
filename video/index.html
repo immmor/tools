@@ -196,7 +196,6 @@
         .neu-btn:hover {
             color: #FF5E00;
             box-shadow: var(--nm-outset);
-            transform: translateY(-1px);
         }
 
         .neu-btn:active, .neu-btn-active {
@@ -215,7 +214,6 @@
         .neu-btn-orange:hover {
             background: var(--orange-gradient-hover);
             box-shadow: var(--nm-outset), 0 12px 30px rgba(255, 94, 0, 0.5);
-            transform: translateY(-2px);
         }
 
         .neu-btn-orange:active {
@@ -291,7 +289,7 @@
         
         <div class="flex items-center gap-3">
             <div class="w-11 h-11 rounded-2xl neu-outset flex items-center justify-center text-brand-500 text-xl font-black">
-                <i class="fa-solid fa-paintbrush text-brand-500"></i>
+                <i class="fa-solid fa-wand-magic-sparkles text-brand-500"></i>
             </div>
             <div>
                 <h1 class="font-extrabold text-lg lg:text-xl tracking-tight leading-none text-brand-500 flex items-center gap-2">
@@ -382,7 +380,7 @@
                 <div class="flex flex-col gap-2">
                     <div class="flex items-center justify-between">
                         <label class="text-xs font-bold uppercase tracking-wider text-gray-500 flex items-center gap-1.5">
-                            <i class="fa-solid fa-terminal text-brand-500"></i> 正向提示词 (Positive Prompt)
+                            <i class="fa-solid fa-terminal text-brand-500"></i> 正向提示词
                         </label>
                         <div class="flex items-center gap-2">
                             <button onclick="magicOptimizePrompt()" class="neu-btn px-2.5 py-1 rounded-xl text-[11px] font-bold text-brand-500 flex items-center gap-1.5" title="AI 智能强化与扩写提示词">
@@ -420,7 +418,7 @@
 
                 <details class="group border-t border-gray-300/40 dark:border-gray-800 pt-3">
                     <summary class="flex justify-between items-center cursor-pointer text-xs font-bold text-gray-500 select-none group-open:text-brand-500">
-                        <span><i class="fa-solid fa-ban text-red-400 mr-1.5"></i> 反向提示词 (Negative Prompt)</span>
+                        <span><i class="fa-solid fa-ban text-red-400 mr-1.5"></i> 反向提示词</span>
                         <i class="fa-solid fa-chevron-down text-xs transition-transform group-open:rotate-180"></i>
                     </summary>
                     <div class="mt-2.5">
@@ -469,7 +467,7 @@
                                 <div class="w-2.5 h-3.5 border-2 border-current rounded-xs"></div> 3:4
                             </button>
                             <button onclick="setAspectRatio('21:9', this)" class="ratio-btn neu-input p-1.5 rounded-xl text-[10px] font-bold text-center flex flex-col items-center justify-center gap-0.5 hover:text-brand-500">
-                                <div class="w-4.5 h-2 border-2 border-current rounded-xs"></div> 21:9
+                                <div class="w-[21px] h-[9px] border-2 border-current rounded-xs"></div> 21:9
                             </button>
                         </div>
                     </div>
@@ -525,7 +523,7 @@
                 
                 <div class="flex justify-between items-center border-b border-gray-300/40 dark:border-gray-800 pb-3">
                     <h3 class="font-extrabold text-sm flex items-center gap-2">
-                        <i class="fa-solid fa-display text-brand-500"></i> Live Viewport Render Stage
+                        <i class="fa-solid fa-display text-brand-500"></i> 实时渲染
                     </h3>
                     <span id="stage-status-tag" class="px-3 py-1 rounded-full text-[10px] font-bold neu-inset text-gray-400">IDLE READY</span>
                 </div>
@@ -588,7 +586,7 @@
                 <div class="flex justify-between items-center border-b border-gray-300/40 dark:border-gray-800 pb-3">
                     <div class="flex items-center gap-3">
                         <h3 class="font-extrabold text-sm flex items-center gap-2">
-                            <i class="fa-solid fa-box-archive text-brand-500"></i> 历史作品画廊 (Vault)
+                            <i class="fa-solid fa-box-archive text-brand-500"></i> 历史作品
                         </h3>
                         <span id="vault-count-badge" class="text-[10px] font-bold px-2 py-0.5 rounded-full neu-inset text-gray-500 font-mono">0 Items</span>
                     </div>
@@ -1011,19 +1009,34 @@
             const taskId = createData.id || createData.video_id || createData.task_id;
             if (!taskId) throw new Error("接口未返回任务 ID");
 
+            stageText.innerText = "任务已提交，生成中…";
+
+            // 阶梯式轮询：首次等 45 秒，第二次 10 秒，之后逐步缩短，最终稳定在 2 秒一次
+            const maxWaitMs = 10 * 60 * 1000;
+            const pollDelay = (n) => n === 0 ? 45000 : Math.max(2000, (11 - n) * 1000);
+
             let result = null;
+            let attempt = 0;
             while (true) {
-                await sleep(2000);
+                const delay = pollDelay(attempt);
+                await sleep(delay);
+
+                if (Date.now() - startTime > maxWaitMs) {
+                    throw new Error("生成超时，请稍后重试");
+                }
+
                 const qUrl = `${baseUrl}/agnesapi?video_id=${encodeURIComponent(taskId)}`;
-                console.log('[Agnes] GET', qUrl);
+                console.log('[Agnes] GET', qUrl, `(+${delay / 1000}s)`);
                 const qRes = await fetch(qUrl, { headers: headers });
                 if (!qRes.ok) throw new Error(`查询失败 HTTP ${qRes.status} @ ${qUrl}`);
                 const data = await qRes.json();
                 const p = Number(data.progress) || 0;
+                console.log('[Agnes] 第' + (attempt + 1) + '次查询响应:', JSON.stringify(data));
 
                 if (data.status === "completed") { result = data; break; }
                 if (data.status === "failed" || data.error) throw new Error(data.error || "任务执行失败");
                 stageText.innerText = `任务渲染中... (${p}%)`;
+                attempt++;
             }
 
             if (!result.url) throw new Error("任务完成但未返回视频地址");
