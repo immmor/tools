@@ -618,8 +618,8 @@
 
     </div>
 
-    <div id="api-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden opacity-0 transition-opacity duration-300">
-        <div class="neu-outset modal-panel w-full max-w-lg p-6 rounded-3xl flex flex-col gap-5 relative transform scale-95 transition-transform duration-300" id="api-modal-card">
+    <div id="api-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto hidden opacity-0 transition-opacity duration-300">
+        <div class="neu-outset modal-panel w-full max-w-lg p-6 rounded-3xl flex flex-col gap-5 relative max-h-[90vh] overflow-y-auto overscroll-contain transform scale-95 transition-transform duration-300" id="api-modal-card">
             
             <div class="flex justify-between items-center border-b border-gray-300/40 dark:border-gray-800 pb-3">
                 <div class="flex items-center gap-2.5">
@@ -628,12 +628,23 @@
                     </div>
                     <div>
                         <h3 class="font-extrabold text-base">自定义 API 接口配置</h3>
+                        <p class="text-[10px] text-gray-400">可保存多个端点，生成时使用「当前生效」的那一个</p>
                     </div>
                 </div>
                 <button onclick="closeApiModal()" class="w-8 h-8 rounded-xl neu-btn flex items-center justify-center text-gray-400 hover:text-brand-500">
                     <i class="fa-solid fa-xmark"></i>
                 </button>
             </div>
+
+            <div class="flex flex-col gap-2">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold text-gray-500">已保存的 API 配置：</span>
+                    <span id="api-config-count" class="text-[10px] font-mono text-gray-400">0 个</span>
+                </div>
+                <div id="api-config-list" class="flex flex-col gap-2 max-h-[220px] overflow-y-auto pr-1"></div>
+            </div>
+
+            <div class="border-t border-gray-300/40 dark:border-gray-800"></div>
 
             <div class="flex flex-col gap-2">
                 <span class="text-xs font-bold text-gray-500">快速应用 Endpoint 预设:</span>
@@ -643,6 +654,11 @@
             </div>
 
             <div class="flex flex-col gap-3.5 text-xs">
+                <div class="flex flex-col gap-1">
+                    <label class="font-bold text-gray-600 dark:text-gray-300">配置名称 (便于区分):</label>
+                    <input type="text" id="api-name-input" placeholder="例如：Agnes 主账号 / 自建 ComfyUI" class="neu-input p-3 rounded-xl font-mono text-xs">
+                </div>
+
                 <div class="flex flex-col gap-1">
                     <label class="font-bold text-gray-600 dark:text-gray-300">API Base Endpoint URL:</label>
                     <input type="text" id="api-url-input" placeholder="https://api.openai.com/v1" class="neu-input p-3 rounded-xl font-mono text-xs">
@@ -676,6 +692,9 @@
                     <i class="fa-solid fa-vial"></i> 测试连接
                 </button>
                 <div class="flex gap-2">
+                    <button onclick="resetApiForm()" class="px-4 py-2 rounded-xl neu-btn text-xs font-bold text-gray-500">
+                        清空
+                    </button>
                     <button onclick="closeApiModal()" class="px-4 py-2 rounded-xl neu-btn text-xs font-bold text-gray-500">
                         取消
                     </button>
@@ -742,18 +761,14 @@
             aspectRatio: '16:9',
             isGenerating: false,
             uploadedImageDataUrl: null,
-            apiConfig: {
-                baseUrl: '',
-                apiKey: '',
-                customModel: '',
-                headers: ''
-            },
+            apiConfigs: [],
+            activeApiId: null,
             historyVault: [],
             currentActiveMedia: null
         };
 
         window.addEventListener('DOMContentLoaded', () => {
-            loadApiConfig();
+            loadApiConfigs();
             loadVaultHistory();
             renderVaultGrid();
         });
@@ -901,8 +916,8 @@
 
             if (appState.isGenerating) return;
 
-            if (!appState.apiConfig.baseUrl) {
-                showToast("⚠️ 请先在右上角配置 API 接口", "error");
+            if (!getActiveApiConfig() || !getActiveApiConfig().baseUrl) {
+                showToast("⚠️ 请先在右上角配置并选择生效的 API 接口", "error");
                 return;
             }
 
@@ -951,7 +966,7 @@
         }
 
         async function generateViaApi(prompt) {
-            const cfg = appState.apiConfig;
+            const cfg = getActiveApiConfig();
             const baseUrl = cfg.baseUrl.replace(/\/+$/, '');
             const isVideo = appState.subTab.includes('vid');
 
@@ -992,7 +1007,7 @@
         }
 
         async function generateVideoViaApi(prompt, baseUrl, headers, stageText, timeCounter, startTime) {
-            const model = appState.apiConfig.customModel || 'agnes-video-2.5-flash';
+            const model = (getActiveApiConfig() && getActiveApiConfig().customModel) || 'agnes-video-2.5-flash';
             const isImg = appState.subTab === 'img2vid';
             const body = {
                 model: model,
@@ -1055,7 +1070,7 @@
         }
 
         async function generateImageViaApi(prompt, baseUrl, headers, stageText, timeCounter, startTime) {
-            const model = 'agnes-image-2.5-flash';
+            const model = (getActiveApiConfig() && getActiveApiConfig().customModel) || 'agnes-image-2.5-flash';
             const isImg2Img = appState.subTab === 'img2img';
             const body = {
                 model: model,
@@ -1341,6 +1356,7 @@
         }
 
         function openApiModal() {
+            resetApiForm();
             const modal = document.getElementById('api-modal');
             modal.classList.remove('hidden');
             setTimeout(() => modal.classList.remove('opacity-0'), 10);
@@ -1391,33 +1407,190 @@
             }, 600);
         }
 
+        let editingApiId = null;
+
+        function getActiveApiConfig() {
+            return appState.apiConfigs.find(c => c.id === appState.activeApiId) || null;
+        }
+
+        function uid() {
+            return 'cfg_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        }
+
+        function persistApiConfigs() {
+            localStorage.setItem('lumen_api_configs', JSON.stringify({
+                configs: appState.apiConfigs,
+                activeApiId: appState.activeApiId
+            }));
+        }
+
+        function resetApiForm() {
+            editingApiId = null;
+            document.getElementById('api-name-input').value = '';
+            document.getElementById('api-url-input').value = '';
+            document.getElementById('api-key-input').value = '';
+            document.getElementById('api-model-input').value = '';
+            document.getElementById('api-headers-input').value = '';
+            document.getElementById('test-connection-status').classList.add('hidden');
+        }
+
+        function renderApiConfigList() {
+            const list = document.getElementById('api-config-list');
+            const count = document.getElementById('api-config-count');
+            list.innerHTML = '';
+            count.innerText = `${appState.apiConfigs.length} 个`;
+
+            if (appState.apiConfigs.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = "py-6 text-center text-[11px] text-gray-400 font-medium";
+                empty.textContent = "暂无保存的配置，填写下方表单后点「保存配置」即可添加";
+                list.appendChild(empty);
+                return;
+            }
+
+            appState.apiConfigs.forEach(cfg => {
+                const isActive = cfg.id === appState.activeApiId;
+                const card = document.createElement('div');
+                card.className = "neu-inset rounded-2xl p-3 flex items-center gap-2";
+
+                const info = document.createElement('div');
+                info.className = "flex-1 min-w-0";
+                const titleRow = document.createElement('div');
+                titleRow.className = "flex items-center gap-2";
+                const nameEl = document.createElement('span');
+                nameEl.className = "font-bold text-xs truncate";
+                nameEl.textContent = cfg.name || '未命名配置';
+                titleRow.appendChild(nameEl);
+                if (isActive) {
+                    const badge = document.createElement('span');
+                    badge.className = "text-[9px] px-1.5 py-0.5 rounded-full bg-brand-500 text-white font-bold";
+                    badge.textContent = "当前生效";
+                    titleRow.appendChild(badge);
+                }
+                const urlEl = document.createElement('div');
+                urlEl.className = "text-[10px] font-mono text-gray-400 truncate";
+                urlEl.textContent = cfg.baseUrl || '未填写地址';
+                info.appendChild(titleRow);
+                info.appendChild(urlEl);
+                card.appendChild(info);
+
+                if (!isActive) {
+                    const useBtn = document.createElement('button');
+                    useBtn.className = "px-2.5 py-1.5 rounded-xl neu-btn text-[10px] font-bold text-brand-500 shrink-0";
+                    useBtn.textContent = "使用";
+                    useBtn.onclick = () => setActiveApiConfig(cfg.id);
+                    card.appendChild(useBtn);
+                }
+
+                const editBtn = document.createElement('button');
+                editBtn.className = "w-7 h-7 rounded-xl neu-btn flex items-center justify-center text-gray-400 hover:text-brand-500 shrink-0";
+                editBtn.innerHTML = '<i class="fa-solid fa-pen"></i>';
+                editBtn.onclick = () => editApiConfig(cfg.id);
+                card.appendChild(editBtn);
+
+                const delBtn = document.createElement('button');
+                delBtn.className = "w-7 h-7 rounded-xl neu-btn flex items-center justify-center text-gray-400 hover:text-red-500 shrink-0";
+                delBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
+                delBtn.onclick = () => deleteApiConfig(cfg.id);
+                card.appendChild(delBtn);
+
+                list.appendChild(card);
+            });
+        }
+
         function saveApiConfiguration() {
+            const name = document.getElementById('api-name-input').value.trim();
             const baseUrl = document.getElementById('api-url-input').value.trim();
             const apiKey = document.getElementById('api-key-input').value.trim();
             const customModel = document.getElementById('api-model-input').value.trim();
             const headers = document.getElementById('api-headers-input').value.trim();
 
-            appState.apiConfig = { baseUrl, apiKey, customModel, headers };
-            localStorage.setItem('lumen_api_config', JSON.stringify(appState.apiConfig));
+            if (editingApiId) {
+                const cfg = appState.apiConfigs.find(c => c.id === editingApiId);
+                if (cfg) {
+                    cfg.name = name;
+                    cfg.baseUrl = baseUrl;
+                    cfg.apiKey = apiKey;
+                    cfg.customModel = customModel;
+                    cfg.headers = headers;
+                }
+            } else {
+                const cfg = { id: uid(), name: name, baseUrl, apiKey, customModel, headers };
+                appState.apiConfigs.push(cfg);
+                appState.activeApiId = cfg.id;
+            }
 
+            persistApiConfigs();
+            renderApiConfigList();
             refreshCustomModelOption();
+            resetApiForm();
             closeApiModal();
-            showToast(baseUrl ? "✅ 自定义 API 设置已保存" : "⚠️ 未填写 API 地址，生成将不可用");
+            showToast(baseUrl ? "✅ 自定义 API 配置已保存" : "⚠️ 未填写地址，生成将不可用");
         }
 
-        function loadApiConfig() {
-            const saved = localStorage.getItem('lumen_api_config');
-            if (saved) {
-                try {
-                    appState.apiConfig = JSON.parse(saved);
-                    document.getElementById('api-url-input').value = appState.apiConfig.baseUrl || '';
-                    document.getElementById('api-key-input').value = appState.apiConfig.apiKey || '';
-                    document.getElementById('api-model-input').value = appState.apiConfig.customModel || '';
-                    document.getElementById('api-headers-input').value = appState.apiConfig.headers || '';
+        function editApiConfig(id) {
+            const cfg = appState.apiConfigs.find(c => c.id === id);
+            if (!cfg) return;
+            editingApiId = id;
+            document.getElementById('api-name-input').value = cfg.name || '';
+            document.getElementById('api-url-input').value = cfg.baseUrl || '';
+            document.getElementById('api-key-input').value = cfg.apiKey || '';
+            document.getElementById('api-model-input').value = cfg.customModel || '';
+            document.getElementById('api-headers-input').value = cfg.headers || '';
+            showToast("✏️ 正在编辑：" + (cfg.name || '未命名配置') + "（改完点保存配置）");
+        }
 
-                    refreshCustomModelOption();
-                } catch(e) {}
+        function deleteApiConfig(id) {
+            appState.apiConfigs = appState.apiConfigs.filter(c => c.id !== id);
+            if (appState.activeApiId === id) {
+                appState.activeApiId = appState.apiConfigs.length ? appState.apiConfigs[0].id : null;
             }
+            persistApiConfigs();
+            renderApiConfigList();
+            refreshCustomModelOption();
+            showToast("🗑️ 已删除该 API 配置");
+        }
+
+        function setActiveApiConfig(id) {
+            appState.activeApiId = id;
+            persistApiConfigs();
+            renderApiConfigList();
+            refreshCustomModelOption();
+            const cfg = appState.apiConfigs.find(c => c.id === id);
+            showToast("✅ 已切换生效：" + (cfg ? (cfg.name || '未命名配置') : ''));
+        }
+
+        function loadApiConfigs() {
+            const raw = localStorage.getItem('lumen_api_configs');
+            if (!raw) {
+                const old = localStorage.getItem('lumen_api_config');
+                if (old) {
+                    try {
+                        const o = JSON.parse(old);
+                        const cfg = {
+                            id: uid(),
+                            name: '我的 API',
+                            baseUrl: o.baseUrl || '',
+                            apiKey: o.apiKey || '',
+                            customModel: o.customModel || '',
+                            headers: o.headers || ''
+                        };
+                        appState.apiConfigs = [cfg];
+                        appState.activeApiId = cfg.id;
+                        persistApiConfigs();
+                        localStorage.removeItem('lumen_api_config');
+                    } catch (e) {}
+                }
+            } else {
+                try {
+                    const data = JSON.parse(raw);
+                    appState.apiConfigs = Array.isArray(data.configs) ? data.configs : [];
+                    appState.activeApiId = data.activeApiId ||
+                        (appState.apiConfigs.length ? appState.apiConfigs[0].id : null);
+                } catch (e) {}
+            }
+            renderApiConfigList();
+            refreshCustomModelOption();
         }
 
         function refreshCustomModelOption() {
@@ -1425,7 +1598,8 @@
             const existing = document.getElementById('custom-models-optgroup');
             if (existing) existing.remove();
 
-            const customModel = appState.apiConfig.customModel;
+            const active = getActiveApiConfig();
+            const customModel = active && active.customModel;
             if (!customModel) return;
 
             const og = document.createElement('optgroup');
