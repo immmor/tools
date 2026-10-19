@@ -159,11 +159,13 @@
 
   // 把声纹相关 data-i18n 文案按当前语言应用到 DOM（在外部 i18n 之后执行，覆盖中文兜底）
   function applyVoiceI18n() {
+    const dict = VOICE_I18N[currentLang];
+    if (!dict) return;
     document.querySelectorAll('[data-i18n]').forEach(el => {
       const k = el.getAttribute('data-i18n');
-      const v = (VOICE_I18N[currentLang] && VOICE_I18N[currentLang][k])
-        || (typeof translations !== 'undefined' && currentLang && translations[currentLang] && translations[currentLang][k]);
-      if (v) el.textContent = v;
+      // 只处理声纹自己的文案：不要用主字典兜底，否则会把其它含 HTML 的文案（如游戏中心消耗金额）
+      // 用 textContent 覆盖成纯文本，破坏 innerHTML 渲染
+      if (k && dict[k]) el.textContent = dict[k];
     });
   }
 
