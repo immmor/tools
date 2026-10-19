@@ -322,7 +322,7 @@
                 <button class="tg-skip" id="tour-skip"></button>
                 <div class="tg-nav">
                     <button class="tg-btn" id="tour-prev"></button>
-                    <button class="tg-btn" id="tour-play" title="暂停 / 播放"></button>
+                    <button class="tg-btn" id="tour-play" title="暂停 / 播放" style="min-width:38px;display:inline-flex;align-items:center;justify-content:center;font-size:14px;"></button>
                     <button class="tg-btn primary" id="tour-next"></button>
                 </div>
             </div>`;
@@ -608,7 +608,7 @@
     }
     function pause() { playing = false; if (autoTimer) clearTimeout(autoTimer); autoTimer = null; updatePlayBtn(); }
     function resume() { playing = true; updatePlayBtn(); scheduleAuto(); }
-    function updatePlayBtn() { if (dom && dom.play) dom.play.textContent = playing ? '⏸' : '▶'; }
+    function updatePlayBtn() { if (dom && dom.play) dom.play.innerHTML = playing ? '<i class="fas fa-pause"></i>' : '<i class="fas fa-play"></i>'; }
 
     // ===== 启动 / 结束 =====
     function start() {
