@@ -295,6 +295,11 @@ async function ensureBonusColumn(DB) {
   try { await DB.prepare('ALTER TABLE user ADD COLUMN bonus_expire_annual TEXT').run(); } catch (e) {}
 }
 
+// 懒加 face_descriptor 列（幂等），用于存储人脸特征向量（128 维浮点数组 JSON）
+async function ensureFaceColumn(DB) {
+  try { await DB.prepare('ALTER TABLE user ADD COLUMN face_descriptor TEXT').run(); } catch (e) {}
+}
+
 // 懒加 p_token 列（幂等），生成新鉴权 token 并持久化，返回完整 token 串
 // token 格式：<随机UUID>.<过期时间戳(ms)>，有效期 1 天，每次登录刷新
 async function newPToken(DB, username) {
@@ -578,7 +583,7 @@ export default {
       // ========== 注册接口（核心）→ 用户名密码注册 ==========
       if (path === '/api/register' && request.method === 'POST') {
         const params = await request.json();
-        const { username, password, inviteCode, securityAnswer, source, priceParam, fromGoogle, fromGithub, web3Address, sliderVerified, textVerified, audioVerified } = params;
+        const { username, password, inviteCode, securityAnswer, source, priceParam, fromGoogle, fromGithub, web3Address, sliderVerified, textVerified, audioVerified, faceDescriptor } = params;
         
         // 统一用小写处理 web3 地址
         const web3AddressLower = web3Address ? web3Address.toLowerCase() : '';
@@ -770,6 +775,12 @@ export default {
           // 注册成功，清理验证标记
           await redis(env, 'DEL', `verify_passed_${username}`);
 
+          // 注册时可选录入人脸：校验通过后保存 128 维特征向量
+          if (faceDescriptor && Array.isArray(faceDescriptor) && faceDescriptor.length === 128 && faceDescriptor.every(n => typeof n === 'number')) {
+            await ensureFaceColumn(DB);
+            await DB.prepare('UPDATE user SET face_descriptor = ? WHERE username = ?').bind(JSON.stringify(faceDescriptor), username).run();
+          }
+
           const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
           // 注册验证方式标签（按语言），用于管理员通知区分来源
@@ -909,6 +920,58 @@ export default {
         } else {
           return resJson({ success: false, message: '用户名或密码错误' }, 401);
         }
+      }
+
+      // ========== 人脸识别登录接口 ==========
+      if (path === '/api/face-login' && request.method === 'POST') {
+        const params = await request.json();
+        const { descriptor } = params;
+        if (!Array.isArray(descriptor) || descriptor.length !== 128 || !descriptor.every(n => typeof n === 'number')) {
+          return resJson({ success: false, message: '人脸特征数据无效！' }, 400);
+        }
+        await ensureFaceColumn(DB);
+        const rows = await DB
+          .prepare("SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders, invite_code, invited_user, rebates, card_number, face_descriptor FROM user WHERE face_descriptor IS NOT NULL AND face_descriptor != ''")
+          .all();
+        let bestUser = null, bestDist = Infinity;
+        for (const u of (rows.results || [])) {
+          let stored;
+          try { stored = JSON.parse(u.face_descriptor); } catch (e) { continue; }
+          if (!Array.isArray(stored) || stored.length !== 128) continue;
+          let s = 0;
+          for (let i = 0; i < 128; i++) { const d = descriptor[i] - stored[i]; s += d * d; }
+          const dist = Math.sqrt(s);
+          if (dist < bestDist) { bestDist = dist; bestUser = u; }
+        }
+        if (!bestUser || bestDist >= 0.6) {
+          return resJson({ success: false, message: '未匹配到人脸，请先录入人脸或使用密码登录' }, 401);
+        }
+        const username = bestUser.username;
+        const pToken = await newPToken(DB, username);
+        const now = new Date(new Date().getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+        const loginInfoEntry = { type: 'face-login', time: now, ip: request.headers.get('CF-Connecting-IP') || 'unknown', location: [request.headers.get('CF-IPCountry'), request.headers.get('CF-IPRegion'), request.headers.get('CF-IPCity')].filter(Boolean).join(' ') || 'unknown', domain: request.url, device: request.headers.get('User-Agent') || 'unknown', acceptLanguage: request.headers.get('Accept-Language') || 'unknown', country: request.headers.get('CF-IPCountry') || 'unknown' };
+        const loginInfo = await DB.prepare('SELECT login_info FROM user WHERE username = ?').bind(username).first();
+        let updatedLoginInfo = JSON.stringify([loginInfoEntry]);
+        if (loginInfo && loginInfo.login_info) {
+          try { const existing = JSON.parse(loginInfo.login_info); existing.unshift(loginInfoEntry); updatedLoginInfo = JSON.stringify(existing.slice(0, 10)); } catch (e) {}
+        }
+        await DB.prepare('UPDATE user SET login_info = ? WHERE username = ?').bind(updatedLoginInfo, username).run();
+        const pricePlan = bestUser.price_plan ? JSON.parse(bestUser.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
+        const cardNumber = bestUser.card_number || await ensureCardNumber(DB, bestUser.rowid);
+        return resJson({ success: true, message: '刷脸登录成功！', userInfo: { id: bestUser.rowid, username: bestUser.username, balance: bestUser.balance, v_token: bestUser.v_token, p_token: pToken, v_expire_date: bestUser.v_expire_date, not_trusted: bestUser.not_trusted || '', vorders: bestUser.vorders, invite_code: bestUser.invite_code, invited_user: bestUser.invited_user, rebates: bestUser.rebates, card_number: cardNumber }, pricePlan });
+      }
+
+      // ========== 录入/更新人脸特征接口（需登录态：p_token 校验） ==========
+      if (path === '/api/save-face' && request.method === 'POST') {
+        const params = await request.json();
+        const { username, p_token, descriptor } = params;
+        if (!username || !p_token) return resJson({ success: false, message: '登录状态无效！' }, 401);
+        if (!Array.isArray(descriptor) || descriptor.length !== 128 || !descriptor.every(n => typeof n === 'number')) return resJson({ success: false, message: '人脸特征数据无效！' }, 400);
+        const rec = await DB.prepare('SELECT p_token FROM user WHERE username = ?').bind(username).first();
+        if (!rec || rec.p_token !== p_token) return resJson({ success: false, message: '登录态校验失败，请重新登录！' }, 401);
+        await ensureFaceColumn(DB);
+        await DB.prepare('UPDATE user SET face_descriptor = ? WHERE username = ?').bind(JSON.stringify(descriptor), username).run();
+        return resJson({ success: true, message: '人脸录入成功！' });
       }
 
       // ========== Web3钱包登录接口 ==========
