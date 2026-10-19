@@ -112,14 +112,23 @@
       input.style.paddingRight = '';
       if (btn.parentNode !== field || field.lastElementChild !== btn) field.appendChild(btn);
     } else {
-      // 登录：内部右侧（绝对定位在输入框上）
+      // 登录：内部右侧（绝对定位在输入框上）。
+      // 让相机“图标”与下方密码框锁图标到右边框的距离一致：
+      // 锁按钮 right-3(12px) 且图标紧贴右缘；相机按钮 36px 宽、图标 18px 居中(半边内边距 9px)，
+      // 故 right = 锁right - 9px ≈ 3px，使两个图标对齐。
+      const lockBtn = $('toggle-password');
+      let rightPx = 3;
+      if (lockBtn) {
+        const lr = parseFloat(getComputedStyle(lockBtn).right);
+        if (!isNaN(lr)) rightPx = lr - ((btn.offsetWidth || 36) - 18) / 2;
+      }
       btn.style.position = 'absolute';
-      btn.style.right = '8px';
+      btn.style.right = rightPx + 'px';
       btn.style.left = 'auto';
       btn.style.top = '50%';
       btn.style.transform = 'translateY(-50%)';
       btn.style.zIndex = '10';
-      input.style.paddingRight = '42px';
+      input.style.paddingRight = '48px';
       if (btn.parentNode !== field) field.appendChild(btn);
     }
   }
@@ -255,9 +264,11 @@
     const btn = $('email-ocr-btn');
     if (!btn || !menuEl) return;
     const r = btn.getBoundingClientRect();
-    menuEl.style.left = Math.max(8, r.left) + 'px';
-    menuEl.style.top = (r.bottom + 6) + 'px';
     menuEl.classList.remove('hidden');
+    // 菜单右边与相机按钮右边对齐（而不是左边）
+    const left = Math.max(8, r.right - menuEl.offsetWidth);
+    menuEl.style.left = left + 'px';
+    menuEl.style.top = (r.bottom + 6) + 'px';
   }
   function hideMenu() { if (menuEl) menuEl.classList.add('hidden'); }
 
