@@ -24,7 +24,7 @@
       voice_enroll_ok: '声纹录入成功！', voice_enroll_fail: '声纹录入失败',
       voice_need_login: '请先登录后再录入声纹', voice_error: '出错了，请重试',
       voice_mic_fail: '无法访问麦克风', voice_no_audio: '请先录音',
-      nav_enroll_voice: '录入声纹', voice_read_prompt: '请朗读', voice_rerecord: '重新录制', voice_rec: '录音中', voice_need_username: '请输入用户名'
+      nav_enroll_voice: '录入声纹', voice_read_prompt: '请朗读', voice_rerecord: '重新录制', voice_rec: '录音中', voice_need_username: '请输入用户名', voice_read_text: '今天天气真好。', voice_lang_hint: '请使用与录入时相同的语言朗读'
     },
     'en-US': {
       voice_login: 'Voice Login', voice_login_title: 'Voiceprint Login',
@@ -39,7 +39,7 @@
       voice_enroll_ok: 'Voiceprint enrolled!', voice_enroll_fail: 'Failed to enroll voiceprint',
       voice_need_login: 'Please sign in before enrolling your voiceprint', voice_error: 'Something went wrong, please retry',
       voice_mic_fail: 'Cannot access microphone', voice_no_audio: 'Please record first',
-      nav_enroll_voice: 'Enroll Voiceprint', voice_read_prompt: 'Please read', voice_rerecord: 'Record again', voice_rec: 'Recording', voice_need_username: 'Please enter your username'
+      nav_enroll_voice: 'Enroll Voiceprint', voice_read_prompt: 'Please read', voice_rerecord: 'Record again', voice_rec: 'Recording', voice_need_username: 'Please enter your username', voice_read_text: 'The weather is really nice today.', voice_lang_hint: 'Please read in the same language you used when enrolling'
     },
     'ja-JP': {
       voice_login: '声紋ログイン', voice_login_title: '声紋認証ログイン',
@@ -54,7 +54,7 @@
       voice_enroll_ok: '声紋の登録成功！', voice_enroll_fail: '声紋の登録に失敗',
       voice_need_login: '声紋登録前にログインしてください', voice_error: 'エラーが発生しました。再試行してください',
       voice_mic_fail: 'マイクにアクセスできません', voice_no_audio: 'まず録音してください',
-      nav_enroll_voice: '声紋を登録', voice_read_prompt: '以下を読んで', voice_rerecord: '再录制', voice_rec: '録音中', voice_need_username: 'ユーザー名を入力してください'
+      nav_enroll_voice: '声紋を登録', voice_read_prompt: '以下を読んで', voice_rerecord: '再录制', voice_rec: '録音中', voice_need_username: 'ユーザー名を入力してください', voice_read_text: '今日はいい天気ですね。', voice_lang_hint: '登録時と同じ言語で読み上げてください'
     },
     'ko-KR': {
       voice_login: '음성 로그인', voice_login_title: '음성 인증 로그인',
@@ -69,7 +69,7 @@
       voice_enroll_ok: '음성 등록 완료!', voice_enroll_fail: '음성 등록 실패',
       voice_need_login: '음성 등록 전에 먼저 로그인하세요', voice_error: '오류가 발생했습니다. 다시 시도하세요',
       voice_mic_fail: '마이크에 접근할 수 없습니다', voice_no_audio: '먼저 녹음하세요',
-      nav_enroll_voice: '음성 등록', voice_read_prompt: '다음을 읽으세요', voice_rerecord: '다시 녹음', voice_rec: '녹음 중', voice_need_username: '사용자 이름을 입력하세요'
+      nav_enroll_voice: '음성 등록', voice_read_prompt: '다음을 읽으세요', voice_rerecord: '다시 녹음', voice_rec: '녹음 중', voice_need_username: '사용자 이름을 입력하세요', voice_read_text: '오늘 날씨가 참 좋네요.', voice_lang_hint: '등록할 때와 같은 언어로 읽어 주세요'
     },
     'es-ES': {
       voice_login: 'Inicio de sesión por voz', voice_login_title: 'Inicio de sesión por voz',
@@ -84,7 +84,7 @@
       voice_enroll_ok: '¡Voz registrada!', voice_enroll_fail: 'Error al registrar la voz',
       voice_need_login: 'Inicia sesión antes de registrar tu voz', voice_error: 'Algo salió mal, inténtalo de nuevo',
       voice_mic_fail: 'No se puede acceder al micrófono', voice_no_audio: 'Graba primero',
-      nav_enroll_voice: 'Registrar voz', voice_read_prompt: 'Lea en voz alta', voice_rerecord: 'Grabar de nuevo', voice_rec: 'Grabando', voice_need_username: 'Introduce tu nombre de usuario'
+      nav_enroll_voice: 'Registrar voz', voice_read_prompt: 'Lea en voz alta', voice_rerecord: 'Grabar de nuevo', voice_rec: 'Grabando', voice_need_username: 'Introduce tu nombre de usuario', voice_read_text: 'Hoy hace muy buen tiempo.', voice_lang_hint: 'Lee en el mismo idioma que usaste al registrar tu voz'
     },
     'vi-VN': {
       voice_login: 'Đăng nhập bằng giọng nói', voice_login_title: 'Đăng nhập bằng giọng nói',
@@ -99,7 +99,7 @@
       voice_enroll_ok: 'Đã đăng ký giọng nói!', voice_enroll_fail: 'Đăng ký giọng nói thất bại',
       voice_need_login: 'Hãy đăng nhập trước khi đăng ký giọng nói', voice_error: 'Có lỗi, vui lòng thử lại',
       voice_mic_fail: 'Không thể truy cập mic', voice_no_audio: 'Hãy ghi âm trước',
-      nav_enroll_voice: 'Đăng ký giọng nói', voice_read_prompt: 'Hãy đọc', voice_rerecord: 'Ghi lại', voice_rec: 'Đang ghi', voice_need_username: 'Vui lòng nhập tên người dùng'
+      nav_enroll_voice: 'Đăng ký giọng nói', voice_read_prompt: 'Hãy đọc', voice_rerecord: 'Ghi lại', voice_rec: 'Đang ghi', voice_need_username: 'Vui lòng nhập tên người dùng', voice_read_text: 'Hôm nay thời tiết thật đẹp.', voice_lang_hint: 'Hãy đọc bằng ngôn ngữ bạn đã dùng khi đăng ký'
     },
     'ar-SA': {
       voice_login: 'تسجيل الدخول بالصوت', voice_login_title: 'تسجيل الدخول ببصمة الصوت',
@@ -114,7 +114,7 @@
       voice_enroll_ok: 'تم تسجيل بصمة الصوت!', voice_enroll_fail: 'فشل تسجيل بصمة الصوت',
       voice_need_login: 'سجّل الدخول قبل تسجيل بصمة صوتك', voice_error: 'حدث خطأ، حاول مرة أخرى',
       voice_mic_fail: 'تعذّر الوصول إلى الميكروفون', voice_no_audio: 'سجّل أولاً',
-      nav_enroll_voice: 'تسجيل بصمة الصوت', voice_read_prompt: 'اقرأ', voice_rerecord: 'إعادة التسجيل', voice_rec: 'جارٍ التسجيل', voice_need_username: 'الرجاء إدخال اسم المستخدم'
+      nav_enroll_voice: 'تسجيل بصمة الصوت', voice_read_prompt: 'اقرأ', voice_rerecord: 'إعادة التسجيل', voice_rec: 'جارٍ التسجيل', voice_need_username: 'الرجاء إدخال اسم المستخدم', voice_read_text: 'إن الجو جميل اليوم.', voice_lang_hint: 'يُرجى القراءة بنفس اللغة التي استخدمتها عند التسجيل'
     },
     'ru-RU': {
       voice_login: 'Вход по голосу', voice_login_title: 'Вход по голосовому отпечатку',
@@ -129,7 +129,7 @@
       voice_enroll_ok: 'Голос записан!', voice_enroll_fail: 'Не удалось записать голос',
       voice_need_login: 'Войдите в аккаунт перед записью голоса', voice_error: 'Произошла ошибка, попробуйте снова',
       voice_mic_fail: 'Нет доступа к микрофону', voice_no_audio: 'Сначала запишите звук',
-      nav_enroll_voice: 'Записать голос', voice_read_prompt: 'Прочитайте', voice_rerecord: 'Записать снова', voice_rec: 'Запись', voice_need_username: 'Введите имя пользователя'
+      nav_enroll_voice: 'Записать голос', voice_read_prompt: 'Прочитайте', voice_rerecord: 'Записать снова', voice_rec: 'Запись', voice_need_username: 'Введите имя пользователя', voice_read_text: 'Сегодня такая хорошая погода.', voice_lang_hint: 'Читайте на том же языке, что и при записи'
     }
   };
 
@@ -174,11 +174,12 @@
     if (el) el.textContent = msg;
   }
 
-  // 固定朗读文本：所有人、每次都读同一串「9 2 8 7」，注册与登录保持一致，声纹匹配更稳定
+  // 固定朗读文本（按界面语言本地化）：注册与登录都读同一句，保证声纹特征一致、匹配更稳定
+  const VOICE_READ_TEXT = '今天天气真好。';
   function generatePrompt() {
     const el = $('voice-prompt');
     if (!el) return;
-    el.textContent = t('voice_read_prompt', '请朗读') + '：9 2 8 7';
+    el.textContent = t('voice_read_prompt', '请朗读') + '：' + t('voice_read_text', VOICE_READ_TEXT);
   }
 
   function loadScript(src) {
