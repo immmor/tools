@@ -329,6 +329,9 @@
     if (backBtn) backBtn.style.display = (m === 'enroll') ? 'none' : '';
     const userInput = $('voice-username');
     if (userInput) userInput.style.display = (m === 'enroll') ? 'none' : '';
+    // “用相同语言朗读”的提醒只在登录模式显示（录入模式无需）
+    const langHint = $('voice-lang-hint');
+    if (langHint) langHint.style.display = (m === 'enroll') ? 'none' : '';
     // 复位状态
     recordedBlob = null;
     recording = false;
