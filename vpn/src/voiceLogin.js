@@ -432,9 +432,24 @@
     }
   }
 
+  // 检测浏览器是否支持语音录制：需 getUserMedia + MediaRecorder + 可用音频格式
+  function voiceSupported() {
+    try {
+      return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia &&
+                typeof MediaRecorder !== 'undefined' &&
+                (MediaRecorder.isTypeSupported('audio/webm') || MediaRecorder.isTypeSupported('audio/mp4')));
+    } catch (e) { return false; }
+  }
+
   function init() {
     applyVoiceI18n();
     document.addEventListener('languageChanged', applyVoiceI18n);
+    // 不支持语音录制的浏览器：隐藏声纹入口，避免用户点到失败
+    if (!voiceSupported()) {
+      const lb = $('voice-login-btn'); if (lb) lb.style.display = 'none';
+      const eb = $('enroll-voice-btn'); if (eb) eb.style.display = 'none';
+      return;
+    }
     $('voice-login-btn') && $('voice-login-btn').addEventListener('click', () => showVoicePanel('login'));
     $('enroll-voice-btn') && $('enroll-voice-btn').addEventListener('click', () => {
       const menu = $('dropdown-menu');
