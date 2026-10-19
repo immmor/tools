@@ -13,7 +13,13 @@
     // ===== 多语言 UI 文案 =====
     const UI = {
         'zh-CN': { name: '客服', skip: '跳过', prev: '上一步', next: '下一步', finish: '完成' },
-        'en-US': { name: 'Support', skip: 'Skip', prev: 'Back', next: 'Next', finish: 'Done' }
+        'en-US': { name: 'Support', skip: 'Skip', prev: 'Back', next: 'Next', finish: 'Done' },
+        'ja-JP': { name: 'サポート', skip: 'スキップ', prev: '前へ', next: '次へ', finish: '完了' },
+        'ko-KR': { name: '고객지원', skip: '건너뛰기', prev: '이전', next: '다음', finish: '완료' },
+        'es-ES': { name: 'Soporte', skip: 'Omitir', prev: 'Atrás', next: 'Siguiente', finish: 'Listo' },
+        'vi-VN': { name: 'Hỗ trợ', skip: 'Bỏ qua', prev: 'Trước', next: 'Tiếp', finish: 'Xong' },
+        'ar-SA': { name: 'الدعم', skip: 'تخطي', prev: 'السابق', next: 'التالي', finish: 'إنهاء' },
+        'ru-RU': { name: 'Поддержка', skip: 'Пропустить', prev: 'Назад', next: 'Далее', finish: 'Готово' }
     };
     const ui = (k) => (UI[window.currentLang] || UI['zh-CN'])[k] || UI['zh-CN'][k];
     const txt = (o) => (o && (o[window.currentLang] || o['zh-CN'])) || '';
@@ -29,112 +35,184 @@
     // 想慢慢看时可随时暂停。click / kind 含义见上方注释。
     const GROUPS = [
         {
-            title: { 'zh-CN': '顶部导航栏', 'en-US': 'Top Navigation' },
+            title: { 'zh-CN': '顶部导航栏', 'en-US': 'Top Navigation', 'ja-JP': 'トップナビゲーション', 'ko-KR': '상단 네비게이션', 'es-ES': 'Barra superior', 'vi-VN': 'Thanh điều hướng', 'ar-SA': 'شريط التنقل العلوي', 'ru-RU': 'Верхняя навигация' },
             steps: [
                 {
                     sel: '#tour-install', click: true, kind: 'link', noClick: true,
-                    t: { 'zh-CN': '安装教程入口', 'en-US': 'Install Guide' },
+                    t: { 'zh-CN': '安装教程入口', 'en-US': 'Install Guide', 'ja-JP': 'インストール手順', 'ko-KR': '설치 가이드', 'es-ES': 'Guía de instalación', 'vi-VN': 'Hướng dẫn cài đặt', 'ar-SA': 'دليل التثبيت', 'ru-RU': 'Установка' },
                     d: {
                         'zh-CN': '「安装」：点击跳转到客户端安装教程页，按平台（Windows / Android / iOS / macOS / Linux）下载并配置 PHANTOM 客户端。',
-                        'en-US': '"Install": jump to the client setup guide and download & configure PHANTOM for your platform (Windows / Android / iOS / macOS / Linux).'
+                        'en-US': '"Install": jump to the client setup guide and download & configure PHANTOM for your platform (Windows / Android / iOS / macOS / Linux).',
+                        'ja-JP': '「インストール」：クリックでクライアントのインストール手順ページへ移動し、プラットフォーム（Windows / Android / iOS / macOS / Linux）ごとに PHANTOM クライアントをダウンロードして設定します。',
+                        'ko-KR': '「설치」: 클릭하면 클라이언트 설치 가이드로 이동하며, 플랫폼별(Windows / Android / iOS / macOS / Linux)로 PHANTOM 클라이언트를 다운로드·설정합니다.',
+                        'es-ES': '«Instalar»: abre la guía de configuración del cliente y descarga y configura PHANTOM para tu plataforma (Windows / Android / iOS / macOS / Linux).',
+                        'vi-VN': '「Cài đặt」: mở trang hướng dẫn cài đặt client, tải và cấu hình PHANTOM cho nền tảng của bạn (Windows / Android / iOS / macOS / Linux).',
+                        'ar-SA': '«التثبيت»: ينقلك إلى دليل إعداد العميل لتنزيل وتهيئة PHANTOM لمنصتك (Windows / Android / iOS / macOS / Linux).',
+                        'ru-RU': '«Установка»: откройте руководство по настройке клиента и скачайте/настройте PHANTOM для вашей платформы (Windows / Android / iOS / macOS / Linux).'
                     }
                 },
                 {
                     sel: '#lang-btn', click: true, kind: 'dropdown',
-                    t: { 'zh-CN': '语言切换', 'en-US': 'Language' },
+                    t: { 'zh-CN': '语言切换', 'en-US': 'Language', 'ja-JP': '言語切替', 'ko-KR': '언어 전환', 'es-ES': 'Idioma', 'vi-VN': 'Ngôn ngữ', 'ar-SA': 'اللغة', 'ru-RU': 'Язык' },
                     d: {
                         'zh-CN': '「语言」：点击展开语言菜单，支持简体中文、English、한국어、العربية、Русский、Español、日本語、Tiếng Việt 一键切换。',
-                        'en-US': '"Language": open the menu to switch between 简体中文, English, 한국어, العربية, Русский, Español, 日本語, Tiếng Việt.'
+                        'en-US': '"Language": open the menu to switch between 简体中文, English, 한국어, العربية, Русский, Español, 日本語, Tiếng Việt.',
+                        'ja-JP': '「言語」：クリックで言語メニューを開き、簡体中文・English・한국어・العربية・Русский・Español・日本語・Tiếng Việt をワンタップで切り替えられます。',
+                        'ko-KR': '「언어」: 클릭하면 언어 메뉴가 열리며, 简体中文·English·한국어·العربية·Русский·Español·日本語·Tiếng Việt 중에서 한 번에 전환할 수 있습니다.',
+                        'es-ES': '«Idioma»: abre el menú para cambiar entre 简体中文, English, 한국어, العربية, Русский, Español, 日本語, Tiếng Việt.',
+                        'vi-VN': '「Ngôn ngữ」: mở menu để chuyển đổi giữa 简体中文, English, 한국어, العربية, Русский, Español, 日本語, Tiếng Việt.',
+                        'ar-SA': '«اللغة»: افتح القائمة للتبديل بين 简体中文 وEnglish و한국어 والعربية وРусский وEspañol و日本語 وTiếng Việt.',
+                        'ru-RU': '«Язык»: откройте меню для переключения между 简体中文, English, 한국어, العربية, Русский, Español, 日本語, Tiếng Việt.'
                     }
                 },
                 {
                     sel: '#theme-toggle-btn', click: true, kind: 'toggle',
-                    t: { 'zh-CN': '主题切换', 'en-US': 'Theme' },
+                    t: { 'zh-CN': '主题切换', 'en-US': 'Theme', 'ja-JP': 'テーマ切替', 'ko-KR': '테마 전환', 'es-ES': 'Tema', 'vi-VN': 'Giao diện', 'ar-SA': 'السمة', 'ru-RU': 'Тема' },
                     d: {
                         'zh-CN': '「主题」：点击在深色 / 浅色界面之间切换，跟随你的使用习惯与时段。',
-                        'en-US': '"Theme": toggle between dark and light UI to match your preference and time of day.'
+                        'en-US': '"Theme": toggle between dark and light UI to match your preference and time of day.',
+                        'ja-JP': '「テーマ」：クリックでダーク / ライトの UI を切り替え、使いやすい方や時間帯に合わせられます。',
+                        'ko-KR': '「테마」: 클릭하면 다크/라이트 UI를 전환하여 습관과 시간대에 맞출 수 있습니다.',
+                        'es-ES': '«Tema»: alterna entre la interfaz oscura y clara según tu preferencia y la hora del día.',
+                        'vi-VN': '「Giao diện」: nhấn để chuyển giữa giao diện tối / sáng theo sở thích và thời điểm.',
+                        'ar-SA': '«السمة»: بدّل بين الواجهة الداكنة والفاتحة حسب تفضيلك ووقت اليوم.',
+                        'ru-RU': '«Тема»: переключайтесь между тёмным и светлым интерфейсом под ваши привычки и время суток.'
                     }
                 },
                 {
                     sel: '#notification-btn', click: true, kind: 'dropdown',
-                    t: { 'zh-CN': '系统通知', 'en-US': 'Notifications' },
+                    t: { 'zh-CN': '系统通知', 'en-US': 'Notifications', 'ja-JP': '通知', 'ko-KR': '알림', 'es-ES': 'Notificaciones', 'vi-VN': 'Thông báo', 'ar-SA': 'الإشعارات', 'ru-RU': 'Уведомления' },
                     d: {
                         'zh-CN': '「通知」：点击查看活动、福利与系统消息；未读时按钮上会有红点提示，点开后底部还能「联系客服」。',
-                        'en-US': '"Notifications": view campaigns, perks and system messages; a red dot marks unread items, and you can also "Contact support" from there.'
+                        'en-US': '"Notifications": view campaigns, perks and system messages; a red dot marks unread items, and you can also "Contact support" from there.',
+                        'ja-JP': '「通知」：クリックでキャンペーン・特典・システムメッセージを確認できます。未読があるとボタンに赤い点が表示され、開くと下部から「サポートへ連絡」もできます。',
+                        'ko-KR': '「알림」: 클릭하면 이벤트·혜택·시스템 메시지를 볼 수 있습니다. 읽지 않으면 버튼에 빨간 점이 표시되고, 열면 하단에서 「고객센터 문의」도 가능합니다.',
+                        'es-ES': '«Notificaciones»: consulta campañas, beneficios y mensajes del sistema; un punto rojo marca los no leídos y también puedes «Contactar con soporte» desde ahí.',
+                        'vi-VN': '「Thông báo」: xem chiến dịch, ưu đãi và tin nhắn hệ thống; chấm đỏ báo chưa đọc, và bạn có thể «Liên hệ hỗ trợ」 từ đây.',
+                        'ar-SA': '«الإشعارات»: اعرض الحملات والمزايا ورسائل النظام؛ تشير نقطة حمراء إلى غير المقروء، ويمكنك أيضاً «التواصل مع الدعم» من هناك.',
+                        'ru-RU': '«Уведомления»: просматривайте акции, бонусы и системные сообщения; красная точка отмечает непрочитанное, а также можно «Связаться с поддержкой» оттуда.'
                     }
                 }
             ]
         },
         {
-            title: { 'zh-CN': '节点套餐', 'en-US': 'Node Plans' },
+            title: { 'zh-CN': '节点套餐', 'en-US': 'Node Plans', 'ja-JP': 'ノードプラン', 'ko-KR': '노드 요금제', 'es-ES': 'Planes de nodos', 'vi-VN': 'Gói nút', 'ar-SA': 'باقات العقد', 'ru-RU': 'Тарифы узлов' },
             steps: [
                 {
                     sel: '#tour-free', click: true, kind: 'modal',
-                    t: { 'zh-CN': '免费节点包', 'en-US': 'Free Node Pack' },
+                    t: { 'zh-CN': '免费节点包', 'en-US': 'Free Node Pack', 'ja-JP': '無料ノードパック', 'ko-KR': '무료 노드 팩', 'es-ES': 'Paquete gratis', 'vi-VN': 'Gói nút miễn phí', 'ar-SA': 'باقة مجانية', 'ru-RU': 'Бесплатный пакет' },
                     d: {
                         'zh-CN': '免费节点包：零门槛体验，点击即可领取免费节点，先试用再决定是否升级。',
-                        'en-US': 'Free node pack: try the service for free with zero cost before upgrading.'
+                        'en-US': 'Free node pack: try the service for free with zero cost before upgrading.',
+                        'ja-JP': '無料ノードパック：手軽に体験でき、クリックするだけで無料ノードを受け取れます。まず試してからアップグレードするか決められます。',
+                        'ko-KR': '무료 노드 팩: 진입 장벽 없이 체험 가능하며, 클릭만으로 무료 노드를 받아 먼저 써보고 업그레이드를 결정할 수 있습니다.',
+                        'es-ES': 'Paquete de nodos gratis: prueba el servicio sin costo antes de actualizar.',
+                        'vi-VN': 'Gói nút miễn phí: trải nghiệm không rào cản, nhấn để nhận node miễn phí, dùng thử trước khi nâng cấp.',
+                        'ar-SA': 'باقة العقد المجانية: جرّب الخدمة مجاناً دون أي تكلفة قبل الترقية.',
+                        'ru-RU': 'Бесплатный пакет узлов: попробуйте сервис бесплатно, прежде чем обновлять.'
                     }
                 },
                 {
                     sel: '#tour-monthly', click: true, kind: 'modal',
-                    t: { 'zh-CN': '月付节点包', 'en-US': 'Monthly Plan' },
+                    t: { 'zh-CN': '月付节点包', 'en-US': 'Monthly Plan', 'ja-JP': '月額ノードパック', 'ko-KR': '월간 노드 팩', 'es-ES': 'Plan mensual', 'vi-VN': 'Gói tháng', 'ar-SA': 'الباقة الشهرية', 'ru-RU': 'Месячный план' },
                     d: {
                         'zh-CN': '月付节点包：按月付费，限时折扣中，适合短期或初次体验的用户，随时可续费。',
-                        'en-US': 'Monthly plan: pay monthly with a limited-time discount — ideal for short-term or first-time users.'
+                        'en-US': 'Monthly plan: pay monthly with a limited-time discount — ideal for short-term or first-time users.',
+                        'ja-JP': '月額ノードパック：月単位で支払い、期間限定の割引中。短期利用や初めての方に最適で、いつでも更新可能です。',
+                        'ko-KR': '월간 노드 팩: 매월 결제하며 한정 기간 할인 중이라 단기나 처음 사용하는 분께 적합하고 언제든 연장할 수 있습니다.',
+                        'es-ES': 'Plan mensual: paga mes a mes con un descuento por tiempo limitado — ideal para usuarios ocasionales o primerizos.',
+                        'vi-VN': 'Gói tháng: trả theo tháng với ưu đãi có hạn — phù hợp cho người dùng ngắn hạn hoặc mới bắt đầu.',
+                        'ar-SA': 'الباقة الشهرية: ادفع شهرياً بخصم محدود الوقت — مثالية للمستخدمين قصيري الأمد أو الجدد.',
+                        'ru-RU': 'Месячный план: платите помесячно со скидкой ограниченное время — идеально для краткосрочных или новых пользователей.'
                     }
                 },
                 {
                     sel: '#tour-annual', click: true, kind: 'modal',
-                    t: { 'zh-CN': '年付节点包', 'en-US': 'Yearly Plan' },
+                    t: { 'zh-CN': '年付节点包', 'en-US': 'Yearly Plan', 'ja-JP': '年額ノードパック', 'ko-KR': '연간 노드 팩', 'es-ES': 'Plan anual', 'vi-VN': 'Gói năm', 'ar-SA': 'الباقة السنوية', 'ru-RU': 'Годовой план' },
                     d: {
                         'zh-CN': '年付节点包：一次性购买一年，立省更多，长期使用的性价比之选。',
-                        'en-US': 'Yearly plan: one purchase covers a full year with the best savings — great for long-term use.'
+                        'en-US': 'Yearly plan: one purchase covers a full year with the best savings — great for long-term use.',
+                        'ja-JP': '年額ノードパック：1年分をまとめて購入でお得になり、長期利用におすすめです。',
+                        'ko-KR': '연간 노드 팩: 1년치를 한 번에 구매하면 더 절약되며 장기 이용에 가장 효율적입니다.',
+                        'es-ES': 'Plan anual: una sola compra cubre todo un año con el mayor ahorro — genial para uso a largo plazo.',
+                        'vi-VN': 'Gói năm: một lần thanh toán cho cả năm với tiết kiệm lớn nhất — lựa chọn lý tưởng cho dùng lâu dài.',
+                        'ar-SA': 'الباقة السنوية: شراء واحد يغطي سنة كاملة بأفضل توفير — ممتاز للاستخدام الطويل.',
+                        'ru-RU': 'Годовой план: одна покупка на целый год с максимальной экономией — отлично для долгосрочного использования.'
                     }
                 },
                 {
                     sel: '#tour-custom', click: true, kind: 'modal',
-                    t: { 'zh-CN': '定制节点', 'en-US': 'Custom Nodes' },
+                    t: { 'zh-CN': '定制节点', 'en-US': 'Custom Nodes', 'ja-JP': 'カスタムノード', 'ko-KR': '맞춤 노드', 'es-ES': 'Nodos personalizados', 'vi-VN': 'Nút tùy chỉnh', 'ar-SA': 'العقد المخصصة', 'ru-RU': 'Пользовательские узлы' },
                     d: {
                         'zh-CN': '定制节点：若对节点有专属需求（特定地区、独享带宽等），可联系我们定制方案，价格详谈。',
-                        'en-US': 'Custom nodes: need a dedicated region or bandwidth? Contact us for a tailored plan.'
+                        'en-US': 'Custom nodes: need a dedicated region or bandwidth? Contact us for a tailored plan.',
+                        'ja-JP': 'カスタムノード：特定の地域や専有帯域など専用のご要件がある場合は、お問い合わせください。価格はご相談です。',
+                        'ko-KR': '맞춤 노드: 특정 지역이나 전용 대역폭 등 전용 요구가 있으면 맞춤 플랜을 상담할 수 있습니다.',
+                        'es-ES': 'Nodos personalizados: ¿necesitas una región o ancho de banda dedicado? Contáctanos para un plan a medida.',
+                        'vi-VN': 'Nút tùy chỉnh: cần khu vực riêng hoặc băng thông riêng? Liên hệ để có gói riêng.',
+                        'ar-SA': 'العقد المخصصة: تحتاج منطقة أو سرعة مخصصة؟ تواصل معنا لخطة مخصصة.',
+                        'ru-RU': 'Пользовательские узлы: нужен выделенный регион или канал? Свяжитесь с нами для индивидуального плана.'
                     }
                 }
             ]
         },
         {
-            title: { 'zh-CN': '更多亮点', 'en-US': 'More Highlights' },
+            title: { 'zh-CN': '更多亮点', 'en-US': 'More Highlights', 'ja-JP': 'その他の特徴', 'ko-KR': '더 많은 특징', 'es-ES': 'Más destacados', 'vi-VN': 'Điểm nổi bật', 'ar-SA': 'المزيد من المميزات', 'ru-RU': 'Другие преимущества' },
             steps: [
                 {
                     sel: '#game-section', click: false,
-                    t: { 'zh-CN': '游戏中心', 'en-US': 'Game Center' },
+                    t: { 'zh-CN': '游戏中心', 'en-US': 'Game Center', 'ja-JP': 'ゲームセンター', 'ko-KR': '게임 센터', 'es-ES': 'Centro de juegos', 'vi-VN': 'Trung tâm game', 'ar-SA': 'مركز الألعاب', 'ru-RU': 'Игровой центр' },
                     d: {
                         'zh-CN': '游戏中心：每日签到、幸运转盘、老虎机等小游戏，玩游戏赢取福利与节点时长，边玩边省。',
-                        'en-US': 'Game center: daily check-in, lucky wheel, slots and more — play to earn perks and node time.'
+                        'en-US': 'Game center: daily check-in, lucky wheel, slots and more — play to earn perks and node time.',
+                        'ja-JP': 'ゲームセンター：毎日の签到・幸運のルーレット・スロットなどのミニゲームで、特典やノード時間を獲得できます。遊びながら節約。',
+                        'ko-KR': '게임 센터: 매일 출석, 행운의 룰렛, 슬롯 등 미니게임으로 혜택과 노드 시간을 얻고 즐기며 아낄 수 있습니다.',
+                        'es-ES': 'Centro de juegos: check-in diario, ruleta de la suerte, tragamonedas y más — juega para ganar beneficios y tiempo de nodo.',
+                        'vi-VN': 'Trung tâm game: điểm danh hàng ngày, vòng quay may mắn, slot và hơn thế nữa — chơi để nhận ưu đãi và thời gian node.',
+                        'ar-SA': 'مركز الألعاب: تسجيل يومي وحظ وجهاز وسائط أكثر — العب لربح المزايا ووقت العقد.',
+                        'ru-RU': 'Игровой центр: ежедневная отметка, колесо фортуны, слоты и другое — играйте, чтобы получать бонусы и время узлов.'
                     }
                 },
                 {
                     sel: '#tour-nodes', click: false,
-                    t: { 'zh-CN': '热门节点分布', 'en-US': 'Popular Nodes' },
+                    t: { 'zh-CN': '热门节点分布', 'en-US': 'Popular Nodes', 'ja-JP': '人気ノード', 'ko-KR': '인기 노드', 'es-ES': 'Nodos populares', 'vi-VN': 'Nút phổ biến', 'ar-SA': 'العقد الشائعة', 'ru-RU': 'Популярные узлы' },
                     d: {
                         'zh-CN': '热门节点：覆盖美国、日本、新加坡等 10+ 国家和地区，高速稳定，就近选择延迟更低。',
-                        'en-US': 'Popular nodes: 10+ countries & regions including US, Japan, Singapore — pick the nearest for lower latency.'
+                        'en-US': 'Popular nodes: 10+ countries & regions including US, Japan, Singapore — pick the nearest for lower latency.',
+                        'ja-JP': '人気ノード：米国・日本・シンガポールなど 10 以上の国と地域をカバー。高速で安定、近いところを選ぶと遅延が低くなります。',
+                        'ko-KR': '인기 노드: 미국·일본·싱가포르 등 10개 이상 국가·지역을 커버하며 안정적이고 고속입니다. 가까운 곳을 골라 지연을 줄이세요.',
+                        'es-ES': 'Nodos populares: 10+ países y regiones incluyendo EE. UU., Japón, Singapur — elige el más cercano para menor latencia.',
+                        'vi-VN': 'Nút phổ biến: hơn 10 quốc gia/vùng lãnh thổ gồm Mỹ, Nhật, Singapore — chọn gần nhất để độ trễ thấp.',
+                        'ar-SA': 'العقد الشائعة: 10+ دول ومناطق منها أمريكا واليابان وسنغافورة — اختر الأقرب لزمن وصول أقل.',
+                        'ru-RU': 'Популярные узлы: 10+ стран и регионов, включая США, Японию, Сингапур — выбирайте ближайший для меньшей задержки.'
                     }
                 },
                 {
                     sel: '#tour-compare', click: false,
-                    t: { 'zh-CN': '为什么选择 PHANTOM', 'en-US': 'Why PHANTOM' },
+                    t: { 'zh-CN': '为什么选择 PHANTOM', 'en-US': 'Why PHANTOM', 'ja-JP': 'PHANTOM を選ぶ理由', 'ko-KR': 'PHANTOM을 선택하는 이유', 'es-ES': 'Por qué PHANTOM', 'vi-VN': 'Tại sao chọn PHANTOM', 'ar-SA': 'لماذا PHANTOM', 'ru-RU': 'Почему PHANTOM' },
                     d: {
                         'zh-CN': '为什么选择 PHANTOM：这里对比我们的核心优势——十年老品牌、隐私保护、多协议支持、稳定高速。',
-                        'en-US': 'Why PHANTOM: our core advantages — 10-year brand, privacy protection, multi-protocol support, stable & fast.'
+                        'en-US': 'Why PHANTOM: our core advantages — 10-year brand, privacy protection, multi-protocol support, stable & fast.',
+                        'ja-JP': 'PHANTOM を選ぶ理由：10年の老舗ブランド、プライバシー保護、マルチプロトコル対応、安定かつ高速という強みを比較しています。',
+                        'ko-KR': 'PHANTOM을 선택하는 이유: 10년 브랜드, 개인정보 보호, 멀티 프로토콜 지원, 안정적·고속이라는 핵심 장점을 비교합니다.',
+                        'es-ES': 'Por qué PHANTOM: nuestras ventajas clave — marca de 10 años, protección de privacidad, soporte multi-protocolo, estable y rápido.',
+                        'vi-VN': 'Tại sao chọn PHANTOM: ưu điểm cốt lõi — thương hiệu 10 năm, bảo vệ riêng tư, đa giao thức, ổn định và nhanh.',
+                        'ar-SA': 'لماذا PHANTOM: مزايانا الأساسية — علامة تجارية من 10 سنوات، حماية الخصوصية، دعم متعدد البروتوكولات، مستقر وسريع.',
+                        'ru-RU': 'Почему PHANTOM: наши ключевые преимущества — бренд с 10-летней историей, защита приватности, поддержка нескольких протоколов, стабильность и скорость.'
                     }
                 },
                 {
                     sel: '#tour-testimonials', click: false,
-                    t: { 'zh-CN': '客户评价', 'en-US': 'Testimonials' },
+                    t: { 'zh-CN': '客户评价', 'en-US': 'Testimonials', 'ja-JP': 'お客様の声', 'ko-KR': '고객 후기', 'es-ES': 'Testimonios', 'vi-VN': 'Đánh giá khách hàng', 'ar-SA': 'آراء العملاء', 'ru-RU': 'Отзывы клиентов' },
                     d: {
                         'zh-CN': '客户评价：来自全球用户的真实反馈，看看大家为什么选择并推荐 PHANTOM。',
-                        'en-US': 'Testimonials: real feedback from users worldwide on why they choose and recommend PHANTOM.'
+                        'en-US': 'Testimonials: real feedback from users worldwide on why they choose and recommend PHANTOM.',
+                        'ja-JP': 'お客様の声：世界中のユーザーからのリアルなフィードバック。皆が PHANTOM を選び、推荐する理由をご覧ください。',
+                        'ko-KR': '고객 후기: 전 세계 사용자의 실제 피드백으로, 모두가 PHANTOM을 선택하고 추천하는 이유를 확인하세요.',
+                        'es-ES': 'Testimonios: opiniones reales de usuarios de todo el mundo sobre por qué eligen y recomiendan PHANTOM.',
+                        'vi-VN': 'Đánh giá khách hàng: phản hồi thực từ người dùng toàn cầu về lý do họ chọn và giới thiệu PHANTOM.',
+                        'ar-SA': 'آراء العملاء: تعليقات حقيقية من مستخدمين حول العالم عن سبب اختيارهم لـ PHANTOM وتوصيتهم به.',
+                        'ru-RU': 'Отзывы клиентов: реальная обратная связь от пользователей по всему миру о том, почему они выбирают и рекомендуют PHANTOM.'
                     }
                 }
             ]
