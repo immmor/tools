@@ -23,7 +23,7 @@
       face_enroll_title: '录入人脸', face_enroll_btn: '录入人脸',
       face_enroll_ok: '录入成功！', face_enroll_fail: '录入失败',
       face_need_login: '请先登录后再录入人脸', face_error: '出错了，请重试',
-      nav_enroll_face: '录入人脸'
+      nav_enroll_face: '录入人脸', face_need_username: '请输入用户名'
     },
     'en-US': {
       face_login: 'Face Login', face_login_title: 'Face Login',
@@ -36,7 +36,7 @@
       face_enroll_title: 'Enroll Face', face_enroll_btn: 'Enroll Face',
       face_enroll_ok: 'Face enrolled!', face_enroll_fail: 'Failed to enroll',
       face_need_login: 'Please sign in before enrolling your face', face_error: 'Something went wrong, please retry',
-      nav_enroll_face: 'Enroll Face'
+      nav_enroll_face: 'Enroll Face', face_need_username: 'Please enter your username'
     },
     'ja-JP': {
       face_login: '顔認証ログイン', face_login_title: '顔認証ログイン',
@@ -49,7 +49,7 @@
       face_enroll_title: '顔を登録', face_enroll_btn: '顔を登録',
       face_enroll_ok: '顔の登録成功！', face_enroll_fail: '登録に失敗',
       face_need_login: '顔を登録する前にログインしてください', face_error: 'エラーが発生しました。再試行してください',
-      nav_enroll_face: '顔を登録'
+      nav_enroll_face: '顔を登録', face_need_username: 'ユーザー名を入力してください'
     },
     'ko-KR': {
       face_login: '얼굴 인증 로그인', face_login_title: '얼굴 인증 로그인',
@@ -62,7 +62,7 @@
       face_enroll_title: '얼굴 등록', face_enroll_btn: '얼굴 등록',
       face_enroll_ok: '얼굴 등록 완료!', face_enroll_fail: '등록 실패',
       face_need_login: '얼굴 등록 전에 먼저 로그인하세요', face_error: '오류가 발생했습니다. 다시 시도하세요',
-      nav_enroll_face: '얼굴 등록'
+      nav_enroll_face: '얼굴 등록', face_need_username: '사용자 이름을 입력하세요'
     },
     'es-ES': {
       face_login: 'Inicio de sesión facial', face_login_title: 'Inicio de sesión facial',
@@ -75,7 +75,7 @@
       face_enroll_title: 'Registrar rostro', face_enroll_btn: 'Registrar rostro',
       face_enroll_ok: '¡Rostro registrado!', face_enroll_fail: 'Error al registrar',
       face_need_login: 'Inicia sesión antes de registrar tu rostro', face_error: 'Algo salió mal, inténtalo de nuevo',
-      nav_enroll_face: 'Registrar rostro'
+      nav_enroll_face: 'Registrar rostro', face_need_username: 'Introduce tu nombre de usuario'
     },
     'vi-VN': {
       face_login: 'Đăng nhập bằng khuôn mặt', face_login_title: 'Đăng nhập bằng khuôn mặt',
@@ -88,7 +88,7 @@
       face_enroll_title: 'Đăng ký khuôn mặt', face_enroll_btn: 'Đăng ký khuôn mặt',
       face_enroll_ok: 'Đã đăng ký khuôn mặt!', face_enroll_fail: 'Đăng ký thất bại',
       face_need_login: 'Hãy đăng nhập trước khi đăng ký khuôn mặt', face_error: 'Có lỗi, vui lòng thử lại',
-      nav_enroll_face: 'Đăng ký khuôn mặt'
+      nav_enroll_face: 'Đăng ký khuôn mặt', face_need_username: 'Vui lòng nhập tên người dùng'
     },
     'ar-SA': {
       face_login: 'تسجيل الدخول بالوجه', face_login_title: 'تسجيل الدخول بالوجه',
@@ -101,7 +101,7 @@
       face_enroll_title: 'تسجيل الوجه', face_enroll_btn: 'تسجيل الوجه',
       face_enroll_ok: 'تم تسجيل الوجه!', face_enroll_fail: 'فشل التسجيل',
       face_need_login: 'سجّل الدخول قبل تسجيل وجهك', face_error: 'حدث خطأ، حاول مرة أخرى',
-      nav_enroll_face: 'تسجيل الوجه'
+      nav_enroll_face: 'تسجيل الوجه', face_need_username: 'الرجاء إدخال اسم المستخدم'
     },
     'ru-RU': {
       face_login: 'Вход по лицу', face_login_title: 'Вход по лицу',
@@ -114,7 +114,7 @@
       face_enroll_title: 'Записать лицо', face_enroll_btn: 'Записать лицо',
       face_enroll_ok: 'Лицо записано!', face_enroll_fail: 'Не удалось записать',
       face_need_login: 'Войдите в аккаунт перед записью лица', face_error: 'Произошла ошибка, попробуйте снова',
-      nav_enroll_face: 'Записать лицо'
+      nav_enroll_face: 'Записать лицо', face_need_username: 'Введите имя пользователя'
     }
   };
 
@@ -210,7 +210,11 @@
       .detectSingleFace(videoEl, new faceapi.TinyFaceDetectorOptions())
       .withFaceLandmarks()
       .withFaceDescriptor();
-    if (!detection) throw new Error(t('face_no_face', '未检测到人脸，请正对摄像头、保证光线充足'));
+    if (!detection) {
+      const e = new Error(t('face_no_face', '未检测到人脸，请正对摄像头、保证光线充足'));
+      e.faceKey = 'face_no_face';
+      throw e;
+    }
     return Array.from(detection.descriptor);
   }
 
@@ -259,7 +263,13 @@
       if (titleEl) titleEl.textContent = t('face_login_title', '人脸识别登录');
       if (submitBtn) submitBtn.textContent = t('face_recognize', '刷脸登录');
     }
+    // 录入模式（已登录，从账户菜单进入）不显示“返回账号登录”和用户名输入
+    const backBtn = $('face-back-btn');
+    if (backBtn) backBtn.style.display = (m === 'enroll') ? 'none' : '';
+    const userInput = $('face-username');
+    if (userInput) userInput.style.display = (m === 'enroll') ? 'none' : '';
     setStatus(t('face_status_ready', '点击“开启摄像头”开始'));
+    { const s = $('face-status'); if (s) s.style.color = ''; }
     if (submitBtn) { submitBtn.disabled = true; submitBtn.classList.add('opacity-50', 'cursor-not-allowed'); }
   }
 
@@ -280,6 +290,7 @@
   async function onStart() {
     const status = $('face-status');
     const submitBtn = $('face-submit-btn');
+    if (status) status.style.color = '';
     try {
       if (status) status.textContent = t('face_loading_model', '正在加载人脸识别模型…');
       await ensureFaceApi();
@@ -287,8 +298,9 @@
       if (status) status.textContent = t('face_camera_ready', '摄像头已开启，点击“刷脸登录”');
       if (submitBtn) { submitBtn.disabled = false; submitBtn.classList.remove('opacity-50', 'cursor-not-allowed'); }
     } catch (err) {
-      if (status) status.textContent = (err && err.message) || t('face_camera_fail', '摄像头启动失败');
-      if (submitBtn) submitBtn.disabled = false;
+    const msg = (err && err.faceKey) ? t(err.faceKey) : t('face_camera_fail', '摄像头启动失败');
+    if (status) { status.textContent = msg; status.style.color = 'var(--neon-red)'; }
+    if (submitBtn) submitBtn.disabled = false;
     }
   }
 
@@ -296,29 +308,43 @@
     const status = $('face-status');
     const submitBtn = $('face-submit-btn');
     if (submitBtn) submitBtn.disabled = true;
+    if (status) status.style.color = '';
     try {
+      if (mode === 'login') {
+        const uname = (($('face-username') && $('face-username').value) || '').trim();
+        if (!uname) {
+          const msg = t('face_need_username', '请输入用户名');
+          if (status) { status.textContent = msg; status.style.color = 'var(--neon-red)'; }
+          if (submitBtn) submitBtn.disabled = false;
+          return;
+        }
+      }
       if (status) status.textContent = t('face_recognizing', '正在识别…');
       const descriptor = await captureDescriptor();
 
       if (mode === 'login') {
+        const uname = (($('face-username') && $('face-username').value) || '').trim();
         const res = await fetch(`${API}/api/face-login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ descriptor })
+          body: JSON.stringify({ username: uname, descriptor })
         });
         const data = await res.json();
         if (data && data.success) {
-          if (status) status.textContent = t('face_login_ok', '刷脸登录成功！');
-          completeLogin(data);
-          setTimeout(closeFaceAndRestore, 800);
+          const msg = t('face_login_ok', '刷脸登录成功！');
+          if (status) { status.textContent = msg; status.style.color = 'var(--neon-green)'; }
+          // 先在本面板显示成功，再写登录态（updateNav 会触发关闭弹窗的事件），避免一闪而过
+          setTimeout(() => { completeLogin(data); closeFaceAndRestore(); }, 1300);
         } else {
-          if (status) status.textContent = (data && data.message) || t('face_login_fail', '识别失败');
+          const msg = t('face_login_fail', '识别失败');
+          if (status) { status.textContent = msg; status.style.color = 'var(--neon-red)'; }
           if (submitBtn) submitBtn.disabled = false;
         }
       } else {
         const info = JSON.parse(localStorage.getItem('userInfo') || '{}');
         if (!info.username || !info.p_token) {
-          if (status) status.textContent = t('face_need_login', '请先登录后再录入人脸');
+          const msg = t('face_need_login', '请先登录后再录入人脸');
+          if (status) { status.textContent = msg; status.style.color = 'var(--neon-red)'; }
           if (submitBtn) submitBtn.disabled = false;
           return;
         }
@@ -328,12 +354,19 @@
           body: JSON.stringify({ username: info.username, p_token: info.p_token, descriptor })
         });
         const data = await res.json();
-        if (status) status.textContent = (data && data.message) || (data && data.success ? t('face_enroll_ok', '录入成功') : t('face_enroll_fail', '录入失败'));
-        if (data && data.success) setTimeout(closeFaceAndRestore, 800);
-        else if (submitBtn) submitBtn.disabled = false;
+        if (data && data.success) {
+          const msg = t('face_enroll_ok', '录入成功！');
+          if (status) { status.textContent = msg; status.style.color = 'var(--neon-green)'; }
+          setTimeout(closeFaceAndRestore, 1300);
+        } else {
+          const msg = t('face_enroll_fail', '录入失败');
+          if (status) { status.textContent = msg; status.style.color = 'var(--neon-red)'; }
+          if (submitBtn) submitBtn.disabled = false;
+        }
       }
     } catch (err) {
-      if (status) status.textContent = (err && err.message) || t('face_error', '出错了，请重试');
+      const msg = (err && err.faceKey) ? t(err.faceKey) : t('face_error', '出错了，请重试');
+      if (status) { status.textContent = msg; status.style.color = 'var(--neon-red)'; }
       if (submitBtn) submitBtn.disabled = false;
     }
   }

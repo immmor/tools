@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>声纹识别（麦克风录音）</title>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 600px; margin: 2rem auto; padding: 0 1rem; }
+        .record-group { margin: 1rem 0; padding: 1rem; border: 1px solid #ddd; border-radius: 8px; }
+        label { display: block; margin-bottom: 0.5rem; font-weight: 600; }
+        button { padding: 0.6rem 1.5rem; background: #007bff; color: #fff; border: none; border-radius: 6px; font-size: 1rem; cursor: pointer; margin-right: 0.5rem; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        button.recording { background: #dc3545; }
+        #status { margin: 1rem 0; padding: 0.75rem; border-radius: 6px; background: #f5f5f5; }
+        #result { margin-top: 1rem; padding: 1rem; border-radius: 6px; background: #fafafa; border: 1px solid #eee; font-size: 1.1rem; }
+        .highlight { color: #007bff; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>声纹识别（录音版）</h1>
+    <p>分别点击下方按钮，对着麦克风说话录制两段音频（建议每段 3 秒以上），然后进行比对。</p>
+
+    <div class="record-group">
+        <label>音频 1（注册时录制）</label>
+        <button id="btn-record1" class="record-btn" data-target="1">开始录音</button>
+        <span id="info1"></span>
+    </div>
+
+    <div class="record-group">
+        <label>音频 2（登录时录制）</label>
+        <button id="btn-record2" class="record-btn" data-target="2">开始录音</button>
+        <span id="info2"></span>
+    </div>
+
+    <button id="btn-compare" disabled>开始比对</button>
+
+    <div id="status">正在加载运行时...</div>
+    <div id="result"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.16.3/dist/ort.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@jaehyun-ko/speaker-verification@5.0.0/dist/speaker-verification.js"></script>
+
+    <script>
+        const verifier = new SpeakerVerification();
+        const statusEl = document.getElementById('status');
+        const resultEl = document.getElementById('result');
+        const btnCompare = document.getElementById('btn-compare');
+
+        // 存储两段录音的 Blob
+        const recordings = { 1: null, 2: null };
+        // 录音状态
+        let mediaRecorder = null;
+        let audioChunks = [];
+        let currentTarget = null;
+
+        // 初始化模型
+        async function initModel() {
+            try {
+                statusEl.textContent = '正在下载并初始化声纹模型（首次加载约 5MB）...';
+                await verifier.initialize('mobile-128');
+                statusEl.textContent = '模型就绪。请分别录制两段音频。';
+                updateCompareButton();
+            } catch (err) {
+                statusEl.textContent = '模型初始化失败：' + err.message;
+                console.error(err);
+            }
+        }
+
+        // 开始录音
+        async function startRecording(target) {
+            try {
+                // 如果正在录音，先停止
+                if (mediaRecorder && mediaRecorder.state === 'recording') {
+                    mediaRecorder.stop();
+                    return;
+                }
+
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                audioChunks = [];
+                currentTarget = target;
+
+                // 使用浏览器支持的 mimeType
+                let mimeType = 'audio/webm';
+                if (!MediaRecorder.isTypeSupported(mimeType)) {
+                    mimeType = 'audio/mp4'; // Safari 备选
+                }
+
+                mediaRecorder = new MediaRecorder(stream, { mimeType });
+
+                mediaRecorder.ondataavailable = (e) => {
+                    if (e.data.size > 0) audioChunks.push(e.data);
+                };
+
+                mediaRecorder.onstop = () => {
+                    const blob = new Blob(audioChunks, { type: mimeType });
+                    recordings[currentTarget] = blob;
+                    document.getElementById(`info${currentTarget}`).textContent =
+                        ` ✅ 已录制 (${(blob.size / 1024).toFixed(1)} KB)`;
+                    resetRecordButtons();
+                    updateCompareButton();
+                    statusEl.textContent = '录音完成。可以录制另一段或开始比对。';
+                    // 释放麦克风
+                    stream.getTracks().forEach(t => t.stop());
+                };
+
+                mediaRecorder.start();
+                // 更新按钮状态
+                const btn = document.getElementById(`btn-record${target}`);
+                btn.textContent = '停止录音';
+                btn.classList.add('recording');
+                statusEl.textContent = `正在录音（音频 ${target}）... 请说话`;
+
+            } catch (err) {
+                statusEl.textContent = '无法访问麦克风：' + err.message;
+                console.error(err);
+            }
+        }
+
+        // 重置录音按钮状态
+        function resetRecordButtons() {
+            document.querySelectorAll('.record-btn').forEach(btn => {
+                btn.textContent = '开始录音';
+                btn.classList.remove('recording');
+                btn.disabled = false;
+            });
+        }
+
+        // 检查两段都录了才启用比对按钮
+        function updateCompareButton() {
+            btnCompare.disabled = !(recordings[1] && recordings[2]);
+        }
+
+        // 比对
+        async function compareSpeakers() {
+            if (!recordings[1] || !recordings[2]) {
+                statusEl.textContent = '请先录制两段音频。';
+                return;
+            }
+
+            btnCompare.disabled = true;
+            statusEl.textContent = '正在计算声纹相似度...';
+            resultEl.innerHTML = '';
+
+            try {
+                const result = await verifier.compareAudio(recordings[1], recordings[2]);
+                const similarityPercent = (result.similarity * 100).toFixed(1);
+
+                let judgement = '';
+                if (result.similarity > 0.7) judgement = '（很可能是同一人）';
+                else if (result.similarity > 0.5) judgement = '（可能是同一人）';
+                else judgement = '（很可能不是同一人）';
+
+                resultEl.innerHTML = `
+                    <div>相似度：<span class="highlight">${similarityPercent}%</span> ${judgement}</div>
+                    <div style="font-size:0.9rem; color:#666; margin-top:0.5rem;">
+                        原始分数：${result.similarity.toFixed(4)} | 处理耗时：${result.processingTime}ms
+                    </div>
+                `;
+                statusEl.textContent = '比对完成。';
+            } catch (err) {
+                statusEl.textContent = '比对失败：' + err.message;
+                console.error(err);
+            } finally {
+                btnCompare.disabled = false;
+            }
+        }
+
+        // 事件绑定
+        document.querySelectorAll('.record-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const target = parseInt(btn.dataset.target);
+                startRecording(target);
+            });
+        });
+
+        btnCompare.addEventListener('click', compareSpeakers);
+
+        // 启动
+        initModel();
+    </script>
+</body>
+</html>

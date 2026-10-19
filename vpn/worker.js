@@ -300,6 +300,11 @@ async function ensureFaceColumn(DB) {
   try { await DB.prepare('ALTER TABLE user ADD COLUMN face_descriptor TEXT').run(); } catch (e) {}
 }
 
+// 懒加 voice_embedding 列（幂等），用于存储声纹特征向量（JSON 数组）
+async function ensureVoiceColumn(DB) {
+  try { await DB.prepare('ALTER TABLE user ADD COLUMN voice_embedding TEXT').run(); } catch (e) {}
+}
+
 // 懒加 p_token 列（幂等），生成新鉴权 token 并持久化，返回完整 token 串
 // token 格式：<随机UUID>.<过期时间戳(ms)>，有效期 1 天，每次登录刷新
 async function newPToken(DB, username) {
@@ -925,28 +930,28 @@ export default {
       // ========== 人脸识别登录接口 ==========
       if (path === '/api/face-login' && request.method === 'POST') {
         const params = await request.json();
-        const { descriptor } = params;
+        const { username, descriptor } = params;
+        if (!username) return resJson({ success: false, message: '请提供用户名！' }, 400);
         if (!Array.isArray(descriptor) || descriptor.length !== 128 || !descriptor.every(n => typeof n === 'number')) {
           return resJson({ success: false, message: '人脸特征数据无效！' }, 400);
         }
         await ensureFaceColumn(DB);
-        const rows = await DB
-          .prepare("SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders, invite_code, invited_user, rebates, card_number, face_descriptor FROM user WHERE face_descriptor IS NOT NULL AND face_descriptor != ''")
-          .all();
-        let bestUser = null, bestDist = Infinity;
-        for (const u of (rows.results || [])) {
-          let stored;
-          try { stored = JSON.parse(u.face_descriptor); } catch (e) { continue; }
-          if (!Array.isArray(stored) || stored.length !== 128) continue;
-          let s = 0;
-          for (let i = 0; i < 128; i++) { const d = descriptor[i] - stored[i]; s += d * d; }
-          const dist = Math.sqrt(s);
-          if (dist < bestDist) { bestDist = dist; bestUser = u; }
+        // 1:1 验证：只比对该指定用户名自己录入的人脸模板
+        const u = await DB
+          .prepare("SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders, invite_code, invited_user, rebates, card_number, face_descriptor FROM user WHERE username = ?")
+          .bind(username).first();
+        if (!u || !u.face_descriptor) {
+          return resJson({ success: false, message: '该用户未录入人脸，请先录入或使用密码登录' }, 401);
         }
-        if (!bestUser || bestDist >= 0.6) {
-          return resJson({ success: false, message: '未匹配到人脸，请先录入人脸或使用密码登录' }, 401);
+        let stored;
+        try { stored = JSON.parse(u.face_descriptor); } catch (e) { return resJson({ success: false, message: '人脸数据已损坏' }, 500); }
+        if (!Array.isArray(stored) || stored.length !== 128) return resJson({ success: false, message: '人脸数据无效' }, 500);
+        let s = 0;
+        for (let i = 0; i < 128; i++) { const d = descriptor[i] - stored[i]; s += d * d; }
+        const dist = Math.sqrt(s);
+        if (dist >= 0.6) {
+          return resJson({ success: false, message: '人脸验证失败' }, 401);
         }
-        const username = bestUser.username;
         const pToken = await newPToken(DB, username);
         const now = new Date(new Date().getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
         const loginInfoEntry = { type: 'face-login', time: now, ip: request.headers.get('CF-Connecting-IP') || 'unknown', location: [request.headers.get('CF-IPCountry'), request.headers.get('CF-IPRegion'), request.headers.get('CF-IPCity')].filter(Boolean).join(' ') || 'unknown', domain: request.url, device: request.headers.get('User-Agent') || 'unknown', acceptLanguage: request.headers.get('Accept-Language') || 'unknown', country: request.headers.get('CF-IPCountry') || 'unknown' };
@@ -956,9 +961,9 @@ export default {
           try { const existing = JSON.parse(loginInfo.login_info); existing.unshift(loginInfoEntry); updatedLoginInfo = JSON.stringify(existing.slice(0, 10)); } catch (e) {}
         }
         await DB.prepare('UPDATE user SET login_info = ? WHERE username = ?').bind(updatedLoginInfo, username).run();
-        const pricePlan = bestUser.price_plan ? JSON.parse(bestUser.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
-        const cardNumber = bestUser.card_number || await ensureCardNumber(DB, bestUser.rowid);
-        return resJson({ success: true, message: '刷脸登录成功！', userInfo: { id: bestUser.rowid, username: bestUser.username, balance: bestUser.balance, v_token: bestUser.v_token, p_token: pToken, v_expire_date: bestUser.v_expire_date, not_trusted: bestUser.not_trusted || '', vorders: bestUser.vorders, invite_code: bestUser.invite_code, invited_user: bestUser.invited_user, rebates: bestUser.rebates, card_number: cardNumber }, pricePlan });
+        const pricePlan = u.price_plan ? JSON.parse(u.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
+        const cardNumber = u.card_number || await ensureCardNumber(DB, u.rowid);
+        return resJson({ success: true, message: '刷脸登录成功！', userInfo: { id: u.rowid, username: u.username, balance: u.balance, v_token: u.v_token, p_token: pToken, v_expire_date: u.v_expire_date, not_trusted: u.not_trusted || '', vorders: u.vorders, invite_code: u.invite_code, invited_user: u.invited_user, rebates: u.rebates, card_number: cardNumber }, pricePlan });
       }
 
       // ========== 录入/更新人脸特征接口（需登录态：p_token 校验） ==========
@@ -972,6 +977,60 @@ export default {
         await ensureFaceColumn(DB);
         await DB.prepare('UPDATE user SET face_descriptor = ? WHERE username = ?').bind(JSON.stringify(descriptor), username).run();
         return resJson({ success: true, message: '人脸录入成功！' });
+      }
+
+      // ========== 声纹登录接口（1:1：验证指定用户名的声纹） ==========
+      if (path === '/api/voice-login' && request.method === 'POST') {
+        const params = await request.json();
+        const { username, embedding } = params;
+        if (!username) return resJson({ success: false, message: '请提供用户名！' }, 400);
+        if (!Array.isArray(embedding) || embedding.length < 32 || !embedding.every(n => typeof n === 'number')) {
+          return resJson({ success: false, message: '声纹特征数据无效！' }, 400);
+        }
+        await ensureVoiceColumn(DB);
+        // 1:1 验证：只比对该指定用户名自己录入的声纹模板
+        const u = await DB
+          .prepare("SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders, invite_code, invited_user, rebates, card_number, voice_embedding FROM user WHERE username = ?")
+          .bind(username).first();
+        if (!u || !u.voice_embedding) {
+          return resJson({ success: false, message: '该用户未录入声纹，请先录入或使用密码登录' }, 401);
+        }
+        let stored;
+        try { stored = JSON.parse(u.voice_embedding); } catch (e) { return resJson({ success: false, message: '声纹数据已损坏' }, 500); }
+        if (!Array.isArray(stored) || stored.length !== embedding.length) return resJson({ success: false, message: '声纹数据无效' }, 500);
+        // 余弦相似度阈值，需根据实际中文录音测试微调（参考区间约 0.7~0.9）
+        const VOICE_THRESHOLD = 0.75;
+        let dot = 0, na = 0, nb = 0;
+        for (let i = 0; i < embedding.length; i++) { dot += embedding[i] * stored[i]; na += embedding[i] * embedding[i]; nb += stored[i] * stored[i]; }
+        const sim = (na > 0 && nb > 0) ? dot / (Math.sqrt(na) * Math.sqrt(nb)) : -Infinity;
+        if (sim < VOICE_THRESHOLD) {
+          return resJson({ success: false, message: '声纹验证失败' }, 401);
+        }
+        const pToken = await newPToken(DB, username);
+        const now = new Date(new Date().getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+        const loginInfoEntry = { type: 'voice-login', time: now, ip: request.headers.get('CF-Connecting-IP') || 'unknown', location: [request.headers.get('CF-IPCountry'), request.headers.get('CF-IPRegion'), request.headers.get('CF-IPCity')].filter(Boolean).join(' ') || 'unknown', domain: request.url, device: request.headers.get('User-Agent') || 'unknown', acceptLanguage: request.headers.get('Accept-Language') || 'unknown', country: request.headers.get('CF-IPCountry') || 'unknown' };
+        const loginInfo = await DB.prepare('SELECT login_info FROM user WHERE username = ?').bind(username).first();
+        let updatedLoginInfo = JSON.stringify([loginInfoEntry]);
+        if (loginInfo && loginInfo.login_info) {
+          try { const existing = JSON.parse(loginInfo.login_info); existing.unshift(loginInfoEntry); updatedLoginInfo = JSON.stringify(existing.slice(0, 10)); } catch (e) {}
+        }
+        await DB.prepare('UPDATE user SET login_info = ? WHERE username = ?').bind(updatedLoginInfo, username).run();
+        const pricePlan = u.price_plan ? JSON.parse(u.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
+        const cardNumber = u.card_number || await ensureCardNumber(DB, u.rowid);
+        return resJson({ success: true, message: '声纹登录成功！', userInfo: { id: u.rowid, username: u.username, balance: u.balance, v_token: u.v_token, p_token: pToken, v_expire_date: u.v_expire_date, not_trusted: u.not_trusted || '', vorders: u.vorders, invite_code: u.invite_code, invited_user: u.invited_user, rebates: u.rebates, card_number: cardNumber }, pricePlan });
+      }
+
+      // ========== 录入/更新声纹特征接口（需登录态：p_token 校验） ==========
+      if (path === '/api/save-voice' && request.method === 'POST') {
+        const params = await request.json();
+        const { username, p_token, embedding } = params;
+        if (!username || !p_token) return resJson({ success: false, message: '登录状态无效！' }, 401);
+        if (!Array.isArray(embedding) || embedding.length < 32 || !embedding.every(n => typeof n === 'number')) return resJson({ success: false, message: '声纹特征数据无效！' }, 400);
+        const rec = await DB.prepare('SELECT p_token FROM user WHERE username = ?').bind(username).first();
+        if (!rec || rec.p_token !== p_token) return resJson({ success: false, message: '登录态校验失败，请重新登录！' }, 401);
+        await ensureVoiceColumn(DB);
+        await DB.prepare('UPDATE user SET voice_embedding = ? WHERE username = ?').bind(JSON.stringify(embedding), username).run();
+        return resJson({ success: true, message: '声纹录入成功！' });
       }
 
       // ========== Web3钱包登录接口 ==========
