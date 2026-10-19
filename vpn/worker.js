@@ -1789,7 +1789,7 @@ export default {
       if (path === '/api/transfer' && request.method === 'POST') {
         try {
           const params = await request.json();
-          const { from, to, amount, password } = params;
+          const { from, to, amount, password, message } = params;
 
           if (!from || !to) {
             return resJson({ code: 400, msg: '缺少 from 或 to 参数' }, 400);
@@ -1833,7 +1833,9 @@ export default {
           }
 
           // 确保转账流水表存在
-          await DB.prepare('CREATE TABLE IF NOT EXISTS transfers (id INTEGER PRIMARY KEY AUTOINCREMENT, from_user TEXT, to_user TEXT, amount REAL, created_at TEXT)').run();
+          await DB.prepare('CREATE TABLE IF NOT EXISTS transfers (id INTEGER PRIMARY KEY AUTOINCREMENT, from_user TEXT, to_user TEXT, amount REAL, created_at TEXT, message TEXT)').run();
+          // 兼容旧表：补加留言列
+          try { await DB.prepare('ALTER TABLE transfers ADD COLUMN message TEXT').run(); } catch (e) {}
 
           // 防双花：条件扣减，只有余额充足（balance >= amt）才会真正扣减
           const deduct = await DB
@@ -1849,7 +1851,7 @@ export default {
           const now = new Date().toISOString();
           const batch = await DB.batch([
             DB.prepare('UPDATE user SET balance = balance + ? WHERE username = ?').bind(amt, to),
-            DB.prepare('INSERT INTO transfers (from_user, to_user, amount, created_at) VALUES (?, ?, ?, ?)').bind(from, to, amt, now)
+            DB.prepare('INSERT INTO transfers (from_user, to_user, amount, created_at, message) VALUES (?, ?, ?, ?, ?)').bind(from, to, amt, now, message ? String(message).slice(0,50) : '')
           ]);
           const addOk = batch[0].success && batch[0].meta.changes > 0;
           const insOk = batch[1].success;
@@ -1892,7 +1894,7 @@ export default {
           const pages = Math.max(1, Math.ceil(total / limit));
           const offset = (page - 1) * limit;
 
-          const rows = await DB.prepare(`SELECT from_user, to_user, amount, created_at FROM transfers ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`)
+          const rows = await DB.prepare(`SELECT from_user, to_user, amount, created_at, message FROM transfers ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`)
             .bind(...params, limit, offset)
             .all();
 
@@ -1900,7 +1902,8 @@ export default {
             counterparty: r.from_user === username ? r.to_user : r.from_user,
             direction: r.from_user === username ? 'out' : 'in',
             amount: r.amount,
-            created_at: r.created_at
+            created_at: r.created_at,
+            message: r.message || ''
           }));
 
           return resJson({
@@ -1961,7 +1964,7 @@ export default {
       if (path === '/api/user/edit' && request.method === 'POST') {
         try {
           const params = await request.json();
-          const { username, password, balance, v_expire_date, learn_vip_expire_date, v_token, invite_code, v_link_clash, v_link_v2ray, not_trusted, login_info, price_plan, vorders, fetch_link, security_answer, auto_rewn, remark, free_expire_date, last_checkin } = params;
+          const { username, password, balance, v_expire_date, learn_vip_expire_date, monthly_quota, v_token, invite_code, v_link_clash, v_link_v2ray, not_trusted, login_info, price_plan, vorders, fetch_link, security_answer, auto_rewn, remark, free_expire_date, last_checkin } = params;
           
           if (!username) {
             return resJson({ code: 400, msg: '缺少username参数' }, 400);
@@ -1994,6 +1997,10 @@ export default {
           if (learn_vip_expire_date !== undefined) {
             updates.push('learn_vip_expire_date = ?');
             values.push(learn_vip_expire_date);
+          }
+          if (monthly_quota !== undefined && monthly_quota !== null) {
+            updates.push('monthly_quota = ?');
+            values.push(monthly_quota);
           }
           if (v_token !== undefined) {
             updates.push('v_token = ?');

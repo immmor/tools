@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>face-api.js 人脸登录 Demo</title>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
+        video, canvas { width: 100%; max-width: 480px; border-radius: 8px; background: #000; }
+        .btn-group { margin: 1rem 0; display: flex; gap: 0.75rem; flex-wrap: wrap; }
+        button { padding: 0.6rem 1.2rem; border: none; border-radius: 6px; cursor: pointer; font-size: 1rem; }
+        button.primary { background: #007bff; color: #fff; }
+        button.secondary { background: #6c757d; color: #fff; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        #status { margin: 1rem 0; padding: 0.75rem; border-radius: 6px; background: #f5f5f5; font-size: 0.95rem; }
+        #log { white-space: pre-wrap; background: #fafafa; padding: 1rem; border: 1px solid #eee; border-radius: 6px; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+    <h1>face-api.js 人脸登录演示</h1>
+    <p>先“注册”采集人脸特征，再“登录”进行比对。全程在浏览器本地运行。</p>
+
+    <video id="video" autoplay muted playsinline></video>
+
+    <div class="btn-group">
+        <button id="btn-start" class="primary">启动摄像头</button>
+        <button id="btn-register" class="secondary" disabled>注册（采集特征）</button>
+        <button id="btn-login" class="secondary" disabled>登录（比对特征）</button>
+    </div>
+
+    <div id="status">正在加载模型...</div>
+    <div id="log"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.7.4/dist/tf.min.js"></script>
+
+
+    <script>
+        const video = document.getElementById('video');
+        const statusEl = document.getElementById('status');
+        const logEl = document.getElementById('log');
+        const btnStart = document.getElementById('btn-start');
+        const btnRegister = document.getElementById('btn-register');
+        const btnLogin = document.getElementById('btn-login');
+
+        // 存放注册时采集的“人脸特征向量”（128 维数组）
+        let storedDescriptor = null;
+        // 比对阈值，通常 0.6 左右，越小越严格
+        const THRESHOLD = 0.6;
+
+        // 模型 CDN 地址（社区维护的可用地址）
+        const MODEL_URL = './models';
+
+        function log(msg) {
+            logEl.textContent = `[${new Date().toLocaleTimeString()}] ${msg}\n` + logEl.textContent;
+        }
+
+        // 1. 加载模型
+        async function loadModels() {
+            try {
+                statusEl.textContent = '正在加载模型（人脸检测 + 关键点 + 识别）...';
+                await Promise.all([
+                    faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL),
+                    faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL),
+                ]);
+                statusEl.textContent = '模型加载完成。请点击“启动摄像头”。';
+                log('模型加载成功');
+            } catch (err) {
+                statusEl.textContent = '模型加载失败：' + err.message;
+                log('模型加载错误：' + err.message);
+                console.error(err);
+            }
+        }
+
+        // 2. 启动摄像头
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                statusEl.textContent = '摄像头已启动。可点击“注册”采集人脸。';
+                btnRegister.disabled = false;
+                btnLogin.disabled = false;
+                btnStart.disabled = true;
+                log('摄像头启动成功');
+            } catch (err) {
+                statusEl.textContent = '摄像头启动失败：' + err.message;
+                log('摄像头错误：' + err.message);
+            }
+        }
+
+        // 3. 从当前视频帧提取单个人脸的特征向量
+        async function getDescriptorFromVideo() {
+            const detection = await faceapi
+                .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+                .withFaceLandmarks()
+                .withFaceDescriptor();
+
+            if (!detection) {
+                throw new Error('未检测到人脸，请正对摄像头、保证光线充足');
+            }
+            return detection.descriptor;
+        }
+
+        // 4. 注册：采集并保存特征
+        async function handleRegister() {
+            btnRegister.disabled = true;
+            statusEl.textContent = '正在采集人脸特征...';
+            try {
+                const descriptor = await getDescriptorFromVideo();
+                // 转成普通数组存入内存（实际项目应发送到后端保存）
+                storedDescriptor = Array.from(descriptor);
+                statusEl.textContent = '注册成功！特征已保存（仅存于当前页面内存）。现在可以点击“登录”进行比对。';
+                log(`注册成功，特征维度：${storedDescriptor.length}`);
+            } catch (err) {
+                statusEl.textContent = '注册失败：' + err.message;
+                log('注册失败：' + err.message);
+            } finally {
+                btnRegister.disabled = false;
+            }
+        }
+
+        // 5. 登录：实时采集并与已存特征比对
+        async function handleLogin() {
+            if (!storedDescriptor) {
+                statusEl.textContent = '请先执行“注册”采集人脸特征。';
+                return;
+            }
+            btnLogin.disabled = true;
+            statusEl.textContent = '正在比对...';
+            try {
+                const currentDescriptor = await getDescriptorFromVideo();
+                // 欧氏距离：距离越小越相似
+                const distance = faceapi.euclideanDistance(
+                    storedDescriptor,
+                    Array.from(currentDescriptor)
+                );
+                const isMatch = distance < THRESHOLD;
+
+                statusEl.textContent = isMatch
+                    ? `✅ 比对通过！距离 = ${distance.toFixed(4)}（阈值 ${THRESHOLD}）`
+                    : `❌ 比对失败。距离 = ${distance.toFixed(4)}（阈值 ${THRESHOLD}）`;
+                log(`登录比对：距离=${distance.toFixed(4)}，结果=${isMatch ? '匹配' : '不匹配'}`);
+            } catch (err) {
+                statusEl.textContent = '登录失败：' + err.message;
+                log('登录失败：' + err.message);
+            } finally {
+                btnLogin.disabled = false;
+            }
+        }
+
+        // 事件绑定
+        btnStart.addEventListener('click', startCamera);
+        btnRegister.addEventListener('click', handleRegister);
+        btnLogin.addEventListener('click', handleLogin);
+
+        // 页面加载后自动加载模型
+        loadModels();
+    </script>
+</body>
+</html>

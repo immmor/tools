@@ -24,120 +24,133 @@
     //        'dropdown' 点击展开下拉（离开时再次点击收起）
     //        'toggle'   点击切换状态（离开时再次点击还原，如主题）
     //        'modal'    点击打开弹窗（离开时隐藏弹窗）
-    const STEPS = [
+    // ===== 步骤定义（按“大功能”分组）=====
+    // 进入一个大功能后，导览会自动逐个介绍它里面的“小功能”，无需用户一步一步点击；
+    // 想慢慢看时可随时暂停。click / kind 含义见上方注释。
+    const GROUPS = [
         {
-            sel: '#tour-nav', click: false,
-            t: { 'zh-CN': '顶部导航栏', 'en-US': 'Top Navigation' },
-            d: {
-                'zh-CN': '顶部导航栏：右侧集中了几个常用入口，下面逐个为你介绍——安装教程、语言、主题与通知。',
-                'en-US': 'Top navigation: the right side gathers a few shortcuts. Let me walk you through them — Install, Language, Theme and Notifications.'
-            }
+            title: { 'zh-CN': '顶部导航栏', 'en-US': 'Top Navigation' },
+            steps: [
+                {
+                    sel: '#tour-install', click: true, kind: 'link', noClick: true,
+                    t: { 'zh-CN': '安装教程入口', 'en-US': 'Install Guide' },
+                    d: {
+                        'zh-CN': '「安装」：点击跳转到客户端安装教程页，按平台（Windows / Android / iOS / macOS / Linux）下载并配置 PHANTOM 客户端。',
+                        'en-US': '"Install": jump to the client setup guide and download & configure PHANTOM for your platform (Windows / Android / iOS / macOS / Linux).'
+                    }
+                },
+                {
+                    sel: '#lang-btn', click: true, kind: 'dropdown',
+                    t: { 'zh-CN': '语言切换', 'en-US': 'Language' },
+                    d: {
+                        'zh-CN': '「语言」：点击展开语言菜单，支持简体中文、English、한국어、العربية、Русский、Español、日本語、Tiếng Việt 一键切换。',
+                        'en-US': '"Language": open the menu to switch between 简体中文, English, 한국어, العربية, Русский, Español, 日本語, Tiếng Việt.'
+                    }
+                },
+                {
+                    sel: '#theme-toggle-btn', click: true, kind: 'toggle',
+                    t: { 'zh-CN': '主题切换', 'en-US': 'Theme' },
+                    d: {
+                        'zh-CN': '「主题」：点击在深色 / 浅色界面之间切换，跟随你的使用习惯与时段。',
+                        'en-US': '"Theme": toggle between dark and light UI to match your preference and time of day.'
+                    }
+                },
+                {
+                    sel: '#notification-btn', click: true, kind: 'dropdown',
+                    t: { 'zh-CN': '系统通知', 'en-US': 'Notifications' },
+                    d: {
+                        'zh-CN': '「通知」：点击查看活动、福利与系统消息；未读时按钮上会有红点提示，点开后底部还能「联系客服」。',
+                        'en-US': '"Notifications": view campaigns, perks and system messages; a red dot marks unread items, and you can also "Contact support" from there.'
+                    }
+                }
+            ]
         },
         {
-            sel: '#tour-install', click: true, kind: 'link', noClick: true,
-            t: { 'zh-CN': '安装教程入口', 'en-US': 'Install Guide' },
-            d: {
-                'zh-CN': '「安装」：点击跳转到客户端安装教程页，按平台（Windows / Android / iOS / macOS / Linux）下载并配置 PHANTOM 客户端。',
-                'en-US': '"Install": jump to the client setup guide and download & configure PHANTOM for your platform (Windows / Android / iOS / macOS / Linux).'
-            }
+            title: { 'zh-CN': '节点套餐', 'en-US': 'Node Plans' },
+            steps: [
+                {
+                    sel: '#tour-free', click: true, kind: 'modal',
+                    t: { 'zh-CN': '免费节点包', 'en-US': 'Free Node Pack' },
+                    d: {
+                        'zh-CN': '免费节点包：零门槛体验，点击即可领取免费节点，先试用再决定是否升级。',
+                        'en-US': 'Free node pack: try the service for free with zero cost before upgrading.'
+                    }
+                },
+                {
+                    sel: '#tour-monthly', click: true, kind: 'modal',
+                    t: { 'zh-CN': '月付节点包', 'en-US': 'Monthly Plan' },
+                    d: {
+                        'zh-CN': '月付节点包：按月付费，限时折扣中，适合短期或初次体验的用户，随时可续费。',
+                        'en-US': 'Monthly plan: pay monthly with a limited-time discount — ideal for short-term or first-time users.'
+                    }
+                },
+                {
+                    sel: '#tour-annual', click: true, kind: 'modal',
+                    t: { 'zh-CN': '年付节点包', 'en-US': 'Yearly Plan' },
+                    d: {
+                        'zh-CN': '年付节点包：一次性购买一年，立省更多，长期使用的性价比之选。',
+                        'en-US': 'Yearly plan: one purchase covers a full year with the best savings — great for long-term use.'
+                    }
+                },
+                {
+                    sel: '#tour-custom', click: true, kind: 'modal',
+                    t: { 'zh-CN': '定制节点', 'en-US': 'Custom Nodes' },
+                    d: {
+                        'zh-CN': '定制节点：若对节点有专属需求（特定地区、独享带宽等），可联系我们定制方案，价格详谈。',
+                        'en-US': 'Custom nodes: need a dedicated region or bandwidth? Contact us for a tailored plan.'
+                    }
+                }
+            ]
         },
         {
-            sel: '#lang-btn', click: true, kind: 'dropdown',
-            t: { 'zh-CN': '语言切换', 'en-US': 'Language' },
-            d: {
-                'zh-CN': '「语言」：点击展开语言菜单，支持简体中文、English、한국어、العربية、Русский、Español、日本語、Tiếng Việt 一键切换。',
-                'en-US': '"Language": open the menu to switch between 简体中文, English, 한국어, العربية, Русский, Español, 日本語, Tiếng Việt.'
-            }
-        },
-        {
-            sel: '#theme-toggle-btn', click: true, kind: 'toggle',
-            t: { 'zh-CN': '主题切换', 'en-US': 'Theme' },
-            d: {
-                'zh-CN': '「主题」：点击在深色 / 浅色界面之间切换，跟随你的使用习惯与时段。',
-                'en-US': '"Theme": toggle between dark and light UI to match your preference and time of day.'
-            }
-        },
-        {
-            sel: '#notification-btn', click: true, kind: 'dropdown',
-            t: { 'zh-CN': '系统通知', 'en-US': 'Notifications' },
-            d: {
-                'zh-CN': '「通知」：点击查看活动、福利与系统消息；未读时按钮上会有红点提示，点开后底部还能「联系客服」。',
-                'en-US': '"Notifications": view campaigns, perks and system messages; a red dot marks unread items, and you can also "Contact support" from there.'
-            }
-        },
-        {
-            sel: '#tour-hero', click: false,
-            t: { 'zh-CN': '品牌主视觉与使用流程', 'en-US': 'Hero & Quick Start' },
-            d: {
-                'zh-CN': '品牌主视觉展示核心主张「安全 · 稳定 · 高速」。下方是使用流程：登录注册 → 购买节点 → 安装客户端 → 导入节点，跟着指引即可快速上手。',
-                'en-US': 'The hero shows our slogan "Safe · Stable · Fast". Below is the quick-start flow: Sign up → Buy a plan → Install client → Import nodes.'
-            }
-        },
-        {
-            sel: '#tour-free', click: true, kind: 'modal',
-            t: { 'zh-CN': '免费节点包', 'en-US': 'Free Node Pack' },
-            d: {
-                'zh-CN': '免费节点包：零门槛体验，点击即可领取免费节点，先试用再决定是否升级。',
-                'en-US': 'Free node pack: try the service for free with zero cost before upgrading.'
-            }
-        },
-        {
-            sel: '#tour-monthly', click: true, kind: 'modal',
-            t: { 'zh-CN': '月付节点包', 'en-US': 'Monthly Plan' },
-            d: {
-                'zh-CN': '月付节点包：按月付费，限时折扣中，适合短期或初次体验的用户，随时可续费。',
-                'en-US': 'Monthly plan: pay monthly with a limited-time discount — ideal for short-term or first-time users.'
-            }
-        },
-        {
-            sel: '#tour-annual', click: true, kind: 'modal',
-            t: { 'zh-CN': '年付节点包', 'en-US': 'Yearly Plan' },
-            d: {
-                'zh-CN': '年付节点包：一次性购买一年，立省更多，长期使用的性价比之选。',
-                'en-US': 'Yearly plan: one purchase covers a full year with the best savings — great for long-term use.'
-            }
-        },
-        {
-            sel: '#tour-custom', click: true, kind: 'modal',
-            t: { 'zh-CN': '定制节点', 'en-US': 'Custom Nodes' },
-            d: {
-                'zh-CN': '定制节点：若对节点有专属需求（特定地区、独享带宽等），可联系我们定制方案，价格详谈。',
-                'en-US': 'Custom nodes: need a dedicated region or bandwidth? Contact us for a tailored plan.'
-            }
-        },
-        {
-            sel: '#game-section', click: false,
-            t: { 'zh-CN': '游戏中心', 'en-US': 'Game Center' },
-            d: {
-                'zh-CN': '游戏中心：每日签到、幸运转盘、老虎机等小游戏，玩游戏赢取福利与节点时长，边玩边省。',
-                'en-US': 'Game center: daily check-in, lucky wheel, slots and more — play to earn perks and node time.'
-            }
-        },
-        {
-            sel: '#tour-nodes', click: false,
-            t: { 'zh-CN': '热门节点分布', 'en-US': 'Popular Nodes' },
-            d: {
-                'zh-CN': '热门节点：覆盖美国、日本、新加坡等 10+ 国家和地区，高速稳定，就近选择延迟更低。',
-                'en-US': 'Popular nodes: 10+ countries & regions including US, Japan, Singapore — pick the nearest for lower latency.'
-            }
-        },
-        {
-            sel: '#tour-compare', click: false,
-            t: { 'zh-CN': '为什么选择 PHANTOM', 'en-US': 'Why PHANTOM' },
-            d: {
-                'zh-CN': '为什么选择 PHANTOM：这里对比我们的核心优势——十年老品牌、隐私保护、多协议支持、稳定高速。',
-                'en-US': 'Why PHANTOM: our core advantages — 10-year brand, privacy protection, multi-protocol support, stable & fast.'
-            }
-        },
-        {
-            sel: '#tour-testimonials', click: false,
-            t: { 'zh-CN': '客户评价', 'en-US': 'Testimonials' },
-            d: {
-                'zh-CN': '客户评价：来自全球用户的真实反馈，看看大家为什么选择并推荐 PHANTOM。',
-                'en-US': 'Testimonials: real feedback from users worldwide on why they choose and recommend PHANTOM.'
-            }
+            title: { 'zh-CN': '更多亮点', 'en-US': 'More Highlights' },
+            steps: [
+                {
+                    sel: '#game-section', click: false,
+                    t: { 'zh-CN': '游戏中心', 'en-US': 'Game Center' },
+                    d: {
+                        'zh-CN': '游戏中心：每日签到、幸运转盘、老虎机等小游戏，玩游戏赢取福利与节点时长，边玩边省。',
+                        'en-US': 'Game center: daily check-in, lucky wheel, slots and more — play to earn perks and node time.'
+                    }
+                },
+                {
+                    sel: '#tour-nodes', click: false,
+                    t: { 'zh-CN': '热门节点分布', 'en-US': 'Popular Nodes' },
+                    d: {
+                        'zh-CN': '热门节点：覆盖美国、日本、新加坡等 10+ 国家和地区，高速稳定，就近选择延迟更低。',
+                        'en-US': 'Popular nodes: 10+ countries & regions including US, Japan, Singapore — pick the nearest for lower latency.'
+                    }
+                },
+                {
+                    sel: '#tour-compare', click: false,
+                    t: { 'zh-CN': '为什么选择 PHANTOM', 'en-US': 'Why PHANTOM' },
+                    d: {
+                        'zh-CN': '为什么选择 PHANTOM：这里对比我们的核心优势——十年老品牌、隐私保护、多协议支持、稳定高速。',
+                        'en-US': 'Why PHANTOM: our core advantages — 10-year brand, privacy protection, multi-protocol support, stable & fast.'
+                    }
+                },
+                {
+                    sel: '#tour-testimonials', click: false,
+                    t: { 'zh-CN': '客户评价', 'en-US': 'Testimonials' },
+                    d: {
+                        'zh-CN': '客户评价：来自全球用户的真实反馈，看看大家为什么选择并推荐 PHANTOM。',
+                        'en-US': 'Testimonials: real feedback from users worldwide on why they choose and recommend PHANTOM.'
+                    }
+                }
+            ]
         }
     ];
+    // 展平为顺序步骤，并附带分组信息（用于“大功能自动介绍小功能”与进度展示）
+    const STEPS = [];
+    GROUPS.forEach((g, gi) => g.steps.forEach((s, si) => {
+        STEPS.push(Object.assign({}, s, {
+            groupTitle: g.title,
+            groupIndex: gi,
+            groupStep: si,
+            groupCount: g.steps.length,
+            isGroupStart: si === 0
+        }));
+    }));
 
     // ===== 样式（注入一次）=====
     const STYLE = `
@@ -152,15 +165,10 @@
   transition:left .5s cubic-bezier(.22,1,.36,1), top .5s cubic-bezier(.22,1,.36,1), opacity .3s ease, transform .3s ease;
   opacity:0;transform:scale(.92);}
 #tour-guide.show{opacity:1;transform:scale(1);}
-#tour-arrow{position:absolute;width:0;height:0;}
-#tour-arrow.a-left{right:100%;border-top:8px solid transparent;border-bottom:8px solid transparent;border-right:10px solid #16161af2;}
-#tour-arrow.a-right{left:100%;border-top:8px solid transparent;border-bottom:8px solid transparent;border-left:10px solid #16161af2;}
-#tour-arrow.a-top{bottom:100%;border-left:8px solid transparent;border-right:8px solid transparent;border-bottom:10px solid #16161af2;}
-#tour-arrow.a-bottom{top:100%;border-left:8px solid transparent;border-right:8px solid transparent;border-top:10px solid #16161af2;}
 .tg-head{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
-.tg-avatar{width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;box-shadow:0 0 0 2px var(--neon-blue);}
-.tg-name{font-weight:800;font-size:14px;line-height:1.1;}
 .tg-step{font-size:11px;color:var(--neon-blue);opacity:.85;margin-top:2px;}
+.tg-group{display:inline-block;font-size:11px;font-weight:800;color:#0a0a0a;background:var(--neon-blue);
+  padding:2px 9px;border-radius:999px;margin-bottom:8px;letter-spacing:.3px;}
 .tg-title{font-weight:800;font-size:15px;margin-bottom:6px;color:#fff;}
 .tg-desc{font-size:13px;line-height:1.6;color:#d4d4d8;margin-bottom:12px;}
 .tg-actions{display:flex;align-items:center;justify-content:space-between;gap:8px;}
@@ -191,8 +199,16 @@
     let activeStep = null;
     let revealed = []; // 本步骤因点击而提升层级 / 打开的内容，用于离开时清理
     let clickTimer = null; // 指针移动到目标后的真实点击（延时，避免“瞬间点完”）
+    let autoTimer = null;  // 自动播放：当前步停留若干毫秒后自动进入下一步
+    let playing = true;    // 自动播放开关（用户可暂停）
     let popObserver = null; // 监听 DOM，捕获异步插入的弹窗（如 VIP 先查状态再弹窗）
+    let supportFab = null;   // 复用真实的客服悬浮窗作为导览“导游”
+    let supportFabBtn = null;
+    let fabSaved = null;     // 导览开始前客服悬浮窗的原始内联样式，用于结束时还原
     const bound = { scroll: null, resize: null, key: null };
+
+    // 导览期间阻止点击客服头像打开对话（捕获阶段拦截 qa.js 的监听器）
+    function blockFabClick(e) { e.stopImmediatePropagation(); e.preventDefault(); }
 
     // ===== DOM 构建 =====
     function buildDom() {
@@ -216,11 +232,9 @@
         const guide = document.createElement('div');
         guide.id = 'tour-guide';
         guide.innerHTML = `
-            <div id="tour-arrow"></div>
+            <div class="tg-group"></div>
             <div class="tg-head">
-                <img class="tg-avatar" src="static/cs1.webp" alt="客服">
                 <div>
-                    <div class="tg-name"></div>
                     <div class="tg-step"></div>
                 </div>
             </div>
@@ -230,6 +244,7 @@
                 <button class="tg-skip" id="tour-skip"></button>
                 <div class="tg-nav">
                     <button class="tg-btn" id="tour-prev"></button>
+                    <button class="tg-btn" id="tour-play" title="暂停 / 播放"></button>
                     <button class="tg-btn primary" id="tour-next"></button>
                 </div>
             </div>`;
@@ -241,23 +256,23 @@
 
         dom = {
             highlight, pointer, clickRing, guide,
-            arrow: guide.querySelector('#tour-arrow'),
-            name: guide.querySelector('.tg-name'),
             step: guide.querySelector('.tg-step'),
             title: guide.querySelector('.tg-title'),
             desc: guide.querySelector('.tg-desc'),
+            group: guide.querySelector('.tg-group'),
             skip: guide.querySelector('#tour-skip'),
             prev: guide.querySelector('#tour-prev'),
+            play: guide.querySelector('#tour-play'),
             next: guide.querySelector('#tour-next')
         };
 
-        dom.name.textContent = ui('name');
         dom.skip.textContent = ui('skip');
         dom.prev.textContent = ui('prev');
         dom.next.textContent = ui('next');
 
         dom.skip.addEventListener('click', finish);
         dom.prev.addEventListener('click', () => goTo(idx - 1));
+        dom.play.addEventListener('click', () => { playing ? pause() : resume(); });
         dom.next.addEventListener('click', () => {
             if (idx >= STEPS.length - 1) finish();
             else goTo(idx + 1);
@@ -292,14 +307,31 @@
         top = clamp(top, 12, window.innerHeight - h - 12);
         g.style.left = left + 'px';
         g.style.top = top + 'px';
+    }
 
-        const a = dom.arrow;
-        a.className = '';
-        a.style.top = ''; a.style.left = '';
-        if (side === 'right') { a.classList.add('a-left'); a.style.top = (rect.top + rect.height / 2 - top - 8) + 'px'; }
-        else if (side === 'left') { a.classList.add('a-right'); a.style.top = (rect.top + rect.height / 2 - top - 8) + 'px'; }
-        else if (side === 'bottom') { a.classList.add('a-top'); a.style.left = (rect.left + rect.width / 2 - left - 8) + 'px'; }
-        else { a.classList.add('a-bottom'); a.style.left = (rect.left + rect.width / 2 - left - 8) + 'px'; }
+    // 客服旋钮（真实悬浮窗）紧贴着讲解气泡的外侧，与气泡作为一个整体移动到当前区块
+    function placeFabBesideBubble(side, rect) {
+        if (!supportFab) return;
+        const g = dom.guide;
+        const w = g.offsetWidth || 300, h = g.offsetHeight || 220;
+        const fw = 44, fh = 44, gap = 14;
+        // 复算气泡目标位置（与 placeGuide 一致），避免读到过渡动画中的中间坐标
+        let bl, bt;
+        if (side === 'right') { bl = rect.right + 18; bt = rect.top; }
+        else if (side === 'left') { bl = rect.left - w - 18; bt = rect.top; }
+        else if (side === 'bottom') { bl = rect.left; bt = rect.bottom + 18; }
+        else { bl = rect.left; bt = rect.top - h - 18; }
+        bl = clamp(bl, 12, window.innerWidth - w - 12);
+        bt = clamp(bt, 12, window.innerHeight - h - 12);
+        const br = bl + w, bcy = bt + h / 2;
+        let left = (side === 'left') ? (bl - fw - gap) : (br + gap); // 旋钮始终在气泡“外侧”
+        let top = bcy - fh / 2;
+        left = clamp(left, 12, window.innerWidth - fw - 12);
+        top = clamp(top, 12, window.innerHeight - fh - 12);
+        supportFab.style.right = 'auto';
+        supportFab.style.left = left + 'px';
+        supportFab.style.top = top + 'px';
+        supportFab.style.transform = 'none';
     }
 
     function positionAll() {
@@ -314,7 +346,10 @@
         dom.highlight.style.width = (rect.width + pad * 2) + 'px';
         dom.highlight.style.height = (rect.height + pad * 2) + 'px';
 
-        placeGuide(rect, chooseSide(rect));
+        // 讲解气泡贴着被讲解的元素（选空白处一侧、留间距），随步骤滑动且不会遮挡讲解区域
+        const side = chooseSide(rect);
+        placeGuide(rect, side);
+        placeFabBesideBubble(side, rect); // 客服旋钮跟随气泡一起移动到该区块
 
         // 指针仅在“需要点击”的步骤出现并移动到目标中心
         if (step.click) {
@@ -455,6 +490,7 @@
     function goTo(i) {
         if (i < 0 || i >= STEPS.length) return;
         if (clickTimer) clearTimeout(clickTimer);
+        if (autoTimer) clearTimeout(autoTimer); // 取消上一轮的自动前进，避免重复触发
         leaveStep(activeEl, activeStep); // 清理上一步
 
         idx = i;
@@ -464,20 +500,37 @@
 
         activeEl = el; activeStep = step;
 
-        dom.name.textContent = ui('name');
         dom.skip.textContent = ui('skip');
         dom.prev.textContent = ui('prev');
         dom.next.textContent = idx >= STEPS.length - 1 ? ui('finish') : ui('next');
         dom.title.textContent = txt(step.t);
         dom.desc.textContent = txt(step.d);
-        dom.step.textContent = `第 ${idx + 1} / ${STEPS.length} 步`;
+        dom.group.textContent = txt(step.groupTitle);                 // 大功能名（pill）
+        dom.step.textContent = `第 ${idx + 1} / ${STEPS.length} 步 · ${step.groupStep + 1}/${step.groupCount}`; // 大功能内进度
         dom.prev.disabled = idx === 0;
 
         if (!isInView(el)) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         positionAll();
 
         if (step.click) interact(el, step);
+        updatePlayBtn();
+        scheduleAuto(); // 自动播放：停留若干毫秒后进入下一步（用户可暂停）
     }
+
+    // 自动播放：当前步停留 dwell 毫秒后自动前进；组首步多停留以便看清“大功能”切换
+    function scheduleAuto() {
+        if (autoTimer) clearTimeout(autoTimer);
+        autoTimer = null;
+        if (!playing || !active) return;
+        if (idx >= STEPS.length - 1) return; // 最后一步停下，等用户点“完成”
+        const step = STEPS[idx];
+        let dwell = step.dwell || (step.kind === 'modal' ? 3400 : step.click ? 2800 : 2400);
+        if (step.isGroupStart) dwell += 900; // 新大功能：多停留，给读者缓冲
+        autoTimer = setTimeout(() => goTo(idx + 1), dwell);
+    }
+    function pause() { playing = false; if (autoTimer) clearTimeout(autoTimer); autoTimer = null; updatePlayBtn(); }
+    function resume() { playing = true; updatePlayBtn(); scheduleAuto(); }
+    function updatePlayBtn() { if (dom && dom.play) dom.play.textContent = playing ? '⏸' : '▶'; }
 
     // ===== 启动 / 结束 =====
     function start() {
@@ -485,6 +538,18 @@
         buildDom();
         active = true;
         startObserver();
+
+        // 复用真实客服悬浮窗作为导游：保存原状态、抬到遮罩之上、禁用其“打开对话”
+        supportFab = document.getElementById('support-fab');
+        if (supportFab) {
+            supportFab.classList.remove('hidden');
+            fabSaved = supportFab.style.cssText;
+            supportFab.style.zIndex = '10005';
+            supportFab.style.transition = 'left .5s cubic-bezier(.22,1,.36,1), top .5s cubic-bezier(.22,1,.36,1)';
+            supportFabBtn = supportFab.querySelector('#support-fab-btn');
+            if (supportFabBtn) supportFabBtn.addEventListener('click', blockFabClick, true);
+        }
+
         idx = 0;
         activeEl = null; activeStep = null;
 
@@ -511,6 +576,9 @@
         active = false;
         stopObserver();
         if (clickTimer) clearTimeout(clickTimer);
+        if (autoTimer) clearTimeout(autoTimer);
+        autoTimer = null;
+        playing = true; // 重置为自动播放，下次进入默认自动
         leaveStep(activeEl, activeStep);
         // 兜底：若上一步弹窗是异步打开、尚未被登记，结束导览时一并移除
         setTimeout(() => {
@@ -520,6 +588,12 @@
                 if (cs.display !== 'none' && cs.visibility !== 'hidden' && r.width > 0 && r.height > 0) n.remove();
             });
         }, 700);
+        // 还原真实客服悬浮窗（位置 / 层级 / 点击行为），让它回到常态
+        if (supportFab) {
+            supportFab.style.cssText = fabSaved || '';
+            if (supportFabBtn) supportFabBtn.removeEventListener('click', blockFabClick, true);
+            supportFab = null; supportFabBtn = null; fabSaved = null;
+        }
         activeEl = null; activeStep = null;
         if (dom) {
             dom.guide.classList.remove('show');
