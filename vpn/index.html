@@ -4887,9 +4887,12 @@
             };
             
             const handleRecharge = async (e) => {
+                // 统一处理：登录态走 ticket 免密登录，未登录/失败则带主题参数打开充值页
+                e.preventDefault();
+                const lang = (window.currentLang || 'zh-CN').split('-')[0];
+                const theme = document.body.classList.contains('theme-light') ? 'light' : 'dark';
+                const fallback = `https://funbua.uk/vpay?lang=${encodeURIComponent(lang)}&theme=${theme}`;
                 if (userInfo && userInfo.username) {
-                    e.preventDefault();
-                    const lang = (window.currentLang || 'zh-CN').split('-')[0];
                     try {
                         const resp = await fetch('https://api.funbua.uk/api/quick-login-ticket', {
                             method: 'POST',
@@ -4898,17 +4901,14 @@
                         });
                         const data = await resp.json();
                         if (data.success && data.ticket) {
-                            const theme = document.body.classList.contains('theme-light') ? 'light' : 'dark';
-                            const url = `https://funbua.uk/vpay?ticket=${encodeURIComponent(data.ticket)}&lang=${encodeURIComponent(lang)}&theme=${theme}`;
-                            window.location.href = url;
+                            window.location.href = `https://funbua.uk/vpay?ticket=${encodeURIComponent(data.ticket)}&lang=${encodeURIComponent(lang)}&theme=${theme}`;
                             return;
                         }
                     } catch (err) {
                         console.error('获取授权码失败', err);
                     }
-                    // 失败则退回直接打开充值页（手动登录）
-                    window.location.href = `https://funbua.uk/vpay?lang=${encodeURIComponent(lang)}&theme=${document.body.classList.contains('theme-light') ? 'light' : 'dark'}`;
                 }
+                window.location.href = fallback;
             };
 
             let withdrawMethod = '';
@@ -7204,20 +7204,6 @@
             }, 10000);
         })();
 
-        // 跳转到 vpay 时携带当前主题参数，使其与本站主题同步
-        (function () {
-            var links = document.querySelectorAll('a.js-recharge, #recharge-btn');
-            Array.prototype.forEach.call(links, function (a) {
-                a.addEventListener('click', function (e) {
-                    e.preventDefault();
-                    var theme = document.body.classList.contains('theme-light') ? 'light' : 'dark';
-                    var base = a.getAttribute('href');
-                    if (!base) return;
-                    var sep = base.indexOf('?') > -1 ? '&' : '?';
-                    window.location.href = base + sep + 'theme=' + theme;
-                });
-            });
-        })();
     </script>
 
     <!-- 系统礼物浮层 -->
