@@ -41,6 +41,61 @@
     return { text, emails: [...new Set(emails)] };
   }
 
+  // ---- 邮箱后缀容错匹配 ----
+  // OCR 常把 q↔g、l↔i、m↔n、u↔v、s↔z、b↔d、c↔e、o↔0 等认错，
+  // 这里用“混淆加权编辑距离”：易混淆字母替换代价 0.5，其余 1，在候选后缀里找最接近的一个。
+  const CONFUSE = {
+    q: 'g', g: 'q',
+    o: '0', '0': 'o',
+    l: 'i1', i: 'l1', '1': 'il',
+    m: 'n', n: 'm',
+    u: 'v', v: 'u',
+    s: 'z', z: 's',
+    b: 'd', d: 'b',
+    c: 'e', e: 'c'
+  };
+  function confused(a, b) { const x = CONFUSE[a]; return !!x && x.indexOf(b) !== -1; }
+  function confusionDist(a, b) {
+    a = String(a).toLowerCase(); b = String(b).toLowerCase();
+    const m = a.length, n = b.length;
+    const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+    for (let i = 0; i <= m; i++) dp[i][0] = i;
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        const cost = a[i - 1] === b[j - 1] ? 0 : (confused(a[i - 1], b[j - 1]) ? 0.5 : 1);
+        dp[i][j] = Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1, dp[i - 1][j - 1] + cost);
+      }
+    }
+    return dp[m][n];
+  }
+  function tldOf(d) { const i = d.lastIndexOf('.'); return i < 0 ? '' : d.slice(i + 1); }
+  // 在候选后缀里找最接近的一个；偏差（混淆距离）≤1 才采用，否则返回 null
+  function matchSuffix(domain, candidates) {
+    domain = domain.toLowerCase().replace(/\s+/g, '');
+    if (!domain) return null;
+    if (candidates.indexOf(domain) !== -1) return domain;
+    const ocrTld = tldOf(domain);
+    let best = null, bestScore = Infinity;
+    for (const c of candidates) {
+      // 顶级域（.com/.net/.cn…）偏差过大则跳过，避免跨后缀误匹配
+      if (ocrTld && tldOf(c) && confusionDist(ocrTld, tldOf(c)) > 1) continue;
+      const d = confusionDist(domain, c);
+      if (d < bestScore) { bestScore = d; best = c; }
+    }
+    return (best && bestScore <= 1) ? best : null;
+  }
+  // 修正整邮箱里的域名部分（无匹配则返回原串）
+  function fixDomainInEmail(e, domainEl) {
+    if (!e.includes('@') || !domainEl) return e;
+    const at = e.lastIndexOf('@');
+    const prefix = e.slice(0, at);
+    const d = e.slice(at + 1);
+    const opts = [...domainEl.options].map((o) => o.value);
+    const m = opts.indexOf(d) !== -1 ? d : matchSuffix(d, opts);
+    return m ? prefix + '@' + m : e;
+  }
+
   // 相机是否可用（用于决定是否显示「拍照」选项）
   function cameraSupported() {
     return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
@@ -65,22 +120,22 @@
     const isRegister = modal && modal.classList.contains('mode-register');
 
     if (!isRegister) {
-      // 登录：整邮箱填入，确保后缀保持隐藏
-      user.value = e;
+      // 登录：整邮箱填入，确保后缀保持隐藏；同时对域名做容错修正
+      user.value = fixDomainInEmail(e, domain);
       if (wrap) wrap.classList.add('hidden');
       if (domain) domain.disabled = false;
-    } else if (/@gmail\.com$/.test(e)) {
-      user.value = e.replace(/@gmail\.com$/, '');
-      if (domain) { domain.value = 'gmail.com'; domain.disabled = false; }
-      if (wrap) wrap.classList.remove('hidden');
-      syncDomainMirror(domain);
     } else if (e.includes('@')) {
-      const [prefix, d] = e.split('@');
-      const optionExists = domain && [...domain.options].some((o) => o.value === d);
-      if (optionExists) {
+      const at = e.lastIndexOf('@');
+      const prefix = e.slice(0, at);
+      const d = e.slice(at + 1);
+      // 候选后缀 = 下拉选项 + 常见邮箱后缀，保证即使选项里没有也能容错匹配
+      const known = ['gmail.com','qq.com','163.com','126.com','outlook.com','hotmail.com','yahoo.com','foxmail.com','sina.com','icloud.com','139.com','aliyun.com','21cn.com'];
+      const opts = domain ? [...domain.options].map((o) => o.value) : [];
+      const candidates = [...new Set(opts.concat(known))];
+      const matched = candidates.indexOf(d) !== -1 ? d : (candidates.length ? matchSuffix(d, candidates) : null);
+      if (matched) {
         user.value = prefix;
-        domain.value = d;
-        domain.disabled = false; // OCR 识别的邮箱允许手动切换后缀
+        if (domain) { domain.value = matched; domain.disabled = false; } // OCR 识别的邮箱允许手动切换后缀
         if (wrap) wrap.classList.remove('hidden');
         syncDomainMirror(domain);
       } else {
