@@ -463,6 +463,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         else document.getElementById('withdraw-btn')?.click();
                         SupportModule.close();
                     };
+                case 'startTour':
+                    return () => {
+                        if (typeof SupportModule !== 'undefined') SupportModule.close();
+                        if (window.TourModule) window.TourModule.start();
+                    };
                 default:
                     return null;
             }
@@ -968,7 +973,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const showWelcome = async () => {
             const lang = window.currentLang || 'zh-CN';
             const welcomeMsg = (window.translations && window.translations[lang]?.support_welcome) || '您好！欢迎来到 PHANTOM VPN 客服中心。我是您的智能客服助手{name}，有什么可以帮助您的吗？';
-            await addBotMessageStream(welcomeMsg.replace(/\{name\}/g, agentName(lang)));
+            const tourLabel = (window.translations && window.translations[lang]?.tour_start) || '开启导览';
+            await addBotMessageStream(welcomeMsg.replace(/\{name\}/g, agentName(lang)), { type: 'startTour', label: tourLabel });
         };
         const updateLanguage = async () => {
             questions = [];
