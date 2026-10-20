@@ -78,6 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 questions = await response.json();
                 loadedLang = lang;
                 renderSuggestions();
+                corpus = buildCorpus();
             } catch (error) {
                 console.error('加载常见问题失败:', error);
             }
@@ -620,6 +621,67 @@ document.addEventListener('DOMContentLoaded', () => {
             await addBotMessageStream(questionData.answer, questionData.action);
         };
 
+        // ===== 输入框自动补全：输入时联想常见问题/关键词/别名，点击或回车补全到输入框 =====
+        let corpus = [];
+        let activeIndex = -1;
+        const inputRow = input ? input.parentNode : null;
+        const autocompleteEl = document.createElement('div');
+        autocompleteEl.className = 'support-autocomplete hidden';
+        if (inputRow) {
+            inputRow.style.position = 'relative';
+            inputRow.appendChild(autocompleteEl);
+        }
+        // 补全词库：每条问题的题目、关键词、别名都纳入
+        const buildCorpus = () => {
+            const list = [];
+            questions.forEach((q) => {
+                if (q.question) list.push({ text: q.question, q });
+                (q.keywords || []).forEach((k) => { if (k) list.push({ text: k, q }); });
+                (q.aliases || []).forEach((a) => { if (a) list.push({ text: a, q }); });
+            });
+            return list;
+        };
+        const hideAutocomplete = () => {
+            autocompleteEl.classList.add('hidden');
+            autocompleteEl.innerHTML = '';
+            activeIndex = -1;
+        };
+        const selectAutocomplete = (m) => {
+            input.value = m.text;
+            hideAutocomplete();
+            input.focus();
+        };
+        const updateActive = () => {
+            const items = autocompleteEl.querySelectorAll('.support-autocomplete-item');
+            items.forEach((el, i) => el.classList.toggle('active', i === activeIndex));
+        };
+        const renderAutocomplete = (matches) => {
+            autocompleteEl.innerHTML = '';
+            if (!matches.length) { hideAutocomplete(); return; }
+            matches.forEach((m) => {
+                const item = document.createElement('div');
+                item.className = 'support-autocomplete-item';
+                item.textContent = m.text;
+                item._match = m;
+                // mousedown 抢在 input blur 之前，避免点击被吞
+                item.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    selectAutocomplete(m);
+                });
+                autocompleteEl.appendChild(item);
+            });
+            activeIndex = -1;
+            autocompleteEl.classList.remove('hidden');
+        };
+        const onInput = () => {
+            resetIdleTimer();
+            const val = input.value.trim().toLowerCase();
+            if (!val) { hideAutocomplete(); return; }
+            // 子串匹配（大小写不敏感），命中即全部列出，超出用滚动条查看
+            const matches = corpus.filter((c) => c.text && c.text.toLowerCase().includes(val));
+            renderAutocomplete(matches);
+        };
+
         // 同义词/归一化词典（按语种）。匹配前把两边都映射到标准词，解决近义词与口语差异。
         // 默认 en 词典作为「通用/跨语种」兜底（英文词在所有语种界面都能命中），zh 为中文口语归一化。
         const SYNONYM_MAP = {
@@ -761,6 +823,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const handleSend = async () => {
             if (isBotReplying) return;
+            hideAutocomplete();
             const text = input.value.trim();
             if (!text) return;
 
@@ -915,6 +978,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const closeModal = () => {
             if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+            hideAutocomplete();
             isLeaveMessageMode = false;
             isBotReplying = false;
             setInputEnabled(true);
@@ -1045,9 +1109,34 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         sendBtn?.addEventListener('click', handleSend);
         input?.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') handleSend();
+            if (e.key === 'Enter' && autocompleteEl.classList.contains('hidden')) handleSend();
         });
-        input?.addEventListener('input', resetIdleTimer);
+        input?.addEventListener('input', onInput);
+        input?.addEventListener('keydown', (e) => {
+            if (autocompleteEl.classList.contains('hidden')) return;
+            const items = [...autocompleteEl.querySelectorAll('.support-autocomplete-item')];
+            if (!items.length) return;
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                activeIndex = (activeIndex + 1) % items.length;
+                updateActive();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                activeIndex = (activeIndex - 1 + items.length) % items.length;
+                updateActive();
+            } else if (e.key === 'Enter') {
+                // 有高亮项时补全到输入框（不发送），无高亮才发送
+                if (activeIndex >= 0 && items[activeIndex]) {
+                    e.preventDefault();
+                    selectAutocomplete(items[activeIndex]._match);
+                }
+            } else if (e.key === 'Escape') {
+                hideAutocomplete();
+            }
+        });
+        document.addEventListener('click', (e) => {
+            if (!autocompleteEl.contains(e.target) && e.target !== input) hideAutocomplete();
+        });
 
         document.addEventListener('languageChanged', () => {
             setTitleForAgent();
