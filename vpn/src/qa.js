@@ -221,7 +221,7 @@ document.addEventListener('DOMContentLoaded', () => {
             div.className = 'flex gap-3 support-bot-message';
             div.innerHTML = `
                 <img src="${agentAvatar()}" alt="客服" class="w-8 h-8 rounded-full object-cover shrink-0">
-                <div class="max-w-[80%]">
+                <div class="max-w-[80%] js-bubble-wrap">
                     <div class="support-bubble px-4 py-3 text-sm flex gap-1">
                         <span class="w-2 h-2 bg-zinc-500 rounded-full animate-bounce" style="animation-delay: ${Math.random() * 200}ms"></span>
                         <span class="w-2 h-2 bg-zinc-500 rounded-full animate-bounce" style="animation-delay: ${150 + Math.random() * 200}ms"></span>
@@ -476,11 +476,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // ===== 消息时间显示 & 客服回复轮询 =====
         const API_BASE = 'https://api.funbua.uk';
-        // 本地时间 -> 'HH:MM'
-        const fmtClock = (date) => {
-            const h = String(date.getHours()).padStart(2, '0');
-            const m = String(date.getMinutes()).padStart(2, '0');
-            return `${h}:${m}`;
+        // 本地时间 -> 'YYYY-MM-DD HH:MM'（含年月日）
+        const fmtDateTime = (date) => {
+            const p = (n) => String(n).padStart(2, '0');
+            const Y = date.getFullYear();
+            const M = p(date.getMonth() + 1);
+            const D = p(date.getDate());
+            const h = p(date.getHours());
+            const m = p(date.getMinutes());
+            return `${Y}-${M}-${D} ${h}:${m}`;
         };
         // 把时间元素追加到气泡下方的容器
         const appendMsgTime = (div, date) => {
@@ -488,7 +492,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!wrap) return;
             const t = document.createElement('div');
             t.className = 'support-msg-time';
-            t.textContent = fmtClock(date);
+            t.textContent = fmtDateTime(date);
             wrap.appendChild(t);
         };
         // 后端 created_at 形如 'YYYY-MM-DD HH:MM:SS'（UTC），转本地 Date
