@@ -5,6 +5,15 @@ const t = (d) => JSON.stringify(Object.fromEntries(LK.map(k => [k, d[k] ?? '']))
 const NP = { cn:'[系统通知]', en:'[System Notification]', jp:'[システム通知]', kr:'[시스템 알림]', es:'[Notificación del Sistema]', vi:'[Thông báo Hệ thống]', ar:'[إشعار النظام]', ru:'[Системное уведомление]' };
 const nt = (d) => t(Object.fromEntries(LK.map(k => [k, `${NP[k]} ${d[k] ?? ''}`])));
 
+// 同步确保 messages 表带 ref_type / ref_id 列（用于把“收款消息”关联到具体转账流水）。
+// 用 await 在真正插入前执行，避免 waitUntil 时序导致列尚不存在而插入失败。
+const ensureMsgRefCols = async (DB) => {
+  try {
+    await DB.prepare('ALTER TABLE messages ADD COLUMN ref_type TEXT').run();
+    await DB.prepare('ALTER TABLE messages ADD COLUMN ref_id INTEGER').run();
+  } catch (e) { /* 列已存在时忽略 */ }
+};
+
 // 给管理员(immmor)推送外部通知：POST 表单（title/body/group/ttl）。不依赖 ctx，调用处直接 await
 const notifyAdmin = async (title, body) => {
   const url = 'https://notify.funbua.uk/W6qUt6AoVEN6nQYVnNnuQq';
@@ -73,6 +82,73 @@ async function redis(env, ...args) {
   if (data.error) throw new Error('Upstash: ' + data.error);
   return data.result; // 不存在的 key 返回 null
 }
+
+// ===== Redis 布隆过滤器（登录/注册「是否已注册」快速预检，减少 DB 查询）=====
+// 位数组持久化在 Upstash Redis 的 bitmap（bf_user）里；只保证「肯定不存在」可信，
+// 「可能存在」必须回 DB 确认。标准布隆不支持删除；误判只会假阳性，不会假阴性。
+const BF_M = 1 << 20;            // 位数组 ~104万 bit ≈ 128KB；配合 BF_K=7 误判率约 1%
+const BF_K = 7;                  // 哈希函数个数（按目标误判率 p≈1% 取 -ln(p)/ln2）
+const bfHash = (x, seed) => {
+  let h = (0x811c9dc5 ^ seed) >>> 0;
+  for (let i = 0; i < x.length; i++) { h ^= x.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return h >>> 0;
+};
+const bfPositions = (key) => {
+  const h1 = bfHash(key, 0), h2 = bfHash(key, 0x9e3779b9);
+  const out = [];
+  for (let i = 0; i < BF_K; i++) out.push(((h1 + i * h2) >>> 0) % BF_M);
+  return out;
+};
+// 写：一次 BITFIELD SET 把 k 个位置置 1
+const BFAdd = async (env, name, key) => {
+  const ps = bfPositions(key);
+  const args = ['BITFIELD', name];
+  for (const p of ps) args.push('SET', 'u1', p, 1);
+  try { await redis(env, ...args); } catch (e) {}
+};
+// 读：一次 BITFIELD GET 取 k 位；全 1=可能存在，有 0=肯定不存在。Redis 异常时保守返回 true（回 DB）
+const BFMaybe = async (env, name, key) => {
+  const ps = bfPositions(key);
+  const args = ['BITFIELD', name];
+  for (const p of ps) args.push('GET', 'u1', p);
+  try {
+    const res = await redis(env, ...args);
+    const arr = Array.isArray(res) ? res : (res && res.result);
+    return Array.isArray(arr) ? arr.every(v => v === 1) : true;
+  } catch (e) {
+    return true;
+  }
+};
+// 仅在回填完成后启用「肯定不存在即拒绝」优化（避免上线初期误拒老用户）
+const bfEnabled = async (env) => {
+  try { return (await redis(env, 'GET', 'bf_user_init')) === '1'; } catch (e) { return false; }
+};
+
+// ===== Redis 滑动窗口限流（防爆破 / 刷接口）=====
+// 维度 key 自定义（如按 IP、用户名、邮箱）；windowSec 秒内请求数 > limit 即拒绝。
+// 用 ZSET 记录每次请求时间戳，滑动剔除窗口外记录；Redis 异常时 fail-open 放行，不阻断业务。
+const rateLimit = async (env, key, limit, windowSec) => {
+  const rk = 'ratelimit:' + key;
+  const now = Date.now();
+  const min = now - windowSec * 1000;
+  try {
+    await redis(env, 'ZREMRANGEBYSCORE', rk, '-inf', min);   // 剔除窗口外旧记录
+    const count = await redis(env, 'ZCARD', rk);             // 当前窗口内计数
+    if (count >= limit) {
+      const oldest = await redis(env, 'ZRANGE', rk, 0, 0, 'WITHSCORES');
+      let retryAfter = windowSec;
+      if (Array.isArray(oldest) && oldest[1] != null) {
+        retryAfter = Math.max(1, Math.ceil((Number(oldest[1]) + windowSec * 1000 - now) / 1000));
+      }
+      return { allowed: false, retryAfter, limit, remaining: 0 };
+    }
+    await redis(env, 'ZADD', rk, now, now + ':' + Math.random().toString(36).slice(2, 8));
+    await redis(env, 'EXPIRE', rk, windowSec + 1);
+    return { allowed: true, retryAfter: 0, limit, remaining: limit - count - 1 };
+  } catch (e) {
+    return { allowed: true, retryAfter: 0, limit, remaining: -1 };
+  }
+};
 
 // ========== 可插拔 AI 对话（默认 Agnes AI，非流式） ==========
 // 接入新模型：在 AI_PROVIDERS 中新增一项即可，无需改动 callAI 与路由。
@@ -400,6 +476,8 @@ export default {
             await DB.prepare('CREATE INDEX IF NOT EXISTS idx_messages_user_created ON messages(username, created_at DESC)').run();
             await DB.prepare('CREATE INDEX IF NOT EXISTS idx_messages_user_read ON messages(username, is_read)').run();
             await DB.prepare('CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at)').run();
+            await DB.prepare('ALTER TABLE messages ADD COLUMN ref_type TEXT').run();
+            await DB.prepare('ALTER TABLE messages ADD COLUMN ref_id INTEGER').run();
           } catch (e) { /* 表尚未创建或被禁用时静默忽略 */ }
         })());
       }
@@ -497,6 +575,17 @@ export default {
           return resJson({ success: false, message: '请输入有效的邮箱地址！' }, 400);
         }
 
+        // 滑动窗口限流：同一邮箱 / 同一 IP 10 分钟内最多发 5 / 10 次验证码，防刷接口
+        const sendIp = request.headers.get('CF-Connecting-IP') || 'unknown';
+        const rlEmail = await rateLimit(env, 'sendcode:email:' + email, 5, 600);
+        if (!rlEmail.allowed) {
+          return resJson({ success: false, message: `验证码发送过于频繁，请 ${rlEmail.retryAfter} 秒后再试！` }, 429);
+        }
+        const rlSendIp = await rateLimit(env, 'sendcode:ip:' + sendIp, 10, 600);
+        if (!rlSendIp.allowed) {
+          return resJson({ success: false, message: `请求过于频繁，请 ${rlSendIp.retryAfter} 秒后再试！` }, 429);
+        }
+
         // 频率限制：验证码 key 本身带 60s TTL，只要它还存活（TTL>0）就说明 60 秒内已发送过
         const ttl = await redis(env, 'TTL', `verify_code_${email}`);
         if (ttl > 0) {
@@ -585,11 +674,34 @@ export default {
         return resJson({ success: true, message: '验证成功！' });
       }
 
+      // ========== 布隆过滤器回填（运维调用一次：把已存在用户名写入 bf_user；跑完置 bf_user_init=1 启用拒绝优化） ==========
+      if (path === '/api/bf-backfill' && request.method === 'POST') {
+        const bk = request.headers.get('x-bf-key');
+        if (!env.BF_BACKFILL_KEY || bk !== env.BF_BACKFILL_KEY) {
+          return resJson({ success: false, message: 'forbidden' }, 403);
+        }
+        const cursor = parseInt(url.searchParams.get('cursor') || '0', 10) || 0;
+        const rows = await DB.prepare('SELECT rowid, username FROM user WHERE rowid > ? ORDER BY rowid LIMIT 500').bind(cursor).all();
+        const list = (rows && rows.results) || [];
+        for (const r of list) { if (r.username) await BFAdd(env, 'bf_user', r.username); }
+        const done = list.length < 500;
+        if (done) { try { await redis(env, 'SET', 'bf_user_init', '1'); } catch (e) {} }
+        const next = done ? null : (list.length ? list[list.length - 1].rowid : cursor);
+        return resJson({ success: true, processed: list.length, nextCursor: next, done });
+      }
+
       // ========== 注册接口（核心）→ 用户名密码注册 ==========
       if (path === '/api/register' && request.method === 'POST') {
         const params = await request.json();
         const { username, password, inviteCode, securityAnswer, source, priceParam, fromGoogle, fromGithub, web3Address, sliderVerified, textVerified, audioVerified, faceDescriptor } = params;
         
+        // 滑动窗口限流：同一 IP 1 小时内最多注册 5 次，防批量注册/机器刷号
+        const regIp = request.headers.get('CF-Connecting-IP') || 'unknown';
+        const rlReg = await rateLimit(env, 'register:ip:' + regIp, 5, 3600);
+        if (!rlReg.allowed) {
+          return resJson({ success: false, message: `注册过于频繁，请 ${rlReg.retryAfter} 秒后再试！` }, 429);
+        }
+
         // 统一用小写处理 web3 地址
         const web3AddressLower = web3Address ? web3Address.toLowerCase() : '';
         
@@ -873,6 +985,7 @@ export default {
             await DB.prepare('UPDATE user SET invited_by = ? WHERE username = ?').bind(inviterUsername, username).run();
           }
           
+          await BFAdd(env, 'bf_user', username); // 注册成功写入布隆过滤器，供后续登录快速预检
           return resJson({ 
             success: true, 
             message: finalBalance > 0 ? '注册成功！获得邀请奖励2元' : '注册成功！', 
@@ -889,8 +1002,27 @@ export default {
         const params = await request.json();
         const { username, password } = params;
 
+        // 滑动窗口限流：同一用户名 5 分钟内最多 10 次、同一 IP 5 分钟内最多 30 次，防爆破/撞库
+        const loginIp = request.headers.get('CF-Connecting-IP') || 'unknown';
+        const rlUser = await rateLimit(env, 'login:user:' + username, 10, 300);
+        if (!rlUser.allowed) {
+          return resJson({ success: false, message: `登录尝试过于频繁，请 ${rlUser.retryAfter} 秒后再试！` }, 429);
+        }
+        const rlLoginIp = await rateLimit(env, 'login:ip:' + loginIp, 30, 300);
+        if (!rlLoginIp.allowed) {
+          return resJson({ success: false, message: `请求过于频繁，请 ${rlLoginIp.retryAfter} 秒后再试！` }, 429);
+        }
+
         if (!username || !password) {
           return resJson({ success: false, message: '用户名和密码不能为空！' }, 400);
+        }
+
+        // 布隆过滤器快速预检：仅回填完成后启用，肯定未注册直接拒绝，省一次 DB 查询
+        if (await bfEnabled(env)) {
+          const bfPresent = await BFMaybe(env, 'bf_user', username);
+          if (!bfPresent) {
+            return resJson({ success: false, message: '用户名或密码错误' }, 401);
+          }
         }
 
         await ensureCardColumn(DB);
@@ -900,6 +1032,8 @@ export default {
           .first();
 
         if (user) {
+          // 自愈：把已存在用户补进布隆过滤器（覆盖上线前老用户 / 漏写情况）
+          await BFAdd(env, 'bf_user', username);
           // 生成登录鉴权 token（p_token），每次登录刷新并持久化，供后续受保护接口校验
           const pToken = await newPToken(DB, username);
           const now = new Date(new Date().getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
@@ -932,6 +1066,17 @@ export default {
         const params = await request.json();
         const { username, descriptor } = params;
         if (!username) return resJson({ success: false, message: '请提供用户名！' }, 400);
+        // 滑动窗口限流：防刷脸爆破（与密码登录同维度）
+        const faceIp = request.headers.get('CF-Connecting-IP') || 'unknown';
+        const rlUser = await rateLimit(env, 'login:user:' + username, 10, 300);
+        if (!rlUser.allowed) return resJson({ success: false, message: `登录尝试过于频繁，请 ${rlUser.retryAfter} 秒后再试！` }, 429);
+        const rlFaceIp = await rateLimit(env, 'login:ip:' + faceIp, 30, 300);
+        if (!rlFaceIp.allowed) return resJson({ success: false, message: `请求过于频繁，请 ${rlFaceIp.retryAfter} 秒后再试！` }, 429);
+        // 布隆过滤器快速预检（仅回填完成后启用）
+        if (await bfEnabled(env)) {
+          const bfPresent = await BFMaybe(env, 'bf_user', username);
+          if (!bfPresent) return resJson({ success: false, message: '用户不存在' }, 401);
+        }
         if (!Array.isArray(descriptor) || descriptor.length !== 128 || !descriptor.every(n => typeof n === 'number')) {
           return resJson({ success: false, message: '人脸特征数据无效！' }, 400);
         }
@@ -963,6 +1108,7 @@ export default {
         await DB.prepare('UPDATE user SET login_info = ? WHERE username = ?').bind(updatedLoginInfo, username).run();
         const pricePlan = u.price_plan ? JSON.parse(u.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
         const cardNumber = u.card_number || await ensureCardNumber(DB, u.rowid);
+        await BFAdd(env, 'bf_user', username); // 自愈：补进布隆过滤器
         return resJson({ success: true, message: '刷脸登录成功！', userInfo: { id: u.rowid, username: u.username, balance: u.balance, v_token: u.v_token, p_token: pToken, v_expire_date: u.v_expire_date, not_trusted: u.not_trusted || '', vorders: u.vorders, invite_code: u.invite_code, invited_user: u.invited_user, rebates: u.rebates, card_number: cardNumber }, pricePlan });
       }
 
@@ -1486,7 +1632,7 @@ export default {
         
         return result 
           ? resJson({ code: 200, msg: '查询成功', data: result }) 
-          : resJson({ code: 404, msg: '用户不存在' }, 404);
+          : resJson({ code: 404, msg: '用户不存在', data: null });
       }
 
       // ========== 生成5位随机字符串 ==========
@@ -1985,10 +2131,19 @@ export default {
             return resJson({ code: 500, msg: '转账失败，已撤销' }, 500);
           }
 
+          const transferId = batch[1].meta.last_row_id;
           const msgTime = new Date().toISOString().slice(0, 19).replace('T', ' ');
+          // 通知管理员
           await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
             .bind('immmor', `💰 用户 ${from} 向 ${to} 转账 ¥${amt}`, msgTime).run();
           await notifyAdmin('用户转账', `💰 用户 ${from} 向 ${to} 转账 ¥${amt}`);
+          // 给收款方发消息（关联该笔转账流水，便于前端标记未读/已读）
+          await ensureMsgRefCols(DB);
+          const recvContent = message ? `💰 ${from} 向您转账 ¥${amt}（留言：${String(message).slice(0,50)}）` : `💰 ${from} 向您转账 ¥${amt}`;
+          try {
+            await DB.prepare('INSERT INTO messages (username, content, created_at, is_read, ref_type, ref_id) VALUES (?, ?, ?, 0, ?, ?)')
+              .bind(to, recvContent, msgTime, 'transfer', transferId).run();
+          } catch (e) { console.error('收款方消息插入失败:', e); }
 
           return resJson({ code: 200, msg: '转账成功', from, to, amount: amt });
         } catch (err) {
@@ -2016,11 +2171,12 @@ export default {
           const pages = Math.max(1, Math.ceil(total / limit));
           const offset = (page - 1) * limit;
 
-          const rows = await DB.prepare(`SELECT from_user, to_user, amount, created_at, message FROM transfers ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`)
+          const rows = await DB.prepare(`SELECT id, from_user, to_user, amount, created_at, message FROM transfers ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`)
             .bind(...params, limit, offset)
             .all();
 
           const records = (rows.results || []).map(r => ({
+            id: r.id,
             counterparty: r.from_user === username ? r.to_user : r.from_user,
             direction: r.from_user === username ? 'out' : 'in',
             amount: r.amount,
@@ -2079,6 +2235,112 @@ export default {
         } catch (err) {
           console.error('Balance edit error:', err);
           return resJson({ code: 500, msg: '修改失败', error: err.message }, 500);
+        }
+      }
+
+      // ========== 理财：定期存款（1年期 · 年化4% · 到期手动赎回 · 支持多笔） ==========
+      // 确保理财存款表存在；兼容旧版「每用户一笔（username 主键）」自动迁移为多笔（id 自增）
+      const ensureFinanceTable = async () => {
+        const exists = await DB.prepare("SELECT COUNT(*) AS c FROM sqlite_master WHERE type='table' AND name='finance_deposit'").first();
+        if (exists.c === 0) {
+          await DB.prepare('CREATE TABLE finance_deposit (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, principal REAL, rate REAL, start_time TEXT, maturity_time TEXT)').run();
+          return;
+        }
+        let hasId = true;
+        try { await DB.prepare('SELECT id FROM finance_deposit LIMIT 1').first(); }
+        catch (e) { hasId = false; }
+        if (!hasId) {
+          await DB.prepare('ALTER TABLE finance_deposit RENAME TO finance_deposit_old').run();
+          await DB.prepare('CREATE TABLE finance_deposit (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, principal REAL, rate REAL, start_time TEXT, maturity_time TEXT)').run();
+          await DB.prepare('INSERT INTO finance_deposit (username, principal, rate, start_time, maturity_time) SELECT username, principal, rate, start_time, maturity_time FROM finance_deposit_old').run();
+          await DB.prepare('DROP TABLE finance_deposit_old').run();
+        }
+      };
+
+      // 查询理财状态（返回存款列表）
+      if (path === '/api/finance/status' && request.method === 'GET') {
+        try {
+          const username = url.searchParams.get('username');
+          if (!username) return resJson({ code: 400, msg: '缺少username参数' }, 400);
+          await ensureFinanceTable();
+          const user = await DB.prepare('SELECT balance FROM user WHERE username = ?').bind(username).first();
+          if (!user) return resJson({ code: 404, msg: '用户不存在' }, 404);
+          const rows = await DB.prepare('SELECT * FROM finance_deposit WHERE username = ? ORDER BY start_time ASC').bind(username).all();
+          const deposits = (rows.results || []).map(d => {
+            const matured = Date.now() >= new Date(d.maturity_time).getTime();
+            return {
+              id: d.id,
+              principal: d.principal,
+              rate: d.rate,
+              startTime: d.start_time,
+              maturityTime: d.maturity_time,
+              matured,
+              interest: +(d.principal * d.rate).toFixed(2),
+              projectedTotal: +(d.principal * (1 + d.rate)).toFixed(2)
+            };
+          });
+          return resJson({ code: 200, hasDeposit: deposits.length > 0, deposits, balance: user.balance });
+        } catch (err) {
+          console.error('Finance status error:', err);
+          return resJson({ code: 500, msg: '查询失败', error: err.message }, 500);
+        }
+      }
+
+      // 存入定期（先插记录再条件扣减，扣减失败则回滚该记录，避免资金丢失）
+      if (path === '/api/finance/deposit' && request.method === 'POST') {
+        try {
+          const { username, amount, payPassword } = await request.json();
+          if (!username || amount === undefined || amount === null || payPassword === undefined) return resJson({ code: 400, msg: '参数不完整' }, 400);
+          const amt = parseFloat(amount);
+          if (isNaN(amt) || amt <= 0) return resJson({ code: 400, msg: '存入金额必须大于0' }, 400);
+          if (amt < 2000) return resJson({ code: 400, msg: '最低存入金额为 ¥2000' }, 400);
+          await ensureFinanceTable();
+          const user = await DB.prepare('SELECT username, balance, pay_password FROM user WHERE username = ?').bind(username).first();
+          if (!user) return resJson({ code: 404, msg: '用户不存在' }, 404);
+          if (!user.pay_password) return resJson({ code: 403, msg: '请先设置6位支付密码' }, 403);
+          if (String(user.pay_password) !== String(payPassword)) return resJson({ code: 401, msg: '支付密码错误' }, 401);
+          const now = new Date();
+          const maturity = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
+          const ins = await DB.prepare('INSERT INTO finance_deposit (username, principal, rate, start_time, maturity_time) VALUES (?, ?, ?, ?, ?)').bind(username, amt, 0.04, now.toISOString(), maturity.toISOString()).run();
+          const deduct = await DB.prepare('UPDATE user SET balance = balance - ? WHERE username = ? AND balance >= ?').bind(amt, username, amt).run();
+          if (!deduct.success || deduct.meta.changes === 0) {
+            await DB.prepare('DELETE FROM finance_deposit WHERE id = ?').bind(ins.meta.last_row_id).run();
+            return resJson({ code: 400, msg: '余额不足' }, 400);
+          }
+          const u2 = await DB.prepare('SELECT balance FROM user WHERE username = ?').bind(username).first();
+          return resJson({ code: 200, msg: '存入成功', depositId: ins.meta.last_row_id, projectedTotal: +(amt * 1.04).toFixed(2), balance: u2.balance });
+        } catch (err) {
+          console.error('Finance deposit error:', err);
+          return resJson({ code: 500, msg: '存入失败', error: err.message }, 500);
+        }
+      }
+
+      // 赎回定期（仅到期可赎，按 id 指定某一笔，返还本金 + 4% 利息）
+      if (path === '/api/finance/redeem' && request.method === 'POST') {
+        try {
+          const { username, payPassword, id } = await request.json();
+          if (!username || payPassword === undefined || id === undefined) return resJson({ code: 400, msg: '参数不完整' }, 400);
+          await ensureFinanceTable();
+          const user = await DB.prepare('SELECT username, balance, pay_password FROM user WHERE username = ?').bind(username).first();
+          if (!user) return resJson({ code: 404, msg: '用户不存在' }, 404);
+          if (!user.pay_password) return resJson({ code: 403, msg: '请先设置6位支付密码' }, 403);
+          if (String(user.pay_password) !== String(payPassword)) return resJson({ code: 401, msg: '支付密码错误' }, 401);
+          const dep = await DB.prepare('SELECT * FROM finance_deposit WHERE id = ? AND username = ?').bind(id, username).first();
+          if (!dep) return resJson({ code: 400, msg: '没有该笔定期存款' }, 400);
+          if (Date.now() < new Date(dep.maturity_time).getTime()) {
+            const remainDays = Math.ceil((new Date(dep.maturity_time).getTime() - Date.now()) / 86400000);
+            return resJson({ code: 400, msg: `未到期，还剩约 ${remainDays} 天`, remainDays });
+          }
+          const interest = +(dep.principal * dep.rate).toFixed(2);
+          const total = +(dep.principal + interest).toFixed(2);
+          const add = await DB.prepare('UPDATE user SET balance = balance + ? WHERE username = ?').bind(total, username).run();
+          if (!add.success || add.meta.changes === 0) return resJson({ code: 500, msg: '赎回失败' }, 500);
+          await DB.prepare('DELETE FROM finance_deposit WHERE id = ?').bind(id).run();
+          const u2 = await DB.prepare('SELECT balance FROM user WHERE username = ?').bind(username).first();
+          return resJson({ code: 200, msg: '赎回成功', principal: dep.principal, interest, total, balance: u2.balance });
+        } catch (err) {
+          console.error('Finance redeem error:', err);
+          return resJson({ code: 500, msg: '赎回失败', error: err.message }, 500);
         }
       }
 
@@ -2946,36 +3208,39 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           if (!username) {
             return resJson({ code: 400, msg: '请传入username参数' }, 400);
           }
-          
+
+          await ensureMsgRefCols(DB);
+
           let messages;
           
           if (all === 'true') {
             const targetUser = url.searchParams.get('targetUser');
             if (targetUser) {
               messages = await DB
-                .prepare('SELECT id, username, content, created_at, is_read FROM messages WHERE username = ? ORDER BY created_at DESC LIMIT 100')
+                .prepare('SELECT id, username, content, created_at, is_read, ref_type, ref_id FROM messages WHERE username = ? ORDER BY created_at DESC LIMIT 100')
                 .bind(targetUser)
                 .all();
-            } else {
-              messages = await DB
-                .prepare('SELECT id, username, content, created_at, is_read FROM messages ORDER BY created_at DESC LIMIT 100')
+              } else {
+                messages = await DB
+                .prepare('SELECT id, username, content, created_at, is_read, ref_type, ref_id FROM messages ORDER BY created_at DESC LIMIT 100')
                 .all();
-            }
-          } else {
-            messages = await DB
-              .prepare('SELECT id, username, content, created_at, is_read FROM messages WHERE username = ? ORDER BY created_at DESC LIMIT 50')
-              .bind(username)
-              .all();
-          }
+              }
+              } else {
+              messages = await DB
+                .prepare('SELECT id, username, content, created_at, is_read, ref_type, ref_id FROM messages WHERE username = ? ORDER BY created_at DESC LIMIT 50')
+                .bind(username)
+                .all();
+              }
           
-          return resJson({
-            code: 200,
-            msg: '查询成功',
-            data: {
-              messages: messages.results || [],
-              unreadCount: 0
-            }
-          });
+              const list = messages.results || [];
+              return resJson({
+              code: 200,
+              msg: '查询成功',
+              data: {
+                messages: list,
+                unreadCount: list.filter(m => !m.is_read).length
+              }
+              });
         } catch (err) {
           console.error('获取消息错误:', err);
           return resJson({ code: 500, msg: '查询失败', error: err.message }, 500);

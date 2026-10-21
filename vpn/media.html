@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>端侧 AI 文本分类 (情感分析)</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 750px; margin: 40px auto; padding: 0 20px; background: #f4f7f6; color: #333; }
+        .card { background: #fff; padding: 24px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05); }
+        h2 { margin-top: 0; color: #2563eb; border-bottom: 2px solid #f1f5f9; padding-bottom: 12px; }
+        textarea { width: 100%; height: 100px; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 15px; box-sizing: border-box; resize: vertical; outline: none; }
+        textarea:focus { border-color: #2563eb; }
+        .btn-group { margin-top: 12px; display: flex; gap: 10px; flex-wrap: wrap; }
+        button { background: #2563eb; color: white; border: none; padding: 10px 18px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; }
+        button:hover { background: #1d4ed8; }
+        button.preset { background: #e2e8f0; color: #475569; }
+        button.preset:hover { background: #cbd5e1; }
+        .result-panel { margin-top: 20px; padding: 16px; border-radius: 8px; background: #0f172a; color: #f8fafc; font-family: monospace; font-size: 13px; line-height: 1.6; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h2>🤖 端侧真实 AI 文本分类</h2>
+        <p style="color: #64748b; font-size: 14px;">
+            基于 Hugging Face 真实神经网络模型（DistilBERT）在浏览器本地运行。
+        </p>
+
+        <textarea id="textInput" placeholder="请输入英文文本（推荐英文，模型对英文支持最完美）：
+1. I really love this application, it is super fast and amazing!
+2. This is the worst service I have ever used. Terrible experience."></textarea>
+
+        <div class="btn-group">
+            <button id="classifyBtn" disabled>正在加载 AI 模型...</button>
+            <button class="preset" onclick="setPreset('pos')">填入正面评价</button>
+            <button class="preset" onclick="setPreset('neg')">填入负面评价</button>
+        </div>
+
+        <div class="result-panel" id="resultBox">
+[系统日志] 正在初始化网页，准备加载神经网络环境...
+        </div>
+    </div>
+
+    <!-- 使用标准 ES Module 导入，并配合 env 彻底解决本地路径 404 问题 -->
+    <script type="module">
+        import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
+
+        // ==========================================
+        // 关键核心：禁止本地查找，强制从官方 CDN 下载模型
+        // ==========================================
+        env.allowLocalModels = false;
+        env.allowRemoteModels = true;
+
+        let classifier = null;
+        const resultBox = document.getElementById('resultBox');
+        const classifyBtn = document.getElementById('classifyBtn');
+        const textInput = document.getElementById('textInput');
+
+        function appendLog(msg) {
+            console.log("[AI_LOG] " + msg);
+            resultBox.innerText += "\n" + msg;
+            resultBox.scrollTop = resultBox.scrollHeight;
+        }
+
+        // 异步初始化 AI 模型
+        async function initAIModel() {
+            try {
+                appendLog(">>> 正在从官方 CDN 异步下载并初始化 DistilBERT 模型（首次运行需几秒钟）...");
+                
+                classifier = await pipeline(
+                    'sentiment-analysis', 
+                    'Xenova/bert-base-multilingual-uncased-sentiment'
+                );
+
+                appendLog("✅ 【模型加载成功】本地神经网络已就绪！");
+                classifyBtn.innerText = "执行真实 AI 分类";
+                classifyBtn.disabled = false;
+            } catch (err) {
+                appendLog("❌ 模型加载失败: " + err.message);
+                console.error(err);
+            }
+        }
+
+        // 点击按钮执行分类推理
+        classifyBtn.addEventListener('click', async () => {
+            const text = textInput.value.trim();
+            if (!text) {
+                alert("请输入需要分析的文本！");
+                return;
+            }
+
+            if (!classifier) {
+                alert("模型尚未加载完成，请稍候...");
+                return;
+            }
+
+            appendLog(`\n----------------------------------------`);
+            appendLog(`[推理任务] 输入文本: "${text}"`);
+            appendLog(`[推理任务] 正在进行本地神经网络前向计算...`);
+
+            const startTime = performance.now();
+            try {
+                const output = await classifier(text);
+                const cost = (performance.now() - startTime).toFixed(2);
+
+                const res = output[0];
+                const confidence = (res.score * 100).toFixed(2);
+
+                appendLog(`[推理完成] 耗时: ${cost} ms`);
+                appendLog(`[预测结果] 标签: ${res.label}`);
+                appendLog(`[置信度得分] ${confidence}%`);
+                appendLog(`[原始返回] ${JSON.stringify(output)}`);
+            } catch (e) {
+                appendLog(`[推理异常] ${e.message}`);
+                console.error(e);
+            }
+        });
+
+        window.setPreset = function(type) {
+            if (type === 'pos') {
+                textInput.value = "I really love using this platform! The user experience is amazing and super smooth.";
+            } else {
+                textInput.value = "This service is terrible. It keeps crashing and completely failed my expectations.";
+            }
+        };
+
+        // 页面加载后自动触发
+        initAIModel();
+    </script>
+</body>
+</html>

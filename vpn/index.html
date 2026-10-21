@@ -2024,6 +2024,13 @@
                            placeholder="请输入 OKX / Binance 账户邮箱">
                     <p class="text-xs text-zinc-500 mt-2">平台将通过该邮箱向您发送USDT，请确保正确无误。</p>
                 </div>
+                <div class="space-y-2">
+                    <label class="text-xs text-zinc-400 block mb-2" data-i18n="withdraw_verify_method">安全验证方式</label>
+                    <div class="grid grid-cols-2 gap-2" id="withdraw-verify-tabs">
+                        <button type="button" data-vmode="slider" class="withdraw-verify-tab flex-1 py-2 rounded-lg border border-[var(--neon-green)] text-sm text-white bg-[var(--neon-green)]/10 transition-all" data-i18n="withdraw_verify_tab_slider">滑块验证</button>
+                        <button type="button" data-vmode="gesture" class="withdraw-verify-tab flex-1 py-2 rounded-lg border border-zinc-700 text-sm text-zinc-400 hover:border-[var(--neon-green)] hover:text-white transition-all" data-i18n="withdraw_verify_tab_gesture">视频手势验证</button>
+                    </div>
+                </div>
                 <div id="withdraw-slider-wrap" class="space-y-4">
                     <div class="relative rounded-lg overflow-hidden border border-zinc-700 bg-zinc-800 w-full" style="aspect-ratio: 280/160;">
                         <canvas id="withdraw-captcha-bg" width="280" height="160" class="block w-full h-full"></canvas>
@@ -2039,6 +2046,19 @@
                         <div id="withdraw-slider-handle" class="absolute top-0 left-0 w-10 h-full bg-zinc-700 border-r border-zinc-600 rounded-lg flex items-center justify-center cursor-grab active:cursor-grabbing transition-colors">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="text-zinc-400"><polyline points="9 18 15 12 9 6"></polyline></svg>
                         </div>
+                    </div>
+                </div>
+                <div id="withdraw-gesture-wrap" class="space-y-3 hidden">
+                    <p id="withdraw-gesture-tip" class="text-xs text-zinc-400" data-i18n="withdraw_gesture_tip">点击「开始手势验证」后，请依次比出系统给出的 3 个数字手势（0–5，伸出的手指数即数字）完成活体验证</p>
+                    <div class="relative rounded-lg overflow-hidden border border-zinc-700 bg-zinc-900 w-full flex items-center justify-center" style="aspect-ratio: 4/3;">
+                        <video id="withdraw-gesture-video" class="block w-full h-full object-cover" autoplay playsinline muted></video>
+                        <canvas id="withdraw-gesture-canvas" class="absolute inset-0 w-full h-full pointer-events-none"></canvas>
+                        <div id="withdraw-gesture-overlay" class="absolute inset-0 flex items-center justify-center text-center text-xs text-zinc-400 px-4" data-i18n="withdraw_gesture_overlay">摄像头未开启</div>
+                    </div>
+                    <div id="withdraw-gesture-status" class="text-center text-xs text-zinc-400" data-i18n="withdraw_gesture_status_idle">未开始</div>
+                    <div class="flex gap-2">
+                        <button id="withdraw-gesture-start" type="button" class="flex-1 py-2.5 bg-[var(--neon-blue)] text-white text-sm rounded-lg hover:opacity-90 transition-opacity" data-i18n="withdraw_gesture_start">开始手势验证</button>
+                        <button id="withdraw-gesture-stop" type="button" class="flex-1 py-2.5 bg-zinc-700 text-zinc-300 text-sm rounded-lg hover:opacity-90 transition-opacity hidden" data-i18n="withdraw_gesture_stop">停止</button>
                     </div>
                 </div>
                 <button id="withdraw-submit" type="button" class="w-full py-3 bg-[var(--neon-green)] text-black font-bold rounded-lg text-sm hover:opacity-90 transition-opacity" data-i18n="withdraw_submit">提交申请</button>
@@ -5413,6 +5433,9 @@
                 els.withdrawModal.classList.remove('hidden');
                 els.withdrawModal.classList.add('flex');
                 if (window.withdrawSliderCtl) window.withdrawSliderCtl.reset();
+                stopGestureVerification();
+                switchVerifyMode('slider');
+                window.isWithdrawVerified = false;
                 updateWithdrawChecks();
                 loadSavedQrCodes();
                 loadWithdrawHistory();
@@ -5554,6 +5577,7 @@
             const closeWithdrawModal = () => {
                 els.withdrawModal.classList.add('hidden');
                 els.withdrawModal.classList.remove('flex');
+                stopGestureVerification();
             };
 
             const handleWithdraw = async () => {
@@ -6532,6 +6556,180 @@
                     statusEl: els.withdrawCaptchaStatus,
                     onVerifiedChange: (v) => { window.isWithdrawVerified = v; updateWithdrawChecks(); }
                 });
+
+                // ===== 视频手势识别验证（MediaPipe GestureRecognizer）=====
+                let gestureRecognizerInst = null;
+                let gestureStreamInst = null;
+                let gestureRAFInst = null;
+                let gestureActive = false;
+                const WITHDRAW_GESTURE_STEPS = 3;
+                let gestureChallenge = [];
+                let gestureStep = 0;
+                let gestureStepCount = 0;
+
+                const gt = (key, vars) => {
+                    const d = (translations[currentLang] && translations[currentLang][key]) || key;
+                    if (!vars) return d;
+                    return d.replace(/\{(\w+)\}/g, (_, k) => (vars[k] != null ? String(vars[k]) : ''));
+                };
+
+                const loadGestureRecognizer = async () => {
+                    if (gestureRecognizerInst) return gestureRecognizerInst;
+                    const { GestureRecognizer, FilesetResolver } = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14');
+                    const vision = await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm');
+                    const modelAssetPath = 'https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task';
+                    try {
+                        gestureRecognizerInst = await GestureRecognizer.createFromOptions(vision, { baseOptions: { modelAssetPath, delegate: 'GPU' }, runningMode: 'VIDEO', numHands: 1 });
+                    } catch {
+                        gestureRecognizerInst = await GestureRecognizer.createFromOptions(vision, { baseOptions: { modelAssetPath, delegate: 'CPU' }, runningMode: 'VIDEO', numHands: 1 });
+                    }
+                    return gestureRecognizerInst;
+                };
+
+                const drawGestureHand = (canvas, video, res) => {
+                    if (!canvas) return;
+                    const w = canvas.width = video.clientWidth || 480;
+                    const h = canvas.height = video.clientHeight || 360;
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, w, h);
+                    const hands = res.landmarks || [];
+                    ctx.fillStyle = '#00ff88';
+                    for (const lm of hands) {
+                        for (const p of lm) {
+                            ctx.beginPath();
+                            ctx.arc(p.x * w, p.y * h, 3, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+                    }
+                };
+
+                const countFingers = (lm) => {
+                    const wrist = lm[0];
+                    const d = (i) => Math.hypot(lm[i].x - wrist.x, lm[i].y - wrist.y);
+                    let count = 0;
+                    const fingers = [[8, 6], [12, 10], [16, 14], [20, 18]];
+                    for (const [tip, pip] of fingers) if (d(tip) > d(pip)) count++;
+                    if (d(4) > d(3) * 1.2) count++; // 拇指：指尖离食指根部比 IP 关节更远即视为伸出
+                    return count;
+                };
+
+                const genGestureChallenge = () => {
+                    gestureChallenge = Array.from({ length: WITHDRAW_GESTURE_STEPS }, () => Math.floor(Math.random() * 6));
+                    gestureStep = 0;
+                    gestureStepCount = 0;
+                    const tip = document.getElementById('withdraw-gesture-tip');
+                    if (tip) tip.innerHTML = gt('withdraw_gesture_show') + '<span class="text-[var(--neon-green)] font-bold tracking-widest">' + gestureChallenge.join('   ') + '</span>';
+                };
+
+                const stopGestureVerification = () => {
+                    gestureActive = false;
+                    if (gestureRAFInst) { cancelAnimationFrame(gestureRAFInst); gestureRAFInst = null; }
+                    if (gestureStreamInst) { gestureStreamInst.getTracks().forEach(t => t.stop()); gestureStreamInst = null; }
+                    const video = document.getElementById('withdraw-gesture-video');
+                    if (video) video.srcObject = null;
+                    const startBtn = document.getElementById('withdraw-gesture-start');
+                    const stopBtn = document.getElementById('withdraw-gesture-stop');
+                    if (startBtn) startBtn.classList.remove('hidden');
+                    if (stopBtn) stopBtn.classList.add('hidden');
+                    const overlay = document.getElementById('withdraw-gesture-overlay');
+                    if (overlay && !window.isWithdrawVerified) overlay.classList.remove('hidden');
+                };
+
+                const startGestureVerification = async () => {
+                    if (gestureActive) return;
+                    const video = document.getElementById('withdraw-gesture-video');
+                    const statusEl = document.getElementById('withdraw-gesture-status');
+                    const overlay = document.getElementById('withdraw-gesture-overlay');
+                    const startBtn = document.getElementById('withdraw-gesture-start');
+                    const stopBtn = document.getElementById('withdraw-gesture-stop');
+                    statusEl.textContent = gt('withdraw_gesture_loading');
+                    statusEl.className = 'text-center text-xs text-zinc-400';
+                    try {
+                        const recognizer = await loadGestureRecognizer();
+                        gestureStreamInst = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: 640, height: 480 }, audio: false });
+                        video.srcObject = gestureStreamInst;
+                        await video.play();
+                        gestureActive = true;
+                        startBtn.classList.add('hidden');
+                        stopBtn.classList.remove('hidden');
+                        overlay.classList.add('hidden');
+                        genGestureChallenge();
+                        statusEl.textContent = gt('withdraw_gesture_step_prompt', { s: 1, t: gestureChallenge.length, n: gestureChallenge[0] });
+                        const detectLoop = async () => {
+                            if (!gestureActive) return;
+                            const now = performance.now();
+                            if (video.readyState >= 2) {
+                                try {
+                                    const res = recognizer.recognizeForVideo(video, now);
+                                    drawGestureHand(document.getElementById('withdraw-gesture-canvas'), video, res);
+                                    const hand = (res.landmarks && res.landmarks[0]) || null;
+                                    if (!hand) {
+                                        gestureStepCount = 0;
+                                        statusEl.textContent = gt('withdraw_gesture_step_nohand', { s: gestureStep + 1, t: gestureChallenge.length });
+                                        statusEl.className = 'text-center text-xs text-zinc-400';
+                                    } else {
+                                        const n = countFingers(hand);
+                                        const want = gestureChallenge[gestureStep];
+                                        if (n === want) {
+                                            gestureStepCount++;
+                                            statusEl.textContent = gt('withdraw_gesture_step_progress', { s: gestureStep + 1, t: gestureChallenge.length, c: gestureStepCount });
+                                            if (gestureStepCount >= 3) {
+                                                gestureStep++;
+                                                gestureStepCount = 0;
+                                                if (gestureStep >= gestureChallenge.length) {
+                                                    window.isWithdrawVerified = true;
+                                                    updateWithdrawChecks();
+                                                    statusEl.textContent = gt('withdraw_gesture_pass');
+                                                    statusEl.className = 'text-center text-xs text-[var(--neon-green)]';
+                                                    stopGestureVerification();
+                                                    return;
+                                                }
+                                                const tip = document.getElementById('withdraw-gesture-tip');
+                                                if (tip) tip.innerHTML = gt('withdraw_gesture_show') + '<span class="text-[var(--neon-green)] font-bold tracking-widest">' + gestureChallenge.join('   ') + '</span>';
+                                                statusEl.textContent = gt('withdraw_gesture_step_prompt', { s: gestureStep + 1, t: gestureChallenge.length, n: gestureChallenge[gestureStep] });
+                                            }
+                                        } else {
+                                            gestureStepCount = 0;
+                                            statusEl.textContent = gt('withdraw_gesture_step_current', { s: gestureStep + 1, t: gestureChallenge.length, n: want, m: n });
+                                        }
+                                    }
+                                } catch (e) { /* 单帧识别错误忽略 */ }
+                            }
+                            gestureRAFInst = requestAnimationFrame(detectLoop);
+                        };
+                        gestureRAFInst = requestAnimationFrame(detectLoop);
+                    } catch (err) {
+                        console.error('手势验证初始化失败:', err);
+                        statusEl.textContent = gt('withdraw_gesture_error');
+                        statusEl.className = 'text-center text-xs text-[var(--neon-red)]';
+                        gestureActive = false;
+                        startBtn.classList.remove('hidden');
+                        stopBtn.classList.add('hidden');
+                    }
+                };
+
+                const switchVerifyMode = (mode) => {
+                    document.querySelectorAll('.withdraw-verify-tab').forEach(b => {
+                        const on = b.dataset.vmode === mode;
+                        b.classList.toggle('border-[var(--neon-green)]', on);
+                        b.classList.toggle('text-white', on);
+                        b.classList.toggle('bg-[var(--neon-green)]/10', on);
+                        b.classList.toggle('border-zinc-700', !on);
+                        b.classList.toggle('text-zinc-400', !on);
+                    });
+                    if (els.withdrawSliderWrap) els.withdrawSliderWrap.classList.toggle('hidden', mode !== 'slider');
+                    const gw = document.getElementById('withdraw-gesture-wrap');
+                    if (gw) gw.classList.toggle('hidden', mode !== 'gesture');
+                    if (mode !== 'gesture') stopGestureVerification();
+                };
+
+                document.querySelectorAll('.withdraw-verify-tab').forEach(tab => {
+                    tab.addEventListener('click', () => switchVerifyMode(tab.dataset.vmode));
+                });
+                const gStart = document.getElementById('withdraw-gesture-start');
+                const gStop = document.getElementById('withdraw-gesture-stop');
+                if (gStart) gStart.addEventListener('click', startGestureVerification);
+                if (gStop) gStop.addEventListener('click', stopGestureVerification);
 
                 const togglePasswordVisibility = (btnId, inputId) => {
                     const p = document.getElementById(inputId);
