@@ -218,26 +218,240 @@
             ]
         }
     ];
+    // 节点套餐步骤按会员状态动态生成：会员走 VIP 节点界面，已登录非会员走免费节点界面，游客仅高亮介绍
+    const BASE_PLAN_STEPS = GROUPS[1].steps;
+    const BASE_NAV_STEPS = GROUPS[0].steps;
+    const TI = {
+        freeIface: {
+            t: { 'zh-CN': '免费节点界面', 'en-US': 'Free Node Interface', 'ja-JP': '無料ノード画面', 'ko-KR': '무료 노드 화면', 'es-ES': 'Interfaz de nodos gratis', 'vi-VN': 'Giao diện nút miễn phí', 'ar-SA': 'واجهة العقد المجانية', 'ru-RU': 'Интерфейс бесплатных узлов' },
+            d: { 'zh-CN': '免费节点界面：这里提供 Clash 与 V2Ray 两种订阅链接。点击「复制」复制到剪贴板，或点「下载」保存文件，再导入 PHANTOM 客户端即可连接。', 'en-US': 'Free node screen: gives Clash and V2Ray subscription links. Tap Copy to copy to clipboard, or Download to save the file, then import it into the PHANTOM client to connect.', 'ja-JP': '無料ノード画面：Clash と V2Ray の購読リンクを提供します。「コピー」でクリップボードへ、「ダウンロード」でファイルを保存し、PHANTOM クライアントにインポートすれば接続できます。', 'ko-KR': '무료 노드 화면：Clash·V2Ray 구독 링크를 제공합니다. 「복사」로 클립보드에 복사하거나 「다운로드」로 저장한 뒤 PHANTOM 클라이언트에 가져오면 연결됩니다.', 'es-ES': 'Pantalla de nodos gratis: ofrece enlaces de suscripción Clash y V2Ray. Pulsa Copiar para copiar al portapapeles o Descargar para guardar el archivo, luego impórtalo en el cliente PHANTOM para conectar.', 'vi-VN': 'Giao diện nút miễn phí：cung cấp liên kết đăng ký Clash và V2Ray. Nhấn Sao chép để copy vào clipboard, hoặc Tải xuống để lưu file, rồi nhập vào client PHANTOM để kết nối.', 'ar-SA': 'واجهة العقد المجانية：توفر روابط اشتراك Clash وV2Ray. اضغط نسخ لنسخ الرابط، أو تنزيل لحفظ الملف، ثم استورده في عميل PHANTOM للاتصال.', 'ru-RU': 'Экран бесплатных узлов：даёт ссылки подписки Clash и V2Ray. Нажмите Копировать для копирования в буфер или Скачать для сохранения файла, затем импортируйте его в клиент PHANTOM для подключения.' }
+        },
+        freeLink: {
+            t: { 'zh-CN': '订阅链接', 'en-US': 'Subscription Link', 'ja-JP': '購読リンク', 'ko-KR': '구독 링크', 'es-ES': 'Enlace de suscripción', 'vi-VN': 'Liên kết đăng ký', 'ar-SA': 'رابط الاشتراك', 'ru-RU': 'Ссылка подписки' },
+            d: { 'zh-CN': '这就是订阅链接，包含你的专属节点配置。点击「复制」一键复制，粘贴到客户端的订阅栏即可；也可点「下载」保存为本地文件。每日签到还能领取当日免费节点。', 'en-US': 'This is the subscription link with your personal node config. Tap Copy to copy it, then paste into the client subscription box; or Download to save it locally. Daily check-in also grants today free node.', 'ja-JP': 'これが購読リンクで、あなた専用のノード設定が含まれます。「コピー」でワンタップ複製し、クライアントの購読欄に貼り付けてください。「ダウンロード」で保存も可。毎日の签到で当日の無料ノードも受け取れます。', 'ko-KR': '이곳이 구독 링크로, 본인 전용 노드 설정이 담겨 있습니다. 「복사」로 복사해 클라이언트 구독란에 붙여넣거나, 「다운로드」로 저장하세요. 매일 출석하면 당일 무료 노드도 받을 수 있습니다.', 'es-ES': 'Este es el enlace de suscripción con tu configuración de nodo. Pulsa Copiar para copiarlo y pégalo en el cuadro de suscripción del cliente; o Descargar para guardarlo. La check-in diaria también otorga el nodo gratis del día.', 'vi-VN': 'Đây là liên kết đăng ký chứa cấu hình nút riêng của bạn. Nhấn Sao chép để copy rồi dán vào ô đăng ký của client, hoặc Tải xuống để lưu file. Điểm danh hằng ngày còn nhận node miễn phí trong ngày.', 'ar-SA': 'هذا رابط الاشتراك ويحتوي إعداد عقدتك الخاص. اضغط نسخ لنسخه والصقه في خانة الاشتراك بالعميل، أو تنزيل لحفظه. كما تمنحك التسجيلة اليومية عقدة مجانية لليوم.', 'ru-RU': 'Это ссылка подписки с вашей личной конфигурацией узла. Нажмите Копировать, чтобы скопировать, и вставьте в поле подписки клиента; или Скачать для сохранения. Ежедневная отметка также даёт бесплатный узел на день.' }
+        },
+        vipIface: {
+            t: { 'zh-CN': 'VIP 节点界面', 'en-US': 'VIP Node Interface', 'ja-JP': 'VIPノード画面', 'ko-KR': 'VIP 노드 화면', 'es-ES': 'Interfaz de nodos VIP', 'vi-VN': 'Giao diện nút VIP', 'ar-SA': 'واجهة عقد VIP', 'ru-RU': 'Интерфейс VIP-узлов' },
+            d: { 'zh-CN': 'VIP 节点界面：顶部显示套餐（月付/年付）、时长与价格；VIP 有效时下方展示 Clash/V2Ray 订阅配置，复制即可导入客户端。还可查看 VIP 状态（有效期、剩余天数、可用流量）。', 'en-US': 'VIP node screen: top shows the plan (monthly/yearly), duration and price; when VIP is active it shows Clash/V2Ray subscription configs to copy into the client. You can also see VIP status (expiry, days left, traffic).', 'ja-JP': 'VIPノード画面：上部にプラン（月額/年額）・期間・価格が表示され、VIP 有効時は Clash/V2Ray 購読設定が出てクライアントへコピーできます。下部には VIP ステータス（有効期限・残り日数・通信量）も。', 'ko-KR': 'VIP 노드 화면: 상단에 플랜(월간/연간)·기간·가격이 표시되고, VIP 유효 시 Clash/V2Ray 구독 설정이 나와 클라이언트로 복사할 수 있습니다. 아래에서 VIP 상태(만료일·잔여 일수·트래픽)도 확인.', 'es-ES': 'Pantalla VIP: arriba muestra el plan (mensual/anual), la duración y el precio; con VIP activo aparecen las configs Clash/V2Ray para copiar en el cliente. Abajo está el estado VIP (caducidad, días restantes, tráfico).', 'vi-VN': 'Giao diện nút VIP: đầu hiển thị gói (tháng/năm), thời hạn và giá; khi VIP còn hạn sẽ hiện cấu hình Clash/V2Ray để copy vào client. Bên dưới xem trạng thái VIP (hạn, ngày còn, dung lượng).', 'ar-SA': 'واجهة عقد VIP：تُظهر الخطة (شهرية/سنوية) والمدة والسعر بالأعلى؛ عند تفعيل VIP تظهر إعدادات Clash/V2Ray للنسخ إلى العميل. بالأسفل حالة VIP (الانتهاء، الأيام المتبقية، البيانات).', 'ru-RU': 'Экран VIP-узлов: вверху план (месяц/год), срок и цена; при активном VIP отображаются конфиги Clash/V2Ray для копирования в клиент. Ниже — статус VIP (срок, дни, трафик).' }
+        },
+        vipConfig: {
+            t: { 'zh-CN': '订阅配置', 'en-US': 'Subscription Config', 'ja-JP': '購読設定', 'ko-KR': '구독 설정', 'es-ES': 'Configuración de suscripción', 'vi-VN': 'Cấu hình đăng ký', 'ar-SA': 'إعداد الاشتراك', 'ru-RU': 'Конфиг подписки' },
+            d: { 'zh-CN': '这就是你的专属 Clash/V2Ray 订阅配置。点击「复制」一键复制，粘贴到客户端的订阅栏即可连接；也可点「下载」保存文件。每个套餐对应一份长期有效的专属链接。', 'en-US': 'This is your personal Clash/V2Ray subscription config. Tap Copy to copy it, paste into the client subscription box to connect; or Download to save the file. Each plan has one long-lived dedicated link.', 'ja-JP': 'これがご自身の専用 Clash/V2Ray 購読設定です。「コピー」でワンタップ複製し、クライアントの購読欄に貼り付けて接続できます。「ダウンロード」で保存も可。各プランに専用リンクが一つあり有効期限が長いです。', 'ko-KR': '이곳이 본인 전용 Clash/V2Ray 구독 설정입니다. 「복사」로 복사해 클라이언트 구독란에 붙여넣어 연결하거나, 「다운로드」로 저장하세요. 각 플랜에는 장기 유효한 전용 링크가 하나 있습니다.', 'es-ES': 'Esta es tu configuración personal de suscripción Clash/V2Ray. Pulsa Copiar para copiarla y pégala en el cuadro de suscripción del cliente para conectar; o Descargar para guardarla. Cada plan tiene un enlace dedicado de larga duración.', 'vi-VN': 'Đây là cấu hình đăng ký Clash/V2Ray riêng của bạn. Nhấn Sao chép để copy rồi dán vào ô đăng ký của client để kết nối, hoặc Tải xuống để lưu file. Mỗi gói có một liên kết riêng hiệu lực lâu dài.', 'ar-SA': 'هذا إعداد اشتراك Clash/V2Ray الخاص بك. اضغط نسخ لنسخه والصقه في خانة الاشتراك بالعميل للاتصال، أو تنزيل لحفظه. كل باقة لها رابط مخصص صالح طويلاً.', 'ru-RU': 'Это ваша личная конфигурация подписки Clash/V2Ray. Нажмите Копировать, чтобы скопировать, и вставьте в поле подписки клиента для подключения; или Скачать для сохранения. У каждого плана — один долговременный выделенный линк.' }
+        },
+        vipPrice: {
+            t: { 'zh-CN': '价格与续费', 'en-US': 'Price & Renewal', 'ja-JP': '価格と更新', 'ko-KR': '가격 및 갱신', 'es-ES': 'Precio y renovación', 'vi-VN': 'Giá và gia hạn', 'ar-SA': 'السعر والتجديد', 'ru-RU': 'Цена и продление' },
+            d: { 'zh-CN': '这里显示当前套餐的价格与时长。开启「自动续费」可在到期前自动扣款，并额外赠送 2 天；余额不足时会提示充值。', 'en-US': 'This shows the current plan price and duration. Enable Auto-renew to charge automatically before expiry and get 2 extra days; if balance is low it prompts you to top up.', 'ja-JP': '現在のプラン価格と期間を表示します。「自動更新」をオンにすると期限前に自動決済され、さらに 2 日プレゼント。残高不足時はチャージを促します。', 'ko-KR': '현재 플랜 가격과 기간을 표시합니다. 「자동 갱신」을 켜면 만료 전 자동 결제되고 2일이 추가로 제공됩니다. 잔액 부족 시 충전을 안내합니다.', 'es-ES': 'Muestra el precio y la duración del plan actual. Activa Renovación automática para cobrar antes del vencimiento y obtener 2 días extra; si el saldo es bajo, avisa para recargar.', 'vi-VN': 'Hiển thị giá và thời hạn gói hiện tại. Bật Tự động gia hạn để tự trừ trước hạn và tặng thêm 2 ngày; số dư thấp sẽ nhắc nạp tiền.', 'ar-SA': 'يعرض سعر ومدة الخطة الحالية. فعّل التجديد التلقائي للخصم قبل الانتهاء مع هدية 2 يوم إضافية؛ وعند نقص الرصيد يُطلب شحنه.', 'ru-RU': 'Показывает цену и срок текущего плана. Включите Автопродление для списания до окончания и +2 дня бонусом; при нехватке баланса предложит пополнить.' }
+        }
+    };
+    const NM = {
+        login: {
+            t: { 'zh-CN': '登录 / 注册', 'en-US': 'Log In / Sign Up', 'ja-JP': 'ログイン / 登録', 'ko-KR': '로그인 / 회원가입', 'es-ES': 'Iniciar sesión / Registrarse', 'vi-VN': 'Đăng nhập / Đăng ký', 'ar-SA': 'تسجيل الدخول / التسجيل', 'ru-RU': 'Вход / Регистрация' },
+            d: { 'zh-CN': '点击这里登录或注册账号。登录后即可领取专属节点、复制订阅链接、查看余额并邀请好友得奖励。', 'en-US': 'Tap here to log in or register. Once signed in you can claim your dedicated nodes, copy subscription links, check balance and invite friends for rewards.', 'ja-JP': 'ここからログインまたは登録できます。ログインすると専用ノードを受け取り、購読リンクをコピーし、残高確認や友達招待で特典を得られます。', 'ko-KR': '여기서 로그인하거나 가입하세요. 로그인하면 전용 노드를 받고, 구독 링크를 복사하고, 잔액을 확인하며 친구 초대로 보상을 얻을 수 있습니다.', 'es-ES': 'Pulsa aquí para iniciar sesión o registrarte. Al entrar puedes reclamar tus nodos, copiar enlaces de suscripción, ver el saldo e invitar amigos por recompensas.', 'vi-VN': 'Nhấn vào đây để đăng nhập hoặc đăng ký. Sau khi đăng nhập bạn có thể nhận node riêng, sao chép liên kết đăng ký, xem số dư và mời bạn bè nhận thưởng.', 'ar-SA': 'اضغط هنا لتسجيل الدخول أو إنشاء حساب. بعد الدخول يمكنك الحصول على عقدك الخاصة ونسخ روابط الاشتراك ومراجعة الرصيد ودعوة الأصدقاء للحصول على مكافآت.', 'ru-RU': 'Нажмите здесь, чтобы войти или зарегистрироваться. После входа вы сможете получить свои узлы, копировать ссылки подписки, видеть баланс и приглашать друзей за вознаграждение.' }
+        },
+        menuBtn: {
+            t: { 'zh-CN': '用户菜单', 'en-US': 'User Menu', 'ja-JP': 'ユーザーメニュー', 'ko-KR': '사용자 메뉴', 'es-ES': 'Menú de usuario', 'vi-VN': 'Menu người dùng', 'ar-SA': 'قائمة المستخدم', 'ru-RU': 'Меню пользователя' },
+            d: { 'zh-CN': '点击右上角的头像 / “菜单”按钮，展开你的个人中心，可查看余额、提现、复制专属邀请链接、查看购买记录、联系客服，以及退出登录。', 'en-US': 'Tap the avatar / “Menu” button at top-right to open your account center — view balance, withdraw, copy your invite link, see purchase history, contact support, and log out.', 'ja-JP': '右上のアイコン / 「メニュー」ボタンを押すと個人センターが開き、残高確認・出金・専用招待リンクのコピー・購入履歴・サポート・ログアウトができます。', 'ko-KR': '우측 상단 아바타 / 「메뉴」 버튼을 누르면 개인 센터가 열립니다. 잔액 확인, 출금, 전용 초대 링크 복사, 구매 내역, 고객센터, 로그아웃을 할 수 있습니다.', 'es-ES': 'Pulsa el avatar / botón “Menú” arriba a la derecha para abrir tu centro de cuenta: saldo, retiro, copiar enlace de invitación, historial de compras, soporte y cerrar sesión.', 'vi-VN': 'Nhấn biểu tượng / nút “Menu” góc phải trên cùng để mở trung tâm tài khoản: xem số dư, rút tiền, sao chép liên kết mời, lịch sử mua hàng, liên hệ hỗ trợ và đăng xuất.', 'ar-SA': 'اضغط الصورة / زر «القائمة» أعلى اليمين لفتح مركز حسابك: الرصيد والسحب ونسخ رابط الدعوة وسجل المشتريات والدعم وتسجيل الخروج.', 'ru-RU': 'Нажмите аватар / кнопку «Меню» вверху справа, чтобы открыть личный кабинет: баланс, вывод, копия пригласительной ссылки, история покупок, поддержка и выход.' }
+        },
+        menu: {
+            t: { 'zh-CN': '个人中心', 'en-US': 'Account Center', 'ja-JP': 'アカウント', 'ko-KR': '계정 센터', 'es-ES': 'Centro de cuenta', 'vi-VN': 'Trung tâm tài khoản', 'ar-SA': 'مركز الحساب', 'ru-RU': 'Личный кабинет' },
+            d: { 'zh-CN': '这里汇总了账户相关操作：查看与复制专属邀请链接、申请提现、查看购买记录、录入人脸 / 声纹、联系客服，以及退出登录。', 'en-US': 'This gathers your account actions: view & copy your invite link, request a withdrawal, see purchase history, enroll face/voiceprint, contact support, and log out.', 'ja-JP': 'ここにアカウント関連の操作がまとまっています：専用招待リンクの表示・コピー、出金申請、購入履歴、顔・声紋登録、サポート、ログアウト。', 'ko-KR': '여기에 계정 관련 작업이 모여 있습니다: 전용 초대 링크 보기·복사, 출금 신청, 구매 내역, 얼굴·음성 등록, 고객센터, 로그아웃.', 'es-ES': 'Aquí se reúnen las acciones de cuenta: ver y copiar tu enlace de invitación, solicitar retiro, ver historial de compras, registrar rostro/ voz, contactar soporte y cerrar sesión.', 'vi-VN': 'Tại đây tập hợp các thao tác tài khoản: xem và sao chép liên kết mời, yêu cầu rút tiền, xem lịch sử mua hàng, đăng ký khuôn mặt/giọng nói, liên hệ hỗ trợ và đăng xuất.', 'ar-SA': 'هنا مجموعة إجراءات الحساب: عرض ونسخ رابط الدعوة وطلب السحب وعرض سجل المشتريات وتسجيل الوجه/الصوت والتواصل مع الدعم وتسجيل الخروج.', 'ru-RU': 'Здесь собраны действия с аккаунтом: просмотр и копия пригласительной ссылки, запрос на вывод, история покупок, регистрация лица/голоса, поддержка и выход.' }
+        }
+    };
+    // 用户下拉框逐项介绍（登录态）
+    const MI = {
+        balance: {
+            t: { 'zh-CN': '账户余额', 'en-US': 'Account Balance', 'ja-JP': '残高', 'ko-KR': '잔액', 'es-ES': 'Saldo', 'vi-VN': 'Số dư', 'ar-SA': 'الرصيد', 'ru-RU': 'Баланс' },
+            d: { 'zh-CN': '这里显示你账户的当前余额（元）。', 'en-US': 'Your current account balance is shown here.', 'ja-JP': '現在の残高（元）が表示されます。', 'ko-KR': '계정 잔액(위안)이 표시됩니다.', 'es-ES': 'Muestra tu saldo actual (¥).', 'vi-VN': 'Hiển thị số dư hiện tại (¥).', 'ar-SA': 'يعرض رصيد حسابك الحالي (يوان).', 'ru-RU': 'Здесь отображается текущий баланс (юани).' }
+        },
+        recharge: {
+            t: { 'zh-CN': '充值', 'en-US': 'Recharge', 'ja-JP': 'チャージ', 'ko-KR': '충전', 'es-ES': 'Recargar', 'vi-VN': 'Nạp tiền', 'ar-SA': 'شحن', 'ru-RU': 'Пополнение' },
+            d: { 'zh-CN': '点击前往充值页面，为余额充值。', 'en-US': 'Top up your account balance.', 'ja-JP': '残高をチャージします。', 'ko-KR': '계정 잔액을 충전합니다.', 'es-ES': 'Recarga el saldo de tu cuenta.', 'vi-VN': 'Nạp thêm tiền vào số dư.', 'ar-SA': 'اشحن رصيد حسابك.', 'ru-RU': 'Пополните баланс счёта.' }
+        },
+        withdraw: {
+            t: { 'zh-CN': '提现', 'en-US': 'Withdraw', 'ja-JP': '出金', 'ko-KR': '출금', 'es-ES': 'Retirar', 'vi-VN': 'Rút tiền', 'ar-SA': 'سحب', 'ru-RU': 'Вывод' },
+            d: { 'zh-CN': '将账户余额提现到你的钱包。', 'en-US': 'Withdraw your balance to your wallet.', 'ja-JP': '残高をウォレットへ出金します。', 'ko-KR': '잔액을 지갑으로 출금합니다.', 'es-ES': 'Retira tu saldo a tu billetera.', 'vi-VN': 'Rút số dư về ví của bạn.', 'ar-SA': 'اسحب رصيدك إلى محفظتك.', 'ru-RU': 'Выведите баланс на кошелёк.' }
+        },
+        invite: {
+            t: { 'zh-CN': '专属邀请链接', 'en-US': 'Invite Link', 'ja-JP': '招待リンク', 'ko-KR': '초대 링크', 'es-ES': 'Enlace de invitación', 'vi-VN': 'Liên kết mời', 'ar-SA': 'رابط الدعوة', 'ru-RU': 'Пригласительная ссылка' },
+            d: { 'zh-CN': '你的专属邀请链接与邀请码，分享好友得返利。', 'en-US': 'Your unique invite link & code — share to earn rewards.', 'ja-JP': '専用の招待リンクとコード。友達紹介で特典。', 'ko-KR': '전용 초대 링크와 코드. 친구 초대로 보상.', 'es-ES': 'Tu enlace y código de invitación únicos.', 'vi-VN': 'Liên kết và mã mời riêng của bạn.', 'ar-SA': 'رابط ورمز الدعوة الخاصان بك.', 'ru-RU': 'Ваша уникальная ссылка и код приглашения.' }
+        },
+        vorders: {
+            t: { 'zh-CN': '购买记录', 'en-US': 'Purchase History', 'ja-JP': '購入履歴', 'ko-KR': '구매 내역', 'es-ES': 'Historial de compras', 'vi-VN': 'Lịch sử mua hàng', 'ar-SA': 'سجل المشتريات', 'ru-RU': 'История покупок' },
+            d: { 'zh-CN': '查看你购买过的节点套餐与订单。', 'en-US': 'View your node packages and orders.', 'ja-JP': '購入したノードと注文を確認。', 'ko-KR': '구매한 노드 패키지와 주문 내역.', 'es-ES': 'Consulta tus paquetes y pedidos.', 'vi-VN': 'Xem các gói node và đơn hàng.', 'ar-SA': 'اعرض حزم العقد وطلباتك.', 'ru-RU': 'Просмотр пакетов узлов и заказов.' }
+        },
+        ad: {
+            t: { 'zh-CN': '广告招商', 'en-US': 'Advertising', 'ja-JP': '広告募集', 'ko-KR': '광고 제휴', 'es-ES': 'Publicidad', 'vi-VN': 'Quảng cáo', 'ar-SA': 'الإعلانات', 'ru-RU': 'Реклама' },
+            d: { 'zh-CN': '了解平台广告招商合作。', 'en-US': 'Learn about advertising partnerships.', 'ja-JP': '広告掲載の提携について。', 'ko-KR': '광고 제휴를 알아보세요.', 'es-ES': 'Infórmate sobre publicidad.', 'vi-VN': 'Tìm hiểu hợp tác quảng cáo.', 'ar-SA': 'تعرف على شراكات الإعلان.', 'ru-RU': 'Узнайте о рекламном сотрудничестве.' }
+        },
+        agent: {
+            t: { 'zh-CN': '成为代理', 'en-US': 'Become an Agent', 'ja-JP': '代理になる', 'ko-KR': '에이전트 되기', 'es-ES': 'Ser agente', 'vi-VN': 'Trở thành đại lý', 'ar-SA': 'كن وكيلاً', 'ru-RU': 'Стать агентом' },
+            d: { 'zh-CN': '申请成为平台代理，发展团队赚佣金。', 'en-US': 'Apply to be an agent and earn commissions.', 'ja-JP': '代理に申し込み、紹介で報酬。', 'ko-KR': '에이전트 신청하고 수수료 획득.', 'es-ES': 'Conviértete en agente y gana.', 'vi-VN': 'Trở thành đại lý nhận hoa hồng.', 'ar-SA': 'تصبح وكيلاً وتكسب عمولة.', 'ru-RU': 'Станьте агентом и получайте комиссию.' }
+        },
+        invest: {
+            t: { 'zh-CN': '投资入股', 'en-US': 'Invest', 'ja-JP': '出資する', 'ko-KR': '투자', 'es-ES': 'Invertir', 'vi-VN': 'Đầu tư', 'ar-SA': 'استثمر', 'ru-RU': 'Инвестировать' },
+            d: { 'zh-CN': '参与平台投资入股。', 'en-US': 'Participate in platform investment.', 'ja-JP': 'プラットフォームへの出資。', 'ko-KR': '플랫폼 투자에 참여.', 'es-ES': 'Participa en la inversión.', 'vi-VN': 'Tham gia đầu tư nền tảng.', 'ar-SA': 'شارك في استثمار المنصة.', 'ru-RU': 'Участвуйте в инвестировании.' }
+        },
+        complaint: {
+            t: { 'zh-CN': '投诉 / 反馈', 'en-US': 'Feedback', 'ja-JP': '問い合わせ', 'ko-KR': '문의 / 불만', 'es-ES': 'Quejas', 'vi-VN': 'Khiếu nại', 'ar-SA': 'الشكاوى', 'ru-RU': 'Жалобы' },
+            d: { 'zh-CN': '遇到问题可在此投诉或反馈。', 'en-US': 'Submit complaints or feedback here.', 'ja-JP': '問題があれば問い合わせを。', 'ko-KR': '문제 발생 시 문의/불만 제기.', 'es-ES': 'Envía quejas o comentarios.', 'vi-VN': 'Gửi khiếu nại hoặc góp ý.', 'ar-SA': 'أرسل شكاوى أو ملاحظات.', 'ru-RU': 'Отправляйте жалобы и отзывы.' }
+        },
+        face: {
+            t: { 'zh-CN': '录入人脸', 'en-US': 'Enroll Face', 'ja-JP': '顔登録', 'ko-KR': '얼굴 등록', 'es-ES': 'Registrar rostro', 'vi-VN': 'Đăng ký khuôn mặt', 'ar-SA': 'تسجيل الوجه', 'ru-RU': 'Регистрация лица' },
+            d: { 'zh-CN': '录入人脸，提升账户安全与验证。', 'en-US': 'Enroll your face for secure verification.', 'ja-JP': '顔を登録しセキュリティ向上。', 'ko-KR': '얼굴을 등록해 보안 강화.', 'es-ES': 'Registra tu rostro para mayor seguridad.', 'vi-VN': 'Đăng ký khuôn mặt để xác minh bảo mật.', 'ar-SA': 'سجّل وجهك للتحقق الآمن.', 'ru-RU': 'Зарегистрируйте лицо для безопасности.' }
+        },
+        voice: {
+            t: { 'zh-CN': '录入声纹', 'en-US': 'Enroll Voiceprint', 'ja-JP': '声紋登録', 'ko-KR': '음성 등록', 'es-ES': 'Registrar voz', 'vi-VN': 'Đăng ký giọng nói', 'ar-SA': 'تسجيل الصوت', 'ru-RU': 'Регистрация голоса' },
+            d: { 'zh-CN': '录入声纹，作为辅助验证方式。', 'en-US': 'Enroll your voiceprint as a backup verification.', 'ja-JP': '声紋を登録（補助認証）。', 'ko-KR': '음성 등록(보조 인증).', 'es-ES': 'Registra tu voz como respaldo.', 'vi-VN': 'Đăng ký giọng nói làm xác minh phụ.', 'ar-SA': 'سجّل صوتك كتحقق بديل.', 'ru-RU': 'Зарегистрируйте голос как резерв.' }
+        },
+        logout: {
+            t: { 'zh-CN': '退出登录', 'en-US': 'Log Out', 'ja-JP': 'ログアウト', 'ko-KR': '로그아웃', 'es-ES': 'Cerrar sesión', 'vi-VN': 'Đăng xuất', 'ar-SA': 'تسجيل الخروج', 'ru-RU': 'Выйти' },
+            d: { 'zh-CN': '退出当前账号登录。', 'en-US': 'Log out of your account.', 'ja-JP': 'アカウントからログアウト。', 'ko-KR': '계정에서 로그아웃.', 'es-ES': 'Cierra la sesión de tu cuenta.', 'vi-VN': 'Đăng xuất khỏi tài khoản.', 'ar-SA': 'سجّل الخروج من حسابك.', 'ru-RU': 'Выйдите из аккаунта.' }
+        }
+    };
+    // 通知下拉框逐项介绍
+    const NI = {
+        btn: {
+            t: { 'zh-CN': '系统通知', 'en-US': 'Notifications', 'ja-JP': '通知', 'ko-KR': '알림', 'es-ES': 'Notificaciones', 'vi-VN': 'Thông báo', 'ar-SA': 'الإشعارات', 'ru-RU': 'Уведомления' },
+            d: {
+                'zh-CN': '「通知」：点击打开通知中心，查看活动、福利与系统消息；有未读时按钮上会出现红点提示。',
+                'en-US': '"Notifications": open the center to see campaigns, perks and system messages; a red dot marks unread items.',
+                'ja-JP': '「通知」：クリックで通知センターを開き、キャンペーン・特典・システムメッセージを確認。未読があると赤い点が表示されます。',
+                'ko-KR': '「알림」: 클릭하면 알림 센터가 열려 이벤트·혜택·시스템 메시지를 볼 수 있습니다. 읽지 않으면 빨간 점이 표시됩니다.',
+                'es-ES': '«Notificaciones»: abre el centro para ver campañas, beneficios y mensajes del sistema; un punto rojo marca lo no leído.',
+                'vi-VN': '「Thông báo」: mở trung tâm xem chiến dịch, ưu đãi và tin nhắn hệ thống; chấm đỏ báo chưa đọc.',
+                'ar-SA': '«الإشعارات»: افتح المركز لعرض الحملات والمزايا والرسائل؛ تشير نقطة حمراء إلى غير المقروء.',
+                'ru-RU': '«Уведомления»: откройте центр, чтобы видеть акции, бонусы и сообщения; красная точка — непрочитанное.'
+            }
+        },
+        list: {
+            t: { 'zh-CN': '通知列表', 'en-US': 'Notification List', 'ja-JP': '通知リスト', 'ko-KR': '알림 목록', 'es-ES': 'Lista de notificaciones', 'vi-VN': 'Danh sách thông báo', 'ar-SA': 'قائمة الإشعارات', 'ru-RU': 'Список уведомлений' },
+            d: {
+                'zh-CN': '通知列表：这里汇总所有活动、福利与系统消息。点击某条可查看详情，未读项会有高亮或红点。',
+                'en-US': 'The list gathers all campaigns, perks and system messages. Tap an item for details; unread ones are highlighted or marked with a dot.',
+                'ja-JP': '通知リスト：すべてのキャンペーン・特典・システムメッセージをまとめます。項目をタップで詳細表示、未読はハイライトまたは赤点。',
+                'ko-KR': '알림 목록: 이벤트·혜택·시스템 메시지를 모두 모읍니다. 항목을 누르면 상세 보기, 읽지 않은 항목은 강조되거나 점 표시.',
+                'es-ES': 'La lista reúne campañas, beneficios y mensajes. Pulsa un item para verlo; los no leídos se resaltan o marcan con un punto.',
+                'vi-VN': 'Danh sách tập hợp chiến dịch, ưu đãi và tin nhắn. Nhấn mục để xem chi tiết; chưa đọc được làm nổi bật hoặc đánh dấu.',
+                'ar-SA': 'القائمة تجمع الحملات والمزايا والرسائل. اضغط عنصراً للتفاصيل؛ غير المقروء مميز أو بنقطة.',
+                'ru-RU': 'Список собирает акции, бонусы и сообщения. Нажмите элемент для подробностей; непрочитанное выделено или отмечено точкой.'
+            }
+        },
+        mark: {
+            t: { 'zh-CN': '全部已读', 'en-US': 'Mark All Read', 'ja-JP': 'すべて既読', 'ko-KR': '모두 읽음', 'es-ES': 'Marcar leídas', 'vi-VN': 'Đánh dấu đã đọc', 'ar-SA': 'تعليم الكل كمقروء', 'ru-RU': 'Отметить прочитанным' },
+            d: {
+                'zh-CN': '「全部已读」：一键把所有通知标记为已读，按钮上的红点提示会随之消失。',
+                'en-US': '"Mark all read": mark every notification as read at once; the red dot on the bell disappears.',
+                'ja-JP': '「すべて既読」：通知を一括で既読に。ベルの赤点が消えます。',
+                'ko-KR': '「모두 읽음」: 모든 알림을 한 번에 읽음 처리하며, 벨의 빨간 점이 사라집니다.',
+                'es-ES': '«Marcar leídas»: marca todas las notificaciones como leídas; el punto rojo desaparece.',
+                'vi-VN': '「Đánh dấu đã đọc」: đánh dấu tất cả thông báo là đã đọc; chấm đỏ trên chuông biến mất.',
+                'ar-SA': '«تعليم الكل كمقروء»: حدد كل الإشعارات كمقروءة دفعة واحدة؛ تختفي النقطة الحمراء.',
+                'ru-RU': '«Отметить прочитанным»: помечает все уведомления прочитанными; красная точка исчезает.'
+            }
+        },
+        contact: {
+            t: { 'zh-CN': '联系客服', 'en-US': 'Contact Support', 'ja-JP': 'サポートへ連絡', 'ko-KR': '고객센터 문의', 'es-ES': 'Contactar soporte', 'vi-VN': 'Liên hệ hỗ trợ', 'ar-SA': 'التواصل مع الدعم', 'ru-RU': 'Связаться с поддержкой' },
+            d: {
+                'zh-CN': '「联系客服」：点击打开客服对话，遇到问题随时咨询，也可在这里反馈建议。',
+                'en-US': '"Contact support": open the support chat to ask questions or send feedback anytime.',
+                'ja-JP': '「サポートへ連絡」：クリックでサポートとのチャットを開き、いつでも質問やご意見をどうぞ。',
+                'ko-KR': '「고객센터 문의」: 클릭하면 상담 채팅이 열려 언제든 문의나 의견을 남길 수 있습니다.',
+                'es-ES': '«Contactar soporte»: abre el chat de soporte para preguntar o enviar comentarios cuando quieras.',
+                'vi-VN': '「Liên hệ hỗ trợ」: mở chat hỗ trợ để hỏi đáp hoặc góp ý bất cứ lúc nào.',
+                'ar-SA': '«التواصل مع الدعم»: افتح محادثة الدعم لطرح الأسئلة أو إرسال الملاحظات في أي وقت.',
+                'ru-RU': '«Связаться с поддержкой»: откройте чат поддержки, чтобы задать вопрос или оставить отзыв в любое время.'
+            }
+        }
+    };
+    function planStepsForUser() {
+        const isVip = (() => { try { return localStorage.getItem('isVip') === 'true'; } catch (e) { return false; } })();
+        const loggedIn = (() => { try { return !!JSON.parse(localStorage.getItem('userInfo') || 'null'); } catch (e) { return false; } })();
+        const [freeCard, monthlyCard, annualCard, customCard] = BASE_PLAN_STEPS;
+        const tease = (c) => Object.assign({}, c, { click: false, noClick: true });
+        const openFree = () => ([
+            Object.assign({}, freeCard, { keepOpen: true }),
+            { sel: '#free-nodes-modal .cyber-card', click: false, kind: 'modal', keepOpen: true, noClick: true, t: TI.freeIface.t, d: TI.freeIface.d },
+            { sel: '#free-nodes-modal [data-link]', click: false, kind: 'modal', noClick: true, t: TI.freeLink.t, d: TI.freeLink.d }
+        ]);
+        if (isVip) {
+            return [
+                Object.assign({}, monthlyCard, { keepOpen: true }),
+                { sel: '#vip-modal .cyber-card', click: false, kind: 'modal', keepOpen: true, noClick: true, t: TI.vipIface.t, d: TI.vipIface.d },
+                { sel: '#vip-modal .vip-plan-price', click: false, kind: 'modal', keepOpen: true, noClick: true, t: TI.vipPrice.t, d: TI.vipPrice.d },
+                { sel: '#vip-modal .vip-clash-input', click: false, kind: 'modal', noClick: true, t: TI.vipConfig.t, d: TI.vipConfig.d },
+                tease(annualCard),
+                tease(customCard)
+            ];
+        }
+        if (loggedIn) {
+            return openFree().concat([tease(monthlyCard), tease(annualCard), tease(customCard)]);
+        }
+        return [tease(freeCard), tease(monthlyCard), tease(annualCard), tease(customCard)];
+    }
+    function navStepsForUser() {
+        const loggedIn = (() => { try { return !!JSON.parse(localStorage.getItem('userInfo') || 'null'); } catch (e) { return false; } })();
+        // 逐项高亮下拉框内的每个功能，下拉保持打开，直到“退出登录”才关闭
+        const itemSteps = [
+            ['#user-balance', 'balance'],
+            ['#recharge-btn', 'recharge'],
+            ['#withdraw-btn', 'withdraw'],
+            ['#invite-btn', 'invite'],
+            ['#vorders-btn', 'vorders'],
+            ['#ad-btn', 'ad'],
+            ['#agent-btn', 'agent'],
+            ['#invest-btn', 'invest'],
+            ['#complaint-btn', 'complaint'],
+            ['#enroll-face-btn', 'face'],
+            ['#enroll-voice-btn', 'voice']
+        ].map(([sel, key]) => ({ sel, click: false, kind: 'modal', keepOpen: true, noClick: true, t: MI[key].t, d: MI[key].d }));
+        // 通知下拉框：打开 → 列表 → 全部已读 → 联系客服（收尾步关闭）
+        const notifSteps = [
+            { sel: '#notification-btn', click: true, kind: 'modal', keepOpen: true, t: NI.btn.t, d: NI.btn.d },
+            { sel: '#notification-list', click: false, kind: 'modal', keepOpen: true, noClick: true, t: NI.list.t, d: NI.list.d },
+            { sel: '#mark-all-read-btn', click: false, kind: 'modal', keepOpen: true, noClick: true, t: NI.mark.t, d: NI.mark.d },
+            { sel: '#contact-btn', click: false, kind: 'modal', keepOpen: false, noClick: true, t: NI.contact.t, d: NI.contact.d }
+        ];
+        const base = BASE_NAV_STEPS.flatMap(s => s.sel === '#notification-btn' ? notifSteps : [s]);
+        if (!loggedIn) {
+            return base.concat([
+                { sel: '#auth-toggle', click: false, noClick: true, kind: 'link', t: NM.login.t, d: NM.login.d }
+            ]);
+        }
+        return base.concat([
+            { sel: '#auth-toggle', click: true, kind: 'modal', keepOpen: true, t: NM.menuBtn.t, d: NM.menuBtn.d },
+            ...itemSteps,
+            { sel: '#logout-btn', click: false, kind: 'modal', keepOpen: false, noClick: true, t: MI.logout.t, d: MI.logout.d }
+        ]);
+    }
+    GROUPS[0].steps = navStepsForUser();
+    GROUPS[1].steps = planStepsForUser();
     // 展平为顺序步骤，并附带分组信息（用于“大功能自动介绍小功能”与进度展示）
-    const STEPS = [];
-    GROUPS.forEach((g, gi) => g.steps.forEach((s, si) => {
-        STEPS.push(Object.assign({}, s, {
-            groupTitle: g.title,
-            groupIndex: gi,
-            groupStep: si,
-            groupCount: g.steps.length,
-            isGroupStart: si === 0
+    let STEPS = [];
+    function buildSteps() {
+        STEPS = [];
+        GROUPS.forEach((g, gi) => g.steps.forEach((s, si) => {
+            STEPS.push(Object.assign({}, s, {
+                groupTitle: g.title,
+                groupIndex: gi,
+                groupStep: si,
+                groupCount: g.steps.length,
+                isGroupStart: si === 0
+            }));
         }));
-    }));
+    }
+    buildSteps();
 
     // ===== 样式（注入一次）=====
     const STYLE = `
 #tour-highlight{position:fixed;z-index:9991;pointer-events:none;border-radius:16px;
-  box-shadow:0 0 0 9999px rgba(0,0,0,.72), 0 0 0 3px var(--neon-blue), 0 0 22px rgba(0,170,255,.55);
+  box-shadow:0 0 0 9999px rgba(0,0,0,.72);
+  transition:left .5s cubic-bezier(.22,1,.36,1), top .5s cubic-bezier(.22,1,.36,1), width .5s cubic-bezier(.22,1,.36,1), height .5s cubic-bezier(.22,1,.36,1);}
+#tour-ring{position:fixed;z-index:9998;pointer-events:none;border-radius:16px;display:none;
+  box-shadow:0 0 0 3px var(--neon-blue), 0 0 22px rgba(0,170,255,.55);
   transition:left .5s cubic-bezier(.22,1,.36,1), top .5s cubic-bezier(.22,1,.36,1), width .5s cubic-bezier(.22,1,.36,1), height .5s cubic-bezier(.22,1,.36,1);
   animation:tourPulse 1.8s ease-in-out infinite;}
-@keyframes tourPulse{0%,100%{box-shadow:0 0 0 9999px rgba(0,0,0,.72),0 0 0 3px var(--neon-blue),0 0 16px rgba(0,170,255,.45);}
-  50%{box-shadow:0 0 0 9999px rgba(0,0,0,.72),0 0 0 3px var(--neon-green),0 0 30px rgba(0,255,65,.55);}}
+@keyframes tourPulse{0%,100%{box-shadow:0 0 0 3px var(--neon-blue),0 0 16px rgba(0,170,255,.45);}
+  50%{box-shadow:0 0 0 3px var(--neon-green),0 0 30px rgba(0,255,65,.55);}}
 #tour-guide{position:fixed;z-index:10001;width:300px;max-width:86vw;background:#16161af2;border:1px solid rgba(0,170,255,.45);
   border-radius:16px;box-shadow:0 14px 44px rgba(0,0,0,.55);padding:14px;color:#fff;font-family:inherit;
   transition:left .5s cubic-bezier(.22,1,.36,1), top .5s cubic-bezier(.22,1,.36,1), opacity .3s ease, transform .3s ease;
@@ -276,6 +490,7 @@
     let activeEl = null;
     let activeStep = null;
     let revealed = []; // 本步骤因点击而提升层级 / 打开的内容，用于离开时清理
+    let raisedStack = []; // 因“被困于祖先堆叠上下文”而一并抬升的祖先，离开时还原
     let clickTimer = null; // 指针移动到目标后的真实点击（延时，避免“瞬间点完”）
     let autoTimer = null;  // 自动播放：当前步停留若干毫秒后自动进入下一步
     let playing = true;    // 自动播放开关（用户可暂停）
@@ -299,6 +514,9 @@
         const highlight = document.createElement('div');
         highlight.id = 'tour-highlight';
         highlight.style.display = 'none';
+
+        const ring = document.createElement('div');
+        ring.id = 'tour-ring';
 
         const pointer = document.createElement('div');
         pointer.id = 'tour-pointer';
@@ -326,14 +544,18 @@
                     <button class="tg-btn primary" id="tour-next"></button>
                 </div>
             </div>`;
+        // 导览按钮（上一步/下一步/暂停/跳过）的点击不要冒泡到 document，
+        // 避免触发页面“点击空白关闭下拉框”的逻辑把正在讲解的下拉框关掉
+        guide.addEventListener('click', e => e.stopPropagation());
 
         document.body.appendChild(highlight);
+        document.body.appendChild(ring);
         document.body.appendChild(pointer);
         document.body.appendChild(clickRing);
         document.body.appendChild(guide);
 
         dom = {
-            highlight, pointer, clickRing, guide,
+            highlight, ring, pointer, clickRing, guide,
             step: guide.querySelector('.tg-step'),
             title: guide.querySelector('.tg-title'),
             desc: guide.querySelector('.tg-desc'),
@@ -385,25 +607,16 @@
         top = clamp(top, 12, window.innerHeight - h - 12);
         g.style.left = left + 'px';
         g.style.top = top + 'px';
+        return { left, top, w, h, right: left + w, bottom: top + h };
     }
 
-    // 客服旋钮（真实悬浮窗）紧贴着讲解气泡的外侧，与气泡作为一个整体移动到当前区块
-    function placeFabBesideBubble(side, rect) {
-        if (!supportFab) return;
-        const g = dom.guide;
-        const w = g.offsetWidth || 300, h = g.offsetHeight || 220;
-        const fw = 44, fh = 44, gap = 14;
-        // 复算气泡目标位置（与 placeGuide 一致），避免读到过渡动画中的中间坐标
-        let bl, bt;
-        if (side === 'right') { bl = rect.right + 18; bt = rect.top; }
-        else if (side === 'left') { bl = rect.left - w - 18; bt = rect.top; }
-        else if (side === 'bottom') { bl = rect.left; bt = rect.bottom + 18; }
-        else { bl = rect.left; bt = rect.top - h - 18; }
-        bl = clamp(bl, 12, window.innerWidth - w - 12);
-        bt = clamp(bt, 12, window.innerHeight - h - 12);
-        const br = bl + w, bcy = bt + h / 2;
-        let left = (side === 'left') ? (bl - fw - gap) : (br + gap); // 旋钮始终在气泡“外侧”
-        let top = bcy - fh / 2;
+    // 客服旋钮（真实悬浮窗）悬浮在讲解信息卡片内右上角，跟随卡片移动到当前区块
+    function placeFabInGuide(gr) {
+        if (!supportFab || !gr) return;
+        const fw = 44, fh = 44, inset = 16;
+        // 贴住卡片右上角内侧，像卡片自带的“旋钮”
+        let left = gr.right - fw - inset;
+        let top = gr.top + inset;
         left = clamp(left, 12, window.innerWidth - fw - 12);
         top = clamp(top, 12, window.innerHeight - fh - 12);
         supportFab.style.right = 'auto';
@@ -424,10 +637,18 @@
         dom.highlight.style.width = (rect.width + pad * 2) + 'px';
         dom.highlight.style.height = (rect.height + pad * 2) + 'px';
 
+        // 蓝色边框环与聚光同位置，但置于弹窗之上（弹窗内容可见、边框不被盖住）
+        if (dom.ring) {
+            dom.ring.style.left = (rect.left - pad) + 'px';
+            dom.ring.style.top = (rect.top - pad) + 'px';
+            dom.ring.style.width = (rect.width + pad * 2) + 'px';
+            dom.ring.style.height = (rect.height + pad * 2) + 'px';
+        }
+
         // 讲解气泡贴着被讲解的元素（选空白处一侧、留间距），随步骤滑动且不会遮挡讲解区域
         const side = chooseSide(rect);
-        placeGuide(rect, side);
-        placeFabBesideBubble(side, rect); // 客服旋钮跟随气泡一起移动到该区块
+        const gr = placeGuide(rect, side);
+        placeFabInGuide(gr); // 客服旋钮悬浮在信息卡片内右上角，跟随卡片移动
 
         // 指针仅在“需要点击”的步骤出现并移动到目标中心
         if (step.click) {
@@ -448,6 +669,21 @@
         return r.top >= -m && r.bottom <= window.innerHeight + m &&
                r.left >= -m && r.right <= window.innerWidth + m;
     }
+    // 是否需要滚动到目标：不在视口内，或被某个可滚动祖先裁剪（如 VIP 弹窗内部 overflow-y:auto）
+    function needsScroll(el) {
+        if (!isInView(el)) return true;
+        let p = el.parentElement;
+        while (p && p !== document.body && p !== document.documentElement) {
+            const oy = getComputedStyle(p).overflowY;
+            if ((oy === 'auto' || oy === 'scroll') && p.scrollHeight > p.clientHeight + 1) {
+                const er = el.getBoundingClientRect();
+                const pr = p.getBoundingClientRect();
+                if (er.top < pr.top - 2 || er.bottom > pr.bottom + 2) return true;
+            }
+            p = p.parentElement;
+        }
+        return false;
+    }
 
     // ===== 真实点击：展示目标里的内容 =====
     // 找到当前可见的弹层（下拉 / 弹窗）
@@ -467,22 +703,47 @@
     }
     // 把弹层提升到导览遮罩之上：找到其最近的“带 z-index 的堆叠上下文祖先”一并提升
     function raiseFor(node) {
+        // 弹窗不抬到暗色遮罩之上：统一由 #tour-highlight 选择框“挖洞”透出，背景由同一块遮罩变暗
+        if (node && node.id && node.id.endsWith('-modal')) return null;
         let el = node;
         while (el && el !== document.body) {
             const z = getComputedStyle(el).zIndex;
             if (z !== 'auto' && z !== '') {
                 if (el._tourZ === undefined) el._tourZ = el.style.zIndex;
-                el.style.zIndex = '10000';
+                el.style.zIndex = '9995';
+                // 若其祖先创建了更低层级的堆叠上下文（如 fixed 顶栏 z-100），该弹层会被“困住”
+                // 仍被导览暗色遮罩盖住——一并抬升这些祖先，使其逃逸到遮罩之上
+                let p = el.parentElement;
+                while (p && p !== document.body) {
+                    const pcs = getComputedStyle(p);
+                    const pz = parseInt(pcs.zIndex, 10);
+                    if ((pcs.position === 'relative' || pcs.position === 'absolute' || pcs.position === 'fixed') && !isNaN(pz) && pz < 9991) {
+                        if (p._tourZ === undefined) p._tourZ = p.style.zIndex;
+                        p.style.zIndex = '9992';
+                        if (!raisedStack.some(r => r.el === p)) raisedStack.push({ el: p, z: p._tourZ });
+                    }
+                    p = p.parentElement;
+                }
                 return el;
             }
             el = el.parentElement;
         }
         if (node._tourZ === undefined) node._tourZ = node.style.zIndex;
-        node.style.zIndex = '10000';
+        node.style.zIndex = '9995';
         return node;
     }
     // 关闭弹窗：优先点弹窗自带的关闭按钮（与站点原生关闭一致），否则直接移除
     function closeModal(node) {
+        // 用户下拉菜单：通过触发按钮关闭，避免误点内部按钮或误删 DOM
+        if (node && node.id === 'dropdown-menu') {
+            const t = document.getElementById('auth-toggle');
+            if (t) { t.click(); return; }
+        }
+        // 通知下拉框：点触发按钮关闭，避免误点内部“全部已读 / 联系客服”或误删 DOM
+        if (node && node.id === 'notification-dropdown') {
+            const b = document.getElementById('notification-btn');
+            if (b) { b.click(); return; }
+        }
         const btn = node.querySelector('[onclick*=".remove()"]') ||
                     node.querySelector('[id$="-close"]') ||
                     node.querySelector('[onclick*="hidden"]') ||
@@ -558,10 +819,16 @@
             el.click(); // 再次点击：收起下拉 / 还原主题
         } else if (step.kind === 'modal') {
             // 直接点击弹窗自带的关闭按钮（与站点原生关闭逻辑一致），点不到再移除
-            revealed.forEach(r => { closeModal(r.node); });
+            // keepOpen：弹窗需保持打开以继续讲解其内部（如节点订阅配置），离开时不关闭
+            if (!step.keepOpen) revealed.forEach(r => { closeModal(r.node); });
         }
-        revealed.forEach(r => { if (r.anchor && r.anchor !== el) r.anchor.style.zIndex = r.anchor._tourZ ?? ''; });
-        revealed = [];
+        // keepOpen 的步骤：保留弹窗与其被提升的层级，直到“收尾”步骤才清理
+        if (!step.keepOpen) {
+            revealed.forEach(r => { if (r.anchor && r.anchor !== el) r.anchor.style.zIndex = r.anchor._tourZ ?? ''; });
+            raisedStack.forEach(r => { r.el.style.zIndex = r.z ?? ''; });
+            raisedStack = [];
+            revealed = [];
+        }
     }
 
     // ===== 步骤切换 =====
@@ -573,8 +840,17 @@
 
         idx = i;
         const step = STEPS[idx];
-        const el = document.querySelector(step.sel);
+        let el = document.querySelector(step.sel);
         if (!el) { finish(); return; }
+        // 下拉框步骤：若所属下拉框被（点击空白 / 导览按钮冒泡等）关闭，重新打开后再定位，避免后续步骤定位不到元素
+        const owner = el.closest && (el.closest('#dropdown-menu') || el.closest('[id$="-dropdown"]'));
+        if (owner && !isVisible(owner)) {
+            const trigId = owner.id === 'dropdown-menu' ? 'auth-toggle' : owner.id.replace('-dropdown', '-btn');
+            const trig = trigId && document.getElementById(trigId);
+            if (trig) trig.click();
+            el = document.querySelector(step.sel);
+        }
+        if (!el || !isVisible(el)) { finish(); return; }
 
         activeEl = el; activeStep = step;
 
@@ -587,7 +863,7 @@
         dom.step.textContent = `第 ${idx + 1} / ${STEPS.length} 步 · ${step.groupStep + 1}/${step.groupCount}`; // 大功能内进度
         dom.prev.disabled = idx === 0;
 
-        if (!isInView(el)) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (needsScroll(el)) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         positionAll();
 
         if (step.click) interact(el, step);
@@ -631,7 +907,7 @@
         idx = 0;
         activeEl = null; activeStep = null;
 
-        [dom.highlight].forEach(e => e.style.display = 'block');
+        [dom.highlight, dom.ring].forEach(e => e.style.display = 'block');
         dom.guide.style.display = '';
         requestAnimationFrame(() => dom.guide.classList.add('show'));
 
@@ -646,6 +922,10 @@
         window.addEventListener('resize', bound.resize);
         window.addEventListener('keydown', bound.key);
 
+        // 按当前会员状态重算导航与节点套餐步骤，再展平
+        GROUPS[0].steps = navStepsForUser();
+        GROUPS[1].steps = planStepsForUser();
+        buildSteps();
         goTo(0);
     }
 
@@ -658,6 +938,8 @@
         autoTimer = null;
         playing = true; // 重置为自动播放，下次进入默认自动
         leaveStep(activeEl, activeStep);
+        raisedStack.forEach(r => { r.el.style.zIndex = r.z ?? ''; });
+        raisedStack = [];
         // 兜底：若上一步弹窗是异步打开、尚未被登记，结束导览时一并移除
         setTimeout(() => {
             document.querySelectorAll('[id$="-modal"]').forEach(n => {
@@ -676,6 +958,7 @@
         if (dom) {
             dom.guide.classList.remove('show');
             dom.highlight.style.display = 'none';
+            dom.ring.style.display = 'none';
             dom.pointer.style.display = 'none';
             dom.clickRing.style.display = 'none';
             setTimeout(() => { if (dom) dom.guide.style.display = 'none'; }, 300);
