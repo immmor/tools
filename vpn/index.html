@@ -3379,10 +3379,52 @@
             }
         })();
 
+        // ==================== 优惠券功能 ====================
+        let appliedCoupon = null;
+        const applyVipCoupon = async (price) => {
+            const dict = translations[currentLang] || {};
+            const inputEl = document.getElementById('vip-coupon-input');
+            const msgEl = document.getElementById('vip-coupon-msg');
+            const priceEl = document.getElementById('vip-plan-price');
+            if (!inputEl || !msgEl) return;
+            const code = (inputEl.value || '').trim();
+            if (!code) { msgEl.textContent = dict.coupon_please_enter || '请输入优惠码'; msgEl.className = 'mt-2 text-xs text-[var(--neon-red)]'; return; }
+            msgEl.textContent = dict.coupon_validating || '校验中…'; msgEl.className = 'mt-2 text-xs text-zinc-400';
+            try {
+                const res = await fetch('https://api.funbua.uk/api/validate-coupon', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code })
+                });
+                const data = await res.json();
+                if (res.ok && data.code === 200 && data.valid) {
+                    const discount = Number(data.discount) || 0;
+                    appliedCoupon = { code, discount };
+                    const final = Math.max(0, price - discount);
+                    const tpl = dict.coupon_applied || '优惠码有效，立减 ¥{discount}，应付 ¥{final}';
+                    msgEl.textContent = tpl.replace('{discount}', '¥' + discount.toFixed(2)).replace('{final}', '¥' + final.toFixed(2));
+                    msgEl.className = 'mt-2 text-xs text-[var(--neon-green)]';
+                    if (priceEl) priceEl.textContent = '¥' + final.toFixed(2);
+                } else {
+                    appliedCoupon = null;
+                    const invalidMsg = (data.msg_key && dict[data.msg_key]) ? dict[data.msg_key] : (data.msg || (dict.coupon_invalid || '优惠码无效'));
+                    msgEl.textContent = invalidMsg;
+                    msgEl.className = 'mt-2 text-xs text-[var(--neon-red)]';
+                    if (priceEl) priceEl.textContent = '¥' + price.toFixed(2);
+                }
+            } catch (e) {
+                appliedCoupon = null;
+                msgEl.textContent = dict.coupon_network_error || '网络错误，请稍后重试';
+                msgEl.className = 'mt-2 text-xs text-[var(--neon-red)]';
+                if (priceEl) priceEl.textContent = '¥' + price.toFixed(2);
+            }
+        };
+
         // ==================== 开通VIP功能 ====================
-        const openVip = async (username, duration = 30, price = 10.00) => {
+        const openVip = async (username, duration = 30, price = 10.00, coupon = null) => {
+            const finalPrice = (coupon && coupon.discount) ? Math.max(0, price - coupon.discount) : price;
             const confirmOpenVip = translations[currentLang]?.alert_confirm_open_vip || '确定要开通VIP吗？将从您的余额中扣除¥{price}。';
-            if (!confirm(confirmOpenVip.replace('{price}', price.toFixed(2)))) {
+            if (!confirm(confirmOpenVip.replace('{price}', finalPrice.toFixed(2)))) {
                 return;
             }
             
@@ -3395,7 +3437,7 @@
                         'Content-Type': 'application/json',
                         ...(pToken ? { 'Authorization': 'Bearer ' + pToken } : {})
                     },
-                    body: JSON.stringify({ username, duration, price, p_token: pToken })
+                    body: JSON.stringify({ username, duration, price, coupon_code: coupon?.code || '', p_token: pToken })
                 });
                 
                 const data = await response.json();
@@ -3417,7 +3459,9 @@
                         savedUserInfo.vorders.unshift({
                             type: 'vip',
                             duration,
-                            price,
+                            price: finalPrice,
+                            discount: coupon?.discount || 0,
+                            coupon_code: coupon?.code || null,
                             created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
                             method: 'balance',
                             status: 'success'
@@ -3443,12 +3487,12 @@
                     });
                     return true;
                 } else {
+                    const openFailed = translations[currentLang]?.alert_open_failed || '开通VIP失败';
+                    const errMsg = (data.msg_key && translations[currentLang]?.[data.msg_key]) ? translations[currentLang][data.msg_key] : (data.msg || '');
                     if (data.balance !== undefined) {
-                        const openFailed = translations[currentLang]?.alert_open_failed || '开通VIP失败';
-                        alert(`${openFailed}：${data.msg}，当前余额：¥${data.balance}`);
+                        alert(`${openFailed}：${errMsg}，当前余额：¥${data.balance}`);
                     } else {
-                        const openFailed = translations[currentLang]?.alert_open_failed || '开通VIP失败';
-                        alert(`${openFailed}：${data.msg}`);
+                        alert(`${openFailed}：${errMsg}`);
                     }
                 }
             } catch (error) {
@@ -3514,6 +3558,7 @@
         // ==================== VIP节点模块 ====================
         const showVipNodes = async (duration = 30) => {
             const userInfo = JSON.parse(localStorage.getItem('userInfo') || 'null');
+            appliedCoupon = null;
 
             if (!userInfo) {
                 const loginAlert = translations[currentLang]?.alert_please_login || '请先登录！';
@@ -3527,7 +3572,7 @@
             try {
                 const response = await fetch(`https://api.funbua.uk/api/vip-status?username=${encodeURIComponent(userInfo.username)}`);
                 const data = await response.json();
-                
+
                 if (data.code === 200) {
                     const vipInfo = data.data;
                     if (vipInfo.is_vip_valid) localStorage.setItem('isVip', 'true');
@@ -3548,7 +3593,7 @@
                                     <div class="absolute inset-x-0 bottom-0 p-4 flex justify-between items-end">
                                         <div>
                                             <h2 class="text-xl md:text-2xl font-black uppercase drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" data-i18n="vip_nodes_title">VIP节点</h2>
-                                            <div class="text-sm md:text-base font-bold text-[var(--neon-orange)] mt-1 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" style="text-shadow: 0 0 10px rgba(255,170,0,0.5)">${duration === 30 ? (dict.vip_plan_monthly || '月付') : (dict.vip_plan_annual || '年付')} ${dict.vip_plan_suffix || '套餐'} (<span id="vip-plan-days" data-base="${duration}"><span class="vip-plan-num">${vipInfo.auto_renew ? duration + 2 : duration}</span>${duration === 30 ? (dict.vip_quota_reset || '30 天').replace(/\d+/g, '') : (dict.vip_quota_reset_annual || '365 天').replace(/\d+/g, '')}</span>) • <span class="vip-plan-price">¥${price.toFixed(2)}</span></div>
+                                            <div class="text-sm md:text-base font-bold text-[var(--neon-orange)] mt-1 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]" style="text-shadow: 0 0 10px rgba(255,170,0,0.5)">${duration === 30 ? (dict.vip_plan_monthly || '月付') : (dict.vip_plan_annual || '年付')} ${dict.vip_plan_suffix || '套餐'} (<span id="vip-plan-days" data-base="${duration}"><span class="vip-plan-num">${vipInfo.auto_renew ? duration + 2 : duration}</span>${duration === 30 ? (dict.vip_quota_reset || '30 天').replace(/\d+/g, '') : (dict.vip_quota_reset_annual || '365 天').replace(/\d+/g, '')}</span>) • <span class="vip-plan-price" id="vip-plan-price">¥${price.toFixed(2)}</span></div>
                                             <div class="text-[10px] text-white/70" data-i18n="vip_price_fluctuate">*价格会随着服务器维护成本而有所波动，请互相理解*</div>
                                         </div>
                                         <button onclick="this.closest('.fixed').remove()" class="text-white/90 hover:text-white bg-black/40 rounded-full p-1 backdrop-blur shrink-0">
@@ -3623,8 +3668,16 @@
                                         </div>
                                     </div>
                                 ` : ''}
+                                <div class="mt-4 mb-4 p-3 bg-zinc-900 rounded border border-zinc-700">
+                                    <div class="text-sm font-bold text-[var(--neon-orange)] mb-2" data-i18n="vip_coupon_title">优惠券</div>
+                                    <div class="flex gap-2">
+                                        <input id="vip-coupon-input" type="text" data-i18n-placeholder="vip_coupon_placeholder" placeholder="请输入优惠码" class="flex-1 bg-zinc-800 border border-zinc-600 rounded px-3 py-2 text-sm text-white outline-none focus:border-[var(--neon-orange)]">
+                                        <button type="button" onclick="applyVipCoupon(${price})" class="bg-[var(--neon-orange)] text-black px-4 py-2 text-sm font-bold hover:opacity-90 whitespace-nowrap" data-i18n="vip_coupon_apply">应用</button>
+                                    </div>
+                                    <div id="vip-coupon-msg" class="mt-2 text-xs"></div>
+                                </div>
                                 <div class="mt-6 flex gap-3">
-                                    <button onclick="openVip('${userInfo.username}', ${duration}, ${price})" class="flex-1 bg-[var(--neon-blue)] text-black py-3 px-4 font-bold text-center hover:opacity-90">
+                                    <button onclick="openVip('${userInfo.username}', ${duration}, ${price}, appliedCoupon)" class="flex-1 bg-[var(--neon-blue)] text-black py-3 px-4 font-bold text-center hover:opacity-90">
                                         ${vipInfo.is_vip_valid ? (dict.vip_renew || '续费VIP') : (dict.vip_open || '开通VIP')}
                                     </button>
                                     <a href="https://funbua.uk/vpay" class="flex-1 bg-[var(--neon-green)] text-black py-3 px-4 font-bold text-center hover:opacity-90 js-recharge">
@@ -3643,11 +3696,16 @@
                         const key = el.getAttribute('data-i18n');
                         if (dict[key]) el.textContent = dict[key];
                     });
+                    document.getElementById('vip-modal').querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+                        const key = el.getAttribute('data-i18n-placeholder');
+                        if (dict[key]) el.placeholder = dict[key];
+                    });
                 } else {
                     const queryFailed = translations[currentLang]?.alert_query_failed || '查询VIP状态失败：';
                     alert(queryFailed + data.msg);
                 }
             } catch (error) {
+                document.getElementById('vip-modal')?.remove();
                 console.error('VIP状态查询失败:', error);
                 const networkError = translations[currentLang]?.network_error || '网络错误，请稍后重试';
                 alert(networkError);

@@ -1,0 +1,1124 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CHAAA // 聊天室</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        chaaa: {
+                            red: '#E60000',
+                            crimson: '#D52B1E',
+                            brightred: '#FF2E2E',
+                            darkred: '#7A0000',
+                            deep: '#0D0506',
+                            card: 'rgba(255, 255, 255, 0.07)',
+                            glassBorder: 'rgba(255, 255, 255, 0.15)',
+                            glassRedBorder: 'rgba(230, 0, 0, 0.35)',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Noto Sans SC', 'Inter', 'Helvetica Neue', 'Arial', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.1);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(230, 0, 0, 0.4);
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(230, 0, 0, 0.8);
+        }
+
+        /* Glassmorphism Structural Classes */
+        .glass-panel {
+            background: rgba(18, 6, 8, 0.72);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .glass-card-sent {
+            background: linear-gradient(135deg, rgba(230, 0, 0, 0.85) 0%, rgba(160, 0, 0, 0.9) 100%);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 8px 32px 0 rgba(230, 0, 0, 0.35);
+        }
+
+        .glass-input {
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+
+        .glass-input:focus {
+            border-color: #FF2E2E;
+            box-shadow: 0 0 18px rgba(230, 0, 0, 0.45);
+        }
+
+        /* chaaa Aesthetic Grid Overlay Background */
+        .chaaa-grid {
+            background-size: 36px 36px;
+            background-image: 
+                linear-gradient(to right, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+        }
+
+        /* Light Mode — 暖白/红调覆盖（告别冷灰） */
+        body.light-mode {
+            background-color: #FBF6F5;
+            color: #2A1A1A;
+        }
+
+        body.light-mode .glass-panel {
+            background: rgba(255, 255, 255, 0.82);
+            border-color: rgba(230, 0, 0, 0.2);
+            box-shadow: 0 20px 50px rgba(0,0,0,0.08);
+        }
+
+        /* 灰色卡片气泡 -> 暖白偏红，呼应品牌色 */
+        body.light-mode .glass-card {
+            background: rgba(255, 246, 245, 0.95);
+            border-color: rgba(230, 0, 0, 0.18);
+            color: #2A1A1A;
+            box-shadow: 0 4px 18px rgba(230, 0, 0, 0.06);
+        }
+
+        body.light-mode .glass-input {
+            background: rgba(255, 255, 255, 0.95);
+            border-color: rgba(0, 0, 0, 0.2);
+            color: #111;
+        }
+
+        /* 网格线改为红调 */
+        body.light-mode .chaaa-grid {
+            background-image: 
+                linear-gradient(to right, rgba(230, 0, 0, 0.06) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(230, 0, 0, 0.06) 1px, transparent 1px);
+        }
+
+        /* 暗色遮罩层 -> 极淡暖色，消除灰黑块 */
+        body.light-mode .bg-black\/10,
+        body.light-mode .bg-black\/20,
+        body.light-mode .bg-black\/25,
+        body.light-mode .bg-black\/30,
+        body.light-mode .bg-black\/40 {
+            background-color: rgba(60, 20, 20, 0.04) !important;
+        }
+
+        /* 头像深色方块 -> 瑞士红 */
+        body.light-mode .bg-zinc-800 {
+            background-color: #E60000 !important;
+            border-color: rgba(230, 0, 0, 0.35) !important;
+        }
+
+        /* 灰阶文字 -> 暖色深墨，确保可读 */
+        body.light-mode .text-zinc-200,
+        body.light-mode .text-zinc-300 { color: #3A2A2A !important; }
+        body.light-mode .text-zinc-400 { color: #6B5560 !important; }
+        body.light-mode .text-zinc-500 { color: #8A7A82 !important; }
+
+        /* 结构白边 -> 浅墨边，亮色下清晰可见 */
+        body.light-mode [class*="border-white"] {
+            border-color: rgba(0, 0, 0, 0.08) !important;
+        }
+
+        /* hover 态在亮色下可见 */
+        body.light-mode .hover\:bg-white\/5:hover,
+        body.light-mode .hover\:bg-white\/10:hover {
+            background-color: rgba(230, 0, 0, 0.06) !important;
+        }
+
+        /* 移动端侧边栏亮色背景 */
+        @media (max-width: 767px) {
+            body.light-mode #sidebar {
+                background-color: rgba(255, 255, 255, 0.97) !important;
+            }
+        }
+
+        /* Ambient Pulsing Animations */
+        @keyframes pulse-slow {
+            0%, 100% { opacity: 0.35; transform: scale(1); }
+            50% { opacity: 0.65; transform: scale(1.06); }
+        }
+
+        .bg-glow-1 {
+            animation: pulse-slow 9s ease-in-out infinite;
+        }
+
+        .bg-glow-2 {
+            animation: pulse-slow 13s ease-in-out infinite alternate;
+        }
+    </style>
+</head>
+
+<body class="bg-chaaa-deep text-slate-100 font-sans h-full overflow-hidden antialiased select-none transition-colors duration-300">
+
+    <!-- Glowing Background Ambient Lighting for Glass Depth -->
+    <div class="fixed inset-0 overflow-hidden pointer-events-none z-0">
+        <div class="bg-glow-1 absolute -top-36 -left-36 w-96 md:w-[650px] h-96 md:h-[650px] bg-chaaa-red rounded-full filter blur-[130px] opacity-40"></div>
+        <div class="bg-glow-2 absolute -bottom-36 -right-36 w-96 md:w-[700px] h-96 md:h-[700px] bg-chaaa-darkred rounded-full filter blur-[150px] opacity-50"></div>
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[450px] h-[450px] bg-red-600/20 rounded-full filter blur-[110px] opacity-30"></div>
+        <div class="absolute inset-0 chaaa-grid z-0"></div>
+    </div>
+
+    <!-- Main Container Frame -->
+    <div class="relative z-10 flex h-full w-full p-0 sm:p-3 md:p-6 lg:p-8 max-w-[1700px] mx-auto">
+        <div class="glass-panel w-full h-full sm:rounded-2xl flex overflow-hidden shadow-2xl relative">
+
+            <!-- MOBILE SIDEBAR BACKDROP OVERLAY -->
+            <div id="mobileBackdrop" class="fixed inset-0 bg-black/70 backdrop-blur-md z-30 hidden md:hidden transition-opacity duration-300 opacity-0" onclick="toggleSidebar()"></div>
+
+            <!-- SIDEBAR: ROOMS & CONTACTS -->
+            <aside id="sidebar" class="fixed md:relative z-40 inset-y-0 left-0 w-80 max-w-[85vw] bg-[#0f0406]/95 md:bg-transparent backdrop-blur-2xl md:backdrop-blur-none border-r border-white/10 flex flex-col transition-transform duration-300 ease-in-out -translate-x-full md:translate-x-0 h-full flex-shrink-0">
+                
+                <!-- chaaa Header Branding -->
+                <div class="p-4 sm:p-5 border-b border-white/10 flex items-center justify-between flex-shrink-0">
+                    <div class="flex items-center space-x-3 min-w-0">
+                        <div class="w-8 h-8 bg-chaaa-red rounded flex items-center justify-center font-extrabold text-white text-lg tracking-tighter shadow-lg shadow-red-600/40 flex-shrink-0">
+                            +
+                        </div>
+                        <div class="min-w-0">
+                            <h1 class="font-black text-base md:text-lg tracking-wider uppercase leading-none truncate">CHAAA</h1>
+                        </div>
+                    </div>
+                    
+                    <!-- Mobile Close Sidebar Button -->
+                    <button onclick="toggleSidebar()" class="md:hidden text-zinc-400 hover:text-white p-2 flex-shrink-0 whitespace-nowrap active:scale-95 transition">
+                        <i class="fa-solid fa-xmark text-lg"></i>
+                    </button>
+                </div>
+
+                <!-- Active User Profile Card -->
+                <div class="p-3.5 mx-4 my-3 rounded-xl glass-card flex items-center justify-between border border-white/10 flex-shrink-0">
+                    <div class="flex items-center space-x-3 min-w-0">
+                        <div class="relative flex-shrink-0">
+                            <div id="profileAvatar" class="w-10 h-10 rounded-lg bg-chaaa-red flex items-center justify-center font-mono font-bold text-sm text-white border border-chaaa-red/40 shadow-md">?</div>
+                            <span class="absolute -bottom-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-black"></span>
+                        </div>
+                        <div class="min-w-0">
+                            <h2 id="profileName" class="font-bold text-xs truncate text-white">未登录</h2>
+                            <p class="font-mono text-[10px] text-zinc-400 truncate">CHAAA // GUEST</p>
+                        </div>
+                    </div>
+                    <span class="font-mono text-[10px] bg-chaaa-red/20 text-chaaa-red font-semibold px-2 py-0.5 rounded border border-chaaa-red/30 flex-shrink-0 whitespace-nowrap ml-2">在线</span>
+                </div>
+
+                <!-- Channels & Direct Messages List -->
+                <div class="flex-1 overflow-y-auto px-4 py-2 space-y-6">
+                    <!-- Temporary Rooms Section (原频道位置) -->
+                    <div>
+                        <div class="flex items-center justify-between px-2 mb-2 flex-shrink-0">
+                            <span class="font-mono text-[11px] font-bold text-zinc-400 tracking-widest uppercase">01 临时聊天室</span>
+                        </div>
+                        <div class="flex items-center space-x-2 px-2 mb-2">
+                            <button onclick="createTempRoom()" class="flex-1 px-2 py-2 rounded-lg bg-chaaa-red/20 hover:bg-chaaa-red/30 text-chaaa-red text-xs font-mono font-bold transition border border-chaaa-red/40 flex-shrink-0 whitespace-nowrap active:scale-95">
+                                <i class="fa-solid fa-plus mr-1"></i>创建
+                            </button>
+                            <button onclick="joinTempRoom()" class="flex-1 px-2 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-zinc-300 text-xs font-mono font-bold transition border border-white/10 flex-shrink-0 whitespace-nowrap active:scale-95">
+                                <i class="fa-solid fa-right-to-bracket mr-1"></i>加入
+                            </button>
+                        </div>
+                        <div id="tempRoomList" class="space-y-1 px-2"></div>
+                    </div>
+
+                    <!-- Friends Section -->
+                    <div>
+                        <div class="flex items-center justify-between px-2 mb-2 flex-shrink-0">
+                            <span class="font-mono text-[11px] font-bold text-zinc-400 tracking-widest uppercase">02 好友</span>
+                            <button onclick="addFriend()" class="text-zinc-500 hover:text-chaaa-red transition flex-shrink-0" title="添加好友">
+                                <i class="fa-solid fa-plus text-xs"></i>
+                            </button>
+                        </div>
+                        <div id="friendList" class="space-y-1"></div>
+                    </div>
+                </div>
+
+                <!-- Footer Sound & Theme Controls -->
+                <div class="p-4 border-t border-white/10 flex items-center justify-between gap-2 bg-black/20 flex-shrink-0">
+                    <button onclick="toggleAudio()" id="soundBtn" class="flex items-center space-x-2 text-xs font-mono text-zinc-400 hover:text-white transition flex-shrink-0 whitespace-nowrap px-2 py-1 rounded hover:bg-white/5">
+                        <i class="fa-solid fa-volume-high text-chaaa-red flex-shrink-0"></i>
+                        <span id="soundLabel" class="flex-shrink-0 whitespace-nowrap">音效: 开启</span>
+                    </button>
+
+                    <div class="flex items-center space-x-1 flex-shrink-0">
+                        <button onclick="logout()" class="w-9 h-9 flex items-center justify-center rounded-lg bg-white/5 hover:bg-chaaa-red/20 text-zinc-300 hover:text-white transition flex-shrink-0 active:scale-95" title="退出登录">
+                            <i class="fa-solid fa-right-from-bracket text-sm"></i>
+                        </button>
+                        <button onclick="toggleTheme()" class="w-9 h-9 flex items-center justify-center rounded-lg bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white transition flex-shrink-0 active:scale-95" title="切换暗黑/亮色主题">
+                            <i class="fa-solid fa-circle-half-stroke text-sm"></i>
+                        </button>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- MAIN CHAT AREA -->
+            <main class="flex-1 flex flex-col h-full overflow-hidden relative min-w-0">
+                
+                <!-- Chat Header Bar -->
+                <header class="p-3.5 sm:p-4 md:px-6 border-b border-white/10 flex items-center justify-between bg-black/10 backdrop-blur-md z-20 flex-shrink-0">
+                    <div class="flex items-center space-x-3 min-w-0">
+                        <button onclick="toggleSidebar()" class="md:hidden w-9 h-9 flex items-center justify-center rounded-lg bg-white/5 text-zinc-400 hover:bg-swiss-red/20 hover:text-swiss-red border border-white/5 flex-shrink-0 active:scale-95 transition">
+                            <i class="fa-solid fa-bars text-sm"></i>
+                        </button>
+                        <div class="min-w-0">
+                            <div class="flex items-center space-x-2">
+                                <h2 id="currentChannelTitle" class="font-black text-base sm:text-lg md:text-xl tracking-wide uppercase truncate">CHAAA // 临时聊天</h2>
+                            </div>
+                            <p id="channelDescription" class="font-mono text-xs text-zinc-400 truncate max-w-xs sm:max-w-md">创建一个或加入一个临时聊天室，即可与同浏览器的其他标签页实时对话。</p>
+                        </div>
+                    </div>
+
+                    <!-- Actions Top Right -->
+                    <div class="flex items-center space-x-2 flex-shrink-0">
+                        <!-- Active users count badge -->
+                        <div class="hidden md:flex items-center space-x-2 bg-white/5 border border-white/10 px-3 py-1.5 rounded-lg font-mono text-xs flex-shrink-0 whitespace-nowrap">
+                            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                            <span class="text-zinc-300">4 人在线</span>
+                        </div>
+                        
+                        <!-- Action Buttons -->
+                        <button onclick="clearChat()" title="清空聊天记录" class="w-9 h-9 flex items-center justify-center rounded-lg bg-white/5 hover:bg-chaaa-red/20 hover:text-chaaa-red text-zinc-400 transition border border-white/5 flex-shrink-0 active:scale-95">
+                            <i class="fa-solid fa-trash-can text-xs sm:text-sm"></i>
+                        </button>
+                        <button id="shareRoomBtn" onclick="shareTempRoom()" title="复制邀请码" class="hidden w-9 h-9 flex items-center justify-center rounded-lg bg-white/5 hover:bg-chaaa-red/20 hover:text-chaaa-red text-zinc-400 transition border border-white/5 flex-shrink-0 active:scale-95">
+                            <i class="fa-solid fa-share-nodes text-xs sm:text-sm"></i>
+                        </button>
+                    </div>
+                </header>
+
+                <!-- MESSAGES SCROLL CONTAINER -->
+                <div id="messageContainer" class="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 space-y-4">
+                    
+                    <!-- chaaa System Date Separator -->
+                    <div class="flex items-center my-4 sm:my-6 flex-shrink-0">
+                        <div class="flex-1 border-t border-white/10"></div>
+                        <span id="dateSeparator" class="px-3 sm:px-4 font-mono text-[10px] font-bold text-zinc-400 tracking-widest uppercase bg-black/40 py-1 rounded-full border border-white/10 flex-shrink-0 whitespace-nowrap mx-2">
+                            2026年10月21日 • 18:32:00
+                        </span>
+                        <div class="flex-1 border-t border-white/10"></div>
+                    </div>
+
+                    <!-- Dynamic Messages -->
+                    <div id="messagesList" class="space-y-4"></div>
+
+                </div>
+
+                <!-- INPUT AREA -->
+                <footer class="p-3 sm:p-4 md:p-5 border-t border-white/10 bg-black/25 backdrop-blur-xl flex-shrink-0">
+                    <form id="chatForm" onsubmit="handleSendMessage(event)" class="flex items-center gap-2 sm:gap-3">
+                        <!-- Quick Attachment Menu -->
+                        <div class="relative flex-shrink-0">
+                            <button type="button" onclick="toggleQuickActions()" class="w-11 h-11 flex items-center justify-center rounded-xl glass-input text-zinc-400 hover:text-white hover:border-chaaa-red/60 transition flex-shrink-0 active:scale-95" title="附加附件">
+                                <i class="fa-solid fa-paperclip text-sm sm:text-base"></i>
+                            </button>
+
+                            <!-- Attachment Popover -->
+                            <div id="quickActionsMenu" class="hidden absolute bottom-14 left-0 w-52 glass-panel p-2 rounded-xl shadow-2xl z-50 space-y-1 border border-white/15 flex-shrink-0">
+                                <button type="button" onclick="sendQuickAsset('IMAGE')" class="w-full text-left px-3 py-2 text-xs rounded-lg hover:bg-chaaa-red/20 hover:text-white text-zinc-300 flex items-center space-x-2 font-mono flex-shrink-0 whitespace-nowrap">
+                                    <i class="fa-regular fa-image text-chaaa-red flex-shrink-0"></i>
+                                    <span>发送海报原型</span>
+                                </button>
+                                <button type="button" onclick="sendQuickAsset('CODE')" class="w-full text-left px-3 py-2 text-xs rounded-lg hover:bg-chaaa-red/20 hover:text-white text-zinc-300 flex items-center space-x-2 font-mono flex-shrink-0 whitespace-nowrap">
+                                    <i class="fa-solid fa-code text-chaaa-red flex-shrink-0"></i>
+                                    <span>插入栅格代码片段</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Text Input Bar -->
+                        <div class="relative flex-1 min-w-0">
+                            <input 
+                                type="text" 
+                                id="messageInput" 
+                                placeholder="输入消息发送至 #综合讨论..." 
+                                autocomplete="off"
+                                class="w-full glass-input px-4 py-3 rounded-xl text-xs sm:text-sm text-white placeholder-zinc-500 focus:outline-none transition font-sans pr-10 min-w-0"
+                            >
+                            <button type="button" onclick="insertEmoji('🔴')" class="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-chaaa-brightred transition flex-shrink-0 whitespace-nowrap p-1">
+                                <i class="fa-regular fa-face-smile text-base"></i>
+                            </button>
+                        </div>
+
+                        <!-- Send Button (Protected from Squishing) -->
+                        <button
+                            type="submit"
+                            id="sendBtn"
+                            class="px-4 sm:px-6 py-3 rounded-xl bg-chaaa-red hover:bg-red-600 text-white font-bold text-xs sm:text-sm tracking-wide transition shadow-lg shadow-red-600/30 flex items-center justify-center space-x-2 border border-red-400/40 active:scale-95 flex-shrink-0 whitespace-nowrap min-w-max"
+                        >
+                            <span class="font-mono text-xs uppercase flex-shrink-0 whitespace-nowrap">发送</span>
+                            <i class="fa-solid fa-paper-plane text-xs flex-shrink-0"></i>
+                        </button>
+                    </form>
+                </footer>
+
+            </main>
+        </div>
+    </div>
+
+    <!-- AUTH OVERLAY: 登录 / 注册 -->
+    <div id="authOverlay" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-chaaa-deep/95 backdrop-blur-xl">
+        <div class="glass-panel w-full max-w-sm p-7 sm:p-8 rounded-2xl border border-white/15 shadow-2xl">
+            <div class="flex items-center justify-center space-x-3 mb-6">
+                <div class="w-9 h-9 bg-chaaa-red rounded flex items-center justify-center font-extrabold text-white text-lg tracking-tighter shadow-lg shadow-red-600/40">+</div>
+                <h1 class="font-black text-lg tracking-wider uppercase">CHAAA <span class="text-chaaa-red">//</span> 账户</h1>
+            </div>
+
+            <!-- Tabs -->
+            <div class="flex rounded-xl bg-black/30 p-1 mb-5">
+                <button id="tabLogin" onclick="switchAuthTab('login')" class="flex-1 py-2 rounded-lg text-xs font-mono font-bold transition bg-chaaa-red text-white">登录</button>
+                <button id="tabRegister" onclick="switchAuthTab('register')" class="flex-1 py-2 rounded-lg text-xs font-mono font-bold transition text-zinc-400 hover:text-white">注册</button>
+            </div>
+
+            <form id="authForm" onsubmit="handleAuth(event)" class="space-y-3">
+                <div>
+                    <label class="block font-mono text-[10px] text-zinc-400 tracking-widest uppercase mb-1">用户名</label>
+                    <input id="authUsername" type="text" autocomplete="username" placeholder="输入用户名"
+                        class="w-full glass-input px-4 py-3 rounded-xl text-sm text-white placeholder-zinc-500 focus:outline-none transition font-sans" required>
+                </div>
+                <div>
+                    <label class="block font-mono text-[10px] text-zinc-400 tracking-widest uppercase mb-1">密码</label>
+                    <input id="authPassword" type="password" autocomplete="current-password" placeholder="输入密码"
+                        class="w-full glass-input px-4 py-3 rounded-xl text-sm text-white placeholder-zinc-500 focus:outline-none transition font-sans" required>
+                </div>
+                <div id="authConfirmWrap" class="hidden">
+                    <label class="block font-mono text-[10px] text-zinc-400 tracking-widest uppercase mb-1">确认密码</label>
+                    <input id="authConfirm" type="password" autocomplete="new-password" placeholder="再次输入密码"
+                        class="w-full glass-input px-4 py-3 rounded-xl text-sm text-white placeholder-zinc-500 focus:outline-none transition font-sans">
+                </div>
+
+                <p id="authError" class="text-xs font-mono text-chaaa-brightred min-h-[1rem]"></p>
+
+                <button type="submit" id="authSubmit"
+                    class="w-full py-3 rounded-xl bg-chaaa-red hover:bg-red-600 text-white font-bold text-sm tracking-wide transition shadow-lg shadow-red-600/30 border border-red-400/40 active:scale-95 flex items-center justify-center space-x-2">
+                    <span id="authSubmitLabel" class="font-mono uppercase">登录</span>
+                </button>
+            </form>
+            <p class="mt-4 text-center font-mono text-[10px] text-zinc-500">本地演示账户 · 数据仅存于本机浏览器</p>
+        </div>
+    </div>
+
+    <!-- 通用输入弹窗（替代浏览器 prompt） -->
+    <div id="promptModal" class="fixed inset-0 z-[120] hidden items-center justify-center p-4 bg-chaaa-deep/95 backdrop-blur-xl">
+        <div class="glass-panel w-full max-w-sm p-7 rounded-2xl border border-white/15 shadow-2xl">
+            <div class="flex items-center space-x-3 mb-5">
+                <div class="w-9 h-9 bg-chaaa-red rounded flex items-center justify-center font-extrabold text-white text-lg tracking-tighter shadow-lg shadow-red-600/40">+</div>
+                <h3 id="promptModalTitle" class="font-black text-lg tracking-wider uppercase">标题</h3>
+            </div>
+            <label id="promptModalLabel" class="block font-mono text-[10px] text-zinc-400 tracking-widest uppercase mb-1">输入</label>
+            <input id="promptModalInput" type="text" autocomplete="off"
+                class="w-full glass-input px-4 py-3 rounded-xl text-sm text-white placeholder-zinc-500 focus:outline-none transition font-sans"
+                onkeydown="if(event.key==='Enter') confirmPromptModal();">
+            <p id="promptModalError" class="text-xs font-mono text-chaaa-brightred min-h-[1rem] mt-2"></p>
+            <div class="flex space-x-3 mt-3">
+                <button onclick="closePromptModal()" class="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-zinc-200 font-bold text-sm tracking-wide transition border border-white/10 active:scale-95">取消</button>
+                <button onclick="confirmPromptModal()" class="flex-1 py-3 rounded-xl bg-chaaa-red hover:bg-red-600 text-white font-bold text-sm tracking-wide transition shadow-lg shadow-red-600/30 border border-red-400/40 active:scale-95">确认</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 通用信息弹窗（替代浏览器 alert，含复制邀请码） -->
+    <div id="infoModal" class="fixed inset-0 z-[120] hidden items-center justify-center p-4 bg-chaaa-deep/95 backdrop-blur-xl">
+        <div class="glass-panel w-full max-w-sm p-7 rounded-2xl border border-white/15 shadow-2xl">
+            <div class="flex items-center space-x-3 mb-5">
+                <div class="w-9 h-9 bg-chaaa-red rounded flex items-center justify-center font-extrabold text-white text-lg tracking-tighter shadow-lg shadow-red-600/40"><i class="fa-solid fa-check"></i></div>
+                <h3 id="infoModalTitle" class="font-black text-lg tracking-wider uppercase">提示</h3>
+            </div>
+            <p id="infoModalBody" class="text-sm text-zinc-300 leading-relaxed font-sans"></p>
+            <div id="infoModalCodeWrap" class="hidden mt-4">
+                <div class="flex items-center justify-between px-4 py-3 rounded-xl bg-black/40 border border-white/10">
+                    <span id="infoModalCode" class="font-mono font-bold text-chaaa-red tracking-widest text-lg"></span>
+                    <button onclick="copyInfoCode(this)" class="px-3 py-1.5 rounded-lg bg-chaaa-red/20 hover:bg-chaaa-red/30 text-chaaa-red text-xs font-mono font-bold border border-chaaa-red/40 active:scale-95 transition">复制</button>
+                </div>
+                <p class="mt-2 text-[10px] font-mono text-zinc-500">把邀请码发给朋友，对方在「加入」中输入即可进入同一聊天室。</p>
+            </div>
+            <button onclick="closeInfoModal()" class="w-full mt-5 py-3 rounded-xl bg-chaaa-red hover:bg-red-600 text-white font-bold text-sm tracking-wide transition shadow-lg shadow-red-600/30 border border-red-400/40 active:scale-95">好的</button>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT INTERACTION LOGIC -->
+    <script>
+        // ===== State =====
+        let currentChannel = null;
+        let soundEnabled = true;
+        let isDarkMode = true;
+        let currentUser = null;            // { username }
+        let authMode = 'login';            // 'login' | 'register'
+        const USERS_KEY = 'chaaa_users';
+        const SESSION_KEY = 'chaaa_session';
+        const TEMP_KEY = 'chaaa_temp_rooms';
+
+        // 临时聊天室：唯一数据来源 { CODE: { title, messages:[] } }
+        let tempRooms = loadTempRooms();
+        const roomChannels = {};   // CODE -> BroadcastChannel
+
+        function loadTempRooms() {
+            try { return JSON.parse(localStorage.getItem(TEMP_KEY)) || {}; } catch { return {}; }
+        }
+        function saveTempRooms() {
+            localStorage.setItem(TEMP_KEY, JSON.stringify(tempRooms));
+        }
+        function getStore(key) {
+            return (tempRooms[key] && tempRooms[key].messages) || [];
+        }
+
+        // Web Audio API Synthesizer (Zero External Dependencies)
+        function playNotificationSound(type = 'receive') {
+            if (!soundEnabled) return;
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContext) return;
+                const ctx = new AudioContext();
+                
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                
+                if (type === 'send') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+                    osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.08); // A5
+                    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.08);
+                    osc.start();
+                    osc.stop(ctx.currentTime + 0.08);
+                } else {
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(880, ctx.currentTime); // A5
+                    osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.12); // A4
+                    gain.gain.setValueAtTime(0.2, ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.12);
+                    osc.start();
+                    osc.stop(ctx.currentTime + 0.12);
+                }
+            } catch (e) {
+                console.log("Audio muted or blocked by browser interactions", e);
+            }
+        }
+
+        // Toggle Sound Setting
+        function toggleAudio() {
+            soundEnabled = !soundEnabled;
+            const soundLabel = document.getElementById('soundLabel');
+            
+            if (soundEnabled) {
+                soundLabel.innerText = "音效: 开启";
+            } else {
+                soundLabel.innerText = "音效: 静音";
+            }
+        }
+
+        // Toggle Mobile Sidebar Drawer
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const backdrop = document.getElementById('mobileBackdrop');
+            
+            const isHidden = sidebar.classList.contains('-translate-x-full');
+            if (isHidden) {
+                sidebar.classList.remove('-translate-x-full');
+                backdrop.classList.remove('hidden');
+                setTimeout(() => backdrop.classList.remove('opacity-0'), 10);
+            } else {
+                sidebar.classList.add('-translate-x-full');
+                backdrop.classList.add('opacity-0');
+                setTimeout(() => backdrop.classList.add('hidden'), 300);
+            }
+        }
+
+        // 切换当前临时聊天室
+        function switchChannel(key) {
+            currentChannel = key;
+            if (tempRooms[key]) {
+                const room = tempRooms[key];
+                const isDM = typeof key === 'string' && key.indexOf('DM_') === 0;
+                document.getElementById('currentChannelTitle').innerText = room.title || ('⌘ 临时室 ' + key);
+                if (isDM) {
+                    const friend = (room.title || '').replace('私聊 ', '');
+                    document.getElementById('channelDescription').innerText = '与 ' + friend + ' 的私聊（仅两人可见）';
+                    document.getElementById('messageInput').placeholder = '发送消息给 ' + friend + '...';
+                } else {
+                    document.getElementById('channelDescription').innerText = '临时加密聊天室 · 邀请码 ' + key;
+                    document.getElementById('messageInput').placeholder = '输入消息发送至 ' + key + '...';
+                }
+            } else {
+                document.getElementById('currentChannelTitle').innerText = 'CHAAA // 临时聊天';
+                document.getElementById('channelDescription').innerText = '创建一个或加入一个临时聊天室，即可与同浏览器的其他标签页实时对话。';
+            }
+            document.getElementById('shareRoomBtn').classList.toggle('hidden', !tempRooms[key] || (typeof key === 'string' && key.indexOf('DM_') === 0));
+
+            renderTempRooms();
+            renderMessages();
+            renderFriends();
+            updateInputState();
+
+            if (window.innerWidth < 768) toggleSidebar();
+        }
+
+        // 无选中聊天室时的空状态
+        function showEmptyRoomState() {
+            currentChannel = null;
+            document.getElementById('currentChannelTitle').innerText = 'CHAAA // 临时聊天';
+            document.getElementById('channelDescription').innerText = '创建一个或加入一个临时聊天室，即可与同浏览器的其他标签页实时对话。';
+            document.getElementById('shareRoomBtn').classList.add('hidden');
+            const list = document.getElementById('messagesList');
+            list.innerHTML = '<div class="flex items-center justify-center py-12"><p class="font-mono text-xs text-zinc-500 text-center px-4 leading-relaxed">尚未选择聊天室<br>点击下方「创建」开启一个临时聊天室，或用「加入」输入邀请码。</p></div>';
+            renderTempRooms();
+            updateInputState();
+        }
+
+        // 没有聊天室时禁用输入框与发送按钮
+        function updateInputState() {
+            const hasRoom = !!(currentChannel && tempRooms[currentChannel]);
+            const input = document.getElementById('messageInput');
+            const sendBtn = document.getElementById('sendBtn');
+            input.disabled = !hasRoom;
+            if (sendBtn) sendBtn.disabled = !hasRoom;
+            if (!hasRoom) input.placeholder = '请先创建或加入一个聊天室';
+        }
+
+        // Handle Form Submission
+        function handleSendMessage(e) {
+            e.preventDefault();
+            if (!currentUser) return;
+            const input = document.getElementById('messageInput');
+            const text = input.value.trim();
+            if (!text) return;
+            sendMessage(text);
+            input.value = '';
+        }
+
+        function sendMessage(text) {
+            if (!currentUser) return;
+            addMessage({
+                id: 'm_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+                sender: currentUser.username,
+                isSent: true,
+                time: getCurrentTime(),
+                text: text
+            });
+            playNotificationSound('send');
+        }
+
+        // Insert Quick Emoji
+        function insertEmoji(emoji) {
+            const input = document.getElementById('messageInput');
+            input.value += `${emoji}`;
+            input.focus();
+        }
+
+        // 渲染单条消息为 HTML
+        function renderMessageHTML(msg) {
+            const initial = (msg.sender || '?').substring(0, 2);
+            const safeText = escapeHtml(msg.text || '');
+            if (msg.isSent) {
+                return '<div class="flex items-start justify-end space-x-3 max-w-2xl ml-auto group">' +
+                    '<div class="space-y-1 text-right min-w-0">' +
+                        '<div class="flex items-center justify-end space-x-2 flex-shrink-0 whitespace-nowrap">' +
+                            '<span class="font-mono text-[10px] text-zinc-400">' + msg.time + '</span>' +
+                            '<span class="font-bold text-xs text-zinc-200">' + escapeHtml(msg.sender) + '</span>' +
+                        '</div>' +
+                        '<div class="glass-card-sent p-3.5 rounded-2xl rounded-tr-xs text-xs sm:text-sm text-white leading-relaxed text-left">' + safeText + (msg.customContent || '') + '</div>' +
+                    '</div>' +
+                    '<div class="w-9 h-9 rounded-lg bg-chaaa-red flex-shrink-0 font-bold font-mono text-xs flex items-center justify-center border border-red-400/40 text-white shadow-md">' + escapeHtml(initial) + '</div>' +
+                '</div>';
+            }
+            return '<div class="flex items-start space-x-3 max-w-2xl group">' +
+                '<div class="w-9 h-9 rounded-lg bg-zinc-800 flex-shrink-0 font-bold font-mono text-xs flex items-center justify-center border border-white/10 text-white shadow-md">' + escapeHtml(initial) + '</div>' +
+                '<div class="space-y-1 min-w-0">' +
+                    '<div class="flex items-center space-x-2 flex-shrink-0 whitespace-nowrap">' +
+                        '<span class="font-bold text-xs text-zinc-200">' + escapeHtml(msg.sender) + '</span>' +
+                        '<span class="font-mono text-[10px] text-zinc-400">' + msg.time + '</span>' +
+                    '</div>' +
+                    '<div class="glass-card p-3.5 rounded-2xl rounded-tl-xs text-xs sm:text-sm text-zinc-200 leading-relaxed shadow-lg">' + safeText + (msg.customContent || '') + '</div>' +
+                '</div>' +
+            '</div>';
+        }
+
+        function renderMessages() {
+            const list = document.getElementById('messagesList');
+            const store = getStore(currentChannel) || [];
+            list.innerHTML = store.map(renderMessageHTML).join('');
+            scrollToBottom();
+        }
+
+        // 写入一条消息（本地存储 + 临时室广播）
+        function addMessage(msg) {
+            const room = tempRooms[currentChannel];
+            if (!room) return;
+            room.messages.push(msg);
+            saveTempRooms();
+            broadcastTemp(msg);
+            renderMessages();
+        }
+
+        // ===== 临时聊天室 =====
+        function genCode() {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            let s = '';
+            for (let i = 0; i < 6; i++) s += chars[Math.floor(Math.random() * chars.length)];
+            return s;
+        }
+
+        function getRoomChannel(code) {
+            if (roomChannels[code]) return roomChannels[code];
+            if (typeof BroadcastChannel === 'undefined') return null;
+            const bc = new BroadcastChannel('chaaa_room_' + code);
+            bc.onmessage = (e) => {
+                const msg = e.data && e.data.msg;
+                if (!msg || !tempRooms[code]) return;
+                const store = tempRooms[code].messages;
+                if (store.some(m => m.id === msg.id)) return;
+                store.push(msg);
+                saveTempRooms();
+                if (currentChannel === code) renderMessages();
+            };
+            roomChannels[code] = bc;
+            return bc;
+        }
+
+        function broadcastTemp(msg) {
+            const bc = getRoomChannel(currentChannel);
+            if (bc) bc.postMessage({ msg: msg });
+        }
+
+        function createTempRoom() {
+            if (!currentUser) return;
+            openPromptModal({
+                title: '创建聊天室',
+                label: '聊天室名称（可选）',
+                placeholder: '留空则使用邀请码命名',
+                onConfirm: (name) => {
+                    let code;
+                    do { code = genCode(); } while (tempRooms[code]);
+                    tempRooms[code] = { title: name ? name : '临时室 ' + code, messages: [] };
+                    saveTempRooms();
+                    getRoomChannel(code);
+                    switchChannel(code);
+                    openInfoModal({
+                        title: '聊天室已创建',
+                        body: '已为你创建临时聊天室' + (name ? '「' + name + '」' : '') + '。把邀请码发给朋友即可一起聊天。',
+                        code: code
+                    });
+                    return null;
+                }
+            });
+        }
+
+        function joinTempRoom() {
+            if (!currentUser) return;
+            openPromptModal({
+                title: '加入聊天室',
+                label: '邀请码',
+                placeholder: '输入 6 位邀请码',
+                onConfirm: (raw) => {
+                    const code = raw.toUpperCase();
+                    if (!code) return '请输入邀请码';
+                    if (!/^[A-Z0-9]+$/.test(code)) return '邀请码只能包含大写字母与数字';
+                    if (!tempRooms[code]) {
+                        tempRooms[code] = { title: '临时室 ' + code, messages: [] };
+                        saveTempRooms();
+                    }
+                    getRoomChannel(code);
+                    switchChannel(code);
+                    return null;
+                }
+            });
+        }
+
+        function leaveTempRoom(code) {
+            delete tempRooms[code];
+            saveTempRooms();
+            const bc = roomChannels[code];
+            if (bc) { bc.close(); delete roomChannels[code]; }
+            const codes = Object.keys(tempRooms);
+            if (currentChannel === code) {
+                if (codes.length) switchChannel(codes[0]);
+                else showEmptyRoomState();
+            } else {
+                renderTempRooms();
+            }
+        }
+
+        function renderTempRooms() {
+            const wrap = document.getElementById('tempRoomList');
+            const codes = Object.keys(tempRooms).filter(c => !c.startsWith('DM_'));
+            if (!codes.length) {
+                wrap.innerHTML = '<p class="px-2 text-[10px] font-mono text-zinc-500">暂无临时聊天室</p>';
+                return;
+            }
+            wrap.innerHTML = codes.map(code => {
+                const active = currentChannel === code;
+                return '<div class="flex items-center justify-between px-3 py-2 rounded-lg text-left transition-all duration-150 group border cursor-pointer ' +
+                    (active ? 'bg-chaaa-red/20 text-white border-chaaa-red/40' : 'text-zinc-400 hover:bg-white/5 border-transparent') +
+                    '" onclick="switchChannel(\'' + code + '\')">' +
+                    '<div class="flex items-center space-x-2.5 min-w-0">' +
+                        '<span class="font-mono text-chaaa-red font-bold text-sm flex-shrink-0">⌘</span>' +
+                        '<span class="font-semibold text-xs tracking-wide truncate">' + code + '</span>' +
+                    '</div>' +
+                    '<button onclick="event.stopPropagation(); leaveTempRoom(\'' + code + '\')" class="text-zinc-500 hover:text-chaaa-red transition flex-shrink-0" title="离开并删除">' +
+                        '<i class="fa-solid fa-xmark"></i>' +
+                    '</button>' +
+                '</div>';
+            }).join('');
+        }
+
+        function shareTempRoom() {
+            if (!tempRooms[currentChannel]) return;
+            openInfoModal({
+                title: '邀请码',
+                body: '把邀请码发给朋友，对方在「加入」中输入即可进入同一聊天室。',
+                code: currentChannel
+            });
+        }
+
+        // ===== 通用弹窗（替代浏览器 prompt / alert）=====
+        let promptModalCallback = null;
+        function openPromptModal({ title, label, placeholder = '', value = '', onConfirm }) {
+            document.getElementById('promptModalTitle').innerText = title;
+            document.getElementById('promptModalLabel').innerText = label;
+            const input = document.getElementById('promptModalInput');
+            input.value = value;
+            input.placeholder = placeholder;
+            document.getElementById('promptModalError').innerText = '';
+            promptModalCallback = onConfirm;
+            const modal = document.getElementById('promptModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            setTimeout(() => input.focus(), 50);
+        }
+        function closePromptModal() {
+            const modal = document.getElementById('promptModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            promptModalCallback = null;
+        }
+        function confirmPromptModal() {
+            const input = document.getElementById('promptModalInput');
+            const val = input.value.trim();
+            if (promptModalCallback) {
+                const err = promptModalCallback(val);
+                if (err) {
+                    document.getElementById('promptModalError').innerText = err;
+                    input.focus();
+                    return;
+                }
+            }
+            closePromptModal();
+        }
+        let infoModalCodeValue = '';
+        function openInfoModal({ title, body, code }) {
+            document.getElementById('infoModalTitle').innerText = title;
+            document.getElementById('infoModalBody').innerText = body;
+            const codeWrap = document.getElementById('infoModalCodeWrap');
+            if (code) {
+                infoModalCodeValue = code;
+                document.getElementById('infoModalCode').innerText = code;
+                codeWrap.classList.remove('hidden');
+            } else {
+                codeWrap.classList.add('hidden');
+            }
+            const modal = document.getElementById('infoModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+        function closeInfoModal() {
+            const modal = document.getElementById('infoModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+        function copyInfoCode(btn) {
+            const code = infoModalCodeValue;
+            if (code && navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(code).catch(() => {});
+            }
+            const old = btn.innerText;
+            btn.innerText = '已复制';
+            setTimeout(() => { btn.innerText = old; }, 1200);
+        }
+
+        // ===== 好友 =====
+        const FRIENDS_KEY = 'chaaa_friends';
+        function loadFriendsMap() {
+            try { return JSON.parse(localStorage.getItem(FRIENDS_KEY)) || {}; } catch { return {}; }
+        }
+        function saveFriendsMap(m) { localStorage.setItem(FRIENDS_KEY, JSON.stringify(m)); }
+        function getFriends() {
+            if (!currentUser) return [];
+            return loadFriendsMap()[currentUser.username] || [];
+        }
+        // 私聊房间码：两人用户名排序后拼成，保证对称唯一
+        function dmCode(friend) {
+            return 'DM_' + [currentUser.username, friend].sort().join('__');
+        }
+        function addFriend() {
+            if (!currentUser) return;
+            openPromptModal({
+                title: '添加好友',
+                label: '好友用户名',
+                placeholder: '输入对方注册的用户名',
+                onConfirm: (raw) => {
+                    const name = raw.trim();
+                    if (!name) return '请输入用户名';
+                    if (name === currentUser.username) return '不能添加自己为好友';
+                    const users = loadUsers();
+                    if (!users[name]) return '该用户不存在，请确认用户名（需对方先注册）';
+                    const map = loadFriendsMap();
+                    const list = map[currentUser.username] || [];
+                    if (list.includes(name)) return '该用户已是你的好友';
+                    list.push(name);
+                    map[currentUser.username] = list;
+                    saveFriendsMap(map);
+                    renderFriends();
+                    openInfoModal({ title: '已添加好友', body: '你已添加 ' + name + ' 为好友，点击即可发起私聊。' });
+                    return null;
+                }
+            });
+        }
+        function removeFriend(name) {
+            const map = loadFriendsMap();
+            map[currentUser.username] = (map[currentUser.username] || []).filter(n => n !== name);
+            saveFriendsMap(map);
+            const code = dmCode(name);
+            if (tempRooms[code]) {
+                delete tempRooms[code];
+                saveTempRooms();
+                const bc = roomChannels[code];
+                if (bc) { bc.close(); delete roomChannels[code]; }
+                if (currentChannel === code) {
+                    const codes = Object.keys(tempRooms).filter(c => !c.startsWith('DM_'));
+                    if (codes.length) switchChannel(codes[0]);
+                    else showEmptyRoomState();
+                }
+            }
+            renderFriends();
+        }
+        function openFriendChat(friend) {
+            const code = dmCode(friend);
+            if (!tempRooms[code]) tempRooms[code] = { title: '私聊 ' + friend, messages: [] };
+            saveTempRooms();
+            switchChannel(code);
+        }
+        function renderFriends() {
+            const wrap = document.getElementById('friendList');
+            const friends = getFriends();
+            if (!friends.length) {
+                wrap.innerHTML = '<p class="px-2 py-2 text-center text-[10px] font-mono text-zinc-500">暂无好友，点右 + 添加</p>';
+                return;
+            }
+            wrap.innerHTML = friends.map(name => {
+                const initial = name.substring(0, 2).toUpperCase();
+                const active = currentChannel === dmCode(name);
+                return '<div class="flex items-center justify-between p-2.5 rounded-lg ' + (active ? 'bg-chaaa-red/20' : 'hover:bg-white/5') + ' cursor-pointer transition flex-shrink-0 group" onclick="openFriendChat(\'' + name + '\')">' +
+                    '<div class="flex items-center space-x-3 min-w-0">' +
+                        '<div class="relative flex-shrink-0">' +
+                            '<div class="w-8 h-8 rounded-lg bg-chaaa-red flex items-center justify-center font-mono font-bold text-xs text-white border border-chaaa-red/40">' + escapeHtml(initial) + '</div>' +
+                            '<span class="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 rounded-full border border-black"></span>' +
+                        '</div>' +
+                        '<div class="min-w-0">' +
+                            '<div class="text-xs font-semibold truncate text-zinc-200">' + escapeHtml(name) + '</div>' +
+                            '<div class="text-[10px] text-emerald-400 font-mono truncate">在线</div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<button onclick="event.stopPropagation(); removeFriend(\'' + name + '\')" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/10 text-zinc-500 hover:text-chaaa-red transition flex-shrink-0" title="删除好友">' +
+                        '<i class="fa-solid fa-xmark"></i>' +
+                    '</button>' +
+                '</div>';
+            }).join('');
+        }
+
+        // ===== 登录 / 注册 =====
+        function loadUsers() {
+            try { return JSON.parse(localStorage.getItem(USERS_KEY)) || {}; } catch { return {}; }
+        }
+        function saveUsers(u) { localStorage.setItem(USERS_KEY, JSON.stringify(u)); }
+
+        function switchAuthTab(mode) {
+            authMode = mode;
+            const loginCls = 'flex-1 py-2 rounded-lg text-xs font-mono font-bold transition bg-chaaa-red text-white';
+            const regCls = 'flex-1 py-2 rounded-lg text-xs font-mono font-bold transition text-zinc-400 hover:text-white';
+            document.getElementById('tabLogin').className = mode === 'login' ? loginCls : regCls;
+            document.getElementById('tabRegister').className = mode === 'register' ? loginCls : regCls;
+            document.getElementById('authConfirmWrap').classList.toggle('hidden', mode !== 'register');
+            document.getElementById('authSubmitLabel').innerText = mode === 'login' ? '登录' : '注册';
+            document.getElementById('authError').innerText = '';
+            document.getElementById('authPassword').setAttribute('autocomplete', mode === 'login' ? 'current-password' : 'new-password');
+        }
+
+        function handleAuth(e) {
+            e.preventDefault();
+            const username = document.getElementById('authUsername').value.trim();
+            const password = document.getElementById('authPassword').value;
+            const err = document.getElementById('authError');
+            if (!username || !password) { err.innerText = '请填写用户名和密码'; return; }
+            const users = loadUsers();
+            if (authMode === 'register') {
+                const confirm = document.getElementById('authConfirm').value;
+                if (password.length < 4) { err.innerText = '密码至少 4 位'; return; }
+                if (password !== confirm) { err.innerText = '两次密码不一致'; return; }
+                if (users[username]) { err.innerText = '该用户名已被注册'; return; }
+                users[username] = password;
+                saveUsers(users);
+                loginUser(username);
+            } else {
+                if (!users[username] || users[username] !== password) { err.innerText = '用户名或密码错误'; return; }
+                loginUser(username);
+            }
+        }
+
+        function loginUser(username) {
+            currentUser = { username: username };
+            localStorage.setItem(SESSION_KEY, username);
+            document.getElementById('authOverlay').style.display = 'none';
+            updateProfile();
+            renderFriends();
+        }
+
+        function logout() {
+            currentUser = null;
+            localStorage.removeItem(SESSION_KEY);
+            document.getElementById('authOverlay').style.display = 'flex';
+            document.getElementById('profileName').innerText = '未登录';
+            document.getElementById('profileAvatar').innerText = '?';
+            renderFriends();
+        }
+
+        function updateProfile() {
+            if (!currentUser) return;
+            document.getElementById('profileName').innerText = currentUser.username;
+            document.getElementById('profileAvatar').innerText = currentUser.username.substring(0, 2).toUpperCase();
+        }
+
+        // Quick Action Menu Popover
+        function toggleQuickActions() {
+            const menu = document.getElementById('quickActionsMenu');
+            menu.classList.toggle('hidden');
+        }
+
+        // Send Attachments (Images/Code)
+        function sendQuickAsset(type) {
+            toggleQuickActions();
+            if (!currentUser) return;
+            const id = 'm_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+            const time = getCurrentTime();
+            if (type === 'IMAGE') {
+                addMessage({
+                    id: id, sender: currentUser.username, isSent: true, time: time,
+                    text: '分享了一份最新的排版概念图稿：',
+                    customContent: '<div class="mt-2 rounded-xl overflow-hidden border border-white/20"><div class="bg-black/80 p-3 font-mono text-xs border-b border-white/10 flex justify-between items-center"><span class="text-chaaa-brightred font-bold">GRID_CONCEPT_2026.SVG</span><span class="text-zinc-500">2.4 MB</span></div><div class="h-28 bg-gradient-to-r from-chaaa-red to-black flex items-center justify-center font-black text-lg tracking-widest text-white">CHAAA DESIGN GRAPHICS</div></div>'
+                });
+            } else if (type === 'CODE') {
+                addMessage({
+                    id: id, sender: currentUser.username, isSent: true, time: time,
+                    text: '共享了 8px 基线网格 CSS 代码片断：',
+                    customContent: '<pre class="mt-2 p-3 bg-black/70 rounded-lg text-xs font-mono text-emerald-400 overflow-x-auto border border-white/10"><code>.chaaa-grid-system {\n  display: grid;\n  grid-template-columns: repeat(12, 1fr);\n  gap: 16px;\n  backdrop-filter: blur(20px);\n}</code></pre>'
+                });
+            }
+            playNotificationSound('send');
+        }
+
+        // Clear Chat Area
+        function clearChat() {
+            const room = tempRooms[currentChannel];
+            if (!room) return;
+            room.messages.length = 0;
+            saveTempRooms();
+            renderMessages();
+        }
+
+        // Theme Toggle (Dark Red / Light chaaa)
+        function toggleTheme() {
+            isDarkMode = !isDarkMode;
+            if (isDarkMode) {
+                document.body.classList.remove('light-mode');
+            } else {
+                document.body.classList.add('light-mode');
+            }
+        }
+
+        // Helper Utilities
+        function scrollToBottom() {
+            const container = document.getElementById('messageContainer');
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function getCurrentTime() {
+            const now = new Date();
+            const h = String(now.getHours()).padStart(2, '0');
+            const m = String(now.getMinutes()).padStart(2, '0');
+            const s = String(now.getSeconds()).padStart(2, '0');
+            return `${h}:${m}:${s}`;
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/&/g, "&amp;")
+                      .replace(/</g, "&lt;")
+                      .replace(/>/g, "&gt;")
+                      .replace(/"/g, "&quot;")
+                      .replace(/'/g, "&#039;");
+        }
+
+        // Close Popover when clicking outside
+        document.addEventListener('click', function(e) {
+            const menu = document.getElementById('quickActionsMenu');
+            const btn = e.target.closest('button[onclick="toggleQuickActions()"]');
+            if (menu && !menu.contains(e.target) && !btn && !menu.classList.contains('hidden')) {
+                menu.classList.add('hidden');
+            }
+        });
+
+        // 初始化
+        function init() {
+            const saved = localStorage.getItem(SESSION_KEY);
+            if (saved) {
+                currentUser = { username: saved };
+                updateProfile();
+                document.getElementById('authOverlay').style.display = 'none';
+            }
+            const now = new Date();
+            document.getElementById('dateSeparator').innerText =
+                now.getFullYear() + '年' + (now.getMonth() + 1) + '月' + now.getDate() + '日 • ' + getCurrentTime();
+            const codes = Object.keys(tempRooms).filter(c => !c.startsWith('DM_'));
+            if (codes.length) switchChannel(codes[0]);
+            else showEmptyRoomState();
+            renderFriends();
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>

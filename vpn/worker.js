@@ -363,23 +363,7 @@ async function ensureCardColumn(DB) {
   globalThis.__cardColReady = true;
 }
 
-// 懒加载额外流量字段（幂等）：月付桶 / 年付桶 各自独立，互不覆盖
-async function ensureBonusColumn(DB) {
-  try { await DB.prepare('ALTER TABLE user ADD COLUMN bonus_quota_monthly INTEGER DEFAULT 0').run(); } catch (e) {}
-  try { await DB.prepare('ALTER TABLE user ADD COLUMN bonus_expire_monthly TEXT').run(); } catch (e) {}
-  try { await DB.prepare('ALTER TABLE user ADD COLUMN bonus_quota_annual INTEGER DEFAULT 0').run(); } catch (e) {}
-  try { await DB.prepare('ALTER TABLE user ADD COLUMN bonus_expire_annual TEXT').run(); } catch (e) {}
-}
 
-// 懒加 face_descriptor 列（幂等），用于存储人脸特征向量（128 维浮点数组 JSON）
-async function ensureFaceColumn(DB) {
-  try { await DB.prepare('ALTER TABLE user ADD COLUMN face_descriptor TEXT').run(); } catch (e) {}
-}
-
-// 懒加 voice_embedding 列（幂等），用于存储声纹特征向量（JSON 数组）
-async function ensureVoiceColumn(DB) {
-  try { await DB.prepare('ALTER TABLE user ADD COLUMN voice_embedding TEXT').run(); } catch (e) {}
-}
 
 // 懒加 p_token 列（幂等），生成新鉴权 token 并持久化，返回完整 token 串
 // token 格式：<随机UUID>.<过期时间戳(ms)>，有效期 1 天，每次登录刷新
@@ -894,7 +878,6 @@ export default {
 
           // 注册时可选录入人脸：校验通过后保存 128 维特征向量
           if (faceDescriptor && Array.isArray(faceDescriptor) && faceDescriptor.length === 128 && faceDescriptor.every(n => typeof n === 'number')) {
-            await ensureFaceColumn(DB);
             await DB.prepare('UPDATE user SET face_descriptor = ? WHERE username = ?').bind(JSON.stringify(faceDescriptor), username).run();
           }
 
@@ -1080,7 +1063,6 @@ export default {
         if (!Array.isArray(descriptor) || descriptor.length !== 128 || !descriptor.every(n => typeof n === 'number')) {
           return resJson({ success: false, message: '人脸特征数据无效！' }, 400);
         }
-        await ensureFaceColumn(DB);
         // 1:1 验证：只比对该指定用户名自己录入的人脸模板
         const u = await DB
           .prepare("SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders, invite_code, invited_user, rebates, card_number, face_descriptor FROM user WHERE username = ?")
@@ -1120,7 +1102,6 @@ export default {
         if (!Array.isArray(descriptor) || descriptor.length !== 128 || !descriptor.every(n => typeof n === 'number')) return resJson({ success: false, message: '人脸特征数据无效！' }, 400);
         const rec = await DB.prepare('SELECT p_token FROM user WHERE username = ?').bind(username).first();
         if (!rec || rec.p_token !== p_token) return resJson({ success: false, message: '登录态校验失败，请重新登录！' }, 401);
-        await ensureFaceColumn(DB);
         await DB.prepare('UPDATE user SET face_descriptor = ? WHERE username = ?').bind(JSON.stringify(descriptor), username).run();
         return resJson({ success: true, message: '人脸录入成功！' });
       }
@@ -1133,7 +1114,6 @@ export default {
         if (!Array.isArray(embedding) || embedding.length < 32 || !embedding.every(n => typeof n === 'number')) {
           return resJson({ success: false, message: '声纹特征数据无效！' }, 400);
         }
-        await ensureVoiceColumn(DB);
         // 1:1 验证：只比对该指定用户名自己录入的声纹模板
         const u = await DB
           .prepare("SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders, invite_code, invited_user, rebates, card_number, voice_embedding FROM user WHERE username = ?")
@@ -1174,7 +1154,6 @@ export default {
         if (!Array.isArray(embedding) || embedding.length < 32 || !embedding.every(n => typeof n === 'number')) return resJson({ success: false, message: '声纹特征数据无效！' }, 400);
         const rec = await DB.prepare('SELECT p_token FROM user WHERE username = ?').bind(username).first();
         if (!rec || rec.p_token !== p_token) return resJson({ success: false, message: '登录态校验失败，请重新登录！' }, 401);
-        await ensureVoiceColumn(DB);
         await DB.prepare('UPDATE user SET voice_embedding = ? WHERE username = ?').bind(JSON.stringify(embedding), username).run();
         return resJson({ success: true, message: '声纹录入成功！' });
       }
@@ -1649,7 +1628,7 @@ export default {
       if (path === '/api/open-vip' && request.method === 'PUT') {
         try {
           const params = await request.json();
-          const { username, duration = 30, price = 10.00 } = params;
+          const { username, duration = 30, price = 10.00, coupon_code: rawCoupon = '' } = params;
           
           if (!username) {
             return resJson({ code: 400, msg: '缺少username参数' }, 400);
@@ -1693,12 +1672,37 @@ export default {
             return resJson({ code: 404, msg: '用户不存在' }, 404);
           }
 
-          if (user.balance < vipPrice) {
+          // 解析已有订单，用于优惠码防重复校验
+          let existingVorders = [];
+          try { existingVorders = JSON.parse(user.vorders || '[]'); } catch (e) { existingVorders = []; }
+
+          // ========== 优惠码校验与抵扣（固定金额立减） ==========
+          const couponCode = (rawCoupon || '').trim().toUpperCase();
+          let couponDiscount = 0;
+          if (couponCode) {
+            const coupon = await DB.prepare('SELECT code, discount_amount, active, expires_at, max_uses, used_count FROM coupons WHERE code = ?').bind(couponCode).first();
+            if (!coupon || !coupon.active) {
+              return resJson({ code: 400, msg: '优惠码无效或已失效', msg_key: 'coupon_invalid_or_inactive' }, 400);
+            }
+            if (coupon.expires_at && new Date(coupon.expires_at) < now) {
+              return resJson({ code: 400, msg: '优惠码已过期', msg_key: 'coupon_expired' }, 400);
+            }
+            if (coupon.max_uses > 0 && coupon.used_count >= coupon.max_uses) {
+              return resJson({ code: 400, msg: '优惠码已被使用完', msg_key: 'coupon_depleted' }, 400);
+            }
+            if (existingVorders.some(o => o.coupon_code === couponCode)) {
+              return resJson({ code: 400, msg: '该优惠码您已使用过', msg_key: 'coupon_already_used' }, 400);
+            }
+            couponDiscount = Math.min(Number(coupon.discount_amount) || 0, vipPrice);
+          }
+          const finalPrice = Math.max(0, vipPrice - couponDiscount);
+
+          if (user.balance < finalPrice) {
             return resJson({ 
               code: 400, 
               msg: '余额不足，请先充值', 
               balance: user.balance,
-              required: vipPrice 
+              required: finalPrice 
             }, 400);
           }
           
@@ -1727,7 +1731,9 @@ export default {
             id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
             type: 'vip',
             duration: duration,
-            price: vipPrice,
+            price: finalPrice,
+            discount: couponDiscount,
+            coupon_code: couponCode || null,
             created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
             method: 'balance',
             status: 'success'
@@ -1739,30 +1745,35 @@ export default {
           
           const result = await DB
             .prepare('UPDATE user SET balance = balance - ?, v_expire_date = ?, v_token = ?, v_link_clash = ?, v_link_v2ray = ?, vorders = ? WHERE username = ?')
-            .bind(vipPrice, newExpireDate.toISOString().slice(0, 19).replace('T', ' '), vToken, vLinkClash, vLinkV2ray, vordersStr, username)
+            .bind(finalPrice, newExpireDate.toISOString().slice(0, 19).replace('T', ' '), vToken, vLinkClash, vLinkV2ray, vordersStr, username)
             .run();
           
           if (result.success && result.meta.changes > 0) {
             const nowTime = new Date().toISOString().slice(0, 19).replace('T', ' ');
             const msg = nt({
-              cn: `用户 ${username} 开通VIP成功！金额：${vipPrice}元，天数：${duration}天`,
-              en: `User ${username} activated VIP successfully! Amount: ¥${vipPrice}, Days: ${duration}`,
-              jp: `ユーザー ${username} がVIPをアクティブ化しました！金額：${vipPrice}元、期間：${duration}日`,
-              kr: `사용자 ${username} 님이 VIP를 활성화했습니다! 금액: ¥${vipPrice}, 기간: ${duration}일`,
-              es: `¡El usuario ${username} activó VIP exitosamente! Monto: ¥${vipPrice}, Días: ${duration}`,
-              vi: `Người dùng ${username} đã kích hoạt VIP thành công! Số tiền: ¥${vipPrice}, Ngày: ${duration}`,
-              ar: `قام المستخدم ${username} بتفعيل VIP بنجاح! المبلغ: ¥${vipPrice}، الأيام: ${duration}`,
-              ru: `Пользователь ${username} успешно активировал VIP! Сумма: ¥${vipPrice}, Дней: ${duration}`
+              cn: `用户 ${username} 开通VIP成功！金额：${finalPrice}元，天数：${duration}天`,
+              en: `User ${username} activated VIP successfully! Amount: ¥${finalPrice}, Days: ${duration}`,
+              jp: `ユーザー ${username} がVIPをアクティブ化しました！金額：${finalPrice}元、期間：${duration}日`,
+              kr: `사용자 ${username} 님이 VIP를 활성화했습니다! 금액: ¥${finalPrice}, 기간: ${duration}일`,
+              es: `¡El usuario ${username} activó VIP exitosamente! Monto: ¥${finalPrice}, Días: ${duration}`,
+              vi: `Người dùng ${username} đã kích hoạt VIP thành công! Số tiền: ¥${finalPrice}, Ngày: ${duration}`,
+              ar: `قام المستخدم ${username} بتفعيل VIP بنجاح! المبلغ: ¥${finalPrice}، الأيام: ${duration}`,
+              ru: `Пользователь ${username} успешно активировал VIP! Сумма: ¥${finalPrice}, Дней: ${duration}`
             });
 
             await DB
               .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
               .bind('immmor', msg, nowTime)
               .run();
-            await notifyAdmin('开通VIP', `用户 ${username} 开通VIP成功！金额：${vipPrice}元，天数：${duration}天`);
+            await notifyAdmin('开通VIP', `用户 ${username} 开通VIP成功！金额：${finalPrice}元，天数：${duration}天`);
             
+            // 优惠码使用计数 +1
+            if (couponCode) {
+              await DB.prepare('UPDATE coupons SET used_count = used_count + 1 WHERE code = ?').bind(couponCode).run();
+            }
+
             // 邀请返现：被邀请人每开通一笔 VIP 订单（月或年），按阶梯比例给邀请人生成待审核返现记录
-            await grantRebate(DB, username, vipPrice, isYearly, newOrder.id);
+            await grantRebate(DB, username, finalPrice, isYearly, newOrder.id);
 
             const updatedUser = await DB
               .prepare('SELECT username, balance, v_expire_date, v_token, v_link_clash, v_link_v2ray, vorders FROM user WHERE username = ?')
@@ -1800,6 +1811,22 @@ export default {
         }
       }
 
+      // ========== 校验优惠码接口 ==========
+      if (path === '/api/validate-coupon' && request.method === 'POST') {
+        try {
+          const { code } = await request.json();
+          if (!code) return resJson({ code: 200, valid: false, msg: '请输入优惠码', msg_key: 'coupon_please_enter' });
+          const coupon = await DB.prepare('SELECT code, discount_amount, active, expires_at, max_uses, used_count FROM coupons WHERE code = ?').bind(String(code).trim().toUpperCase()).first();
+          if (!coupon || !coupon.active) return resJson({ code: 200, valid: false, msg: '优惠码无效或已失效', msg_key: 'coupon_invalid_or_inactive' });
+          const now = new Date();
+          if (coupon.expires_at && new Date(coupon.expires_at) < now) return resJson({ code: 200, valid: false, msg: '优惠码已过期', msg_key: 'coupon_expired' });
+          if (coupon.max_uses > 0 && coupon.used_count >= coupon.max_uses) return resJson({ code: 200, valid: false, msg: '优惠码已被使用完', msg_key: 'coupon_depleted' });
+          return resJson({ code: 200, valid: true, msg: '优惠码有效', discount: Number(coupon.discount_amount) || 0, type: coupon.type });
+        } catch (err) {
+          return resJson({ code: 500, msg: '校验失败', error: err.message }, 500);
+        }
+      }
+
       // ========== 增加流量接口 ==========
       if (path === '/api/add-traffic' && request.method === 'PUT') {
         try {
@@ -1815,8 +1842,6 @@ export default {
           if (!tokenExp || Date.now() > tokenExp) return resJson({ code: 401, msg: '登录已过期，请重新登录' }, 401);
           const tokenUser = await DB.prepare('SELECT username FROM user WHERE p_token = ?').bind(authToken).first();
           if (!tokenUser || tokenUser.username !== username) return resJson({ code: 403, msg: '无权操作该账号' }, 403);
-
-          await ensureBonusColumn(DB);
 
           const addPrice = parseFloat(price);
           const addMb = Math.round(parseFloat(gb) * 1024);
@@ -1951,8 +1976,6 @@ export default {
         try {
           const username = url.searchParams.get('username');
           if (!username) return resJson({ code: 400, msg: '缺少username参数' }, 400);
-
-          await ensureBonusColumn(DB);
 
           let user = await DB
             .prepare('SELECT username, v_expire_date, v_token, v_link_clash, v_link_v2ray, auto_rewn, balance, price_plan, monthly_quota, used_quota, quota_reset_date, bonus_quota_monthly, bonus_expire_monthly, bonus_quota_annual, bonus_expire_annual FROM user WHERE username = ?')
@@ -2341,6 +2364,113 @@ export default {
         } catch (err) {
           console.error('Finance redeem error:', err);
           return resJson({ code: 500, msg: '赎回失败', error: err.message }, 500);
+        }
+      }
+
+      // ========== 贷款：可用额度 = 当前余额的 50%，最低 ¥500；不足则不可贷 ==========
+      if (path === '/api/loan/apply' && request.method === 'POST') {
+        try {
+          const { username, amount, payPassword, days } = await request.json();
+          if (!username || amount === undefined || amount === null || payPassword === undefined) return resJson({ code: 400, msg: '参数不完整' }, 400);
+          const amt = parseFloat(amount);
+          if (isNaN(amt) || amt <= 0) return resJson({ code: 400, msg: '贷款金额必须大于0' }, 400);
+          const user = await DB.prepare('SELECT username, balance, pay_password FROM user WHERE username = ?').bind(username).first();
+          if (!user) return resJson({ code: 404, msg: '用户不存在' }, 404);
+          if (!user.pay_password) return resJson({ code: 403, msg: '请先设置6位支付密码' }, 403);
+          if (String(user.pay_password) !== String(payPassword)) return resJson({ code: 401, msg: '支付密码错误' }, 401);
+          const balance = +user.balance;
+          const limit = Math.floor(balance * 0.5);
+          if (limit < 500) return resJson({ code: 400, msg: '当前余额不足，暂不可贷款（需余额≥¥1000）' }, 400);
+          if (amt < 500) return resJson({ code: 400, msg: '最低贷款额度为 ¥500' }, 400);
+          if (amt > limit) return resJson({ code: 400, msg: '贷款金额不能超过可用额度 ¥' + limit }, 400);
+          const add = await DB.prepare('UPDATE user SET balance = balance + ? WHERE username = ?').bind(amt, username).run();
+          if (!add.success || add.meta.changes === 0) return resJson({ code: 500, msg: '贷款失败' }, 500);
+          const u2 = await DB.prepare('SELECT balance FROM user WHERE username = ?').bind(username).first();
+          const nowTime = new Date().toISOString().slice(0, 19).replace('T', ' ');
+          try {
+            await DB.prepare('CREATE TABLE IF NOT EXISTS loan_record (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, amount REAL, created_at TEXT, status TEXT, rate REAL, due_at TEXT, repaid_at TEXT, interest REAL, total_repaid REAL)').run();
+            try { await DB.prepare('ALTER TABLE loan_record ADD COLUMN rate REAL').run(); } catch (e) {}
+            try { await DB.prepare('ALTER TABLE loan_record ADD COLUMN due_at TEXT').run(); } catch (e) {}
+            try { await DB.prepare('ALTER TABLE loan_record ADD COLUMN repaid_at TEXT').run(); } catch (e) {}
+            try { await DB.prepare('ALTER TABLE loan_record ADD COLUMN interest REAL').run(); } catch (e) {}
+            try { await DB.prepare('ALTER TABLE loan_record ADD COLUMN total_repaid REAL').run(); } catch (e) {}
+            try { await DB.prepare('ALTER TABLE loan_record ADD COLUMN term_days INTEGER').run(); } catch (e) {}
+            const LOAN_TERM_RATES = { 30: 0.10, 90: 0.10, 180: 0.11, 365: 0.12, 730: 0.14, 1095: 0.16 };
+            const termDays = LOAN_TERM_RATES[days] != null ? (parseInt(days, 10) || 365) : 365;
+            const termRate = LOAN_TERM_RATES[termDays] != null ? LOAN_TERM_RATES[termDays] : 0.10;
+            const dueTime = new Date(Date.now() + termDays * 86400000).toISOString().slice(0, 19).replace('T', ' ');
+            await DB.prepare('INSERT INTO loan_record (username, amount, created_at, status, rate, due_at, term_days) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(username, amt, nowTime, 'active', termRate, dueTime, termDays).run();
+            // 给管理员发消息
+            await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)').bind('immmor', `💸 用户 ${username} 申请贷款 ¥${amt}（当前余额 ¥${u2.balance}）`, nowTime).run();
+            await notifyAdmin('用户贷款', `💸 用户 ${username} 申请贷款 ¥${amt}（当前余额 ¥${u2.balance}）`);
+          } catch (e) { console.error('Loan record/admin notify error:', e); }
+          return resJson({ code: 200, msg: '贷款成功', amount: amt, limit, balance: u2.balance });
+        } catch (err) {
+          console.error('Loan apply error:', err);
+          return resJson({ code: 500, msg: '贷款失败', error: err.message }, 500);
+        }
+      }
+
+      // ========== 贷款记录查询 ==========
+      if (path === '/api/loan/records' && request.method === 'GET') {
+        try {
+          const username = url.searchParams.get('username');
+          if (!username) return resJson({ code: 400, msg: '缺少username参数' }, 400);
+          await DB.prepare('CREATE TABLE IF NOT EXISTS loan_record (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, amount REAL, created_at TEXT, status TEXT, rate REAL, due_at TEXT, repaid_at TEXT, interest REAL, total_repaid REAL)').run();
+          const rows = await DB.prepare('SELECT * FROM loan_record WHERE username = ? ORDER BY created_at DESC').bind(username).all();
+          const records = (rows.results || []).map(r => ({
+            id: r.id,
+            amount: +r.amount,
+            rate: r.rate != null ? +r.rate : 0.10,
+            termDays: r.term_days != null ? +r.term_days : null,
+            createdAt: r.created_at,
+            dueAt: r.due_at,
+            status: r.status,
+            repaidAt: r.repaid_at,
+            interest: r.interest != null ? +r.interest : null,
+            totalRepaid: r.total_repaid != null ? +r.total_repaid : null
+          }));
+          return resJson({ code: 200, records });
+        } catch (err) {
+          console.error('Loan records error:', err);
+          return resJson({ code: 500, msg: '查询失败', error: err.message }, 500);
+        }
+      }
+
+      // ========== 贷款还款（支持提前还款，利息按实际天数计，年化10%） ==========
+      if (path === '/api/loan/repay' && request.method === 'POST') {
+        try {
+          const { username, loanId, payPassword } = await request.json();
+          if (!username || loanId === undefined || loanId === null || payPassword === undefined) return resJson({ code: 400, msg: '参数不完整' }, 400);
+          const user = await DB.prepare('SELECT username, balance, pay_password FROM user WHERE username = ?').bind(username).first();
+          if (!user) return resJson({ code: 404, msg: '用户不存在' }, 404);
+          if (!user.pay_password) return resJson({ code: 403, msg: '请先设置6位支付密码' }, 403);
+          if (String(user.pay_password) !== String(payPassword)) return resJson({ code: 401, msg: '支付密码错误' }, 401);
+          const loan = await DB.prepare('SELECT * FROM loan_record WHERE id = ? AND username = ?').bind(loanId, username).first();
+          if (!loan) return resJson({ code: 404, msg: '贷款记录不存在' }, 404);
+          if (loan.status === 'repaid') return resJson({ code: 400, msg: '该笔贷款已还清' }, 400);
+          const principal = +loan.amount;
+          const rate = loan.rate != null ? +loan.rate : 0.10;
+          const start = new Date(loan.created_at).getTime();
+          const due = loan.due_at ? new Date(loan.due_at).getTime() : start + 365 * 86400000;
+          const end = Math.min(Date.now(), due);
+          const days = Math.max(0, Math.floor((end - start) / 86400000));
+          const interest = Math.round(principal * rate * days / 365 * 100) / 100;
+          const total = Math.round((principal + interest) * 100) / 100;
+          const nowTime = new Date().toISOString().slice(0, 19).replace('T', ' ');
+          if (+user.balance < total) return resJson({ code: 400, msg: '余额不足，无法还款（需 ¥' + total + '）' }, 400);
+          const upd = await DB.prepare('UPDATE user SET balance = balance - ? WHERE username = ?').bind(total, username).run();
+          if (!upd.success || upd.meta.changes === 0) return resJson({ code: 500, msg: '还款失败' }, 500);
+          await DB.prepare("UPDATE loan_record SET status='repaid', repaid_at=?, interest=?, total_repaid=? WHERE id=?").bind(nowTime, interest, total, loanId).run();
+          try {
+            await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)').bind('immmor', `💸 用户 ${username} 还款 ¥${total}（本金 ¥${principal}，利息 ¥${interest}）`, nowTime).run();
+            await notifyAdmin('用户还款', `💸 用户 ${username} 还款 ¥${total}（本金 ¥${principal}，利息 ¥${interest}）`);
+          } catch (e) { console.error('Loan repay admin notify error:', e); }
+          const u3 = await DB.prepare('SELECT balance FROM user WHERE username = ?').bind(username).first();
+          return resJson({ code: 200, msg: '还款成功', amount: total, principal, interest, balance: u3.balance, limit: Math.floor(+u3.balance * 0.5) });
+        } catch (err) {
+          console.error('Loan repay error:', err);
+          return resJson({ code: 500, msg: '还款失败', error: err.message }, 500);
         }
       }
 
