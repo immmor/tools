@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FUV | 极值决策架构系统</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter & JetBrains Mono Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Noto+Sans+SC:wght@300;400;600;800;900&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Three.js for 3D Background Matrix -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            orange: '#FF5500',
+                            'orange-light': '#FF7733',
+                            'orange-dark': '#CC3300',
+                            glow: 'rgba(255, 85, 0, 0.4)',
+                        },
+                        swiss: {
+                            bg: '#060709',
+                            panel: 'rgba(12, 14, 20, 0.65)',
+                            border: 'rgba(255, 255, 255, 0.12)',
+                            'border-strong': 'rgba(255, 85, 0, 0.5)',
+                            muted: '#7A8092',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['"Noto Sans SC"', 'Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    boxShadow: {
+                        'swiss-glass': '0 30px 60px -12px rgba(0, 0, 0, 0.7), inset 0 1px 0 0 rgba(255, 255, 255, 0.15)',
+                        'orange-glow': '0 0 50px rgba(255, 85, 0, 0.35)',
+                        'orange-glow-lg': '0 0 100px rgba(255, 85, 0, 0.5)',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Bold Swiss Typography Techniques */
+        .text-outline-swiss {
+            -webkit-text-stroke: 1.5px rgba(255, 255, 255, 0.25);
+            color: transparent;
+            transition: all 0.4s ease;
+        }
+        .text-outline-swiss:hover {
+            -webkit-text-stroke: 1.5px #FF5500;
+            color: rgba(255, 85, 0, 0.05);
+        }
+
+        .text-outline-orange {
+            -webkit-text-stroke: 1.5px #FF5500;
+            color: transparent;
+        }
+
+        /* Glassmorphism Refinements */
+        .glass-panel {
+            background: rgba(12, 14, 20, 0.65);
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .glass-nav {
+            background: rgba(6, 7, 9, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        /* Ambient Lights */
+        .ambient-glow-1 {
+            position: absolute;
+            width: 700px;
+            height: 700px;
+            background: radial-gradient(circle, rgba(255, 85, 0, 0.22) 0%, rgba(255, 85, 0, 0) 70%);
+            top: -200px;
+            left: -200px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .ambient-glow-2 {
+            position: absolute;
+            width: 800px;
+            height: 800px;
+            background: radial-gradient(circle, rgba(140, 40, 255, 0.15) 0%, rgba(0, 0, 0, 0) 70%);
+            bottom: 10%;
+            right: -300px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Custom Range Input */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type=range]:focus {
+            outline: none;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 2px;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            height: 20px;
+            width: 20px;
+            border-radius: 2px;
+            background: #FF5500;
+            cursor: pointer;
+            -webkit-appearance: none;
+            margin-top: -8px;
+            box-shadow: 0 0 15px #FF5500;
+            transition: all 0.2s ease;
+        }
+        input[type=range]::-webkit-slider-thumb:hover {
+            transform: scale(1.25);
+            background: #FF7733;
+        }
+
+        /* Custom Grid Scanlines */
+        .swiss-grid-overlay {
+            background-size: 40px 40px;
+            background-image: 
+                linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+        }
+
+        /* Terminal Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.3);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 85, 0, 0.4);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #FF5500;
+        }
+    </style>
+</head>
+<body class="bg-swiss-bg text-gray-100 font-sans antialiased overflow-x-hidden selection:bg-brand-orange selection:text-white">
+
+    <!-- WebGL Background Canvas -->
+    <canvas id="bg-canvas" class="fixed inset-0 pointer-events-none z-0 opacity-40"></canvas>
+
+    <!-- Ambient Lighting Overlays -->
+    <div class="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+        <div class="ambient-glow-1"></div>
+        <div class="ambient-glow-2"></div>
+        <div class="absolute inset-0 swiss-grid-overlay pointer-events-none"></div>
+    </div>
+
+    <!-- CLEAN & ULTRA-SLEEK TOP NAVIGATION -->
+    <nav class="fixed top-0 left-0 right-0 z-50 glass-nav transition-all duration-300">
+        <div class="max-w-7xl mx-auto px-6 lg:px-12 h-20 flex items-center justify-between">
+            
+            <!-- Left: Bold Logo & Pulse Indicator -->
+            <a href="#" class="flex items-center gap-4 group">
+                <div class="w-9 h-9 bg-brand-orange flex items-center justify-center font-mono font-black text-white text-xl tracking-tighter shadow-orange-glow group-hover:scale-105 transition-transform">
+                    FUV
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="font-extrabold text-lg tracking-widest text-white uppercase font-sans">决策引擎架构</span>
+                    <span class="inline-flex items-center gap-1.5 px-2 py-0.5 bg-brand-orange/10 border border-brand-orange/30 text-[10px] font-mono text-brand-orange rounded-full">
+                        <span class="w-1.5 h-1.5 rounded-full bg-brand-orange animate-ping"></span>
+                        v3.0 矩阵版本
+                    </span>
+                </div>
+            </a>
+
+            <!-- Right: Minimalist Status & Primary Trigger CTA -->
+            <div class="flex items-center gap-6">
+                <!-- System Pulse Status -->
+                <div class="hidden sm:flex items-center gap-3 font-mono text-xs text-swiss-muted border-r border-white/10 pr-6">
+                    <span class="text-gray-400">核心状态：</span>
+                    <span class="text-emerald-400 font-semibold flex items-center gap-1">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400"></span> 已全局收敛
+                    </span>
+                </div>
+
+                <!-- Sleek Single High-Impact Trigger -->
+                <a href="#matrix-lab" class="relative group inline-flex items-center justify-center px-6 py-2.5 text-xs font-mono font-bold tracking-wider text-white uppercase overflow-hidden bg-brand-orange rounded shadow-orange-glow hover:shadow-orange-glow-lg transition-all duration-300">
+                    <span class="absolute inset-0 w-full h-full bg-white/20 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-700"></span>
+                    <i data-lucide="cpu" class="w-4 h-4 mr-2"></i>
+                    <span>启动模拟推演</span>
+                </a>
+
+                <!-- Drawer Toggle Icon (Minimalist Menu) -->
+                <button onclick="toggleDrawer()" class="p-2 text-gray-400 hover:text-white hover:bg-white/5 rounded transition-colors" aria-label="打开导航抽屉">
+                    <i data-lucide="menu-alt-right" class="w-6 h-6 text-brand-orange"></i>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Sleek Overlay Navigation Drawer -->
+    <div id="nav-drawer" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-2xl opacity-0 pointer-events-none transition-all duration-300 flex flex-col justify-between p-8 sm:p-16">
+        <div class="flex justify-between items-center">
+            <span class="font-mono text-xs text-brand-orange">// FUV 导航索引系统</span>
+            <button onclick="toggleDrawer()" class="p-2 rounded bg-white/5 text-gray-400 hover:text-white">
+                <i data-lucide="x" class="w-8 h-8"></i>
+            </button>
+        </div>
+
+        <div class="max-w-4xl space-y-6 sm:space-y-10 my-auto">
+            <a href="#hero" onclick="toggleDrawer()" class="block text-3xl sm:text-5xl font-black text-white hover:text-brand-orange transition-colors tracking-tight">
+                01 / 系统架构 <span class="text-xs font-mono text-swiss-muted font-normal block sm:inline sm:ml-4 mt-1 sm:mt-0">理论源流与极值模型</span>
+            </a>
+            <a href="#matrix-lab" onclick="toggleDrawer()" class="block text-3xl sm:text-5xl font-black text-white hover:text-brand-orange transition-colors tracking-tight">
+                02 / 向量矩阵 <span class="text-xs font-mono text-swiss-muted font-normal block sm:inline sm:ml-4 mt-1 sm:mt-0">2D 决策向量坐标图谱</span>
+            </a>
+            <a href="#terminal-section" onclick="toggleDrawer()" class="block text-3xl sm:text-5xl font-black text-white hover:text-brand-orange transition-colors tracking-tight">
+                03 / 诊断终端 <span class="text-xs font-mono text-swiss-muted font-normal block sm:inline sm:ml-4 mt-1 sm:mt-0">实时演算黑盒与审计日志</span>
+            </a>
+            <a href="#comparison" onclick="toggleDrawer()" class="block text-3xl sm:text-5xl font-black text-white hover:text-brand-orange transition-colors tracking-tight">
+                04 / 模型对比 <span class="text-xs font-mono text-swiss-muted font-normal block sm:inline sm:ml-4 mt-1 sm:mt-0">JEV 期望模型与 FUV 矩阵</span>
+            </a>
+        </div>
+
+        <div class="font-mono text-xs text-swiss-muted flex justify-between items-center border-t border-white/10 pt-6">
+            <span>FUV 决策引擎 // 瑞士极简主义规范</span>
+            <span class="text-brand-orange">2026 年 10 月标准版</span>
+        </div>
+    </div>
+
+    <!-- MAIN HERO SECTION -->
+    <main class="relative z-10 pt-28">
+
+        <section id="hero" class="max-w-7xl mx-auto px-6 lg:px-12 pt-12 pb-24 lg:pt-20 lg:pb-32">
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 items-stretch">
+                
+                <!-- Left Asymmetric Header: Giant Typography -->
+                <div class="lg:col-span-8 flex flex-col justify-between space-y-8">
+                    
+                    <div class="space-y-6">
+                        <!-- Top Swiss Mono Identifier -->
+                        <div class="inline-flex items-center gap-3 font-mono text-xs text-brand-orange tracking-widest uppercase">
+                            <span class="w-8 h-[2px] bg-brand-orange"></span>
+                            <span>超越传统期望价值理论 (JEV)</span>
+                        </div>
+
+                        <!-- Giant Hero Headline with Outline Contrast -->
+                        <h1 class="text-4xl sm:text-6xl lg:text-7xl font-black tracking-tighter leading-tight text-white uppercase">
+                            量化不确定性。<br/>
+                            <span class="text-outline-swiss">掌控混沌局势。</span><br/>
+                            <span class="text-brand-orange">FUV 决策引擎。</span>
+                        </h1>
+
+                        <!-- Subtitle -->
+                        <p class="text-base sm:text-lg text-swiss-muted max-w-2xl font-light leading-relaxed pt-2">
+                            摒弃传统 JEV（联合期望价值）的线性盲区。FUV 引擎通过 <strong class="text-white">多维效用映射 (F)</strong>、<strong class="text-white">不确定性收敛 (U)</strong> 与 <strong class="text-white">动态敏捷校准 (V)</strong>，在极高混沌与黑天鹅环境中锁定终极最佳决策路径。
+                        </p>
+                    </div>
+
+                    <!-- Quick Metrics Micro-Grid -->
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-6 border-t border-white/10 font-mono">
+                        <div class="glass-panel p-4 rounded border-l-2 border-l-brand-orange">
+                            <div class="text-2xl font-extrabold text-white">99.82%</div>
+                            <div class="text-[11px] text-swiss-muted mt-1">概率收敛精度</div>
+                        </div>
+                        <div class="glass-panel p-4 rounded border-l-2 border-l-purple-500">
+                            <div class="text-2xl font-extrabold text-white">&lt; 12ms</div>
+                            <div class="text-[11px] text-swiss-muted mt-1">向量重算延迟</div>
+                        </div>
+                        <div class="glass-panel p-4 rounded border-l-2 border-l-cyan-400 col-span-2 sm:col-span-1">
+                            <div class="text-2xl font-extrabold text-white">0.00%</div>
+                            <div class="text-[11px] text-swiss-muted mt-1">近因偏差溢出</div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Right Column: Live Interactive Glass Hero Monitor Widget -->
+                <div class="lg:col-span-4 flex">
+                    <div class="w-full glass-panel p-8 rounded-2xl border border-white/10 shadow-swiss-glass flex flex-col justify-between relative overflow-hidden bg-gradient-to-b from-white/5 to-transparent">
+                        
+                        <div class="absolute -top-12 -right-12 w-40 h-40 bg-brand-orange/20 rounded-full blur-2xl pointer-events-none"></div>
+
+                        <div>
+                            <!-- Header status inside card -->
+                            <div class="flex items-center justify-between pb-6 border-b border-white/10 font-mono text-xs">
+                                <span class="text-swiss-muted flex items-center gap-2">
+                                    <i data-lucide="activity" class="w-4 h-4 text-brand-orange"></i>
+                                    实时向量监控
+                                </span>
+                                <span class="text-brand-orange font-bold">状态：活跃</span>
+                            </div>
+
+                            <!-- Big Score Metric -->
+                            <div class="py-8 text-center">
+                                <span class="text-xs font-mono text-swiss-muted uppercase tracking-widest block mb-2">动态 FUV 综合指数</span>
+                                <div class="text-6xl font-black font-mono text-white tracking-tight" id="hero-live-index">
+                                    88.4
+                                </div>
+                                <div class="inline-block mt-3 px-3 py-1 bg-brand-orange/10 border border-brand-orange/30 text-brand-orange text-xs font-mono rounded">
+                                    已确认最优决策策略
+                                </div>
+                            </div>
+
+                            <!-- Mini Vector Breakdown Bars -->
+                            <div class="space-y-4 font-mono text-xs">
+                                <div>
+                                    <div class="flex justify-between text-gray-300 mb-1">
+                                        <span>F 因子（核心效用）</span>
+                                        <span class="text-brand-orange">94.2%</span>
+                                    </div>
+                                    <div class="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
+                                        <div class="bg-brand-orange h-full" style="width: 94.2%"></div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-gray-300 mb-1">
+                                        <span>U 因子（不确定性）</span>
+                                        <span class="text-purple-400">22.8%</span>
+                                    </div>
+                                    <div class="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
+                                        <div class="bg-purple-500 h-full" style="width: 22.8%"></div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-gray-300 mb-1">
+                                        <span>V 因子（动态校准）</span>
+                                        <span class="text-cyan-400">89.0%</span>
+                                    </div>
+                                    <div class="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
+                                        <div class="bg-cyan-400 h-full" style="width: 89%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="pt-8">
+                            <a href="#matrix-lab" class="w-full py-3 bg-white/10 hover:bg-brand-orange hover:text-white transition-colors duration-300 font-mono text-xs text-white font-bold uppercase rounded flex items-center justify-center gap-2 border border-white/10">
+                                <span>进入向量交互实验室</span>
+                                <i data-lucide="arrow-down-right" class="w-4 h-4"></i>
+                            </a>
+                        </div>
+
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- SIGNATURE INTERACTIVE FEATURE 1: FUV 2D DECISION MATRIX VECTOR CANVAS -->
+        <section id="matrix-lab" class="py-24 border-t border-white/10 bg-black/40 relative">
+            <div class="max-w-7xl mx-auto px-6 lg:px-12">
+                
+                <div class="flex flex-col md:flex-row md:items-end justify-between mb-16 gap-6">
+                    <div>
+                        <span class="text-brand-orange font-mono text-xs uppercase tracking-widest block mb-2">// 2D 矢量交互实验室</span>
+                        <h2 class="text-3xl sm:text-5xl font-black text-white tracking-tight uppercase">
+                            FUV 决策向量矩阵图谱
+                        </h2>
+                    </div>
+                    <p class="text-swiss-muted text-sm max-w-md font-mono">
+                        拖动左侧控制面板滑块，实时观察方案在 2D 决策平面（确定性效用 Utility vs 不确定性系数 Uncertainty）中的轨迹位移与风险边界。
+                    </p>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                    
+                    <!-- Left: Control Sliders -->
+                    <div class="lg:col-span-5 glass-panel p-8 rounded-2xl border border-white/10 space-y-6">
+                        <div class="flex items-center justify-between pb-4 border-b border-white/10 font-mono text-xs">
+                            <span class="text-white font-bold flex items-center gap-2">
+                                <i data-lucide="sliders" class="w-4 h-4 text-brand-orange"></i>
+                                向量参量控制台
+                            </span>
+                            <button onclick="resetSliders()" class="text-swiss-muted hover:text-brand-orange transition-colors">
+                                [重置参数]
+                            </button>
+                        </div>
+
+                        <!-- Presets Selector -->
+                        <div class="space-y-2">
+                            <label class="font-mono text-xs text-swiss-muted block">经典决策场景预设：</label>
+                            <div class="grid grid-cols-2 gap-2 font-mono text-xs">
+                                <button onclick="setScenario(85, 25, 80)" class="px-3 py-2 bg-white/5 border border-white/10 hover:border-brand-orange text-gray-200 rounded text-left transition-colors">
+                                    🎯 高回报稳健型 (S 级)
+                                </button>
+                                <button onclick="setScenario(95, 85, 40)" class="px-3 py-2 bg-white/5 border border-white/10 hover:border-brand-orange text-gray-200 rounded text-left transition-colors">
+                                    ⚠️ 黑天鹅博弈 (高风险)
+                                </button>
+                                <button onclick="setScenario(40, 20, 90)" class="px-3 py-2 bg-white/5 border border-white/10 hover:border-brand-orange text-gray-200 rounded text-left transition-colors">
+                                    🛡️ 资本防守型 (保守策略)
+                                </button>
+                                <button onclick="setScenario(70, 60, 75)" class="px-3 py-2 bg-white/5 border border-white/10 hover:border-brand-orange text-gray-200 rounded text-left transition-colors">
+                                    ⚡ 复杂战略转型 (Pivot)
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Slider 1: Utility F -->
+                        <div class="space-y-2 pt-2">
+                            <div class="flex justify-between font-mono text-xs">
+                                <span class="text-gray-300">F 因子：预期核心效用</span>
+                                <span class="text-brand-orange font-bold" id="label-f">85</span>
+                            </div>
+                            <input type="range" id="input-f" min="10" max="100" value="85" oninput="renderVectorMatrix()">
+                        </div>
+
+                        <!-- Slider 2: Uncertainty U -->
+                        <div class="space-y-2">
+                            <div class="flex justify-between font-mono text-xs">
+                                <span class="text-gray-300">U 因子：外部黑天鹅不确定性</span>
+                                <span class="text-purple-400 font-bold" id="label-u">35%</span>
+                            </div>
+                            <input type="range" id="input-u" min="5" max="95" value="35" oninput="renderVectorMatrix()">
+                        </div>
+
+                        <!-- Slider 3: Calibration V -->
+                        <div class="space-y-2">
+                            <div class="flex justify-between font-mono text-xs">
+                                <span class="text-gray-300">V 因子：动态敏捷校准能力</span>
+                                <span class="text-cyan-400 font-bold" id="label-v">75</span>
+                            </div>
+                            <input type="range" id="input-v" min="10" max="100" value="75" oninput="renderVectorMatrix()">
+                        </div>
+
+                        <div class="p-4 bg-brand-orange/5 border border-brand-orange/20 rounded font-mono text-xs text-swiss-muted">
+                            <span class="text-brand-orange font-bold block mb-1">矢量运算公式：</span>
+                            FUV_向量值 = (F · e^-U) × log2(V + 1)
+                        </div>
+                    </div>
+
+                    <!-- Right: Interactive 2D Vector Radar / Coordinate Canvas -->
+                    <div class="lg:col-span-7 glass-panel p-6 sm:p-8 rounded-2xl border border-white/10 flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-center justify-between pb-4 border-b border-white/10 font-mono text-xs">
+                                <span class="text-swiss-muted">// 2D 决策向量矢量坐标系</span>
+                                <span class="text-gray-300 font-bold" id="canvas-status">评估状态：最优收敛</span>
+                            </div>
+
+                            <!-- Canvas Container -->
+                            <div class="relative w-full aspect-square sm:aspect-[4/3] bg-black/60 rounded-xl my-4 border border-white/5 overflow-hidden">
+                                <canvas id="vector-canvas" class="w-full h-full block"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Vector Output Metrics Strip -->
+                        <div class="grid grid-cols-3 gap-4 font-mono text-xs pt-2">
+                            <div class="p-3 bg-white/5 rounded border border-white/5">
+                                <span class="text-swiss-muted block text-[10px]">向量评分</span>
+                                <span class="text-lg font-bold text-brand-orange" id="res-score">76.4</span>
+                            </div>
+                            <div class="p-3 bg-white/5 rounded border border-white/5">
+                                <span class="text-swiss-muted block text-[10px]">安全安全冗余率</span>
+                                <span class="text-lg font-bold text-emerald-400" id="res-margin">+24.2%</span>
+                            </div>
+                            <div class="p-3 bg-white/5 rounded border border-white/5">
+                                <span class="text-swiss-muted block text-[10px]">决策区间分级</span>
+                                <span class="text-xs font-bold text-white block truncate" id="res-zone">S 级最优方案</span>
+                            </div>
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+        </section>
+
+        <!-- SIGNATURE FEATURE 2: DECISION BREAKDOWN TERMINAL -->
+        <section id="terminal-section" class="py-24 border-t border-white/10 relative">
+            <div class="max-w-7xl mx-auto px-6 lg:px-12">
+                
+                <div class="max-w-3xl mb-12">
+                    <span class="text-brand-orange font-mono text-xs uppercase tracking-widest block mb-2">// 实时诊断终端</span>
+                    <h2 class="text-3xl sm:text-5xl font-black text-white tracking-tight uppercase">
+                        决策演算黑盒控制台
+                    </h2>
+                    <p class="text-swiss-muted text-base mt-2 font-mono">
+                        决策全过程代码化与日志留痕，每一项 FUV 参数修正均可实现高精度回溯与审计追踪。
+                    </p>
+                </div>
+
+                <!-- Swiss Style Dark Terminal Card -->
+                <div class="glass-panel rounded-2xl border border-white/15 overflow-hidden shadow-2xl font-mono">
+                    
+                    <!-- Terminal Top Bar -->
+                    <div class="bg-black/80 px-6 py-4 border-b border-white/10 flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div class="w-3 h-3 rounded-full bg-red-500/80"></div>
+                            <div class="w-3 h-3 rounded-full bg-yellow-500/80"></div>
+                            <div class="w-3 h-3 rounded-full bg-green-500/80"></div>
+                            <span class="text-xs text-swiss-muted ml-2">fuv-kernel-v3.0.4 --bash</span>
+                        </div>
+                        <div class="flex items-center gap-4 text-xs text-swiss-muted">
+                            <span>线程号：#0492</span>
+                            <span class="text-brand-orange">UTC+8 2026</span>
+                        </div>
+                    </div>
+
+                    <!-- Terminal Output Log Container -->
+                    <div class="p-6 sm:p-8 bg-black/70 text-xs sm:text-sm space-y-3 h-80 overflow-y-auto" id="terminal-log">
+                        <div class="text-swiss-muted">[00:00:01] FUV 决策核心初始化完毕，内核处于准备就绪状态。</div>
+                        <div class="text-swiss-muted">[00:00:02] 加载随机概率矩阵 (JEV 基础参考线)...</div>
+                        <div class="text-brand-orange">[00:00:03] 映射 F 因子核心效用：F_score = 85.00</div>
+                        <div class="text-purple-400">[00:00:04] 执行 U 因子不确定性凸收敛：Delta_U = -0.32</div>
+                        <div class="text-cyan-400">[00:00:05] V 因子动态校准矩阵已与市场波动率保持同步。</div>
+                        <div class="text-emerald-400 font-bold">[00:00:06] 运行成功：FUV 综合指数收敛为 76.42，顺利通过决策边界校验。</div>
+                    </div>
+
+                    <!-- Terminal Interactive Command Line -->
+                    <div class="p-4 bg-black/90 border-t border-white/10 flex items-center gap-3">
+                        <span class="text-brand-orange font-bold">$</span>
+                        <input type="text" id="terminal-input" placeholder="输入控制命令，例如：'run'、'scenario'、'clear'、'export'..." class="w-full bg-transparent text-white font-mono text-xs sm:text-sm focus:outline-none" onkeydown="handleTerminalCommand(event)">
+                        <button onclick="executeTerminalBtn()" class="px-4 py-1.5 bg-brand-orange text-white text-xs font-bold rounded">
+                            执行命令
+                        </button>
+                    </div>
+
+                </div>
+
+            </div>
+        </section>
+
+        <!-- SECTION: MODEL COMPARISON MATRIX TABLE -->
+        <section id="comparison" class="py-24 border-t border-white/10 bg-black/40">
+            <div class="max-w-7xl mx-auto px-6 lg:px-12">
+                
+                <div class="text-center max-w-3xl mx-auto mb-16">
+                    <span class="text-brand-orange font-mono text-xs uppercase tracking-widest block mb-2">// 架构对比矩阵</span>
+                    <h2 class="text-3xl sm:text-5xl font-black text-white tracking-tight uppercase">经典 JEV 期望模型 vs FUV 升维架构</h2>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    
+                    <!-- JEV Model -->
+                    <div class="glass-panel p-8 rounded-2xl border border-white/10 space-y-4">
+                        <div class="flex justify-between items-center pb-4 border-b border-white/10">
+                            <span class="font-mono text-xs text-swiss-muted uppercase">传统一维模型</span>
+                            <span class="px-2 py-0.5 bg-red-500/10 text-red-400 border border-red-500/20 font-mono text-[10px]">JEV (联合期望价值)</span>
+                        </div>
+                        <h3 class="text-2xl font-bold text-white">传统联合期望价值模型</h3>
+                        <p class="text-swiss-muted text-sm leading-relaxed">
+                            依赖“线性概率 × 预期收益”的单维粗放估算。在黑天鹅事件频发的高混沌现实环境中，往往因忽视了不确定性的非线性放大惩罚而引发重大战略失误。
+                        </p>
+                        <div class="space-y-2 font-mono text-xs text-gray-400 pt-4">
+                            <div class="flex items-center gap-2">
+                                <i data-lucide="x" class="w-4 h-4 text-red-400"></i> 错误假设先验概率完全已知
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <i data-lucide="x" class="w-4 h-4 text-red-400"></i> 忽略极端尾部风险与心理惩罚
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <i data-lucide="x" class="w-4 h-4 text-red-400"></i> 缺少动态增量反馈与修正机制
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- FUV Engine -->
+                    <div class="glass-panel p-8 rounded-2xl border border-brand-orange/40 bg-brand-orange/5 space-y-4">
+                        <div class="flex justify-between items-center pb-4 border-b border-brand-orange/20">
+                            <span class="font-mono text-xs text-brand-orange uppercase">下一代高阶架构</span>
+                            <span class="px-2 py-0.5 bg-brand-orange/20 text-brand-orange border border-brand-orange/40 font-mono text-[10px] font-bold">FUV 引擎</span>
+                        </div>
+                        <h3 class="text-2xl font-bold text-white">FUV 升维决策引擎</h3>
+                        <p class="text-swiss-muted text-sm leading-relaxed">
+                            通过 F 因子解耦多维核心效用，U 因子实施不确定性凸优化收敛，再利用 V 因子进行敏捷增量校准，打造具备极度抗脆弱特性的理智决策体系。
+                        </p>
+                        <div class="space-y-2 font-mono text-xs text-gray-200 pt-4">
+                            <div class="flex items-center gap-2">
+                                <i data-lucide="check" class="w-4 h-4 text-brand-orange"></i> 完美适应极高混沌与黑天鹅环境
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <i data-lucide="check" class="w-4 h-4 text-brand-orange"></i> 2D 决策向量坐标系可视化位移
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <i data-lucide="check" class="w-4 h-4 text-brand-orange"></i> 完整代码化日志与审计追溯
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+        </section>
+
+        <!-- FOOTER CTA -->
+        <section class="py-24 border-t border-white/10 relative">
+            <div class="max-w-5xl mx-auto px-6 lg:px-12 text-center">
+                <div class="glass-panel p-12 sm:p-20 rounded-3xl border border-brand-orange/40 shadow-orange-glow">
+                    <h2 class="text-3xl sm:text-5xl font-black text-white tracking-tight uppercase mb-6">
+                        准备部署 <span class="text-brand-orange">FUV 引擎？</span>
+                    </h2>
+                    <p class="text-swiss-muted text-lg max-w-xl mx-auto mb-8 font-light">
+                        立即体验瑞士极简高阶决策引擎，将非结构化直觉升维为精确可计算的决策矢量矩阵。
+                    </p>
+                    <a href="#matrix-lab" class="inline-flex items-center justify-center px-8 py-4 text-sm font-mono font-bold text-white bg-brand-orange rounded shadow-orange-glow hover:bg-brand-orange-light transition-all">
+                        <i data-lucide="play" class="w-4 h-4 mr-2"></i>
+                        启动 FUV 决策引擎
+                    </a>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="border-t border-white/10 bg-black/90 py-12 text-swiss-muted font-mono text-xs">
+        <div class="max-w-7xl mx-auto px-6 lg:px-12 flex flex-col sm:flex-row items-center justify-between gap-6">
+            <div class="flex items-center gap-3">
+                <div class="w-6 h-6 bg-brand-orange text-white font-bold flex items-center justify-center">F</div>
+                <span class="text-white font-bold">FUV 极值决策架构系统</span>
+            </div>
+            <div>© 2026 FUV ENGINE. 瑞士极简主义技术规范。</div>
+        </div>
+    </footer>
+
+    <!-- JAVASCRIPT ENGINE & CANVAS SCRIPTS -->
+    <script>
+        // Initialize Lucide Icons
+        lucide.createIcons();
+
+        // Overlay Navigation Drawer Toggle
+        function toggleDrawer() {
+            const drawer = document.getElementById('nav-drawer');
+            if (drawer.classList.contains('opacity-0')) {
+                drawer.classList.remove('opacity-0', 'pointer-events-none');
+            } else {
+                drawer.classList.add('opacity-0', 'pointer-events-none');
+            }
+        }
+
+        // --- 1. THREE.JS BACKGROUND MATRIX CANVAS ---
+        let scene, camera, renderer, particles;
+
+        function initThreeJS() {
+            const canvas = document.getElementById('bg-canvas');
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 30;
+
+            renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+
+            // Particles Geometry
+            const geometry = new THREE.BufferGeometry();
+            const count = 400;
+            const positions = new Float32Array(count * 3);
+
+            for(let i = 0; i < count * 3; i++) {
+                positions[i] = (Math.random() - 0.5) * 80;
+            }
+
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+            const material = new THREE.PointsMaterial({
+                size: 0.8,
+                color: 0xFF5500,
+                transparent: true,
+                opacity: 0.5
+            });
+
+            particles = new THREE.Points(geometry, material);
+            scene.add(particles);
+
+            animateThreeJS();
+        }
+
+        function animateThreeJS() {
+            requestAnimationFrame(animateThreeJS);
+            if (particles) {
+                particles.rotation.y += 0.001;
+                particles.rotation.x += 0.0005;
+            }
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            if (camera && renderer) {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+            renderVectorMatrix();
+        });
+
+        // --- 2. SIGNATURE INTERACTIVE FEATURE: 2D VECTOR MATRIX CANVAS ---
+        function renderVectorMatrix() {
+            const canvas = document.getElementById('vector-canvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+
+            // Responsive Canvas Buffer
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+
+            const width = canvas.width;
+            const height = canvas.height;
+
+            // Get Slider Values
+            const F = parseFloat(document.getElementById('input-f').value);
+            const U = parseFloat(document.getElementById('input-u').value);
+            const V = parseFloat(document.getElementById('input-v').value);
+
+            // Update Labels
+            document.getElementById('label-f').innerText = F;
+            document.getElementById('label-u').innerText = U + '%';
+            document.getElementById('label-v').innerText = V;
+
+            // Clear Background
+            ctx.fillStyle = '#08090C';
+            ctx.fillRect(0, 0, width, height);
+
+            // Draw Coordinate Grid Lines
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+            ctx.lineWidth = 1;
+
+            const gridSteps = 6;
+            for(let i = 1; i < gridSteps; i++) {
+                // Vertical lines
+                ctx.beginPath();
+                ctx.moveTo((width / gridSteps) * i, 0);
+                ctx.lineTo((width / gridSteps) * i, height);
+                ctx.stroke();
+
+                // Horizontal lines
+                ctx.beginPath();
+                ctx.moveTo(0, (height / gridSteps) * i);
+                ctx.lineTo(width, (height / gridSteps) * i);
+                ctx.stroke();
+            }
+
+            // Draw Axis Arrows (X: Uncertainty, Y: Utility)
+            const margin = 40;
+            ctx.strokeStyle = 'rgba(255, 85, 0, 0.4)';
+            ctx.lineWidth = 2;
+
+            // Y Axis (Utility)
+            ctx.beginPath();
+            ctx.moveTo(margin, height - margin);
+            ctx.lineTo(margin, margin);
+            ctx.stroke();
+
+            // X Axis (Uncertainty)
+            ctx.beginPath();
+            ctx.moveTo(margin, height - margin);
+            ctx.lineTo(width - margin, height - margin);
+            ctx.stroke();
+
+            // Axis Labels
+            ctx.fillStyle = '#7A8092';
+            ctx.font = '10px "Noto Sans SC", "JetBrains Mono"';
+            ctx.fillText('核心效用 (F) ▲', margin + 5, margin - 10);
+            ctx.fillText('不确定性 (U) ►', width - 110, height - margin + 20);
+
+            // Calculate Target Coordinates
+            // X-axis: Map Uncertainty (0 to 100) to Canvas
+            const posX = margin + (U / 100) * (width - margin * 2);
+            // Y-axis: Map Utility (0 to 100) to Canvas
+            const posY = (height - margin) - (F / 100) * (height - margin * 2);
+
+            // Calculate Vector Convergence Radius based on V Factor
+            const radius = Math.max(15, (110 - V) * 0.6);
+
+            // Draw Safety Horizon Polygon / Zone
+            ctx.fillStyle = 'rgba(255, 85, 0, 0.08)';
+            ctx.beginPath();
+            ctx.moveTo(margin, height - margin);
+            ctx.lineTo(margin, margin + 20);
+            ctx.lineTo(width - margin - 60, height - margin);
+            ctx.closePath();
+            ctx.fill();
+
+            // Draw Vector Point Pulse Ring
+            ctx.strokeStyle = '#FF5500';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(posX, posY, radius, 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.fillStyle = 'rgba(255, 85, 0, 0.2)';
+            ctx.beginPath();
+            ctx.arc(posX, posY, radius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw Core Vector Point
+            ctx.fillStyle = '#FFFFFF';
+            ctx.beginPath();
+            ctx.arc(posX, posY, 5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Connect Vector Line from Origin
+            ctx.strokeStyle = '#FF5500';
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(margin, height - margin);
+            ctx.lineTo(posX, posY);
+            ctx.stroke();
+            ctx.setLineDash([]); // Reset line dash
+
+            // Mathematical Calculations for Results
+            const fuvScore = (F * Math.exp(-U / 80) * Math.log2(V / 10 + 1)).toFixed(1);
+            const marginValue = (((F / (U + 1)) * (V / 50)) * 10).toFixed(1);
+
+            document.getElementById('res-score').innerText = fuvScore;
+            document.getElementById('res-margin').innerText = '+' + marginValue + '%';
+
+            const zoneEl = document.getElementById('res-zone');
+            const statusEl = document.getElementById('canvas-status');
+
+            if (fuvScore > 70) {
+                zoneEl.innerText = "S 级最优可行域";
+                zoneEl.className = "text-xs font-bold text-emerald-400 block truncate";
+                statusEl.innerText = "评估状态：可行且高度稳健";
+                statusEl.className = "text-emerald-400 font-bold";
+            } else if (fuvScore >= 45) {
+                zoneEl.innerText = "B 级谨慎观察区";
+                zoneEl.className = "text-xs font-bold text-amber-400 block truncate";
+                statusEl.innerText = "评估状态：存在中度偏好风险";
+                statusEl.className = "text-amber-400 font-bold";
+            } else {
+                zoneEl.innerText = "危险极端风险区";
+                zoneEl.className = "text-xs font-bold text-red-400 block truncate";
+                statusEl.innerText = "评估状态：触发高风险预警";
+                statusEl.className = "text-red-400 font-bold";
+            }
+
+            // Sync with Hero Card Display
+            document.getElementById('hero-live-index').innerText = fuvScore;
+        }
+
+        function setScenario(f, u, v) {
+            document.getElementById('input-f').value = f;
+            document.getElementById('input-u').value = u;
+            document.getElementById('input-v').value = v;
+            renderVectorMatrix();
+            appendTerminalLog(`已载入场景预设值：F=${f}, U=${u}%, V=${v}`);
+        }
+
+        function resetSliders() {
+            setScenario(85, 35, 75);
+        }
+
+        // --- 3. DECISION TERMINAL LOGIC ---
+        function appendTerminalLog(msg, colorClass = "text-gray-300") {
+            const terminal = document.getElementById('terminal-log');
+            if (!terminal) return;
+            const time = new Date().toLocaleTimeString();
+            const line = document.createElement('div');
+            line.className = colorClass;
+            line.innerText = `[${time}] ${msg}`;
+            terminal.appendChild(line);
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+
+        function handleTerminalCommand(e) {
+            if (e.key === 'Enter') {
+                executeTerminalBtn();
+            }
+        }
+
+        function executeTerminalBtn() {
+            const input = document.getElementById('terminal-input');
+            const cmd = input.value.trim().toLowerCase();
+            if (!cmd) return;
+
+            appendTerminalLog(`> ${cmd}`, "text-brand-orange font-bold");
+
+            if (cmd === 'run') {
+                renderVectorMatrix();
+                appendTerminalLog("正在重新计算并收敛 FUV 矩阵向量...", "text-emerald-400");
+            } else if (cmd === 'clear') {
+                document.getElementById('terminal-log').innerHTML = '';
+            } else if (cmd === 'scenario') {
+                setScenario(90, 20, 85);
+            } else if (cmd === 'help') {
+                appendTerminalLog("可用命令列表：'run'（运行演算）、'scenario'（场景加载）、'clear'（清屏）、'export'（导出）");
+            } else {
+                appendTerminalLog(`无法识别命令：'${cmd}'。请输入 'help' 查看可用命令。`, "text-red-400");
+            }
+
+            input.value = '';
+        }
+
+        // Global Window Onload
+        window.onload = function() {
+            initThreeJS();
+            renderVectorMatrix();
+        };
+    </script>
+</body>
+</html>
