@@ -5,15 +5,6 @@ const t = (d) => JSON.stringify(Object.fromEntries(LK.map(k => [k, d[k] ?? '']))
 const NP = { cn:'[系统通知]', en:'[System Notification]', jp:'[システム通知]', kr:'[시스템 알림]', es:'[Notificación del Sistema]', vi:'[Thông báo Hệ thống]', ar:'[إشعار النظام]', ru:'[Системное уведомление]' };
 const nt = (d) => t(Object.fromEntries(LK.map(k => [k, `${NP[k]} ${d[k] ?? ''}`])));
 
-// 同步确保 messages 表带 ref_type / ref_id 列（用于把“收款消息”关联到具体转账流水）。
-// 用 await 在真正插入前执行，避免 waitUntil 时序导致列尚不存在而插入失败。
-const ensureMsgRefCols = async (DB) => {
-  try {
-    await DB.prepare('ALTER TABLE messages ADD COLUMN ref_type TEXT').run();
-    await DB.prepare('ALTER TABLE messages ADD COLUMN ref_id INTEGER').run();
-  } catch (e) { /* 列已存在时忽略 */ }
-};
-
 // 给管理员(immmor)推送外部通知：POST 表单（title/body/group/ttl）。不依赖 ctx，调用处直接 await
 const notifyAdmin = async (title, body) => {
   const url = 'https://notify.funbua.uk/W6qUt6AoVEN6nQYVnNnuQq';
@@ -355,20 +346,10 @@ function generateCardNumber() {
   return CARD_PREFIX + digits;
 }
 
-// 懒加载 card_number 字段与唯一索引（幂等，每个实例只执行一次）
-async function ensureCardColumn(DB) {
-  if (globalThis.__cardColReady) return;
-  try { await DB.prepare('ALTER TABLE user ADD COLUMN card_number TEXT').run(); } catch (e) {}
-  try { await DB.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_user_card_number ON user (card_number)').run(); } catch (e) {}
-  globalThis.__cardColReady = true;
-}
-
-
 
 // 懒加 p_token 列（幂等），生成新鉴权 token 并持久化，返回完整 token 串
 // token 格式：<随机UUID>.<过期时间戳(ms)>，有效期 1 天，每次登录刷新
 async function newPToken(DB, username) {
-  try { await DB.prepare('ALTER TABLE user ADD COLUMN p_token TEXT').run(); } catch (e) {}
   const token = `${crypto.randomUUID()}.${Date.now() + 24 * 60 * 60 * 1000}`;
   try { await DB.prepare('UPDATE user SET p_token = ? WHERE username = ?').bind(token, username).run(); } catch (e) {}
   return token;
@@ -377,7 +358,6 @@ async function newPToken(DB, username) {
 // 取用户卡号，没有就补发一张（唯一索引防撞号，撞了就重试）
 async function ensureCardNumber(DB, rowid) {
   if (!rowid) return '';
-  await ensureCardColumn(DB);
   let row = null;
   try {
     row = await DB.prepare('SELECT card_number FROM user WHERE rowid = ?').bind(rowid).first();
@@ -400,7 +380,6 @@ async function ensureCardNumber(DB, rowid) {
 
 // 注册时挑一个尚未被占用的卡号
 async function pickUniqueCardNumber(DB) {
-  await ensureCardColumn(DB);
   for (let i = 0; i < 8; i++) {
     const card = generateCardNumber();
     try {
@@ -450,20 +429,6 @@ export default {
           msg: "数据库绑定失败！请检查Worker的D1绑定配置",
           error: "D1 database instance is undefined"
         }, 500);
-      }
-
-      // ========== 数据库索引初始化（幂等，避免 messages 全表扫描） ==========
-      if (!globalThis.__msgIdxInited) {
-        globalThis.__msgIdxInited = true;
-        ctx.waitUntil((async () => {
-          try {
-            await DB.prepare('CREATE INDEX IF NOT EXISTS idx_messages_user_created ON messages(username, created_at DESC)').run();
-            await DB.prepare('CREATE INDEX IF NOT EXISTS idx_messages_user_read ON messages(username, is_read)').run();
-            await DB.prepare('CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at)').run();
-            await DB.prepare('ALTER TABLE messages ADD COLUMN ref_type TEXT').run();
-            await DB.prepare('ALTER TABLE messages ADD COLUMN ref_id INTEGER').run();
-          } catch (e) { /* 表尚未创建或被禁用时静默忽略 */ }
-        })());
       }
 
       // ========== talangya 商品代理（绕过CORS，原样返回） ==========
@@ -1008,7 +973,6 @@ export default {
           }
         }
 
-        await ensureCardColumn(DB);
         const user = await DB
           .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders, invite_code, invited_user, rebates, card_number FROM user WHERE username = ? AND password = ?')
           .bind(username, password)
@@ -1170,7 +1134,6 @@ export default {
         // 统一用小写处理，避免大小写不匹配问题
         const addressLower = address.toLowerCase();
 
-        await ensureCardColumn(DB);
         const user = await DB
           .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders, card_number FROM user WHERE username = ? OR web3_address = ?')
           .bind(addressLower, addressLower)
@@ -1264,7 +1227,6 @@ export default {
           return resJson({ success: false, message: '缺少授权码！' }, 400);
         }
 
-        await ensureCardColumn(DB);
         const user = await DB
           .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders, invite_code, invited_user, rebates, login_ticket, ticket_expire, card_number FROM user WHERE login_ticket = ?')
           .bind(ticket)
@@ -2047,9 +2009,6 @@ export default {
       // ========== 支付密码接口：GET 查询状态 / POST 设置（6位数字） ==========
       if (path === '/api/pay-password') {
         try {
-          // 懒加载字段：不存在时新增
-          try { await DB.prepare('ALTER TABLE user ADD COLUMN pay_password TEXT').run(); } catch (e) {}
-
           // 查询是否已设置
           if (request.method === 'GET') {
             const username = url.searchParams.get('username');
@@ -2096,9 +2055,6 @@ export default {
             return resJson({ code: 400, msg: '请输入6位支付密码以确认转账' }, 400);
           }
 
-          // 确保支付密码字段存在
-          try { await DB.prepare('ALTER TABLE user ADD COLUMN pay_password TEXT').run(); } catch (e) {}
-
           // 校验转出用户是否存在 + 支付密码校验
           const sender = await DB
             .prepare('SELECT username, pay_password, balance FROM user WHERE username = ?')
@@ -2122,11 +2078,6 @@ export default {
           if (!recipient) {
             return resJson({ code: 404, msg: '收款用户不存在' }, 404);
           }
-
-          // 确保转账流水表存在
-          await DB.prepare('CREATE TABLE IF NOT EXISTS transfers (id INTEGER PRIMARY KEY AUTOINCREMENT, from_user TEXT, to_user TEXT, amount REAL, created_at TEXT, message TEXT)').run();
-          // 兼容旧表：补加留言列
-          try { await DB.prepare('ALTER TABLE transfers ADD COLUMN message TEXT').run(); } catch (e) {}
 
           // 防双花：条件扣减，只有余额充足（balance >= amt）才会真正扣减
           const deduct = await DB
@@ -2160,8 +2111,6 @@ export default {
           await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
             .bind('immmor', `💰 用户 ${from} 向 ${to} 转账 ¥${amt}`, msgTime).run();
           await notifyAdmin('用户转账', `💰 用户 ${from} 向 ${to} 转账 ¥${amt}`);
-          // 给收款方发消息（关联该笔转账流水，便于前端标记未读/已读）
-          await ensureMsgRefCols(DB);
           const recvContent = message ? `💰 ${from} 向您转账 ¥${amt}（留言：${String(message).slice(0,50)}）` : `💰 ${from} 向您转账 ¥${amt}`;
           try {
             await DB.prepare('INSERT INTO messages (username, content, created_at, is_read, ref_type, ref_id) VALUES (?, ?, ?, 0, ?, ?)')
@@ -2262,30 +2211,11 @@ export default {
       }
 
       // ========== 理财：定期存款（1年期 · 年化4% · 到期手动赎回 · 支持多笔） ==========
-      // 确保理财存款表存在；兼容旧版「每用户一笔（username 主键）」自动迁移为多笔（id 自增）
-      const ensureFinanceTable = async () => {
-        const exists = await DB.prepare("SELECT COUNT(*) AS c FROM sqlite_master WHERE type='table' AND name='finance_deposit'").first();
-        if (exists.c === 0) {
-          await DB.prepare('CREATE TABLE finance_deposit (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, principal REAL, rate REAL, start_time TEXT, maturity_time TEXT)').run();
-          return;
-        }
-        let hasId = true;
-        try { await DB.prepare('SELECT id FROM finance_deposit LIMIT 1').first(); }
-        catch (e) { hasId = false; }
-        if (!hasId) {
-          await DB.prepare('ALTER TABLE finance_deposit RENAME TO finance_deposit_old').run();
-          await DB.prepare('CREATE TABLE finance_deposit (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, principal REAL, rate REAL, start_time TEXT, maturity_time TEXT)').run();
-          await DB.prepare('INSERT INTO finance_deposit (username, principal, rate, start_time, maturity_time) SELECT username, principal, rate, start_time, maturity_time FROM finance_deposit_old').run();
-          await DB.prepare('DROP TABLE finance_deposit_old').run();
-        }
-      };
-
       // 查询理财状态（返回存款列表）
       if (path === '/api/finance/status' && request.method === 'GET') {
         try {
           const username = url.searchParams.get('username');
           if (!username) return resJson({ code: 400, msg: '缺少username参数' }, 400);
-          await ensureFinanceTable();
           const user = await DB.prepare('SELECT balance FROM user WHERE username = ?').bind(username).first();
           if (!user) return resJson({ code: 404, msg: '用户不存在' }, 404);
           const rows = await DB.prepare('SELECT * FROM finance_deposit WHERE username = ? ORDER BY start_time ASC').bind(username).all();
@@ -2317,7 +2247,6 @@ export default {
           const amt = parseFloat(amount);
           if (isNaN(amt) || amt <= 0) return resJson({ code: 400, msg: '存入金额必须大于0' }, 400);
           if (amt < 2000) return resJson({ code: 400, msg: '最低存入金额为 ¥2000' }, 400);
-          await ensureFinanceTable();
           const user = await DB.prepare('SELECT username, balance, pay_password FROM user WHERE username = ?').bind(username).first();
           if (!user) return resJson({ code: 404, msg: '用户不存在' }, 404);
           if (!user.pay_password) return resJson({ code: 403, msg: '请先设置6位支付密码' }, 403);
@@ -2343,7 +2272,6 @@ export default {
         try {
           const { username, payPassword, id } = await request.json();
           if (!username || payPassword === undefined || id === undefined) return resJson({ code: 400, msg: '参数不完整' }, 400);
-          await ensureFinanceTable();
           const user = await DB.prepare('SELECT username, balance, pay_password FROM user WHERE username = ?').bind(username).first();
           if (!user) return resJson({ code: 404, msg: '用户不存在' }, 404);
           if (!user.pay_password) return resJson({ code: 403, msg: '请先设置6位支付密码' }, 403);
@@ -2388,13 +2316,6 @@ export default {
           const u2 = await DB.prepare('SELECT balance FROM user WHERE username = ?').bind(username).first();
           const nowTime = new Date().toISOString().slice(0, 19).replace('T', ' ');
           try {
-            await DB.prepare('CREATE TABLE IF NOT EXISTS loan_record (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, amount REAL, created_at TEXT, status TEXT, rate REAL, due_at TEXT, repaid_at TEXT, interest REAL, total_repaid REAL)').run();
-            try { await DB.prepare('ALTER TABLE loan_record ADD COLUMN rate REAL').run(); } catch (e) {}
-            try { await DB.prepare('ALTER TABLE loan_record ADD COLUMN due_at TEXT').run(); } catch (e) {}
-            try { await DB.prepare('ALTER TABLE loan_record ADD COLUMN repaid_at TEXT').run(); } catch (e) {}
-            try { await DB.prepare('ALTER TABLE loan_record ADD COLUMN interest REAL').run(); } catch (e) {}
-            try { await DB.prepare('ALTER TABLE loan_record ADD COLUMN total_repaid REAL').run(); } catch (e) {}
-            try { await DB.prepare('ALTER TABLE loan_record ADD COLUMN term_days INTEGER').run(); } catch (e) {}
             const LOAN_TERM_RATES = { 30: 0.10, 90: 0.10, 180: 0.11, 365: 0.12, 730: 0.14, 1095: 0.16 };
             const termDays = LOAN_TERM_RATES[days] != null ? (parseInt(days, 10) || 365) : 365;
             const termRate = LOAN_TERM_RATES[termDays] != null ? LOAN_TERM_RATES[termDays] : 0.10;
@@ -2416,7 +2337,6 @@ export default {
         try {
           const username = url.searchParams.get('username');
           if (!username) return resJson({ code: 400, msg: '缺少username参数' }, 400);
-          await DB.prepare('CREATE TABLE IF NOT EXISTS loan_record (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, amount REAL, created_at TEXT, status TEXT, rate REAL, due_at TEXT, repaid_at TEXT, interest REAL, total_repaid REAL)').run();
           const rows = await DB.prepare('SELECT * FROM loan_record WHERE username = ? ORDER BY created_at DESC').bind(username).all();
           const records = (rows.results || []).map(r => ({
             id: r.id,
@@ -3338,8 +3258,6 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           if (!username) {
             return resJson({ code: 400, msg: '请传入username参数' }, 400);
           }
-
-          await ensureMsgRefCols(DB);
 
           let messages;
           
@@ -4412,7 +4330,6 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
       if (path === '/api/rebates') {
         if (request.method === 'GET') {
           try {
-            try { await DB.prepare('ALTER TABLE user ADD COLUMN rebates TEXT').run(); } catch(e) {}
             const status = url.searchParams.get('status');
             const users = await DB.prepare('SELECT username, rebates FROM user WHERE rebates IS NOT NULL AND rebates != ""').all();
             const list = [];
@@ -4528,11 +4445,6 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
 
           if (resolved.length === 0) return resJson({ success: false, message: '未指定任何接收用户' }, 400);
 
-          try { await DB.prepare('CREATE TABLE IF NOT EXISTS gift_bet (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, game_type TEXT, prize REAL, status TEXT DEFAULT "pending", created_at TEXT)').run(); } catch(e) {}
-          // 邀请返现：被邀请人记录邀请人 / 邀请人侧存返现记录（不建新表）
-          try { await DB.prepare('ALTER TABLE user ADD COLUMN invited_by TEXT').run(); } catch(e) {}
-          try { await DB.prepare('ALTER TABLE user ADD COLUMN rebates TEXT').run(); } catch(e) {}
-
           const now = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
           const msgNow = new Date().toISOString().slice(0, 19).replace('T', ' ');
           const gameNames = { wheel: '幸运转盘', slot: '老虎机', scratch: '刮刮乐' };
@@ -4594,7 +4506,6 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
 
       // ========== 广告点击统计接口（数据存于 user 表） ==========
       if (path === '/api/ad-click') {
-        try { await DB.prepare('ALTER TABLE user ADD COLUMN ad_clicks TEXT').run(); } catch (e) {}
         // 记录点击：POST /api/ad-click  body { ad_id, username, content? }
         if (request.method === 'POST') {
           try {

@@ -4,6 +4,10 @@
 (function () {
   const $ = (id) => document.getElementById(id);
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const t = (key, fallback) => {
+    const dict = (window.translations && window.currentLang && window.translations[window.currentLang]) || {};
+    return (key in dict && dict[key]) ? dict[key] : fallback;
+  };
   const TESSERACT_SRC = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
 
   function loadScript(src) {
@@ -35,10 +39,10 @@
   async function recognize(file) {
     await ensureOCR();
     const { data: { text } } = await worker.recognize(file);
-    const emails = (text.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi) || [])
-      .map((s) => s.toLowerCase());
-    // 去重
-    return { text, emails: [...new Set(emails)] };
+    const rawMatches = text.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi) || [];
+    // 域名后缀容错修正 + 去重（修正后相同后缀会被合并，避免 gmail.com 与 gmai1.com 重复列出）
+    const emails = [...new Set(rawMatches.map((s) => optimizeEmail(s)))];
+    return { text, emails };
   }
 
   // ---- 邮箱后缀容错匹配 ----
@@ -92,8 +96,27 @@
     const prefix = e.slice(0, at);
     const d = e.slice(at + 1);
     const opts = [...domainEl.options].map((o) => o.value);
-    const m = opts.indexOf(d) !== -1 ? d : matchSuffix(d, opts);
+    const candidates = [...new Set(opts.concat(KNOWN_DOMAINS))];
+    const m = candidates.indexOf(d) !== -1 ? d : matchSuffix(d, candidates);
     return m ? prefix + '@' + m : e;
+  }
+
+  // 常见邮箱后缀白名单（OCR 容错候选池）
+  const KNOWN_DOMAINS = ['gmail.com','googlemail.com','qq.com','163.com','126.com','outlook.com','hotmail.com','live.com','yahoo.com','yahoo.com.cn','foxmail.com','sina.com','sina.cn','icloud.com','me.com','139.com','aliyun.com','21cn.com','sohu.com','tom.com','189.cn','yeah.net','msn.com'];
+
+  // 对“整邮箱”做域名后缀容错修正（前缀不动），无匹配返回原串
+  function optimizeEmail(raw) {
+    if (!raw) return raw;
+    const e = String(raw).trim().toLowerCase().replace(/\s+/g, '');
+    const at = e.lastIndexOf('@');
+    if (at < 1) return e;
+    const prefix = e.slice(0, at);
+    const d = e.slice(at + 1);
+    const domainEl = $('email-domain');
+    const opts = domainEl ? [...domainEl.options].map((o) => o.value) : [];
+    const candidates = [...new Set(opts.concat(KNOWN_DOMAINS))];
+    const fixed = candidates.indexOf(d) !== -1 ? d : matchSuffix(d, candidates);
+    return fixed ? prefix + '@' + fixed : e;
   }
 
   // 相机是否可用（用于决定是否显示「拍照」选项）
@@ -129,9 +152,8 @@
       const prefix = e.slice(0, at);
       const d = e.slice(at + 1);
       // 候选后缀 = 下拉选项 + 常见邮箱后缀，保证即使选项里没有也能容错匹配
-      const known = ['gmail.com','qq.com','163.com','126.com','outlook.com','hotmail.com','yahoo.com','foxmail.com','sina.com','icloud.com','139.com','aliyun.com','21cn.com'];
       const opts = domain ? [...domain.options].map((o) => o.value) : [];
-      const candidates = [...new Set(opts.concat(known))];
+      const candidates = [...new Set(opts.concat(KNOWN_DOMAINS))];
       const matched = candidates.indexOf(d) !== -1 ? d : (candidates.length ? matchSuffix(d, candidates) : null);
       if (matched) {
         user.value = prefix;
@@ -249,15 +271,21 @@
     $('ocr-camera-cancel').addEventListener('click', closeCamera);
   }
 
-  // 统一处理图片（相册或拍照）→ OCR → 回填
-  function processImage(fileOrBlob) {
-    if (!fileOrBlob) return;
-    const btn = $('email-ocr-btn');
+  // 当前 OCR 目标（由 openMenuFor 设置）：输入框 + 按钮 + 回填回调
+  let active = null;
+  function ocrBtn() { return (active && active.btn) || $('email-ocr-btn'); }
+
+  // 统一处理图片（相册或拍照）→ OCR → 回填到指定输入框
+  function runOCR(fileOrBlob, inputEl, btn, onSelect) {
+    if (!fileOrBlob || !inputEl) return;
     const oldTitle = btn ? btn.title : '';
     if (btn) { btn.style.opacity = '0.5'; btn.title = '识别中…'; }
     recognize(fileOrBlob).then(({ emails }) => {
-      if (emails.length) {
-        fillEmail(emails[0]);
+      if (emails.length > 1) {
+        showEmailPicker(emails, inputEl, onSelect, btn);
+        if (btn) btn.title = t('ocr_multi_email_count', '识别到 {n} 个邮箱，请选择').replace('{n}', emails.length);
+      } else if (emails.length === 1) {
+        onSelect(emails[0]);
         if (btn) btn.title = '已填入: ' + emails[0];
       } else if (btn) btn.title = '未识别到邮箱';
     }).catch(() => {
@@ -265,6 +293,50 @@
     }).finally(() => {
       if (btn) { btn.style.opacity = ''; setTimeout(() => { if (btn) btn.title = oldTitle; }, 2500); }
     });
+  }
+
+  // 登录/注册弹窗用的入口：回填到 #username（含后缀拆分逻辑在 fillEmail 内）
+  function processImage(fileOrBlob) {
+    if (!active) return;
+    runOCR(fileOrBlob, active.input, active.btn, active.onSelect);
+  }
+
+  // 多个邮箱时的选择浮层（fixed 定位，避免被弹窗 overflow 裁剪）
+  function showEmailPicker(emails, inputEl, onSelect, btn) {
+    hideEmailPicker();
+    inputEl = inputEl || $('username');
+    const r = inputEl.getBoundingClientRect();
+    const picker = document.createElement('div');
+    picker.id = 'ocr-email-picker';
+    picker.className = 'fixed z-[320] rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl overflow-hidden';
+    picker.style.left = r.left + 'px';
+    picker.style.top = (r.bottom + 6) + 'px';
+    picker.style.width = Math.max(r.width, 220) + 'px';
+    const head = document.createElement('div');
+    head.className = 'px-3 py-2 text-xs text-zinc-400 bg-zinc-800 border-b border-zinc-700';
+    head.textContent = t('ocr_multi_email', '识别到多个邮箱，请选择');
+    picker.appendChild(head);
+    const list = document.createElement('div');
+    list.className = 'max-h-56 overflow-y-auto';
+    emails.forEach((em) => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'w-full text-left px-3 py-2 text-sm text-white hover:bg-[var(--neon-blue)]/20 transition-colors';
+      item.textContent = em;
+      item.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        onSelect(em);
+        if (btn) btn.title = '已填入: ' + em;
+        hideEmailPicker();
+      });
+      list.appendChild(item);
+    });
+    picker.appendChild(list);
+    document.body.appendChild(picker);
+  }
+  function hideEmailPicker() {
+    const p = $('ocr-email-picker');
+    if (p) p.remove();
   }
 
   function buildMenu() {
@@ -299,10 +371,16 @@
     });
     // 点击空白处关闭
     document.addEventListener('click', (ev) => {
+      const ob = ocrBtn();
       if (menuEl && !menuEl.classList.contains('hidden') &&
-          !menuEl.contains(ev.target) && ev.target !== $('email-ocr-btn') &&
-          !$('email-ocr-btn').contains(ev.target)) {
+          !menuEl.contains(ev.target) && ev.target !== ob &&
+          !(ob && ob.contains(ev.target))) {
         hideMenu();
+      }
+      const picker = $('ocr-email-picker');
+      if (picker && !picker.contains(ev.target) && ev.target !== ob &&
+          !(ob && ob.contains(ev.target))) {
+        picker.remove();
       }
     });
 
@@ -316,7 +394,7 @@
   }
 
   function showMenu() {
-    const btn = $('email-ocr-btn');
+    const btn = ocrBtn();
     if (!btn || !menuEl) return;
     const r = btn.getBoundingClientRect();
     menuEl.classList.remove('hidden');
@@ -327,25 +405,35 @@
   }
   function hideMenu() { if (menuEl) menuEl.classList.add('hidden'); }
 
+  function setActive(inputEl, btn, onSelect) { active = { input: inputEl, btn: btn, onSelect: onSelect }; }
+  function openMenuFor(inputEl, btn, onSelect) {
+    setActive(inputEl, btn, onSelect);
+    hideEmailPicker();
+    if (menuEl && !menuEl.classList.contains('hidden')) hideMenu();
+    else showMenu();
+  }
+
   function init() {
     const btn = $('email-ocr-btn');
     if (!btn) return;
     buildMenu();
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
+      setActive($('username'), $('email-ocr-btn'), (em) => fillEmail(em));
+      hideEmailPicker();
       if (menuEl && !menuEl.classList.contains('hidden')) hideMenu();
       else showMenu();
     });
     // 监听登录/注册模式切换（#auth-modal 的 mode-register class）
     const modal = $('auth-modal');
     if (modal) {
-      new MutationObserver(placeCamButton).observe(modal, { attributes: true, attributeFilter: ['class'] });
+      new MutationObserver(() => { placeCamButton(); hideEmailPicker(); }).observe(modal, { attributes: true, attributeFilter: ['class'] });
     }
     placeCamButton();
   }
 
   // 暴露给其他脚本使用
-  window.OCR = { ensureOCR, recognize, supported: cameraSupported };
+  window.OCR = { ensureOCR, recognize, supported: cameraSupported, openMenuFor, optimizeEmail };
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
