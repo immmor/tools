@@ -10,10 +10,13 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap" rel="stylesheet">
+    <!-- KaTeX for LaTeX formula rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
     <!-- Three.js for 3D Background Matrix -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 
     <script>
         tailwind.config = {
@@ -366,10 +369,10 @@
                     </p>
                 </div>
 
-                <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:items-stretch">
                     
                     <!-- Left: Control Sliders -->
-                    <div class="lg:col-span-5 glass-panel p-8 rounded-2xl border border-white/10 space-y-6">
+                    <div class="lg:col-span-5 glass-panel p-8 rounded-2xl border border-white/10 flex flex-col lg:justify-between space-y-6">
                         <div class="flex items-center justify-between pb-4 border-b border-white/10 font-mono text-xs">
                             <span class="text-white font-bold flex items-center gap-2">
                                 <i data-lucide="sliders" class="w-4 h-4 text-brand-orange"></i>
@@ -426,9 +429,9 @@
                             <input type="range" id="input-v" min="10" max="100" value="75" oninput="renderVectorMatrix()">
                         </div>
 
-                        <div class="p-4 bg-brand-orange/5 border border-brand-orange/20 rounded font-mono text-xs text-swiss-muted">
-                            <span class="text-brand-orange font-bold block mb-1">Vector Calculation Formula:</span>
-                            FUV_Vector = (F · e^-U) × log2(V + 1)
+                        <div class="p-4 bg-brand-orange/5 border border-brand-orange/20 rounded">
+                            <span class="text-brand-orange font-bold block mb-2 font-mono text-xs">Vector Calculation Formula:</span>
+                            <div id="fuv-formula" class="text-white text-center text-lg"></div>
                         </div>
                     </div>
 
@@ -683,134 +686,31 @@
                 camera.updateProjectionMatrix();
                 renderer.setSize(window.innerWidth, window.innerHeight);
             }
-            renderVectorMatrix();
         });
 
         // --- 2. SIGNATURE INTERACTIVE FEATURE: 2D VECTOR MATRIX CANVAS ---
-        function renderVectorMatrix() {
-            const canvas = document.getElementById('vector-canvas');
-            if (!canvas) return;
-            const ctx = canvas.getContext('2d');
+        let vecState = { F: 85, U: 35, V: 75, score: 0, history: [] };
 
-            // Responsive Canvas Buffer
-            const rect = canvas.getBoundingClientRect();
-            canvas.width = rect.width;
-            canvas.height = rect.height;
-
-            const width = canvas.width;
-            const height = canvas.height;
-
-            // Get Slider Values
+        function updateVectorState() {
             const F = parseFloat(document.getElementById('input-f').value);
             const U = parseFloat(document.getElementById('input-u').value);
             const V = parseFloat(document.getElementById('input-v').value);
+            vecState.F = F; vecState.U = U; vecState.V = V;
 
-            // Update Labels
             document.getElementById('label-f').innerText = F;
             document.getElementById('label-u').innerText = U + '%';
             document.getElementById('label-v').innerText = V;
 
-            // Clear Background
-            ctx.fillStyle = '#08090C';
-            ctx.fillRect(0, 0, width, height);
+            const fuvScore = (F * Math.exp(-U / 80) * Math.log2(V / 10 + 1));
+            const marginValue = ((F / (U + 1)) * (V / 50)) * 10;
+            vecState.score = fuvScore;
 
-            // Draw Coordinate Grid Lines
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-            ctx.lineWidth = 1;
-
-            const gridSteps = 6;
-            for(let i = 1; i < gridSteps; i++) {
-                // Vertical lines
-                ctx.beginPath();
-                ctx.moveTo((width / gridSteps) * i, 0);
-                ctx.lineTo((width / gridSteps) * i, height);
-                ctx.stroke();
-
-                // Horizontal lines
-                ctx.beginPath();
-                ctx.moveTo(0, (height / gridSteps) * i);
-                ctx.lineTo(width, (height / gridSteps) * i);
-                ctx.stroke();
-            }
-
-            // Draw Axis Arrows (X: Uncertainty, Y: Utility)
-            const margin = 40;
-            ctx.strokeStyle = 'rgba(255, 85, 0, 0.4)';
-            ctx.lineWidth = 2;
-
-            // Y Axis (Utility)
-            ctx.beginPath();
-            ctx.moveTo(margin, height - margin);
-            ctx.lineTo(margin, margin);
-            ctx.stroke();
-
-            // X Axis (Uncertainty)
-            ctx.beginPath();
-            ctx.moveTo(margin, height - margin);
-            ctx.lineTo(width - margin, height - margin);
-            ctx.stroke();
-
-            // Axis Labels
-            ctx.fillStyle = '#7A8092';
-            ctx.font = '10px "Inter", "JetBrains Mono"';
-            ctx.fillText('Core Utility (F) ▲', margin + 5, margin - 10);
-            ctx.fillText('Uncertainty (U) ►', width - 110, height - margin + 20);
-
-            // Calculate Target Coordinates
-            // X-axis: Map Uncertainty (0 to 100) to Canvas
-            const posX = margin + (U / 100) * (width - margin * 2);
-            // Y-axis: Map Utility (0 to 100) to Canvas
-            const posY = (height - margin) - (F / 100) * (height - margin * 2);
-
-            // Calculate Vector Convergence Radius based on V Factor
-            const radius = Math.max(15, (110 - V) * 0.6);
-
-            // Draw Safety Horizon Polygon / Zone
-            ctx.fillStyle = 'rgba(255, 85, 0, 0.08)';
-            ctx.beginPath();
-            ctx.moveTo(margin, height - margin);
-            ctx.lineTo(margin, margin + 20);
-            ctx.lineTo(width - margin - 60, height - margin);
-            ctx.closePath();
-            ctx.fill();
-
-            // Draw Vector Point Pulse Ring
-            ctx.strokeStyle = '#FF5500';
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            ctx.arc(posX, posY, radius, 0, Math.PI * 2);
-            ctx.stroke();
-
-            ctx.fillStyle = 'rgba(255, 85, 0, 0.2)';
-            ctx.beginPath();
-            ctx.arc(posX, posY, radius, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Draw Core Vector Point
-            ctx.fillStyle = '#FFFFFF';
-            ctx.beginPath();
-            ctx.arc(posX, posY, 5, 0, Math.PI * 2);
-            ctx.fill();
-
-            // Connect Vector Line from Origin
-            ctx.strokeStyle = '#FF5500';
-            ctx.setLineDash([4, 4]);
-            ctx.beginPath();
-            ctx.moveTo(margin, height - margin);
-            ctx.lineTo(posX, posY);
-            ctx.stroke();
-            ctx.setLineDash([]); // Reset line dash
-
-            // Mathematical Calculations for Results
-            const fuvScore = (F * Math.exp(-U / 80) * Math.log2(V / 10 + 1)).toFixed(1);
-            const marginValue = (((F / (U + 1)) * (V / 50)) * 10).toFixed(1);
-
-            document.getElementById('res-score').innerText = fuvScore;
-            document.getElementById('res-margin').innerText = '+' + marginValue + '%';
+            document.getElementById('res-score').innerText = fuvScore.toFixed(1);
+            document.getElementById('res-margin').innerText = '+' + marginValue.toFixed(1) + '%';
+            document.getElementById('hero-live-index').innerText = fuvScore.toFixed(1);
 
             const zoneEl = document.getElementById('res-zone');
             const statusEl = document.getElementById('canvas-status');
-
             if (fuvScore > 70) {
                 zoneEl.innerText = "Class S Optimal Zone";
                 zoneEl.className = "text-xs font-bold text-emerald-400 block truncate";
@@ -828,8 +728,170 @@
                 statusEl.className = "text-red-400 font-bold";
             }
 
-            // Sync with Hero Card Display
-            document.getElementById('hero-live-index').innerText = fuvScore;
+            vecState.history.push({ U, F });
+            if (vecState.history.length > 50) vecState.history.shift();
+        }
+
+        function drawArrowHead(ctx, x, y, dir) {
+            ctx.fillStyle = 'rgba(255, 85, 0, 0.9)';
+            ctx.beginPath();
+            if (dir === 'up') { ctx.moveTo(x, y); ctx.lineTo(x - 4, y + 8); ctx.lineTo(x + 4, y + 8); }
+            else { ctx.moveTo(x, y); ctx.lineTo(x - 8, y - 4); ctx.lineTo(x - 8, y + 4); }
+            ctx.closePath(); ctx.fill();
+        }
+
+        function drawVectorPlane(t) {
+            const canvas = document.getElementById('vector-canvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            const width = canvas.width, height = canvas.height;
+            const margin = 44;
+            const plotW = width - margin * 2, plotH = height - margin * 2;
+            const { F, U, V, history } = vecState;
+
+            // Background radial glow
+            const bg = ctx.createRadialGradient(width * 0.5, height * 0.42, 20, width * 0.5, height * 0.5, Math.max(width, height) * 0.75);
+            bg.addColorStop(0, '#1A120A');
+            bg.addColorStop(1, '#08090C');
+            ctx.fillStyle = bg;
+            ctx.fillRect(0, 0, width, height);
+
+            // Minor grid
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+            ctx.lineWidth = 1;
+            for (let i = 1; i < 20; i++) {
+                const gx = margin + plotW * i / 20, gy = margin + plotH * i / 20;
+                ctx.beginPath(); ctx.moveTo(gx, margin); ctx.lineTo(gx, height - margin); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(margin, gy); ctx.lineTo(width - margin, gy); ctx.stroke();
+            }
+            // Major grid
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.10)';
+            for (let i = 1; i < 5; i++) {
+                const gx = margin + plotW * i / 5, gy = margin + plotH * i / 5;
+                ctx.beginPath(); ctx.moveTo(gx, margin); ctx.lineTo(gx, height - margin); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(margin, gy); ctx.lineTo(width - margin, gy); ctx.stroke();
+            }
+
+            // Risk zones (high F + low U = optimal top-left, opposite = risk)
+            ctx.fillStyle = 'rgba(16, 185, 129, 0.05)';
+            ctx.beginPath();
+            ctx.moveTo(margin, margin);
+            ctx.lineTo(margin + plotW * 0.5, margin);
+            ctx.lineTo(margin, margin + plotH * 0.5);
+            ctx.closePath(); ctx.fill();
+
+            ctx.fillStyle = 'rgba(239, 68, 68, 0.05)';
+            ctx.beginPath();
+            ctx.moveTo(width - margin, height - margin);
+            ctx.lineTo(width - margin - plotW * 0.5, height - margin);
+            ctx.lineTo(width - margin, height - margin - plotH * 0.5);
+            ctx.closePath(); ctx.fill();
+
+            // Safety horizon polygon
+            ctx.fillStyle = 'rgba(255, 85, 0, 0.07)';
+            ctx.beginPath();
+            ctx.moveTo(margin, height - margin);
+            ctx.lineTo(margin, margin + plotH * 0.1);
+            ctx.lineTo(width - margin - plotW * 0.18, height - margin);
+            ctx.closePath(); ctx.fill();
+
+            // Axes
+            ctx.strokeStyle = 'rgba(255, 85, 0, 0.5)';
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(margin, height - margin); ctx.lineTo(margin, margin - 6); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(margin, height - margin); ctx.lineTo(width - margin + 6, height - margin); ctx.stroke();
+            drawArrowHead(ctx, margin, margin - 6, 'up');
+            drawArrowHead(ctx, width - margin + 6, height - margin, 'right');
+
+            // Ticks & numeric labels
+            ctx.fillStyle = '#7A8092';
+            ctx.font = '9px "JetBrains Mono", monospace';
+            ctx.textAlign = 'center';
+            for (let i = 0; i <= 5; i++) {
+                const v = i * 20;
+                ctx.fillText(v, margin + plotW * i / 5, height - margin + 14);
+                ctx.textAlign = 'right';
+                ctx.fillText(v, margin - 6, (height - margin) - plotH * i / 5 + 3);
+                ctx.textAlign = 'center';
+            }
+            ctx.fillStyle = '#FF7733';
+            ctx.font = '10px "JetBrains Mono", monospace';
+            ctx.fillText('Uncertainty (U) →', width / 2, height - 8);
+            ctx.save();
+            ctx.translate(12, height / 2);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillText('Core Utility (F) →', 0, 0);
+            ctx.restore();
+            ctx.textAlign = 'left';
+
+            // Trajectory trail
+            if (history.length > 1) {
+                ctx.lineWidth = 1.5;
+                for (let i = 1; i < history.length; i++) {
+                    const a = history[i - 1], b = history[i];
+                    const ax = margin + (a.U / 100) * plotW, ay = (height - margin) - (a.F / 100) * plotH;
+                    const bx = margin + (b.U / 100) * plotW, by = (height - margin) - (b.F / 100) * plotH;
+                    ctx.strokeStyle = `rgba(255, 85, 0, ${0.05 + 0.3 * i / history.length})`;
+                    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+                }
+            }
+
+            // Vector point coords
+            const posX = margin + (U / 100) * plotW;
+            const posY = (height - margin) - (F / 100) * plotH;
+
+            // Projection crosshair
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+            ctx.setLineDash([3, 3]); ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(posX, height - margin); ctx.lineTo(posX, posY); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(margin, posY); ctx.lineTo(posX, posY); ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Vector line from origin
+            ctx.strokeStyle = 'rgba(255, 85, 0, 0.9)';
+            ctx.setLineDash([5, 4]); ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(margin, height - margin); ctx.lineTo(posX, posY); ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Pulsing convergence rings
+            const pulse = (Math.sin(t / 400) + 1) / 2;
+            const baseR = Math.max(14, (110 - V) * 0.55);
+            ctx.strokeStyle = `rgba(255, 85, 0, ${0.5 * (1 - pulse)})`;
+            ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.arc(posX, posY, baseR + pulse * 10, 0, Math.PI * 2); ctx.stroke();
+            ctx.fillStyle = 'rgba(255, 85, 0, 0.12)';
+            ctx.beginPath(); ctx.arc(posX, posY, baseR, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = 'rgba(255, 85, 0, 0.5)';
+            ctx.beginPath(); ctx.arc(posX, posY, baseR, 0, Math.PI * 2); ctx.stroke();
+
+            // Core point
+            ctx.fillStyle = '#FFFFFF';
+            ctx.beginPath(); ctx.arc(posX, posY, 5, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#FF5500';
+            ctx.beginPath(); ctx.arc(posX, posY, 2.5, 0, Math.PI * 2); ctx.fill();
+
+            // Coordinate label
+            ctx.fillStyle = '#FFB070';
+            ctx.font = '10px "JetBrains Mono", monospace';
+            const rightSide = posX > width * 0.6;
+            ctx.textAlign = rightSide ? 'right' : 'left';
+            const lx = rightSide ? posX - 10 : posX + 10;
+            const ly = posY < margin + 20 ? posY + 18 : posY - 12;
+            ctx.fillText('F:' + F + '  U:' + U + '%', lx, ly);
+            ctx.textAlign = 'left';
+        }
+
+        function renderVectorMatrix() {
+            updateVectorState();
+            drawVectorPlane(performance.now());
+        }
+
+        function animateVectorPlane() {
+            drawVectorPlane(performance.now());
+            requestAnimationFrame(animateVectorPlane);
         }
 
         function setScenario(f, u, v) {
@@ -889,6 +951,10 @@
         window.onload = function() {
             initThreeJS();
             renderVectorMatrix();
+            animateVectorPlane();
+            if (window.katex) {
+                katex.render("FUV_{Vector} = (F \\cdot e^{-U}) \\times \\log_{2}(V + 1)", document.getElementById('fuv-formula'), { throwOnError: false });
+            }
         };
     </script>
 </body>
