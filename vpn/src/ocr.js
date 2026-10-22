@@ -210,66 +210,8 @@
     }
   }
 
-  // ---- 选择菜单（拍照 / 相册） ----
-  let menuEl = null, fileCamera = null, fileAlbum = null;
-
-  // ---- 实时摄像头拍照（getUserMedia 直接调摄像头） ----
-  let cameraStream = null;
-
-  function closeCamera() {
-    if (cameraStream) {
-      cameraStream.getTracks().forEach((t) => t.stop());
-      cameraStream = null;
-    }
-    const overlay = $('ocr-camera-overlay');
-    if (overlay) overlay.classList.add('hidden');
-  }
-
-  async function openCamera() {
-    const overlay = $('ocr-camera-overlay');
-    const video = $('ocr-camera-video');
-    const status = $('ocr-camera-status');
-    if (!overlay || !video) return;
-    if (status) status.textContent = '正在打开摄像头…';
-    overlay.classList.remove('hidden');
-    try {
-      cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
-      video.srcObject = cameraStream;
-      await video.play();
-      if (status) status.textContent = '';
-    } catch (e) {
-      if (status) status.textContent = '无法访问摄像头：' + (e && e.message ? e.message : e);
-      setTimeout(closeCamera, 2200);
-    }
-  }
-
-  function capturePhoto() {
-    const video = $('ocr-camera-video');
-    if (!video || !video.videoWidth) return;
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-    closeCamera();
-    canvas.toBlob((blob) => { if (blob) processImage(blob); }, 'image/jpeg', 0.92);
-  }
-
-  function buildCameraOverlay() {
-    if ($('ocr-camera-overlay')) return;
-    const wrap = document.createElement('div');
-    wrap.id = 'ocr-camera-overlay';
-    wrap.className = 'hidden fixed inset-0 z-[400] bg-black/90 flex flex-col items-center justify-center p-4';
-    wrap.innerHTML = `
-      <video id="ocr-camera-video" class="max-w-full max-h-[68vh] rounded-lg bg-black" autoplay playsinline muted></video>
-      <div id="ocr-camera-status" class="text-xs text-zinc-300 mt-2 h-4"></div>
-      <div class="mt-3 flex gap-3">
-        <button type="button" id="ocr-camera-shot" class="px-5 py-2 rounded-lg bg-[var(--neon-green)] text-black text-sm font-medium">拍照</button>
-        <button type="button" id="ocr-camera-cancel" class="px-5 py-2 rounded-lg border border-zinc-600 text-zinc-200 text-sm">取消</button>
-      </div>`;
-    document.body.appendChild(wrap);
-    $('ocr-camera-shot').addEventListener('click', capturePhoto);
-    $('ocr-camera-cancel').addEventListener('click', closeCamera);
-  }
+  // ---- 本地图片选择（点击 OCR 按钮直接打开，不再弹下拉菜单 / 调摄像头） ----
+  let fileAlbum = null;
 
   // 当前 OCR 目标（由 openMenuFor 设置）：输入框 + 按钮 + 回填回调
   let active = null;
@@ -339,90 +281,50 @@
     if (p) p.remove();
   }
 
-  function buildMenu() {
-    if (menuEl) return;
-
-    menuEl = document.createElement('div');
-    menuEl.id = 'ocr-menu';
-    menuEl.className = 'hidden fixed z-[300] w-40 rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl overflow-hidden';
-    const items = [];
-    if (cameraSupported()) {
-      items.push({ act: 'camera', icon: 'fas fa-camera', label: '拍照' });
-    }
-    items.push({ act: 'album', icon: 'fas fa-image', label: '从相册选择' });
-    menuEl.innerHTML = items.map((it) =>
-      `<button type="button" data-act="${it.act}" class="w-full text-left px-3 py-2 text-sm text-zinc-200 hover:bg-zinc-700 hover:text-white"><i class="${it.icon} mr-2"></i>${it.label}</button>`
-    ).join('');
-    document.body.appendChild(menuEl);
-
+  function ensureFilePicker() {
+    if (fileAlbum) return;
     fileAlbum = document.createElement('input');
     fileAlbum.type = 'file';
     fileAlbum.accept = 'image/*';
     fileAlbum.className = 'hidden';
     document.body.appendChild(fileAlbum);
-
-    // 菜单点击
-    menuEl.addEventListener('click', (ev) => {
-      const act = ev.target.getAttribute('data-act');
-      if (!act) return;
-      hideMenu();
-      if (act === 'camera') openCamera();
-      else fileAlbum.click();
-    });
-    // 点击空白处关闭
-    document.addEventListener('click', (ev) => {
-      const ob = ocrBtn();
-      if (menuEl && !menuEl.classList.contains('hidden') &&
-          !menuEl.contains(ev.target) && ev.target !== ob &&
-          !(ob && ob.contains(ev.target))) {
-        hideMenu();
-      }
-      const picker = $('ocr-email-picker');
-      if (picker && !picker.contains(ev.target) && ev.target !== ob &&
-          !(ob && ob.contains(ev.target))) {
-        picker.remove();
-      }
-    });
-
     fileAlbum.addEventListener('change', (e) => {
       const f = e.target.files && e.target.files[0];
       processImage(f);
       fileAlbum.value = '';
     });
-
-    buildCameraOverlay();
   }
 
-  function showMenu() {
-    const btn = ocrBtn();
-    if (!btn || !menuEl) return;
-    const r = btn.getBoundingClientRect();
-    menuEl.classList.remove('hidden');
-    // 菜单右边与相机按钮右边对齐（而不是左边）
-    const left = Math.max(8, r.right - menuEl.offsetWidth);
-    menuEl.style.left = left + 'px';
-    menuEl.style.top = (r.bottom + 6) + 'px';
+  // 点击 OCR 按钮：直接打开本地图片选择器（不再弹出下拉菜单）
+  function openAlbum() {
+    ensureFilePicker();
+    if (fileAlbum) fileAlbum.click();
   }
-  function hideMenu() { if (menuEl) menuEl.classList.add('hidden'); }
 
   function setActive(inputEl, btn, onSelect) { active = { input: inputEl, btn: btn, onSelect: onSelect }; }
   function openMenuFor(inputEl, btn, onSelect) {
     setActive(inputEl, btn, onSelect);
     hideEmailPicker();
-    if (menuEl && !menuEl.classList.contains('hidden')) hideMenu();
-    else showMenu();
+    openAlbum();
   }
 
   function init() {
     const btn = $('email-ocr-btn');
     if (!btn) return;
-    buildMenu();
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       setActive($('username'), $('email-ocr-btn'), (em) => fillEmail(em));
       hideEmailPicker();
-      if (menuEl && !menuEl.classList.contains('hidden')) hideMenu();
-      else showMenu();
+      openAlbum();
+    });
+    // 点击空白处关闭多邮箱选择浮层
+    document.addEventListener('click', (ev) => {
+      const picker = $('ocr-email-picker');
+      if (!picker) return;
+      const ob = ocrBtn();
+      if (!picker.contains(ev.target) && ev.target !== ob && !(ob && ob.contains(ev.target))) {
+        picker.remove();
+      }
     });
     // 监听登录/注册模式切换（#auth-modal 的 mode-register class）
     const modal = $('auth-modal');
