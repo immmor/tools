@@ -137,6 +137,14 @@
                     </button>
                 </div>
 
+                <!-- AIM / VIEW mode toggle: avoid accidental clicks while orbiting -->
+                <div class="pt-2 border-t border-black/10">
+                    <button id="btn-pointer-mode" class="w-full py-2 px-3 rounded-xl text-xs font-bold font-mono transition-all bg-swissDark text-white shadow-sm uppercase">
+                        POINTER: AIM
+                    </button>
+                    <div class="text-[10px] font-mono text-swissGray mt-1">AIM: tap commands · VIEW: camera only</div>
+                </div>
+
                 <!-- ACTION BUTTONS: expanded with JUMP -->
                 <div class="text-[10px] font-mono font-bold tracking-widest text-swissGray uppercase border-b border-black/10 pb-1 pt-2">HUMANOID ACTIONS</div>
                 <div class="text-[10px] font-mono text-swissGray">AUTO-JUMP: ON — clears obstacles & idles on its own</div>
@@ -496,6 +504,7 @@
         let maxSpeed = 3.5;
         let currentSpeed = 0.0;
         let interactionMode = 'NAV';
+        let pointerMode = 'AIM';   // 'AIM' = clicks command the robot, 'VIEW' = camera only
         let gaitPhase = 0;
 
         // --- ACTION STATE (now includes jump) ---
@@ -858,7 +867,18 @@
             }
         }
 
-        window.addEventListener('pointerdown', handlePointer);
+        // --- POINTER: only a clean tap commands; drags (camera orbit) are ignored ---
+        let downX = 0, downY = 0;
+        window.addEventListener('pointerdown', (e) => {
+            if (e.target !== renderer.domElement) return;
+            downX = e.clientX; downY = e.clientY;
+        });
+        window.addEventListener('pointerup', (e) => {
+            if (e.target !== renderer.domElement) return;
+            if (pointerMode === 'VIEW') return;
+            if (Math.hypot(e.clientX - downX, e.clientY - downY) > 6) return; // was a drag, not a tap
+            handlePointer(e);
+        });
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
@@ -893,6 +913,17 @@
 
         btnModeNav.addEventListener('click', () => setInteractionMode('NAV'));
         btnModeObstacle.addEventListener('click', () => setInteractionMode('OBSTACLE'));
+
+        // AIM (clicks command) / VIEW (camera only) toggle
+        const btnPointerMode = document.getElementById('btn-pointer-mode');
+        btnPointerMode.addEventListener('click', () => {
+            pointerMode = pointerMode === 'AIM' ? 'VIEW' : 'AIM';
+            btnPointerMode.textContent = `POINTER: ${pointerMode}`;
+            btnPointerMode.className = pointerMode === 'AIM'
+                ? "w-full py-2 px-3 rounded-xl text-xs font-bold font-mono transition-all bg-swissDark text-white shadow-sm uppercase"
+                : "w-full py-2 px-3 rounded-xl text-xs font-bold font-mono transition-all bg-white/80 text-swissDark border border-black/10 hover:bg-white shadow-sm uppercase";
+            logSystem(pointerMode === 'VIEW' ? "View mode: taps ignored (camera only)." : "Aim mode: tap to command.");
+        });
 
         // Hide / show the two lower panels
         const btnTogglePanels = document.getElementById('btn-toggle-panels');
