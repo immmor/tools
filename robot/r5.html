@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HUMANOID // SIMULATION ENVIRONMENT</title>
+    <!-- 引入瑞士风格常用字体 Inter 和 JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    
+    <!-- 引入 Three.js & OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #e3e5e8;
+            --accent-color: #ff3b30;
+            --text-main: #111111;
+            --text-muted: #666666;
+            --glass-bg: rgba(255, 255, 255, 0.55);
+            --glass-border: rgba(255, 255, 255, 0.75);
+            --glass-shadow: 0 12px 32px 0 rgba(0, 0, 0, 0.06);
+            --blur-radius: 18px;
+            --font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            --mono-font: 'JetBrains Mono', monospace;
+            --grid-unit: 8px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: var(--font-family);
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            padding: calc(var(--grid-unit) * 3);
+            background-image: 
+                linear-gradient(rgba(0, 0, 0, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 0, 0, 0.03) 1px, transparent 1px);
+            background-size: 24px 24px;
+            overflow-x: hidden;
+        }
+
+        .glass-panel {
+            background: var(--glass-bg);
+            backdrop-filter: blur(var(--blur-radius));
+            -webkit-backdrop-filter: blur(var(--blur-radius));
+            border: 1px solid var(--glass-border);
+            border-radius: 12px;
+            box-shadow: var(--glass-shadow);
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            margin-bottom: calc(var(--grid-unit) * 2.5);
+            padding-bottom: calc(var(--grid-unit) * 1.5);
+            border-bottom: 2px solid var(--text-main);
+        }
+
+        .header-title h1 {
+            font-size: 1.6rem;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            text-transform: uppercase;
+        }
+
+        .header-title p {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-weight: 600;
+            letter-spacing: 0.08em;
+        }
+
+        .system-status {
+            font-size: 0.75rem;
+            font-weight: 600;
+            font-family: var(--mono-font);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--accent-color);
+            border-radius: 50%;
+            display: inline-block;
+            box-shadow: 0 0 8px var(--accent-color);
+        }
+
+        .main-container {
+            display: grid;
+            grid-template-columns: 1fr 340px;
+            gap: calc(var(--grid-unit) * 2.5);
+            flex: 1;
+        }
+
+        .viewport-section {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            min-height: 520px;
+            overflow: hidden;
+        }
+
+        .viewport-header {
+            padding: 12px 18px;
+            font-size: 0.7rem;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            border-bottom: 1px solid var(--glass-border);
+            display: flex;
+            justify-content: space-between;
+            background: rgba(255, 255, 255, 0.2);
+            z-index: 10;
+        }
+
+        .canvas-container {
+            flex: 1;
+            position: relative;
+            width: 100%;
+            height: 100%;
+            cursor: grab;
+        }
+        .canvas-container:active { cursor: grabbing; }
+
+        .viewport-overlay {
+            position: absolute;
+            bottom: 16px;
+            left: 16px;
+            pointer-events: none;
+            display: flex;
+            gap: 8px;
+            z-index: 10;
+        }
+
+        .mode-badge {
+            background: rgba(17, 17, 17, 0.85);
+            color: #fff;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-size: 0.65rem;
+            font-weight: 600;
+            font-family: var(--mono-font);
+            letter-spacing: 0.05em;
+        }
+
+        .controls-section {
+            display: flex;
+            flex-direction: column;
+            gap: calc(var(--grid-unit) * 2);
+            padding: calc(var(--grid-unit) * 2.5);
+            overflow-y: auto;
+        }
+
+        .panel-group {
+            display: flex;
+            flex-direction: column;
+            gap: calc(var(--grid-unit));
+        }
+
+        .panel-label {
+            font-size: 0.65rem;
+            font-weight: 800;
+            letter-spacing: 0.12em;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .telemetry-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: calc(var(--grid-unit));
+        }
+
+        .data-card {
+            background: rgba(255, 255, 255, 0.35);
+            padding: 10px 12px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.6);
+        }
+
+        .data-card .value {
+            font-size: 1.1rem;
+            font-weight: 600;
+            font-family: var(--mono-font);
+            color: var(--text-main);
+        }
+
+        .data-card .unit {
+            font-size: 0.6rem;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        .btn-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .btn-group-3 {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 6px;
+        }
+
+        .swiss-btn {
+            background-color: var(--text-main);
+            color: #fff;
+            border: none;
+            padding: 10px 12px;
+            font-family: var(--font-family);
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            border-radius: 6px;
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+        }
+
+        .swiss-btn:hover {
+            background-color: #333;
+            transform: translateY(-1px);
+        }
+
+        .swiss-btn.accent { background-color: var(--accent-color); }
+        .swiss-btn.accent:hover { background-color: #e03228; }
+        
+        .swiss-btn.outline {
+            background-color: transparent;
+            color: var(--text-main);
+            border: 1px solid var(--text-main);
+        }
+        .swiss-btn.outline:hover {
+            background-color: var(--text-main);
+            color: #fff;
+        }
+
+        .swiss-btn.active {
+            box-shadow: inset 0 0 0 2px var(--accent-color);
+        }
+
+        @media (max-width: 900px) {
+            body { padding: var(--grid-unit); }
+            .main-container { grid-template-columns: 1fr; }
+            .viewport-section { min-height: 420px; height: 50vh; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="header-title">
+            <p>Bipedal System // Kinematics</p>
+            <h1>Humanoid Sim</h1>
+        </div>
+        <div class="system-status">
+            <span class="status-dot"></span>
+            <span id="status-text">SYSTEM ACTIVE</span>
+        </div>
+    </header>
+
+    <main class="main-container">
+        <!-- 3D 视图 -->
+        <section class="glass-panel viewport-section">
+            <div class="viewport-header">
+                <span>// 3D Viewport (Bipedal Motor Engine)</span>
+                <span id="fps-counter">60 FPS</span>
+            </div>
+            <div class="canvas-container" id="canvas-wrapper"></div>
+            <div class="viewport-overlay">
+                <span class="mode-badge" id="mode-display">MODE: NAV GOAL</span>
+                <span class="mode-badge" id="state-display" style="background:var(--accent-color)">ACTION: IDLE</span>
+            </div>
+        </section>
+
+        <!-- 右侧控制台 -->
+        <aside class="glass-panel controls-section">
+            
+            <!-- 遥测数据 -->
+            <div class="panel-group">
+                <div class="panel-label">Humanoid Telemetry</div>
+                <div class="telemetry-grid">
+                    <div class="data-card">
+                        <div class="unit">POSITION (X, Z)</div>
+                        <div class="value" id="val-pos">0.0, 0.0</div>
+                    </div>
+                    <div class="data-card">
+                        <div class="unit">ALTITUDE (Y)</div>
+                        <div class="value" id="val-alt">0.00m</div>
+                    </div>
+                    <div class="data-card">
+                        <div class="unit">HEADING</div>
+                        <div class="value" id="val-deg">0°</div>
+                    </div>
+                    <div class="data-card">
+                        <div class="unit">GAIT STATE</div>
+                        <div class="value" id="val-gait" style="font-size:0.9rem">DOUBLE</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 交互模式选择 -->
+            <div class="panel-group">
+                <div class="panel-label">Interaction Mode</div>
+                <div class="btn-group">
+                    <button class="swiss-btn outline active" id="mode-nav">Set Target</button>
+                    <button class="swiss-btn outline" id="mode-obs">+ Obstacle</button>
+                </div>
+            </div>
+
+            <!-- 动作控制区 -->
+            <div class="panel-group">
+                <div class="panel-label">Motion & Gestures</div>
+                <div class="btn-group-3">
+                    <button class="swiss-btn accent" id="btn-jump">Jump</button>
+                    <button class="swiss-btn" id="btn-wave">Wave</button>
+                    <button class="swiss-btn" id="btn-squat">Squat</button>
+                </div>
+                <div class="btn-group-3" style="margin-top:6px;">
+                    <button class="swiss-btn" id="btn-nod">Nod</button>
+                    <button class="swiss-btn" id="btn-kick">Kick</button>
+                    <button class="swiss-btn outline" id="btn-reset-pose">Reset Pose</button>
+                </div>
+            </div>
+
+            <!-- 系统命令 -->
+            <div class="panel-group">
+                <div class="panel-label">System Operations</div>
+                <div class="btn-group">
+                    <button class="swiss-btn" id="btn-spawn-low-obs">Low Hurdle</button>
+                    <button class="swiss-btn outline" id="btn-clear-obs">Clear All</button>
+                </div>
+            </div>
+
+        </aside>
+    </main>
+
+    <script>
+        // --- 1. Three.js Scene Setup ---
+        const container = document.getElementById('canvas-wrapper');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xe3e5e8);
+        scene.fog = new THREE.FogExp2(0xe3e5e8, 0.012);
+
+        const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
+        camera.position.set(0, 5, 10);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxPolarAngle = Math.PI / 2 - 0.02;
+
+        // --- 2. Lighting & Environment ---
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(10, 20, 10);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        dirLight.shadow.camera.near = 0.5;
+        dirLight.shadow.camera.far = 50;
+        const d = 15;
+        dirLight.shadow.camera.left = -d; dirLight.shadow.camera.right = d;
+        dirLight.shadow.camera.top = d; dirLight.shadow.camera.bottom = -d;
+        scene.add(dirLight);
+
+        // 地面网格
+        const gridHelper = new THREE.GridHelper(60, 60, 0x111111, 0xcccccc);
+        gridHelper.position.y = 0;
+        scene.add(gridHelper);
+
+        const planeGeo = new THREE.PlaneGeometry(100, 100);
+        const planeMat = new THREE.MeshStandardMaterial({ color: 0xdbddf0, roughness: 0.8 });
+        const floor = new THREE.Mesh(planeGeo, planeMat);
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        // --- 3. Humanoid Robot Model Construction ---
+        const robotGroup = new THREE.Group();
+        scene.add(robotGroup);
+
+        const matWhite = new THREE.MeshStandardMaterial({ color: 0xf0f0f0, roughness: 0.3 });
+        const matDark = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.5 });
+        const matAccent = new THREE.MeshStandardMaterial({ color: 0xff3b30, roughness: 0.2 });
+
+        const pelvis = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.2, 0.3), matDark);
+        pelvis.position.y = 1.0;
+        pelvis.castShadow = true;
+        robotGroup.add(pelvis);
+
+        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.65, 0.35), matWhite);
+        torso.position.y = 0.45;
+        torso.castShadow = true;
+        pelvis.add(torso);
+
+        const coreLight = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.05, 16), matAccent);
+        coreLight.rotation.x = Math.PI / 2;
+        coreLight.position.set(0, 0.1, 0.18);
+        torso.add(coreLight);
+
+        const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.1), matDark);
+        neck.position.y = 0.38;
+        torso.add(neck);
+
+        const headGroup = new THREE.Group();
+        headGroup.position.y = 0.12;
+        neck.add(headGroup);
+
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.28, 0.28), matWhite);
+        head.castShadow = true;
+        headGroup.add(head);
+
+        const visor = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.08, 0.05), matDark);
+        visor.position.set(0, 0.02, 0.13);
+        headGroup.add(visor);
+
+        function createLimb(isArm = false) {
+            const upper = new THREE.Mesh(
+                isArm ? new THREE.CylinderGeometry(0.05, 0.04, 0.35) : new THREE.CylinderGeometry(0.07, 0.05, 0.45),
+                matWhite
+            );
+            upper.castShadow = true;
+
+            const joint = new THREE.Group();
+            joint.add(upper);
+            upper.position.y = isArm ? -0.175 : -0.225;
+
+            const lower = new THREE.Mesh(
+                isArm ? new THREE.CylinderGeometry(0.04, 0.03, 0.35) : new THREE.CylinderGeometry(0.05, 0.04, 0.45),
+                matDark
+            );
+            lower.position.y = isArm ? -0.175 : -0.225;
+            lower.castShadow = true;
+
+            const lowerJoint = new THREE.Group();
+            lowerJoint.position.y = isArm ? -0.35 : -0.45;
+            lowerJoint.add(lower);
+            upper.add(lowerJoint);
+
+            let endPart;
+            if (isArm) {
+                endPart = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 12), matAccent);
+                endPart.position.y = -0.2;
+            } else {
+                endPart = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.08, 0.22), matWhite);
+                endPart.position.set(0, -0.22, 0.04);
+            }
+            endPart.castShadow = true;
+            lower.add(endPart);
+
+            return { shoulderOrHip: joint, elbowOrKnee: lowerJoint, endPart };
+        }
+
+        const leftArm = createLimb(true);
+        leftArm.shoulderOrHip.position.set(0.35, 0.25, 0);
+        torso.add(leftArm.shoulderOrHip);
+
+        const rightArm = createLimb(true);
+        rightArm.shoulderOrHip.position.set(-0.35, 0.25, 0);
+        torso.add(rightArm.shoulderOrHip);
+
+        const leftLeg = createLimb(false);
+        leftLeg.shoulderOrHip.position.set(0.16, -0.1, 0);
+        pelvis.add(leftLeg.shoulderOrHip);
+
+        const rightLeg = createLimb(false);
+        rightLeg.shoulderOrHip.position.set(-0.16, -0.1, 0);
+        pelvis.add(rightLeg.shoulderOrHip);
+
+        // --- 4. Target Marker & Obstacles ---
+        const targetGeo = new THREE.RingGeometry(0.2, 0.35, 32);
+        const targetMat = new THREE.MeshBasicMaterial({ color: 0xff3b30, side: THREE.DoubleSide });
+        const targetMarker = new THREE.Mesh(targetGeo, targetMat);
+        targetMarker.rotation.x = Math.PI / 2;
+        targetMarker.position.y = 0.01;
+        scene.add(targetMarker);
+
+        const obstacles = [];
+        function createObstacle(x, z, width = 1.2, height = 0.4, depth = 0.4) {
+            const obsGeo = new THREE.BoxGeometry(width, height, depth);
+            const obsMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.4 });
+            const obs = new THREE.Mesh(obsGeo, obsMat);
+            obs.position.set(x, height / 2, z);
+            obs.castShadow = true;
+            obs.receiveShadow = true;
+            scene.add(obs);
+            
+            obstacles.push({
+                mesh: obs,
+                x: x, z: z,
+                width: width,
+                height: height,
+                depth: depth,
+                radius: Math.max(width, depth) * 0.5 + 0.35 // 机器人碰撞半径边界
+            });
+        }
+
+        createObstacle(0, -3, 1.6, 0.35, 0.3);
+
+        // --- 5. State Machine & Kinematics Engine ---
+        const state = {
+            pos: new THREE.Vector2(0, 0),
+            target: new THREE.Vector2(0, 0),
+            angle: 0,
+            posY: 1.0,
+            speed: 0,
+            maxSpeed: 0.035,
+            gaitPhase: 0,
+            action: 'IDLE',
+            actionTime: 0,
+            mode: 'NAV'
+        };
+
+        const uiPos = document.getElementById('val-pos');
+        const uiAlt = document.getElementById('val-alt');
+        const uiDeg = document.getElementById('val-deg');
+        const uiGait = document.getElementById('val-gait');
+        const uiStateDisplay = document.getElementById('state-display');
+        const uiModeDisplay = document.getElementById('mode-display');
+
+        function resetJoints() {
+            leftArm.shoulderOrHip.rotation.set(0,0,0);
+            leftArm.elbowOrKnee.rotation.set(0,0,0);
+            rightArm.shoulderOrHip.rotation.set(0,0,0);
+            rightArm.elbowOrKnee.rotation.set(0,0,0);
+            leftLeg.shoulderOrHip.rotation.set(0,0,0);
+            leftLeg.elbowOrKnee.rotation.set(0,0,0);
+            rightLeg.shoulderOrHip.rotation.set(0,0,0);
+            rightLeg.elbowOrKnee.rotation.set(0,0,0);
+            headGroup.rotation.set(0,0,0);
+            torso.rotation.set(0,0,0);
+            pelvis.position.y = 1.0;
+        }
+
+        function triggerAction(actionName) {
+            state.action = actionName;
+            state.actionTime = 0;
+            uiStateDisplay.textContent = `ACTION: ${actionName}`;
+            if (actionName === 'JUMP') {
+                uiStateDisplay.style.background = '#ff3b30';
+            } else {
+                uiStateDisplay.style.background = '#111111';
+            }
+        }
+
+        // 强力 3D 圆柱/盒体碰撞检测与防穿模防卡死函数
+        function resolveCollisions(nextX, nextZ) {
+            let posX = nextX;
+            let posZ = nextZ;
+            const robotRadius = 0.35; // 机器人碰撞半径
+
+            for (let obs of obstacles) {
+                // 计算机器人与障碍物中心在 XZ 平面上的矩形边界碰撞 / 圆柱碰撞
+                const halfW = obs.width / 2 + robotRadius;
+                const halfD = obs.depth / 2 + robotRadius;
+
+                const minX = obs.x - halfW;
+                const maxX = obs.x + halfW;
+                const minZ = obs.z - halfD;
+                const maxZ = obs.z + halfD;
+
+                // 如果处于障碍物盒体内
+                if (posX >= minX && posX <= maxX && posZ >= minZ && posZ <= maxZ) {
+                    // 如果正在跳跃且高度足够跳过，则允许穿过低矮障碍物
+                    if (state.action === 'JUMP' && pelvis.position.y > obs.height + 0.3) {
+                        continue;
+                    }
+
+                    // 否则执行推出平移处理（找出最近的边界推出以防卡死）
+                    const distLeft = Math.abs(posX - minX);
+                    const distRight = Math.abs(maxX - posX);
+                    const distFront = Math.abs(posZ - minZ);
+                    const distBack = Math.abs(maxZ - posZ);
+
+                    const minDist = Math.min(distLeft, distRight, distFront, distBack);
+
+                    if (minDist === distLeft) posX = minX;
+                    else if (minDist === distRight) posX = maxX;
+                    else if (minDist === distFront) posZ = minZ;
+                    else posZ = maxZ;
+                }
+            }
+            return { x: posX, z: posZ };
+        }
+
+        // --- 6. Physics & Animation Loops ---
+        function updateKinematics() {
+            const dist = state.pos.distanceTo(state.target);
+
+            // 1. 前方预警自动触发跳跃
+            if (state.action !== 'JUMP') {
+                for (let obs of obstacles) {
+                    const dToObs = Math.hypot(state.pos.x - obs.x, state.pos.y - obs.z);
+                    if (dToObs < 1.2 && obs.height <= 0.6) {
+                        triggerAction('JUMP');
+                        break;
+                    }
+                }
+            }
+
+            // 2. 状态机动作处理
+            if (state.action === 'JUMP') {
+                state.actionTime += 0.04;
+                const t = state.actionTime;
+
+                if (t < Math.PI) {
+                    const jumpHeight = Math.sin(t) * 1.2;
+                    pelvis.position.y = 1.0 + jumpHeight;
+
+                    const flex = Math.sin(t) * 0.8;
+                    leftLeg.shoulderOrHip.rotation.x = -flex;
+                    leftLeg.elbowOrKnee.rotation.x = flex * 1.2;
+                    rightLeg.shoulderOrHip.rotation.x = -flex;
+                    rightLeg.elbowOrKnee.rotation.x = flex * 1.2;
+
+                    leftArm.shoulderOrHip.rotation.z = flex * 0.5;
+                    rightArm.shoulderOrHip.rotation.z = -flex * 0.5;
+
+                    const rawX = state.pos.x + Math.sin(state.angle) * state.maxSpeed * 1.2;
+                    const rawZ = state.pos.y + Math.cos(state.angle) * state.maxSpeed * 1.2;
+                    const resolved = resolveCollisions(rawX, rawZ);
+                    state.pos.set(resolved.x, resolved.z);
+                } else {
+                    pelvis.position.y = 1.0;
+                    resetJoints();
+                    triggerAction(dist > 0.1 ? 'WALK' : 'IDLE');
+                }
+            } 
+            else if (state.action === 'WAVE') {
+                state.actionTime += 0.08;
+                resetJoints();
+                rightArm.shoulderOrHip.rotation.z = Math.PI - 0.2;
+                rightArm.elbowOrKnee.rotation.y = Math.sin(state.actionTime * 3) * 0.5;
+                if (state.actionTime > Math.PI * 2) triggerAction('IDLE');
+            }
+            else if (state.action === 'SQUAT') {
+                state.actionTime += 0.05;
+                const squatFactor = (Math.sin(state.actionTime) + 1) / 2;
+                pelvis.position.y = 1.0 - squatFactor * 0.4;
+
+                leftLeg.shoulderOrHip.rotation.x = -squatFactor * 0.8;
+                leftLeg.elbowOrKnee.rotation.x = squatFactor * 1.4;
+                rightLeg.shoulderOrHip.rotation.x = -squatFactor * 0.8;
+                rightLeg.elbowOrKnee.rotation.x = squatFactor * 1.4;
+
+                if (state.actionTime > Math.PI * 2) {
+                    resetJoints();
+                    triggerAction('IDLE');
+                }
+            }
+            else if (state.action === 'NOD') {
+                state.actionTime += 0.1;
+                headGroup.rotation.x = Math.sin(state.actionTime * 2) * 0.3;
+                if (state.actionTime > Math.PI * 2) {
+                    headGroup.rotation.x = 0;
+                    triggerAction('IDLE');
+                }
+            }
+            else if (state.action === 'KICK') {
+                state.actionTime += 0.06;
+                const t = state.actionTime;
+                resetJoints();
+                if (t < Math.PI) {
+                    rightLeg.shoulderOrHip.rotation.x = -Math.sin(t) * 1.2;
+                    rightLeg.elbowOrKnee.rotation.x = Math.sin(t) * 0.4;
+                } else {
+                    resetJoints();
+                    triggerAction('IDLE');
+                }
+            }
+            else {
+                if (dist > 0.15) {
+                    if (state.action !== 'WALK') triggerAction('WALK');
+
+                    const targetAngle = Math.atan2(state.target.x - state.pos.x, state.target.y - state.pos.y);
+                    let diff = targetAngle - state.angle;
+                    while (diff < -Math.PI) diff += Math.PI * 2;
+                    while (diff > Math.PI) diff -= Math.PI * 2;
+                    state.angle += diff * 0.08;
+
+                    const rawX = state.pos.x + Math.sin(state.angle) * state.maxSpeed;
+                    const rawZ = state.pos.y + Math.cos(state.angle) * state.maxSpeed;
+                    
+                    // 应用防穿模碰撞检测
+                    const resolved = resolveCollisions(rawX, rawZ);
+                    state.pos.set(resolved.x, resolved.z);
+
+                    state.gaitPhase += 0.12;
+                    const p = state.gaitPhase;
+
+                    leftLeg.shoulderOrHip.rotation.x = Math.sin(p) * 0.6;
+                    leftLeg.elbowOrKnee.rotation.x = Math.max(0, -Math.sin(p) * 0.7);
+                    rightLeg.shoulderOrHip.rotation.x = -Math.sin(p) * 0.6;
+                    rightLeg.elbowOrKnee.rotation.x = Math.max(0, Math.sin(p) * 0.7);
+
+                    leftArm.shoulderOrHip.rotation.x = -Math.sin(p) * 0.5;
+                    rightArm.shoulderOrHip.rotation.x = Math.sin(p) * 0.5;
+
+                    pelvis.position.y = 1.0 + Math.abs(Math.sin(p * 2)) * 0.04;
+                    uiGait.textContent = Math.sin(p) > 0 ? "SINGLE (L)" : "SINGLE (R)";
+                } else {
+                    if (state.action === 'WALK') {
+                        triggerAction('IDLE');
+                        resetJoints();
+                        uiGait.textContent = "DOUBLE";
+                    }
+                }
+            }
+
+            robotGroup.position.set(state.pos.x, pelvis.position.y - 1.0, state.pos.y);
+            robotGroup.rotation.y = state.angle;
+
+            uiPos.textContent = `${state.pos.x.toFixed(1)}, ${state.pos.y.toFixed(1)}`;
+            uiAlt.textContent = `${robotGroup.position.y.toFixed(2)}m`;
+            uiDeg.textContent = `${Math.round((state.angle * 180 / Math.PI) % 360)}°`;
+        }
+
+        // --- 7. Interactions ---
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        container.addEventListener('pointerdown', (e) => {
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(floor);
+
+            if (intersects.length > 0) {
+                const pt = intersects[0].point;
+                if (state.mode === 'NAV') {
+                    state.target.set(pt.x, pt.z);
+                    targetMarker.position.set(pt.x, 0.01, pt.z);
+                } else if (state.mode === 'OBS') {
+                    createObstacle(pt.x, pt.z, 1.2, 0.35, 0.3);
+                }
+            }
+        });
+
+        document.getElementById('mode-nav').addEventListener('click', () => {
+            state.mode = 'NAV';
+            uiModeDisplay.textContent = 'MODE: NAV GOAL';
+            document.getElementById('mode-nav').classList.add('active');
+            document.getElementById('mode-obs').classList.remove('active');
+        });
+
+        document.getElementById('mode-obs').addEventListener('click', () => {
+            state.mode = 'OBS';
+            uiModeDisplay.textContent = 'MODE: + OBSTACLE';
+            document.getElementById('mode-obs').classList.add('active');
+            document.getElementById('mode-nav').classList.remove('active');
+        });
+
+        document.getElementById('btn-jump').addEventListener('click', () => triggerAction('JUMP'));
+        document.getElementById('btn-wave').addEventListener('click', () => triggerAction('WAVE'));
+        document.getElementById('btn-squat').addEventListener('click', () => triggerAction('SQUAT'));
+        document.getElementById('btn-nod').addEventListener('click', () => triggerAction('NOD'));
+        document.getElementById('btn-kick').addEventListener('click', () => triggerAction('KICK'));
+        document.getElementById('btn-reset-pose').addEventListener('click', () => {
+            resetJoints();
+            triggerAction('IDLE');
+        });
+
+        document.getElementById('btn-spawn-low-obs').addEventListener('click', () => {
+            const forwardX = state.pos.x + Math.sin(state.angle) * 2.0;
+            const forwardZ = state.pos.y + Math.cos(state.angle) * 2.0;
+            createObstacle(forwardX, forwardZ, 1.4, 0.35, 0.3);
+        });
+
+        document.getElementById('btn-clear-obs').addEventListener('click', () => {
+            for (let obs of obstacles) scene.remove(obs.mesh);
+            obstacles.length = 0;
+        });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        });
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            updateKinematics();
+            renderer.render(scene, camera);
+        }
+
+        animate();
+    </script>
+</body>
+</html>

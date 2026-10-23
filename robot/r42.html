@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HUMANOID ROBOTICS // 3D BIPEDAL SIMULATION + JUMP</title>
+    
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Three.js & OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        swissRed: '#FF3B30',
+                        swissDark: '#111111',
+                        swissGray: '#8E8E93',
+                        swissLight: '#F2F2F7',
+                        swissWarning: '#FF9500',
+                        swissGreen: '#34C759'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Glassmorphism Panels */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.75);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.9);
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+        }
+
+        /* Status pulse animations */
+        @keyframes pulse-red {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(255, 59, 48, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 59, 48, 0); }
+        }
+
+        @keyframes pulse-green {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(52, 199, 89, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(52, 199, 89, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(52, 199, 89, 0); }
+        }
+
+        .status-pulse-red { animation: pulse-red 1.5s infinite; }
+        .status-pulse-green { animation: pulse-green 2s infinite; }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.05); }
+        ::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.2); border-radius: 2px; }
+
+        /* Grid Background */
+        .swiss-grid-bg {
+            background-size: 32px 32px;
+            background-image: 
+                linear-gradient(to right, rgba(0, 0, 0, 0.035) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(0, 0, 0, 0.035) 1px, transparent 1px);
+        }
+
+        canvas { outline: none; user-select: none; }
+    </style>
+</head>
+<body class="bg-[#E5E5EA] text-swissDark font-sans overflow-hidden h-screen w-screen relative swiss-grid-bg">
+
+    <!-- 3D Canvas Container -->
+    <div id="canvas-container" class="absolute inset-0 z-0 cursor-crosshair"></div>
+
+    <!-- UI Overlay Layer -->
+    <div class="absolute inset-0 z-10 pointer-events-none flex flex-col justify-between p-4 md:p-6 select-none">
+        
+        <!-- HEADER -->
+        <header class="glass-panel rounded-2xl p-4 md:p-5 pointer-events-auto flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 transition-all duration-300 max-w-6xl mx-auto w-full">
+            <div>
+                <div class="flex items-center gap-3">
+                    <span class="text-xs font-mono font-bold tracking-widest text-swissRed uppercase px-2 py-0.5 bg-swissRed/10 rounded">SYS // HUMANOID-KINEMATICS</span>
+                    <span class="text-xs font-mono text-swissGray">v4.2.0 // JUMP+</span>
+                </div>
+                <h1 class="text-xl md:text-2xl font-black tracking-tight uppercase mt-1">HUMANOID // BIPEDAL GAIT & COLLISION AVOIDANCE</h1>
+            </div>
+
+            <div class="flex items-center gap-4 self-end sm:self-center">
+                <!-- Status Badge -->
+                <div class="flex items-center gap-2.5 bg-white/80 px-4 py-2 rounded-xl border border-white/90 shadow-sm">
+                    <div id="status-dot" class="w-2.5 h-2.5 rounded-full bg-swissGreen status-pulse-green"></div>
+                    <span id="status-text" class="text-xs font-mono font-bold tracking-wider text-swissDark">BIPED READY</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- MAIN OVERLAY CONTENT -->
+        <div class="flex-1 my-4 flex flex-col md:flex-row justify-between items-end gap-4 pointer-events-none max-w-6xl mx-auto w-full overflow-y-auto md:overflow-visible">
+            
+            <!-- Left Controls & Pose Panel -->
+            <div class="glass-panel rounded-2xl p-4 pointer-events-auto max-w-xs w-full space-y-3">
+                <div class="text-[10px] font-mono font-bold tracking-widest text-swissGray uppercase border-b border-black/10 pb-1">INTERACTION MODES</div>
+                
+                <div class="space-y-2 text-xs">
+                    <div class="flex items-center justify-between">
+                        <span class="font-semibold">Left Click / Tap:</span>
+                        <span id="interaction-mode-desc" class="font-mono text-swissRed font-bold">SET WALK TARGET</span>
+                    </div>
+                    <div class="flex items-center justify-between text-swissGray">
+                        <span>Right Drag / Orbit:</span>
+                        <span class="font-mono">ROTATE CAMERA</span>
+                    </div>
+                    <div class="flex items-center justify-between text-swissGray">
+                        <span>Scroll / Pinch:</span>
+                        <span class="font-mono">ZOOM VIEW</span>
+                    </div>
+                </div>
+
+                <div class="pt-2 border-t border-black/10 flex items-center gap-2">
+                    <button id="btn-mode-nav" class="flex-1 py-2 px-3 rounded-xl text-xs font-bold font-mono transition-all bg-swissDark text-white shadow-sm">
+                        WALK TARGET
+                    </button>
+                    <button id="btn-mode-obstacle" class="flex-1 py-2 px-3 rounded-lg text-xs font-bold font-mono transition-all bg-white/80 text-swissDark border border-black/10 hover:bg-white">
+                        + OBSTACLE
+                    </button>
+                </div>
+
+                <!-- ACTION BUTTONS: expanded with JUMP -->
+                <div class="text-[10px] font-mono font-bold tracking-widest text-swissGray uppercase border-b border-black/10 pb-1 pt-2">HUMANOID ACTIONS</div>
+                <div class="grid grid-cols-2 gap-2">
+                    <button id="btn-action-wave" class="py-2 px-3 rounded-xl font-mono text-xs font-bold text-swissDark bg-white/80 hover:bg-white border border-black/10 shadow-sm transition-all uppercase">
+                        WAVE HAND
+                    </button>
+                    <button id="btn-action-jump" class="py-2 px-3 rounded-xl font-mono text-xs font-bold text-swissDark bg-white/80 hover:bg-white border border-black/10 shadow-sm transition-all uppercase">
+                        JUMP
+                    </button>
+                    <button id="btn-action-nod" class="py-2 px-3 rounded-xl font-mono text-xs font-bold text-swissDark bg-white/80 hover:bg-white border border-black/10 shadow-sm transition-all uppercase">
+                        NOD HEAD
+                    </button>
+                    <button id="btn-action-bow" class="py-2 px-3 rounded-xl font-mono text-xs font-bold text-swissDark bg-white/80 hover:bg-white border border-black/10 shadow-sm transition-all uppercase">
+                        BOW
+                    </button>
+                    <button id="btn-action-shrug" class="py-2 px-3 rounded-xl font-mono text-xs font-bold text-swissDark bg-white/80 hover:bg-white border border-black/10 shadow-sm transition-all uppercase">
+                        SHRUG
+                    </button>
+                    <button id="btn-action-wiggle" class="py-2 px-3 rounded-xl font-mono text-xs font-bold text-swissDark bg-white/80 hover:bg-white border border-black/10 shadow-sm transition-all uppercase">
+                        WIGGLE
+                    </button>
+                </div>
+                <div class="grid grid-cols-1 gap-2 mt-1">
+                    <button id="btn-action-resetpose" class="py-2 px-3 rounded-xl font-mono text-xs font-bold text-swissDark bg-white/80 hover:bg-white border border-black/10 shadow-sm transition-all uppercase">
+                        RESET POSE
+                    </button>
+                </div>
+            </div>
+
+            <!-- Right Telemetry & Controls Panel -->
+            <div class="glass-panel rounded-2xl p-4 md:p-5 pointer-events-auto max-w-sm w-full space-y-4">
+                
+                <!-- Telemetry Section -->
+                <div>
+                    <div class="text-[10px] font-mono font-bold tracking-widest text-swissGray uppercase border-b border-black/10 pb-1 mb-2">HUMANOID TELEMETRY</div>
+                    <div class="grid grid-cols-2 gap-2 font-mono">
+                        <div class="bg-white/60 p-2.5 rounded-xl border border-white/80">
+                            <div class="text-[9px] text-swissGray font-bold">POSITION (X, Z)</div>
+                            <div id="val-pos" class="text-sm font-bold text-swissDark mt-0.5">0.0, 0.0</div>
+                        </div>
+                        <div class="bg-white/60 p-2.5 rounded-xl border border-white/80">
+                            <div class="text-[9px] text-swissGray font-bold">HEADING (YAW)</div>
+                            <div id="val-heading" class="text-sm font-bold text-swissDark mt-0.5">0.0°</div>
+                        </div>
+                        <div class="bg-white/60 p-2.5 rounded-xl border border-white/80">
+                            <div class="text-[9px] text-swissGray font-bold">CURRENT SPEED</div>
+                            <div id="val-speed" class="text-sm font-bold text-swissDark mt-0.5">0.00 m/s</div>
+                        </div>
+                        <div class="bg-white/60 p-2.5 rounded-xl border border-white/80">
+                            <div class="text-[9px] text-swissGray font-bold">GAIT PHASE %</div>
+                            <div id="val-gait" class="text-sm font-bold text-swissDark mt-0.5">0%</div>
+                        </div>
+                        <div class="bg-white/60 p-2.5 rounded-xl border border-white/80">
+                            <div class="text-[9px] text-swissGray font-bold">GROUND CONTACT</div>
+                            <div id="val-contact" class="text-sm font-bold text-swissGreen mt-0.5">DUAL FEET</div>
+                        </div>
+                        <div class="bg-white/60 p-2.5 rounded-xl border border-white/80">
+                            <div class="text-[9px] text-swissGray font-bold">HAZARD SENSOR</div>
+                            <div id="val-lidar" class="text-sm font-bold text-swissGreen mt-0.5">CLEAR</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Gait Speed Adjustment Slider -->
+                <div>
+                    <div class="flex justify-between items-center text-xs font-mono font-bold mb-1">
+                        <span class="text-swissGray">GAIT WALK SPEED</span>
+                        <span id="val-max-speed" class="text-swissDark">3.5 m/s</span>
+                    </div>
+                    <input type="range" id="slider-speed" min="1" max="6" step="0.5" value="3.5" class="w-full h-1.5 bg-black/10 rounded-lg appearance-none cursor-pointer accent-swissRed">
+                </div>
+
+                <!-- Control Buttons -->
+                <div class="grid grid-cols-2 gap-2 pt-1">
+                    <button id="btn-toggle-sim" class="py-2.5 px-3 rounded-xl font-mono text-xs font-bold text-white bg-swissRed hover:bg-red-600 shadow-md transition-all uppercase">
+                        PAUSE GAIT
+                    </button>
+                    <button id="btn-reset-robot" class="py-2.5 px-3 rounded-xl font-mono text-xs font-bold text-swissDark bg-white/80 hover:bg-white border border-black/10 shadow-sm transition-all uppercase">
+                        RESET POS
+                    </button>
+                    <button id="btn-spawn-random" class="col-span-1 py-2 px-3 rounded-xl font-mono text-[11px] font-bold text-swissDark bg-white/60 hover:bg-white border border-black/10 transition-all">
+                        + RANDOM BLOCK
+                    </button>
+                    <button id="btn-clear-obstacles" class="col-span-1 py-2 px-3 rounded-xl font-mono text-[11px] font-bold text-swissRed bg-swissRed/10 hover:bg-swissRed/20 border border-swissRed/20 transition-all">
+                        CLEAR ALL
+                    </button>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- FOOTER / LOG -->
+        <footer class="glass-panel rounded-2xl px-4 py-2 pointer-events-auto flex justify-between items-center text-[10px] font-mono text-swissGray max-w-6xl mx-auto w-full">
+            <div>MODE: <span id="footer-mode" class="text-swissDark font-bold">WALK TARGET</span></div>
+            <div id="footer-log" class="hidden sm:block truncate max-w-md">Humanoid kinematic engine initialized. Jump action ready.</div>
+            <div>ACTIVE OBSTACLES: <span id="val-obstacle-count" class="text-swissDark font-bold">0</span></div>
+        </footer>
+
+    </div>
+
+    <!-- 3D SIMULATION ENGINE SCRIPT -->
+    <script>
+        // --- SCENE SETUP ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xe5e5ea);
+        scene.fog = new THREE.FogExp2(0xe5e5ea, 0.015);
+
+        // Camera
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 18, 26);
+
+        // Renderer
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+
+        // Controls
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxPolarAngle = Math.PI / 2 - 0.05;
+        controls.minDistance = 4;
+        controls.maxDistance = 70;
+        controls.target.set(0, 2.5, 0);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.85);
+        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.95);
+        dirLight.position.set(20, 45, 20);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        dirLight.shadow.camera.near = 0.5;
+        dirLight.shadow.camera.far = 120;
+        const d = 35;
+        dirLight.shadow.camera.left = -d;
+        dirLight.shadow.camera.right = d;
+        dirLight.shadow.camera.top = d;
+        dirLight.shadow.camera.bottom = -d;
+        scene.add(dirLight);
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x8d8d93, 0.35);
+        scene.add(hemiLight);
+
+        // Ground
+        const floorSize = 60;
+        const floorGeo = new THREE.PlaneGeometry(floorSize, floorSize);
+        const floorMat = new THREE.MeshStandardMaterial({ color: 0xf2f2f7, roughness: 0.8, metalness: 0.1 });
+        const floor = new THREE.Mesh(floorGeo, floorMat);
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        const gridHelper = new THREE.GridHelper(floorSize, 30, 0x111111, 0x8e8e93);
+        gridHelper.position.y = 0.01;
+        gridHelper.material.opacity = 0.25;
+        gridHelper.material.transparent = true;
+        scene.add(gridHelper);
+
+        const borderGeo = new THREE.BoxGeometry(floorSize, 0.5, floorSize);
+        const borderMat = new THREE.MeshBasicMaterial({ color: 0x111111, wireframe: true });
+        const borderMesh = new THREE.LineSegments(new THREE.WireframeGeometry(borderGeo), borderMat);
+        borderMesh.position.y = 0.25;
+        scene.add(borderMesh);
+
+        // --- HUMANOID ROBOT MODEL ---
+        const robotGroup = new THREE.Group();
+        scene.add(robotGroup);
+        const robotRadius = 0.9;
+
+        const whiteArmorMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.25, metalness: 0.1 });
+        const darkJointMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.5, metalness: 0.6 });
+        const visorGlowMat = new THREE.MeshBasicMaterial({ color: 0xff3b30 });
+
+        const pelvisGroup = new THREE.Group();
+        pelvisGroup.position.y = 2.4;
+        robotGroup.add(pelvisGroup);
+        const pelvisMesh = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.3, 0.5), whiteArmorMat);
+        pelvisMesh.castShadow = true;
+        pelvisGroup.add(pelvisMesh);
+
+        const torsoGroup = new THREE.Group();
+        torsoGroup.position.y = 0.25;
+        pelvisGroup.add(torsoGroup);
+        const chestMesh = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.9, 0.55), whiteArmorMat);
+        chestMesh.position.y = 0.45;
+        chestMesh.castShadow = true;
+        torsoGroup.add(chestMesh);
+        const chestStripe = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.5, 0.57), visorGlowMat);
+        chestStripe.position.set(0, 0.45, 0);
+        torsoGroup.add(chestStripe);
+
+        const headGroup = new THREE.Group();
+        headGroup.position.y = 1.05;
+        torsoGroup.add(headGroup);
+        const headMesh = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.45, 0.45), whiteArmorMat);
+        headMesh.position.y = 0.22;
+        headMesh.castShadow = true;
+        headGroup.add(headMesh);
+        const visorMesh = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.1, 0.1), visorGlowMat);
+        visorMesh.position.set(0, 0.25, 0.21);
+        headGroup.add(visorMesh);
+
+        // Arms
+        function createArm(isLeft) {
+            const side = isLeft ? 1 : -1;
+            const shoulderPivot = new THREE.Group();
+            shoulderPivot.position.set(side * 0.55, 0.8, 0);
+            shoulderPivot.add(new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 16), darkJointMat));
+            const upperArm = new THREE.Group();
+            shoulderPivot.add(upperArm);
+            const upperArmMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.08, 0.65, 16), whiteArmorMat);
+            upperArmMesh.position.y = -0.325;
+            upperArmMesh.castShadow = true;
+            upperArm.add(upperArmMesh);
+            const elbowPivot = new THREE.Group();
+            elbowPivot.position.y = -0.65;
+            upperArm.add(elbowPivot);
+            elbowPivot.add(new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 16), darkJointMat));
+            const lowerArm = new THREE.Group();
+            elbowPivot.add(lowerArm);
+            const lowerArmMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.07, 0.6, 16), whiteArmorMat);
+            lowerArmMesh.position.y = -0.3;
+            lowerArmMesh.castShadow = true;
+            lowerArm.add(lowerArmMesh);
+            const handMesh = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.15, 0.15), darkJointMat);
+            handMesh.position.y = -0.65;
+            lowerArm.add(handMesh);
+            torsoGroup.add(shoulderPivot);
+            return { shoulderPivot, upperArm, elbowPivot, lowerArm };
+        }
+        const leftArm = createArm(true);
+        const rightArm = createArm(false);
+
+        // Legs
+        function createLeg(isLeft) {
+            const side = isLeft ? 1 : -1;
+            const hipPivot = new THREE.Group();
+            hipPivot.position.set(side * 0.25, -0.15, 0);
+            hipPivot.add(new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 16), darkJointMat));
+            const upperLeg = new THREE.Group();
+            hipPivot.add(upperLeg);
+            const upperLegMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.11, 0.85, 16), whiteArmorMat);
+            upperLegMesh.position.y = -0.425;
+            upperLegMesh.castShadow = true;
+            upperLeg.add(upperLegMesh);
+            const kneePivot = new THREE.Group();
+            kneePivot.position.y = -0.85;
+            upperLeg.add(kneePivot);
+            kneePivot.add(new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 16), darkJointMat));
+            const lowerLeg = new THREE.Group();
+            kneePivot.add(lowerLeg);
+            const lowerLegMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.09, 0.85, 16), whiteArmorMat);
+            lowerLegMesh.position.y = -0.425;
+            lowerLegMesh.castShadow = true;
+            lowerLeg.add(lowerLegMesh);
+            const footPivot = new THREE.Group();
+            footPivot.position.y = -0.85;
+            lowerLeg.add(footPivot);
+            const footMesh = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.12, 0.45), darkJointMat);
+            footMesh.position.set(0, -0.06, 0.1);
+            footMesh.castShadow = true;
+            footPivot.add(footMesh);
+            pelvisGroup.add(hipPivot);
+            return { hipPivot, upperLeg, kneePivot, lowerLeg, footPivot };
+        }
+        const leftLeg = createLeg(true);
+        const rightLeg = createLeg(false);
+
+        // Target Marker
+        const targetGroup = new THREE.Group();
+        targetGroup.position.set(0, 0, -12);
+        scene.add(targetGroup);
+        const targetCrossMat = new THREE.MeshBasicMaterial({ color: 0xff3b30 });
+        targetGroup.add(new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.05, 0.3), targetCrossMat));
+        targetGroup.add(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.05, 1.8), targetCrossMat));
+        const targetRingGeo = new THREE.RingGeometry(1.2, 1.35, 32);
+        const targetRingMat = new THREE.MeshBasicMaterial({ color: 0xff3b30, side: THREE.DoubleSide, transparent: true, opacity: 0.6 });
+        const targetRing = new THREE.Mesh(targetRingGeo, targetRingMat);
+        targetRing.rotation.x = -Math.PI / 2;
+        targetRing.position.y = 0.01;
+        targetGroup.add(targetRing);
+        const goalBeamGeo = new THREE.CylinderGeometry(0.05, 0.05, 12, 16);
+        const goalBeamMat = new THREE.MeshBasicMaterial({ color: 0xff3b30, transparent: true, opacity: 0.4 });
+        const goalBeam = new THREE.Mesh(goalBeamGeo, goalBeamMat);
+        goalBeam.position.y = 6;
+        targetGroup.add(goalBeam);
+
+        // Path Line
+        const pathLineGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.1, 0), new THREE.Vector3(0, 0.1, -12)]);
+        const pathLineMat = new THREE.LineDashedMaterial({ color: 0xff3b30, dashSize: 0.6, gapSize: 0.4, transparent: true, opacity: 0.5 });
+        const pathLine = new THREE.Line(pathLineGeo, pathLineMat);
+        scene.add(pathLine);
+
+        // --- OBSTACLES ---
+        const obstacles = [];
+        const obstacleMeshes = [];
+        const obstacleMatDark = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.4, metalness: 0.2 });
+        const obstacleMatGlass = new THREE.MeshPhysicalMaterial({ color: 0xffffff, transmission: 0.6, opacity: 1, transparent: true, roughness: 0.1, ior: 1.5, thickness: 1.2 });
+        const obstacleMatAccent = new THREE.MeshStandardMaterial({ color: 0xff3b30, roughness: 0.3 });
+
+        function createObstacle(x, z, type = 'box') {
+            let mesh, radius;
+            const materials = [obstacleMatDark, obstacleMatGlass, obstacleMatAccent];
+            const mat = materials[Math.floor(Math.random() * materials.length)];
+            if (type === 'pillar') {
+                const height = 2.8 + Math.random() * 2;
+                radius = 0.9 + Math.random() * 0.4;
+                mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, height, 24), mat);
+                mesh.position.set(x, height / 2, z);
+            } else if (type === 'sphere') {
+                radius = 1.1 + Math.random() * 0.4;
+                mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 24, 24), mat);
+                mesh.position.set(x, radius, z);
+            } else {
+                const width = 1.6 + Math.random() * 1.5;
+                const depth = 1.6 + Math.random() * 1.5;
+                const height = 2 + Math.random() * 2;
+                mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), mat);
+                mesh.position.set(x, height / 2, z);
+                radius = Math.hypot(width / 2, depth / 2);
+            }
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.add(new THREE.LineSegments(new THREE.WireframeGeometry(mesh.geometry), new THREE.MeshBasicMaterial({ color: 0x111111, opacity: 0.2, transparent: true })));
+            scene.add(mesh);
+            obstacleMeshes.push(mesh);
+            obstacles.push({ mesh, x, z, radius });
+            document.getElementById('val-obstacle-count').textContent = obstacles.length;
+            logSystem(`Obstacle created at (${x.toFixed(1)}, ${z.toFixed(1)})`);
+        }
+
+        function initDefaultObstacles() {
+            clearObstacles();
+            createObstacle(-7, -5, 'box');
+            createObstacle(6, -8, 'pillar');
+            createObstacle(-4, 6, 'pillar');
+            createObstacle(5, 5, 'sphere');
+            createObstacle(0, -10, 'box');
+        }
+
+        function clearObstacles() {
+            obstacleMeshes.forEach(mesh => scene.remove(mesh));
+            obstacles.length = 0;
+            obstacleMeshes.length = 0;
+            document.getElementById('val-obstacle-count').textContent = '0';
+            logSystem("All obstacles cleared.");
+        }
+
+        // --- SIMULATION STATE ---
+        let simRunning = true;
+        let maxSpeed = 3.5;
+        let currentSpeed = 0.0;
+        let interactionMode = 'NAV';
+        let gaitPhase = 0;
+
+        // --- ACTION STATE (now includes jump) ---
+        let activeAction = null; // 'wave', 'jump', 'nod', 'bow', 'shrug', 'wiggle'
+        let actionTimer = 0;
+        const actionDuration = {
+            wave: Math.PI * 6,
+            jump: 1.2,          // seconds (we'll use time-based for jump)
+            nod: Math.PI * 1.5,
+            bow: Math.PI * 1.2,
+            shrug: Math.PI * 1.8,
+            wiggle: Math.PI * 2.5
+        };
+
+        // jump vertical offset and velocity
+        let jumpOffset = 0;
+        let jumpVelocity = 0;
+
+        const robotState = {
+            x: 0, z: 0, yaw: -Math.PI / 2,
+            targetX: 0, targetZ: -12
+        };
+
+        initDefaultObstacles();
+
+        // --- STEERING & COLLISION (same as before) ---
+        function computeSteering() {
+            const dx = robotState.targetX - robotState.x;
+            const dz = robotState.targetZ - robotState.z;
+            const distToTarget = Math.hypot(dx, dz);
+            if (distToTarget < 0.4) return { speed: 0, yawRate: 0, arrived: true, hazard: false };
+            let repulseX = 0, repulseZ = 0, hazardDetected = false;
+            const safetyMargin = 2.5;
+            obstacles.forEach(obs => {
+                const ox = robotState.x - obs.x;
+                const oz = robotState.z - obs.z;
+                const oDist = Math.hypot(ox, oz);
+                const minDist = robotRadius + obs.radius + safetyMargin;
+                if (oDist < minDist) {
+                    hazardDetected = true;
+                    const force = Math.pow((minDist - oDist) / minDist, 2) * 16.0;
+                    repulseX += (ox / oDist) * force;
+                    repulseZ += (oz / oDist) * force;
+                }
+            });
+            const attrX = (dx / distToTarget) * 2.8;
+            const attrZ = (dz / distToTarget) * 2.8;
+            const finalX = attrX + repulseX;
+            const finalZ = attrZ + repulseZ;
+            let finalYaw = Math.atan2(-finalZ, finalX);
+            let yawError = finalYaw - robotState.yaw;
+            while (yawError > Math.PI) yawError -= Math.PI * 2;
+            while (yawError < -Math.PI) yawError += Math.PI * 2;
+            const turnFactor = Math.max(0.1, Math.cos(yawError));
+            const targetSpeed = Math.min(maxSpeed, distToTarget * 1.2) * turnFactor;
+            return { speed: targetSpeed, yawRate: yawError * 5.0, arrived: false, hazard: hazardDetected };
+        }
+
+        function resolveHardCollisions() {
+            const limit = floorSize / 2 - robotRadius;
+            robotState.x = THREE.MathUtils.clamp(robotState.x, -limit, limit);
+            robotState.z = THREE.MathUtils.clamp(robotState.z, -limit, limit);
+            let colliding = false;
+            obstacles.forEach(obs => {
+                const dx = robotState.x - obs.x;
+                const dz = robotState.z - obs.z;
+                const dist = Math.hypot(dx, dz);
+                const minAllowedDist = robotRadius + obs.radius + 0.1;
+                if (dist < minAllowedDist) {
+                    colliding = true;
+                    const overlap = minAllowedDist - dist;
+                    const nx = dx / (dist || 0.001);
+                    const nz = dz / (dist || 0.001);
+                    robotState.x += nx * overlap;
+                    robotState.z += nz * overlap;
+                }
+            });
+            return colliding;
+        }
+
+        // --- KINEMATICS UPDATE (enhanced with jump) ---
+        function updateHumanoidKinematics(dt, speedRatio) {
+            // Handle action timers
+            let actionProgress = 0;
+            if (activeAction) {
+                if (activeAction === 'jump') {
+                    actionTimer += dt;
+                    actionProgress = Math.min(actionTimer / actionDuration.jump, 1.0);
+                    // Jump physics: vertical offset using parabola
+                    const t = actionProgress;
+                    // Parabola: 4 * h * t * (1-t), peak height ~1.2 units
+                    jumpOffset = 4 * 1.2 * t * (1 - t);
+                    // Also apply some leg bend during jump
+                    const legBend = Math.sin(t * Math.PI) * 0.5;
+                    leftLeg.hipPivot.rotation.x = legBend * 0.8;
+                    rightLeg.hipPivot.rotation.x = legBend * 0.8;
+                    leftLeg.kneePivot.rotation.x = legBend * 1.2;
+                    rightLeg.kneePivot.rotation.x = legBend * 1.2;
+                    // Arms up during jump
+                    leftArm.shoulderPivot.rotation.x = -legBend * 1.2;
+                    rightArm.shoulderPivot.rotation.x = -legBend * 1.2;
+                    leftArm.elbowPivot.rotation.x = -legBend * 0.8;
+                    rightArm.elbowPivot.rotation.x = -legBend * 0.8;
+                    // Torso lean
+                    torsoGroup.rotation.x = legBend * 0.3;
+                    headGroup.rotation.x = -legBend * 0.2;
+
+                    if (actionProgress >= 1.0) {
+                        activeAction = null;
+                        actionTimer = 0;
+                        jumpOffset = 0;
+                        // reset pose to neutral (will be handled by idle/walk next frame)
+                    }
+                } else {
+                    // existing actions (wave, nod, bow, shrug, wiggle)
+                    actionTimer += dt * 6.0;
+                    actionProgress = Math.min(actionTimer / actionDuration[activeAction], 1.0);
+                    if (actionProgress >= 1.0) {
+                        activeAction = null;
+                        actionTimer = 0;
+                        actionProgress = 0;
+                    }
+                }
+            } else {
+                jumpOffset = 0; // ensure no offset
+            }
+
+            // --- WALKING GAIT (legs) ---
+            if (speedRatio > 0.05 && activeAction !== 'jump') {
+                gaitPhase += dt * currentSpeed * 4.5;
+                const cycle = gaitPhase;
+                const leftLegPhase = Math.sin(cycle);
+                const rightLegPhase = Math.sin(cycle + Math.PI);
+
+                pelvisGroup.position.y = 2.4 + Math.abs(Math.sin(cycle * 2)) * 0.12;
+                pelvisGroup.rotation.z = Math.sin(cycle) * 0.06;
+                pelvisGroup.rotation.y = Math.sin(cycle) * 0.08;
+
+                leftLeg.hipPivot.rotation.x = leftLegPhase * 0.6;
+                rightLeg.hipPivot.rotation.x = rightLegPhase * 0.6;
+
+                leftLeg.kneePivot.rotation.x = Math.max(0, -leftLegPhase * 0.8);
+                rightLeg.kneePivot.rotation.x = Math.max(0, -rightLegPhase * 0.8);
+
+                leftLeg.footPivot.rotation.x = -leftLeg.hipPivot.rotation.x * 0.5;
+                rightLeg.footPivot.rotation.x = -rightLeg.hipPivot.rotation.x * 0.5;
+            } else if (activeAction !== 'jump') {
+                // idle legs
+                pelvisGroup.position.y = 2.4;
+                pelvisGroup.rotation.set(0, 0, 0);
+                leftLeg.hipPivot.rotation.x *= 0.8;
+                rightLeg.hipPivot.rotation.x *= 0.8;
+                leftLeg.kneePivot.rotation.x *= 0.8;
+                rightLeg.kneePivot.rotation.x *= 0.8;
+                leftLeg.footPivot.rotation.x *= 0.8;
+                rightLeg.footPivot.rotation.x *= 0.8;
+            }
+
+            // Apply jump offset to whole robotGroup Y
+            robotGroup.position.y = jumpOffset;
+
+            // --- ARMS (non-action / walking) ---
+            if (!activeAction) {
+                if (speedRatio > 0.05) {
+                    const cycle = gaitPhase;
+                    const leftLegPhase = Math.sin(cycle);
+                    const rightLegPhase = Math.sin(cycle + Math.PI);
+                    rightArm.shoulderPivot.rotation.x = leftLegPhase * 0.5;
+                    rightArm.elbowPivot.rotation.x = -Math.abs(leftLegPhase) * 0.3;
+                    leftArm.shoulderPivot.rotation.x = rightLegPhase * 0.5;
+                    leftArm.elbowPivot.rotation.x = -Math.abs(rightLegPhase) * 0.3;
+                    rightArm.shoulderPivot.rotation.z = 0;
+                    leftArm.shoulderPivot.rotation.z = 0;
+                } else {
+                    leftArm.shoulderPivot.rotation.x *= 0.8;
+                    leftArm.elbowPivot.rotation.x *= 0.8;
+                    rightArm.shoulderPivot.rotation.x *= 0.8;
+                    rightArm.elbowPivot.rotation.x *= 0.8;
+                    rightArm.shoulderPivot.rotation.z *= 0.8;
+                    leftArm.shoulderPivot.rotation.z *= 0.8;
+                }
+                // Reset head/torso if not jumping
+                if (activeAction !== 'jump') {
+                    headGroup.rotation.set(0, 0, 0);
+                    torsoGroup.rotation.set(0, 0, 0);
+                }
+            } else if (activeAction !== 'jump') {
+                // Apply non-jump action poses (wave, nod, bow, shrug, wiggle)
+                applyActionPose(activeAction, actionProgress);
+            }
+        }
+
+        // --- applyActionPose (same as before, jump handled separately) ---
+        function applyActionPose(action, progress) {
+            const t = progress;
+            const ease = Math.sin(Math.PI * t);
+            leftArm.shoulderPivot.rotation.set(0, 0, 0);
+            leftArm.elbowPivot.rotation.set(0, 0, 0);
+            rightArm.shoulderPivot.rotation.set(0, 0, 0);
+            rightArm.elbowPivot.rotation.set(0, 0, 0);
+            headGroup.rotation.set(0, 0, 0);
+            torsoGroup.rotation.set(0, 0, 0);
+
+            switch(action) {
+                case 'wave': {
+                    const waveAngle = Math.sin(actionTimer * 3) * 0.5;
+                    rightArm.shoulderPivot.rotation.x = Math.PI * 0.8 + ease * 0.2;
+                    rightArm.shoulderPivot.rotation.z = -0.3 - ease * 0.2;
+                    rightArm.elbowPivot.rotation.x = -0.5 + waveAngle * 0.8;
+                    leftArm.shoulderPivot.rotation.x = 0.1;
+                    break;
+                }
+                case 'nod': {
+                    const nodAngle = Math.sin(t * Math.PI * 2) * 0.4;
+                    headGroup.rotation.x = nodAngle;
+                    torsoGroup.rotation.x = nodAngle * 0.3;
+                    break;
+                }
+                case 'bow': {
+                    const bowAmount = ease * 0.9;
+                    torsoGroup.rotation.x = bowAmount;
+                    headGroup.rotation.x = bowAmount * 0.5;
+                    leftArm.shoulderPivot.rotation.x = -0.3 * bowAmount;
+                    rightArm.shoulderPivot.rotation.x = -0.3 * bowAmount;
+                    break;
+                }
+                case 'shrug': {
+                    const shrugAmount = Math.sin(t * Math.PI) * 0.5;
+                    leftArm.shoulderPivot.rotation.z = shrugAmount;
+                    rightArm.shoulderPivot.rotation.z = -shrugAmount;
+                    leftArm.shoulderPivot.rotation.x = -0.2 * shrugAmount;
+                    rightArm.shoulderPivot.rotation.x = -0.2 * shrugAmount;
+                    leftArm.elbowPivot.rotation.x = 0.5 * shrugAmount;
+                    rightArm.elbowPivot.rotation.x = 0.5 * shrugAmount;
+                    headGroup.rotation.z = Math.sin(t * Math.PI * 2) * 0.2;
+                    break;
+                }
+                case 'wiggle': {
+                    const wiggle = Math.sin(t * Math.PI * 6) * 0.2;
+                    pelvisGroup.rotation.y = wiggle * 0.5;
+                    pelvisGroup.rotation.z = wiggle * 0.3;
+                    leftArm.shoulderPivot.rotation.z = wiggle * 1.2;
+                    rightArm.shoulderPivot.rotation.z = -wiggle * 1.2;
+                    headGroup.rotation.z = wiggle * 0.5;
+                    leftArm.shoulderPivot.rotation.x = 0.2;
+                    rightArm.shoulderPivot.rotation.x = 0.2;
+                    break;
+                }
+            }
+        }
+
+        function startAction(actionName) {
+            if (activeAction === 'jump') return; // prevent interrupt during jump
+            if (activeAction && actionName !== 'jump') return; // allow only one non-jump action at a time
+            if (actionName === 'jump' && activeAction) return; // can't jump while another action is active
+            activeAction = actionName;
+            actionTimer = 0;
+            if (actionName === 'jump') {
+                jumpOffset = 0;
+                logSystem("Jump initiated!");
+            } else {
+                logSystem(`Action triggered: ${actionName.toUpperCase()}`);
+            }
+        }
+
+        function resetHumanoidPose() {
+            activeAction = null;
+            actionTimer = 0;
+            gaitPhase = 0;
+            jumpOffset = 0;
+            robotGroup.position.y = 0;
+            pelvisGroup.position.set(0, 2.4, 0);
+            pelvisGroup.rotation.set(0, 0, 0);
+            [leftArm, rightArm].forEach(arm => {
+                arm.shoulderPivot.rotation.set(0, 0, 0);
+                arm.elbowPivot.rotation.set(0, 0, 0);
+            });
+            [leftLeg, rightLeg].forEach(leg => {
+                leg.hipPivot.rotation.set(0, 0, 0);
+                leg.kneePivot.rotation.set(0, 0, 0);
+                leg.footPivot.rotation.set(0, 0, 0);
+            });
+            headGroup.rotation.set(0, 0, 0);
+            torsoGroup.rotation.set(0, 0, 0);
+            logSystem("Humanoid pose reset to standard default.");
+        }
+
+        // --- INTERACTION & RAYCASTING ---
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        function handlePointer(event) {
+            if (event.target !== renderer.domElement) return;
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(floor);
+            if (intersects.length > 0) {
+                const point = intersects[0].point;
+                if (interactionMode === 'NAV') {
+                    robotState.targetX = point.x;
+                    robotState.targetZ = point.z;
+                    targetGroup.position.set(point.x, 0, point.z);
+                    logSystem(`Walk Goal updated to (${point.x.toFixed(1)}, ${point.z.toFixed(1)})`);
+                } else if (interactionMode === 'OBSTACLE') {
+                    if (Math.hypot(point.x - robotState.x, point.z - robotState.z) > robotRadius + 1.5) {
+                        const types = ['box', 'pillar', 'sphere'];
+                        createObstacle(point.x, point.z, types[Math.floor(Math.random() * types.length)]);
+                    } else {
+                        logSystem("Obstacle cannot be placed directly on the robot!");
+                    }
+                }
+            }
+        }
+
+        window.addEventListener('pointerdown', handlePointer);
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // --- UI LOGIC ---
+        const statusDot = document.getElementById('status-dot');
+        const statusText = document.getElementById('status-text');
+        const lidarStatus = document.getElementById('val-lidar');
+        const contactStatus = document.getElementById('val-contact');
+        const btnModeNav = document.getElementById('btn-mode-nav');
+        const btnModeObstacle = document.getElementById('btn-mode-obstacle');
+        const interactionDesc = document.getElementById('interaction-mode-desc');
+        const footerMode = document.getElementById('footer-mode');
+
+        function setInteractionMode(mode) {
+            interactionMode = mode;
+            footerMode.textContent = mode === 'NAV' ? 'WALK TARGET' : 'OBSTACLE PLACEMENT';
+            if (mode === 'NAV') {
+                btnModeNav.className = "flex-1 py-2 px-3 rounded-xl text-xs font-bold font-mono transition-all bg-swissDark text-white shadow-sm";
+                btnModeObstacle.className = "flex-1 py-2 px-3 rounded-lg text-xs font-bold font-mono transition-all bg-white/80 text-swissDark border border-black/10 hover:bg-white";
+                interactionDesc.textContent = "SET WALK TARGET";
+                interactionDesc.className = "font-mono text-swissRed font-bold";
+            } else {
+                btnModeObstacle.className = "flex-1 py-2 px-3 rounded-xl text-xs font-bold font-mono transition-all bg-swissDark text-white shadow-sm";
+                btnModeNav.className = "flex-1 py-2 px-3 rounded-lg text-xs font-bold font-mono transition-all bg-white/80 text-swissDark border border-black/10 hover:bg-white";
+                interactionDesc.textContent = "CLICK TO PLACE BLOCK";
+                interactionDesc.className = "font-mono text-swissDark font-bold";
+            }
+        }
+
+        btnModeNav.addEventListener('click', () => setInteractionMode('NAV'));
+        btnModeObstacle.addEventListener('click', () => setInteractionMode('OBSTACLE'));
+
+        document.getElementById('slider-speed').addEventListener('input', (e) => {
+            maxSpeed = parseFloat(e.target.value);
+            document.getElementById('val-max-speed').textContent = `${maxSpeed.toFixed(1)} m/s`;
+        });
+
+        const btnToggleSim = document.getElementById('btn-toggle-sim');
+        btnToggleSim.addEventListener('click', () => {
+            simRunning = !simRunning;
+            btnToggleSim.textContent = simRunning ? 'PAUSE GAIT' : 'RESUME GAIT';
+            btnToggleSim.className = simRunning ? 
+                'py-2.5 px-3 rounded-xl font-mono text-xs font-bold text-white bg-swissRed hover:bg-red-600 shadow-md transition-all uppercase' :
+                'py-2.5 px-3 rounded-xl font-mono text-xs font-bold text-white bg-swissGreen hover:bg-green-600 shadow-md transition-all uppercase';
+            logSystem(simRunning ? "Gait Simulation Resumed." : "Gait Simulation Paused.");
+        });
+
+        document.getElementById('btn-reset-robot').addEventListener('click', () => {
+            robotState.x = 0; robotState.z = 0; robotState.yaw = -Math.PI / 2;
+            robotState.targetX = 0; robotState.targetZ = -12;
+            targetGroup.position.set(0, 0, -12);
+            resetHumanoidPose();
+            logSystem("Humanoid position reset to origin.");
+        });
+
+        // Action buttons
+        document.getElementById('btn-action-wave').addEventListener('click', () => startAction('wave'));
+        document.getElementById('btn-action-jump').addEventListener('click', () => startAction('jump'));
+        document.getElementById('btn-action-nod').addEventListener('click', () => startAction('nod'));
+        document.getElementById('btn-action-bow').addEventListener('click', () => startAction('bow'));
+        document.getElementById('btn-action-shrug').addEventListener('click', () => startAction('shrug'));
+        document.getElementById('btn-action-wiggle').addEventListener('click', () => startAction('wiggle'));
+        document.getElementById('btn-action-resetpose').addEventListener('click', resetHumanoidPose);
+
+        document.getElementById('btn-spawn-random').addEventListener('click', () => {
+            const rx = (Math.random() - 0.5) * (floorSize * 0.7);
+            const rz = (Math.random() - 0.5) * (floorSize * 0.7);
+            const types = ['box', 'pillar', 'sphere'];
+            createObstacle(rx, rz, types[Math.floor(Math.random() * types.length)]);
+        });
+        document.getElementById('btn-clear-obstacles').addEventListener('click', clearObstacles);
+
+        function logSystem(msg) {
+            document.getElementById('footer-log').textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        }
+
+        // --- ANIMATION LOOP ---
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = Math.min(clock.getDelta(), 0.1);
+
+            if (simRunning) {
+                const steer = computeSteering();
+                currentSpeed += (steer.speed - currentSpeed) * 4.0 * dt;
+                robotState.yaw += steer.yawRate * dt;
+                robotState.x += Math.cos(robotState.yaw) * currentSpeed * dt;
+                robotState.z -= Math.sin(robotState.yaw) * currentSpeed * dt;
+                const isPhysicalCollision = resolveHardCollisions();
+
+                // robotGroup position is set here, Y handled in kinematics via jumpOffset
+                robotGroup.position.x = robotState.x;
+                robotGroup.position.z = robotState.z;
+                robotGroup.rotation.y = robotState.yaw + Math.PI / 2;
+
+                const speedRatio = currentSpeed / maxSpeed;
+                updateHumanoidKinematics(dt, speedRatio);
+
+                // Path line update
+                const pathPositions = pathLine.geometry.attributes.position.array;
+                pathPositions[0] = robotState.x;
+                pathPositions[1] = 0.1;
+                pathPositions[2] = robotState.z;
+                pathPositions[3] = robotState.targetX;
+                pathPositions[4] = 0.1;
+                pathPositions[5] = robotState.targetZ;
+                pathLine.geometry.attributes.position.needsUpdate = true;
+                pathLine.computeLineDistances();
+
+                // Telemetry
+                document.getElementById('val-pos').textContent = `${robotState.x.toFixed(1)}, ${robotState.z.toFixed(1)}`;
+                let deg = Math.round((robotState.yaw * 180 / Math.PI) % 360);
+                if (deg < 0) deg += 360;
+                document.getElementById('val-heading').textContent = `${deg}°`;
+                document.getElementById('val-speed').textContent = `${currentSpeed.toFixed(2)} m/s`;
+                document.getElementById('val-gait').textContent = `${Math.round((gaitPhase % (Math.PI * 2)) / (Math.PI * 2) * 100)}%`;
+
+                // Ground contact logic (include jump)
+                if (activeAction === 'jump' && jumpOffset > 0.1) {
+                    contactStatus.textContent = "AIRBORNE";
+                    contactStatus.className = "text-sm font-bold text-swissWarning mt-0.5";
+                } else {
+                    contactStatus.textContent = currentSpeed > 0.1 ? "SINGLE STANCE" : "DUAL FEET";
+                    contactStatus.className = "text-sm font-bold text-swissGreen mt-0.5";
+                }
+
+                if (isPhysicalCollision || steer.hazard) {
+                    statusDot.className = "w-2.5 h-2.5 rounded-full bg-swissRed status-pulse-red";
+                    statusText.textContent = isPhysicalCollision ? "COLLISION DETECTED" : "OBSTACLE AVOIDANCE";
+                    lidarStatus.textContent = isPhysicalCollision ? "IMPACT" : "HAZARD NEAR";
+                    lidarStatus.className = "text-sm font-bold text-swissRed mt-0.5";
+                } else if (steer.arrived) {
+                    statusDot.className = "w-2.5 h-2.5 rounded-full bg-swissGreen";
+                    statusText.textContent = "TARGET REACHED";
+                    lidarStatus.textContent = "CLEAR";
+                    lidarStatus.className = "text-sm font-bold text-swissGreen mt-0.5";
+                } else {
+                    statusDot.className = "w-2.5 h-2.5 rounded-full bg-swissGreen status-pulse-green";
+                    statusText.textContent = "AUTONOMOUS GAIT";
+                    lidarStatus.textContent = "CLEAR";
+                    lidarStatus.className = "text-sm font-bold text-swissGreen mt-0.5";
+                }
+            }
+
+            targetRing.rotation.z += 0.5 * dt;
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        animate();
+    </script>
+</body>
+</html>

@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ROBOTICS // 3D SIMULATION ENVIRONMENT</title>
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Three.js & OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        swissRed: '#FF3B30',
+                        swissDark: '#111111',
+                        swissGray: '#8E8E93',
+                        swissLight: '#F2F2F7',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Custom Glassmorphism Styles */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.55);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.7);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+        }
+
+        .glass-panel-dark {
+            background: rgba(17, 17, 17, 0.75);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Custom Scrollbar for overlays */
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.05);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 2px;
+        }
+
+        /* Pulse animation for Swiss Red Status */
+        @keyframes pulse-red {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(255, 59, 48, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 59, 48, 0); }
+        }
+
+        .status-pulse {
+            animation: pulse-red 2s infinite;
+        }
+
+        /* Swiss Grid Overlay */
+        .swiss-grid-bg {
+            background-size: 40px 40px;
+            background-image: 
+                linear-gradient(to right, rgba(0, 0, 0, 0.03) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(0, 0, 0, 0.03) 1px, transparent 1px);
+        }
+
+        /* Prevent text selection on canvas controls */
+        canvas {
+            outline: none;
+            user-select: none;
+        }
+    </style>
+</head>
+<body class="bg-[#E5E5EA] text-swissDark font-sans overflow-hidden h-screen w-screen relative swiss-grid-bg">
+
+    <!-- 3D Canvas Container -->
+    <div id="canvas-container" class="absolute inset-0 z-0"></div>
+
+    <!-- UI Overlay Layer -->
+    <div class="absolute inset-0 z-10 pointer-events-none flex flex-col justify-between p-4 md:p-6">
+        
+        <!-- HEADER -->
+        <header class="glass-panel rounded-2xl p-4 md:p-5 pointer-events-auto flex flex-row flex-wrap justify-between items-center gap-4 transition-all duration-300">
+            <div>
+                <h1 class="text-xl md:text-2xl font-black tracking-tight uppercase mt-1">ROBOTICS</h1>
+            </div>
+
+            <div class="flex items-center gap-4 self-center">
+                <div class="flex items-center gap-2 bg-white/60 px-3 py-1.5 rounded-xl border border-white/80">
+                    <div id="status-dot" class="w-2.5 h-2.5 rounded-full bg-swissRed status-pulse"></div>
+                    <span id="status-text" class="text-xs font-mono font-semibold tracking-wider uppercase">NAVIGATING</span>
+                </div>
+                <button id="toggle-ui-btn" class="p-2 bg-swissDark text-white rounded-xl text-xs font-mono">
+                    PANEL
+                </button>
+            </div>
+        </header>
+
+        <!-- MAIN INTERACTIVE CONTENT OVERLAY -->
+        <div class="flex-1 my-4 flex flex-col md:flex-row justify-between items-start md:items-end gap-4 overflow-hidden pointer-events-none">
+            
+            <!-- LEFT PANEL: TELEMETRY & LIDAR DATA -->
+            <div id="telemetry-panel" class="glass-panel rounded-2xl p-4 md:p-5 pointer-events-auto w-full md:w-80 flex flex-col gap-4 max-h-[50vh] md:max-h-full overflow-y-auto transition-all duration-300">
+                <div class="flex items-center justify-between border-b border-black/10 pb-2">
+                    <h2 class="text-xs font-black tracking-widest uppercase text-swissDark">TELEMETRY DATA</h2>
+                    <span class="text-[10px] font-mono text-swissGray">LIVE SENSOR FEED</span>
+                </div>
+
+                <!-- Telemetry Grid -->
+                <div class="grid grid-cols-2 gap-2 font-mono">
+                    <div class="bg-white/40 p-2.5 rounded-xl border border-white/60">
+                        <div class="text-[10px] text-swissGray uppercase tracking-wider">POS X</div>
+                        <div id="tele-x" class="text-sm font-semibold mt-0.5">+0.00 m</div>
+                    </div>
+                    <div class="bg-white/40 p-2.5 rounded-xl border border-white/60">
+                        <div class="text-[10px] text-swissGray uppercase tracking-wider">POS Z</div>
+                        <div id="tele-z" class="text-sm font-semibold mt-0.5">+0.00 m</div>
+                    </div>
+                    <div class="bg-white/40 p-2.5 rounded-xl border border-white/60">
+                        <div class="text-[10px] text-swissGray uppercase tracking-wider">HEADING</div>
+                        <div id="tele-heading" class="text-sm font-semibold mt-0.5">0.0°</div>
+                    </div>
+                    <div class="bg-white/40 p-2.5 rounded-xl border border-white/60">
+                        <div class="text-[10px] text-swissGray uppercase tracking-wider">SPEED</div>
+                        <div id="tele-speed" class="text-sm font-semibold mt-0.5">0.00 m/s</div>
+                    </div>
+                </div>
+
+                <div class="bg-white/40 p-2.5 rounded-xl border border-white/60 font-mono">
+                    <div class="text-[10px] text-swissGray uppercase tracking-wider">DIST TO TARGET</div>
+                    <div id="tele-dist" class="text-lg font-bold text-swissRed mt-0.5">0.00 m</div>
+                </div>
+
+                <!-- Sensor Visualizer Toggles -->
+                <div class="flex flex-col gap-2 pt-2 border-t border-black/10">
+                    <div class="text-[10px] font-black tracking-widest uppercase text-swissGray">VISUALIZERS</div>
+                    <div class="flex items-center justify-between bg-white/40 p-2 rounded-xl border border-white/60">
+                        <span class="text-xs font-semibold">LiDAR Scanner Rays</span>
+                        <button id="toggle-lidar-btn" class="px-3 py-1 bg-swissDark text-white text-xs font-mono font-medium rounded-lg transition hover:bg-swissRed">
+                            ACTIVE
+                        </button>
+                    </div>
+                    <div class="flex items-center justify-between bg-white/40 p-2 rounded-xl border border-white/60">
+                        <span class="text-xs font-semibold">Target Beacon Path</span>
+                        <button id="toggle-path-btn" class="px-3 py-1 bg-swissDark text-white text-xs font-mono font-medium rounded-lg transition hover:bg-swissRed">
+                            SHOW
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT PANEL: CONTROLS & CAMERA PRESETS -->
+            <div id="control-panel" class="glass-panel rounded-2xl p-4 md:p-5 pointer-events-auto w-full md:w-80 flex flex-col gap-4 transition-all duration-300">
+                <div class="flex items-center justify-between border-b border-black/10 pb-2">
+                    <h2 class="text-xs font-black tracking-widest uppercase text-swissDark">NAVIGATION CONTROL</h2>
+                    <span class="text-[10px] font-mono text-swissGray">MANUAL OVERRIDE</span>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="grid grid-cols-2 gap-2">
+                    <button id="btn-pause" class="py-2.5 px-3 bg-swissDark text-white font-mono text-xs font-bold rounded-xl transition hover:bg-black active:scale-95">
+                        PAUSE
+                    </button>
+                    <button id="btn-reset" class="py-2.5 px-3 bg-white/80 text-swissDark border border-black/10 font-mono text-xs font-bold rounded-xl transition hover:bg-white active:scale-95">
+                        RESET POS
+                    </button>
+                </div>
+
+                <!-- Max Speed Slider -->
+                <div class="bg-white/40 p-3 rounded-xl border border-white/60 flex flex-col gap-1.5">
+                    <div class="flex justify-between items-center text-xs font-semibold">
+                        <span class="text-[10px] font-mono text-swissGray uppercase">MAX SPEED</span>
+                        <span id="speed-val" class="font-mono text-xs">4.0 m/s</span>
+                    </div>
+                    <input id="slider-speed" type="range" min="1" max="10" step="0.5" value="4" 
+                        class="w-full h-1.5 bg-black/10 rounded-lg appearance-none cursor-pointer accent-swissRed">
+                </div>
+
+                <!-- Environment & Obstacles -->
+                <div class="flex flex-col gap-2">
+                    <button id="btn-add-obstacles" class="py-2.5 px-3 bg-swissRed text-white font-mono text-xs font-bold rounded-xl transition hover:bg-red-600 active:scale-95 flex items-center justify-center gap-2">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        GENERATE OBSTACLES
+                    </button>
+                </div>
+
+                <!-- Camera Presets -->
+                <div class="pt-2 border-t border-black/10 flex flex-col gap-2">
+                    <div class="text-[10px] font-black tracking-widest uppercase text-swissGray">CAMERA PRESETS</div>
+                    <div class="grid grid-cols-3 gap-1.5 font-mono text-[11px]">
+                        <button id="cam-iso" class="py-1.5 bg-white/60 hover:bg-white text-swissDark font-bold rounded-lg border border-white/80 transition">ISO</button>
+                        <button id="cam-top" class="py-1.5 bg-white/60 hover:bg-white text-swissDark font-bold rounded-lg border border-white/80 transition">TOP</button>
+                        <button id="cam-follow" class="py-1.5 bg-white/60 hover:bg-white text-swissDark font-bold rounded-lg border border-white/80 transition">FOLLOW</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- FOOTER / HINT -->
+        <footer class="glass-panel rounded-xl px-4 py-2.5 pointer-events-auto flex justify-between items-center text-[11px] font-mono text-swissGray">
+            <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-black/30"></span>
+                <span>CLICK GROUND TO SET DESTINATION</span>
+            </div>
+            <div class="hidden sm:block">
+                DRAG TO ROTATE // SCROLL TO ZOOM
+            </div>
+        </footer>
+    </div>
+
+    <!-- THREE.JS SIMULATION SCRIPT -->
+    <script>
+        // --- SIMULATION STATE ---
+        const state = {
+            paused: false,
+            lidarActive: true,
+            showPath: true,
+            maxSpeed: 4.0,
+            acceleration: 8.0,
+            deceleration: 10.0,
+            turnSpeed: 6.0,
+            robotStatus: 'IDLE', // IDLE, NAVIGATING, ARRIVED
+            cameraMode: 'ISO' // ISO, TOP, FOLLOW
+        };
+
+        // --- THREE.JS SETUP ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xE5E5EA);
+        scene.fog = new THREE.FogExp2(0xE5E5EA, 0.015);
+
+        // Camera
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        
+        // Renderer
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+
+        // OrbitControls
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxPolarAngle = Math.PI / 2 - 0.02; // Don't go below ground
+
+        // --- LIGHTING ---
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(30, 50, 20);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        dirLight.shadow.camera.near = 0.5;
+        dirLight.shadow.camera.far = 150;
+        const d = 40;
+        dirLight.shadow.camera.left = -d;
+        dirLight.shadow.camera.right = d;
+        dirLight.shadow.camera.top = d;
+        dirLight.shadow.camera.bottom = -d;
+        scene.add(dirLight);
+
+        // Hemisphere light for subtle Swiss minimalist sky tone
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0xdcdce0, 0.4);
+        scene.add(hemiLight);
+
+        // --- ENVIRONMENT GRID & GROUND ---
+        const groundSize = 80;
+        
+        // Ground Plane (Receives Shadows)
+        const groundGeo = new THREE.PlaneGeometry(groundSize, groundSize);
+        const groundMat = new THREE.MeshStandardMaterial({ 
+            color: 0xF2F2F7, 
+            roughness: 0.8,
+            metalness: 0.1
+        });
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // Custom Swiss Grid
+        const gridHelper = new THREE.GridHelper(groundSize, 40, 0x111111, 0xCCCCCC);
+        gridHelper.position.y = 0.01; // Slightly above ground
+        scene.add(gridHelper);
+
+        // Border Bounds
+        const borderGeo = new THREE.BoxGeometry(groundSize, 0.4, groundSize);
+        const borderMat = new THREE.MeshBasicMaterial({ color: 0x111111, wireframe: true });
+        const border = new THREE.Mesh(borderGeo, borderMat);
+        border.position.y = 0.2;
+        scene.add(border);
+
+        // --- ROBOT CREATION (SWISS MINIMALIST DESIGN) ---
+        const robotGroup = new THREE.Group();
+        scene.add(robotGroup);
+
+        // Robot Chassis (Main Body)
+        const chassisGeo = new THREE.BoxGeometry(2.2, 0.8, 3.0);
+        const chassisMat = new THREE.MeshStandardMaterial({ 
+            color: 0x111111, 
+            roughness: 0.2, 
+            metalness: 0.8 
+        });
+        const chassis = new THREE.Mesh(chassisGeo, chassisMat);
+        chassis.position.y = 0.6;
+        chassis.castShadow = true;
+        chassis.receiveShadow = true;
+        robotGroup.add(chassis);
+
+        // Top White Shell Panel (Glass/Minimalist Accent)
+        const shellGeo = new THREE.BoxGeometry(2.0, 0.3, 2.6);
+        const shellMat = new THREE.MeshStandardMaterial({ 
+            color: 0xFFFFFF, 
+            roughness: 0.1, 
+            metalness: 0.1 
+        });
+        const shell = new THREE.Mesh(shellGeo, shellMat);
+        shell.position.y = 1.0;
+        shell.castShadow = true;
+        robotGroup.add(shell);
+
+        // Swiss Red Heading Laser Line (Direction Indicator)
+        const headingGeo = new THREE.BoxGeometry(0.1, 0.05, 1.8);
+        const headingMat = new THREE.MeshBasicMaterial({ color: 0xFF3B30 });
+        const headingLine = new THREE.Mesh(headingGeo, headingMat);
+        headingLine.position.set(0, 1.16, 0.5);
+        robotGroup.add(headingLine);
+
+        // Lidar Turret (Cylinder)
+        const lidarGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.35, 24);
+        const lidarMat = new THREE.MeshStandardMaterial({ color: 0xFF3B30, roughness: 0.3 });
+        const lidar = new THREE.Mesh(lidarGeo, lidarMat);
+        lidar.position.set(0, 1.3, -0.6);
+        lidar.castShadow = true;
+        robotGroup.add(lidar);
+
+        // Wheels
+        const wheelGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.3, 24);
+        const wheelMat = new THREE.MeshStandardMaterial({ color: 0x2C2C2E, roughness: 0.9 });
+        
+        const wheelPositions = [
+            [-1.2, 0.4, 0.9],
+            [1.2, 0.4, 0.9],
+            [-1.2, 0.4, -0.9],
+            [1.2, 0.4, -0.9]
+        ];
+
+        wheelPositions.forEach(pos => {
+            const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+            wheel.rotation.z = Math.PI / 2;
+            wheel.position.set(...pos);
+            wheel.castShadow = true;
+            robotGroup.add(wheel);
+        });
+
+        // --- LIDAR SCAN RAYS VISUALIZER ---
+        const lidarRayCount = 24;
+        const lidarRaysGroup = new THREE.Group();
+        lidarRaysGroup.position.set(0, 1.3, -0.6);
+        robotGroup.add(lidarRaysGroup);
+
+        const rayLines = [];
+        const rayMaterial = new THREE.LineBasicMaterial({ color: 0xFF3B30, transparent: true, opacity: 0.4 });
+
+        for (let i = 0; i < lidarRayCount; i++) {
+            const angle = (i / lidarRayCount) * Math.PI * 2;
+            const points = [];
+            points.push(new THREE.Vector3(0, 0, 0));
+            points.push(new THREE.Vector3(Math.cos(angle) * 8, 0, Math.sin(angle) * 8));
+            
+            const rayGeo = new THREE.BufferGeometry().setFromPoints(points);
+            const line = new THREE.Line(rayGeo, rayMaterial);
+            lidarRaysGroup.add(line);
+            rayLines.push({ line, angle });
+        }
+
+        // --- DESTINATION BEACON / TARGET MARKER ---
+        const targetGroup = new THREE.Group();
+        scene.add(targetGroup);
+        targetGroup.position.set(0, 0, 0);
+
+        // Swiss Red Target Rings
+        const ring1Geo = new THREE.RingGeometry(0.4, 0.6, 32);
+        const ring1Mat = new THREE.MeshBasicMaterial({ color: 0xFF3B30, side: THREE.DoubleSide });
+        const ring1 = new THREE.Mesh(ring1Geo, ring1Mat);
+        ring1.rotation.x = Math.PI / 2;
+        ring1.position.y = 0.02;
+        targetGroup.add(ring1);
+
+        const ring2Geo = new THREE.RingGeometry(1.2, 1.3, 32);
+        const ring2Mat = new THREE.MeshBasicMaterial({ color: 0xFF3B30, side: THREE.DoubleSide, transparent: true, opacity: 0.5 });
+        const ring2 = new THREE.Mesh(ring2Geo, ring2Mat);
+        ring2.rotation.x = Math.PI / 2;
+        ring2.position.y = 0.02;
+        targetGroup.add(ring2);
+
+        // Vertical Beacon Light Pillar
+        const beaconGeo = new THREE.CylinderGeometry(0.05, 0.05, 6, 16);
+        const beaconMat = new THREE.MeshBasicMaterial({ color: 0xFF3B30, transparent: true, opacity: 0.3 });
+        const beacon = new THREE.Mesh(beaconGeo, beaconMat);
+        beacon.position.y = 3;
+        targetGroup.add(beacon);
+
+        // --- PATH LINE (ROBOT TO TARGET) ---
+        const pathMaterial = new THREE.LineDashedMaterial({
+            color: 0xFF3B30,
+            dashSize: 0.6,
+            gapSize: 0.3,
+            linewidth: 2
+        });
+        const pathGeometry = new THREE.BufferGeometry();
+        const pathLine = new THREE.Line(pathGeometry, pathMaterial);
+        scene.add(pathLine);
+
+        // --- OBSTACLES SYSTEM ---
+        const obstacles = [];
+        const obstacleGroup = new THREE.Group();
+        scene.add(obstacleGroup);
+
+        function generateRandomObstacles() {
+            // Clear existing
+            while (obstacleGroup.children.length > 0) {
+                const obj = obstacleGroup.children[0];
+                obstacleGroup.remove(obj);
+            }
+            obstacles.length = 0;
+
+            const matGray = new THREE.MeshStandardMaterial({ color: 0x8E8E93, roughness: 0.6 });
+
+            const count = 8 + Math.floor(Math.random() * 6);
+            for (let i = 0; i < count; i++) {
+                const isCylinder = Math.random() > 0.5;
+                const size = 1.5 + Math.random() * 2.5;
+                const height = 2 + Math.random() * 4;
+                
+                let mesh;
+                if (isCylinder) {
+                    mesh = new THREE.Mesh(new THREE.CylinderGeometry(size/2, size/2, height, 24), matGray);
+                } else {
+                    mesh = new THREE.Mesh(new THREE.BoxGeometry(size, height, size), matGray);
+                }
+
+                // Random position away from center
+                let x, z;
+                do {
+                    x = (Math.random() - 0.5) * (groundSize - 16);
+                    z = (Math.random() - 0.5) * (groundSize - 16);
+                } while (Math.hypot(x, z) < 8); // Keep center clear for robot start
+
+                mesh.position.set(x, height / 2, z);
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+                obstacleGroup.add(mesh);
+
+                obstacles.push({
+                    position: new THREE.Vector2(x, z),
+                    radius: size * 0.8
+                });
+            }
+        }
+
+        generateRandomObstacles();
+
+        // --- ROBOT KINEMATICS & NAVIGATION ---
+        const robotState = {
+            pos: new THREE.Vector2(0, 0),
+            targetPos: new THREE.Vector2(0, 0),
+            heading: 0, // In radians
+            currentSpeed: 0
+        };
+
+        // Raycasting for user ground click
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        function onGroundClick(event) {
+            // Calculate pointer position in normalized device coordinates
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(ground);
+
+            if (intersects.length > 0) {
+                const p = intersects[0].point;
+                // Clamp target inside boundary
+                const limit = groundSize / 2 - 2;
+                const targetX = Math.max(-limit, Math.min(limit, p.x));
+                const targetZ = Math.max(-limit, Math.min(limit, p.z));
+
+                robotState.targetPos.set(targetX, targetZ);
+                targetGroup.position.set(targetX, 0, targetZ);
+
+                // Re-enable navigation status
+                state.robotStatus = 'NAVIGATING';
+            }
+        }
+
+        window.addEventListener('pointerdown', (e) => {
+            // Only trigger if click wasn't on UI panels
+            if (e.target.closest('#telemetry-panel') || 
+                e.target.closest('#control-panel') || 
+                e.target.closest('header') || 
+                e.target.closest('footer')) {
+                return;
+            }
+            onGroundClick(e);
+        });
+
+        // --- CAMERA CONTROLLER PRESETS ---
+        function setCameraPreset(mode) {
+            state.cameraMode = mode;
+            const duration = 1000;
+            
+            if (mode === 'ISO') {
+                camera.position.set(25, 25, 25);
+                controls.target.set(0, 0, 0);
+            } else if (mode === 'TOP') {
+                camera.position.set(0, 45, 0.1);
+                controls.target.set(0, 0, 0);
+            } else if (mode === 'FOLLOW') {
+                // Pos relative to robot
+                const relCam = new THREE.Vector3(0, 8, -12).applyAxisAngle(new THREE.Vector3(0, 1, 0), robotState.heading);
+                camera.position.set(robotGroup.position.x + relCam.x, 8, robotGroup.position.z + relCam.z);
+                controls.target.copy(robotGroup.position);
+            }
+            controls.update();
+        }
+
+        setCameraPreset('ISO');
+
+        // --- UPDATE & ANIMATION LOOP ---
+        const clock = new THREE.Clock();
+
+        // Stuck / local-minimum escape state
+        let prevPosX = robotState.pos.x, prevPosY = robotState.pos.y;
+        let lastFrameMoved = 1;
+        let stuckTimer = 0, escapeDir = 0;
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const dt = Math.min(clock.getDelta(), 0.1);
+
+            // Distance to target — computed every frame so telemetry (even when paused) has it
+            const dx = robotState.targetPos.x - robotState.pos.x;
+            const dy = robotState.targetPos.y - robotState.pos.y;
+            const distToTarget = Math.hypot(dx, dy);
+
+            if (!state.paused) {
+                // --- ROBOT MOVEMENT LOGIC ---
+                if (distToTarget > 0.2) {
+                    state.robotStatus = 'NAVIGATING';
+                    
+                    // Desired Heading towards target (Three.js Z is forward/backward, X is side)
+                    // Atan2 (dx, dy) gives angle from Z axis
+                    // --- POTENTIAL FIELD STEERING (ref: r3.html) ---
+                    const robotRadius = 1.5;
+                    const safetyMargin = 2.2;
+
+                    // Attraction toward target (normalized, constant gain)
+                    const attrX = (dx / distToTarget) * 2.5;
+                    const attrZ = (dy / distToTarget) * 2.5;
+
+                    // Repulsion from obstacles — exponential, strong near contact.
+                    // Radial part pushes away; tangential part swings the car AROUND
+                    // (so it steers to the clearer side instead of reversing into a deadlock).
+                    const fwdX = Math.sin(robotState.heading), fwdZ = Math.cos(robotState.heading);
+                    let repulseX = 0, repulseZ = 0;
+                    for (const obs of obstacles) {
+                        const ox = robotState.pos.x - obs.position.x; // away dir (obs -> robot)
+                        const oz = robotState.pos.y - obs.position.y;
+                        const oDist = Math.hypot(ox, oz);
+                        const minDist = robotRadius + obs.radius + safetyMargin;
+                        if (oDist < minDist && oDist > 0.001) {
+                            const force = Math.pow((minDist - oDist) / minDist, 2) * 14.0;
+                            const nx = ox / oDist, nz = oz / oDist;            // radial away
+                            const side = (nx * fwdZ - nz * fwdX) >= 0 ? 1 : -1; // swing to clearer side
+                            const tx = -nz * side, tz = nx * side;             // tangential (around)
+                            repulseX += (nx * 0.5 + tx) * force;
+                            repulseZ += (nz * 0.5 + tz) * force;
+                        }
+                    }
+
+                    // Combined steering vector -> desired heading (r2 convention: atan2(x, z))
+                    let desiredHeading = Math.atan2(attrX + repulseX, attrZ + repulseZ);
+
+                    // --- STUCK / LOCAL-MINIMUM ESCAPE ---
+                    // Potential fields can deadlock when an obstacle sits between robot and goal.
+                    // If we've barely moved for ~1s, commit to swinging around the clearer side.
+                    if (lastFrameMoved < robotState.currentSpeed * dt * 0.4 && distToTarget > 0.2) {
+                        stuckTimer += dt;
+                    } else {
+                        stuckTimer = 0;
+                        escapeDir = 0;
+                    }
+                    if (stuckTimer > 1.0) {
+                        if (escapeDir === 0) {
+                            let nearest = null, nd = Infinity;
+                            for (const obs of obstacles) {
+                                const d = Math.hypot(robotState.pos.x - obs.position.x, robotState.pos.y - obs.position.y);
+                                if (d < nd) { nd = d; nearest = obs; }
+                            }
+                            if (nearest) {
+                                const ox = robotState.pos.x - nearest.position.x;
+                                const oz = robotState.pos.y - nearest.position.y;
+                                const oDist = Math.hypot(ox, oz) || 1;
+                                const nx = ox / oDist, nz = oz / oDist;
+                                escapeDir = (nx * fwdZ - nz * fwdX) >= 0 ? 1 : -1; // clearer side
+                            } else {
+                                escapeDir = Math.random() < 0.5 ? 1 : -1;
+                            }
+                        }
+                        desiredHeading = robotState.heading + escapeDir * (Math.PI / 2);
+                    }
+
+                    // Shortest-path yaw error
+                    let yawError = desiredHeading - robotState.heading;
+                    while (yawError > Math.PI) yawError -= Math.PI * 2;
+                    while (yawError < -Math.PI) yawError += Math.PI * 2;
+
+                    // Rate-based turning (strong enough to actually steer around)
+                    robotState.heading += yawError * state.turnSpeed * dt;
+
+                    // Slow down on sharp turns / near hazards
+                    const turnFactor = Math.max(0.15, Math.cos(yawError));
+                    let desiredSpeed = Math.min(state.maxSpeed, distToTarget * 1.5) * turnFactor;
+                    if (stuckTimer > 1.0) desiredSpeed = Math.min(desiredSpeed, 2.0); // crawl while escaping
+
+                    if (robotState.currentSpeed < desiredSpeed) {
+                        robotState.currentSpeed += state.acceleration * dt;
+                    } else {
+                        robotState.currentSpeed -= state.deceleration * dt;
+                    }
+
+                    // Move Robot — car-like: translate ONLY along heading, never strafe
+                    const stepLen = robotState.currentSpeed * dt;
+                    const dirX = Math.sin(robotState.heading);
+                    const dirZ = Math.cos(robotState.heading);
+
+                    // Limit the forward step so we stop at the obstacle surface (no penetration, no sideways slide)
+                    let allowed = stepLen;
+                    for (const obs of obstacles) {
+                        const ox = obs.position.x - robotState.pos.x;
+                        const oz = obs.position.y - robotState.pos.y;
+                        const along = ox * dirX + oz * dirZ;          // distance ahead to obstacle center
+                        const perp2 = (ox * ox + oz * oz) - along * along; // squared lateral offset
+                        const minD = obs.radius + robotRadius;
+                        if (along > 0 && perp2 < minD * minD) {
+                            const maxAdvance = along - minD - 0.05;   // stop just before contact
+                            if (maxAdvance < allowed) allowed = Math.max(0, maxAdvance);
+                        }
+                    }
+                    robotState.pos.x += dirX * allowed;
+                    robotState.pos.y += dirZ * allowed;
+                    if (allowed < stepLen * 0.999) robotState.currentSpeed *= 0.6; // bleed speed when blocked
+
+                    // Record this frame's net movement for stuck detection
+                    lastFrameMoved = Math.hypot(robotState.pos.x - prevPosX, robotState.pos.y - prevPosY);
+                    prevPosX = robotState.pos.x;
+                    prevPosY = robotState.pos.y;
+
+                } else {
+                    // Arrived at target
+                    robotState.currentSpeed = Math.max(0, robotState.currentSpeed - state.deceleration * dt);
+                    state.robotStatus = robotState.currentSpeed < 0.05 ? 'ARRIVED' : 'NAVIGATING';
+                }
+
+                // Update 3D Robot Position and Heading
+                robotGroup.position.set(robotState.pos.x, 0, robotState.pos.y);
+                robotGroup.rotation.y = robotState.heading;
+
+                // Animate Lidar Spin
+                lidar.rotation.y += 8 * dt;
+
+                // Animate Beacon pulse
+                const pulseScale = 1 + Math.sin(Date.now() * 0.005) * 0.15;
+                ring2.scale.set(pulseScale, pulseScale, 1);
+
+                // Update Path Line Graphics
+                if (state.showPath) {
+                    const pathPoints = [
+                        new THREE.Vector3(robotState.pos.x, 0.1, robotState.pos.y),
+                        new THREE.Vector3(robotState.targetPos.x, 0.1, robotState.targetPos.y)
+                    ];
+                    pathGeometry.setFromPoints(pathPoints);
+                    pathLine.computeLineDistances();
+                    pathLine.visible = true;
+                } else {
+                    pathLine.visible = false;
+                }
+
+                // Update Camera if in Follow Mode
+                if (state.cameraMode === 'FOLLOW') {
+                    const offset = new THREE.Vector3(0, 10, -14).applyAxisAngle(new THREE.Vector3(0, 1, 0), robotState.heading);
+                    camera.position.lerp(new THREE.Vector3(robotState.pos.x + offset.x, offset.y, robotState.pos.y + offset.z), 0.05);
+                    controls.target.lerp(new THREE.Vector3(robotState.pos.x, 1, robotState.pos.y), 0.05);
+                }
+            }
+
+            // Controls update
+            controls.update();
+
+            // Render
+            renderer.render(scene, camera);
+
+            // Update UI Telemetry
+            updateUI(distToTarget);
+        }
+
+        // --- UI UPDATE ROUTINE ---
+        const uiX = document.getElementById('tele-x');
+        const uiZ = document.getElementById('tele-z');
+        const uiHeading = document.getElementById('tele-heading');
+        const uiSpeed = document.getElementById('tele-speed');
+        const uiDist = document.getElementById('tele-dist');
+        const uiStatusText = document.getElementById('status-text');
+        const uiStatusDot = document.getElementById('status-dot');
+
+        function updateUI(dist) {
+            uiX.textContent = `${robotState.pos.x >= 0 ? '+' : ''}${robotState.pos.x.toFixed(2)} m`;
+            uiZ.textContent = `${robotState.pos.y >= 0 ? '+' : ''}${robotState.pos.y.toFixed(2)} m`;
+            
+            // Format heading in degrees 0-360
+            let deg = (robotState.heading * 180 / Math.PI) % 360;
+            if (deg < 0) deg += 360;
+            uiHeading.textContent = `${deg.toFixed(1)}°`;
+
+            uiSpeed.textContent = `${robotState.currentSpeed.toFixed(2)} m/s`;
+            uiDist.textContent = `${Math.max(0, dist).toFixed(2)} m`;
+
+            // Status Badge
+            uiStatusText.textContent = state.robotStatus;
+            if (state.robotStatus === 'NAVIGATING') {
+                uiStatusDot.className = 'w-2.5 h-2.5 rounded-full bg-swissRed status-pulse';
+            } else if (state.robotStatus === 'ARRIVED') {
+                uiStatusDot.className = 'w-2.5 h-2.5 rounded-full bg-green-500';
+            } else {
+                uiStatusDot.className = 'w-2.5 h-2.5 rounded-full bg-swissGray';
+            }
+        }
+
+        // --- EVENT LISTENERS & UI INTERACTIVITY ---
+        
+        // Speed Slider
+        const sliderSpeed = document.getElementById('slider-speed');
+        const speedValDisplay = document.getElementById('speed-val');
+        sliderSpeed.addEventListener('input', (e) => {
+            state.maxSpeed = parseFloat(e.target.value);
+            speedValDisplay.textContent = `${state.maxSpeed.toFixed(1)} m/s`;
+        });
+
+        // Pause Button
+        const btnPause = document.getElementById('btn-pause');
+        btnPause.addEventListener('click', () => {
+            state.paused = !state.paused;
+            btnPause.textContent = state.paused ? 'RESUME' : 'PAUSE';
+            btnPause.classList.toggle('bg-swissRed', state.paused);
+            btnPause.classList.toggle('bg-swissDark', !state.paused);
+        });
+
+        // Reset Button
+        document.getElementById('btn-reset').addEventListener('click', () => {
+            robotState.pos.set(0, 0);
+            robotState.targetPos.set(0, 0);
+            robotState.heading = 0;
+            robotState.currentSpeed = 0;
+            targetGroup.position.set(0, 0, 0);
+            state.robotStatus = 'IDLE';
+        });
+
+        // Generate Obstacles Button
+        document.getElementById('btn-add-obstacles').addEventListener('click', () => {
+            generateRandomObstacles();
+        });
+
+        // Toggle Lidar Visualizer
+        const btnLidar = document.getElementById('toggle-lidar-btn');
+        btnLidar.addEventListener('click', () => {
+            state.lidarActive = !state.lidarActive;
+            lidarRaysGroup.visible = state.lidarActive;
+            btnLidar.textContent = state.lidarActive ? 'ACTIVE' : 'HIDDEN';
+            btnLidar.classList.toggle('bg-swissDark', state.lidarActive);
+            btnLidar.classList.toggle('bg-swissGray', !state.lidarActive);
+        });
+
+        // Toggle Path
+        const btnPath = document.getElementById('toggle-path-btn');
+        btnPath.addEventListener('click', () => {
+            state.showPath = !state.showPath;
+            btnPath.textContent = state.showPath ? 'SHOW' : 'HIDE';
+            btnPath.classList.toggle('bg-swissDark', state.showPath);
+            btnPath.classList.toggle('bg-swissGray', !state.showPath);
+        });
+
+        // Camera Presets
+        document.getElementById('cam-iso').addEventListener('click', () => setCameraPreset('ISO'));
+        document.getElementById('cam-top').addEventListener('click', () => setCameraPreset('TOP'));
+        document.getElementById('cam-follow').addEventListener('click', () => setCameraPreset('FOLLOW'));
+
+        // Mobile UI Collapsible Panel Toggle
+        const toggleUiBtn = document.getElementById('toggle-ui-btn');
+        const telemetryPanel = document.getElementById('telemetry-panel');
+        const controlPanel = document.getElementById('control-panel');
+        let uiVisible = true;
+
+        toggleUiBtn.addEventListener('click', () => {
+            uiVisible = !uiVisible;
+            telemetryPanel.classList.toggle('hidden', !uiVisible);
+            controlPanel.classList.toggle('hidden', !uiVisible);
+        });
+
+        // Window Resize Listener
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Start Loop
+        animate();
+    </script>
+</body>
+</html>

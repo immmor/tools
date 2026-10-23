@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ROBOTICS // 3D SIMULATION & COLLISION SYSTEM</title>
+    
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Three.js & OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        swissRed: '#FF3B30',
+                        swissDark: '#111111',
+                        swissGray: '#8E8E93',
+                        swissLight: '#F2F2F7',
+                        swissWarning: '#FF9500',
+                        swissGreen: '#34C759'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Glassmorphism Panels */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.75);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.9);
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+        }
+
+        /* Status pulse animations */
+        @keyframes pulse-red {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(255, 59, 48, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 59, 48, 0); }
+        }
+
+        @keyframes pulse-green {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(52, 199, 89, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(52, 199, 89, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(52, 199, 89, 0); }
+        }
+
+        .status-pulse-red { animation: pulse-red 1.5s infinite; }
+        .status-pulse-green { animation: pulse-green 2s infinite; }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.05); }
+        ::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.2); border-radius: 2px; }
+
+        /* Grid Background */
+        .swiss-grid-bg {
+            background-size: 32px 32px;
+            background-image: 
+                linear-gradient(to right, rgba(0, 0, 0, 0.035) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(0, 0, 0, 0.035) 1px, transparent 1px);
+        }
+
+        canvas { outline: none; user-select: none; }
+    </style>
+</head>
+<body class="bg-[#E5E5EA] text-swissDark font-sans overflow-hidden h-screen w-screen relative swiss-grid-bg">
+
+    <!-- 3D Canvas Container -->
+    <div id="canvas-container" class="absolute inset-0 z-0 cursor-crosshair"></div>
+
+    <!-- UI Overlay Layer -->
+    <div class="absolute inset-0 z-10 pointer-events-none flex flex-col justify-between p-4 md:p-6 select-none">
+        
+        <!-- HEADER -->
+        <header class="glass-panel rounded-2xl p-4 md:p-5 pointer-events-auto flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 transition-all duration-300 max-w-6xl mx-auto w-full">
+            <div>
+                <div class="flex items-center gap-3">
+                    <span class="text-xs font-mono font-bold tracking-widest text-swissRed uppercase px-2 py-0.5 bg-swissRed/10 rounded">SYS // 3D-PHYSICS</span>
+                    <span class="text-xs font-mono text-swissGray">v3.5.0</span>
+                </div>
+                <h1 class="text-xl md:text-2xl font-black tracking-tight uppercase mt-1">ROBOTICS // AUTONOMOUS NAVIGATION & COLLISION AVOIDANCE</h1>
+            </div>
+
+            <div class="flex items-center gap-4 self-end sm:self-center">
+                <!-- Status Badge -->
+                <div class="flex items-center gap-2.5 bg-white/80 px-4 py-2 rounded-xl border border-white/90 shadow-sm">
+                    <div id="status-dot" class="w-2.5 h-2.5 rounded-full bg-swissGreen status-pulse-green"></div>
+                    <span id="status-text" class="text-xs font-mono font-bold tracking-wider text-swissDark">NAVIGATION READY</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- MAIN OVERLAY CONTENT -->
+        <div class="flex-1 my-4 flex flex-col md:flex-row justify-between items-end gap-4 pointer-events-none max-w-6xl mx-auto w-full overflow-y-auto md:overflow-visible">
+            
+            <!-- Left Info Panel -->
+            <div class="glass-panel rounded-2xl p-4 pointer-events-auto max-w-xs w-full space-y-3">
+                <div class="text-[10px] font-mono font-bold tracking-widest text-swissGray uppercase border-b border-black/10 pb-1">INTERACTION MODES</div>
+                
+                <div class="space-y-2 text-xs">
+                    <div class="flex items-center justify-between">
+                        <span class="font-semibold">Left Click / Tap:</span>
+                        <span id="interaction-mode-desc" class="font-mono text-swissRed font-bold">SET TARGET GOAL</span>
+                    </div>
+                    <div class="flex items-center justify-between text-swissGray">
+                        <span>Right Drag / Orbit:</span>
+                        <span class="font-mono">ROTATE CAMERA</span>
+                    </div>
+                    <div class="flex items-center justify-between text-swissGray">
+                        <span>Scroll / Pinch:</span>
+                        <span class="font-mono">ZOOM VIEW</span>
+                    </div>
+                </div>
+
+                <div class="pt-2 border-t border-black/10 flex items-center gap-2">
+                    <button id="btn-mode-nav" class="flex-1 py-2 px-3 rounded-xl text-xs font-bold font-mono transition-all bg-swissDark text-white shadow-sm">
+                        NAV GOAL
+                    </button>
+                    <button id="btn-mode-obstacle" class="flex-1 py-2 px-3 rounded-lg text-xs font-bold font-mono transition-all bg-white/80 text-swissDark border border-black/10 hover:bg-white">
+                        + OBSTACLE
+                    </button>
+                </div>
+            </div>
+
+            <!-- Right Telemetry & Controls Panel -->
+            <div class="glass-panel rounded-2xl p-4 md:p-5 pointer-events-auto max-w-sm w-full space-y-4">
+                
+                <!-- Telemetry Section -->
+                <div>
+                    <div class="text-[10px] font-mono font-bold tracking-widest text-swissGray uppercase border-b border-black/10 pb-1 mb-2">TELEMETRY & SENSORS</div>
+                    <div class="grid grid-cols-2 gap-2 font-mono">
+                        <div class="bg-white/60 p-2.5 rounded-xl border border-white/80">
+                            <div class="text-[9px] text-swissGray font-bold">POSITION (X, Z)</div>
+                            <div id="val-pos" class="text-sm font-bold text-swissDark mt-0.5">0.0, 0.0</div>
+                        </div>
+                        <div class="bg-white/60 p-2.5 rounded-xl border border-white/80">
+                            <div class="text-[9px] text-swissGray font-bold">HEADING (YAW)</div>
+                            <div id="val-heading" class="text-sm font-bold text-swissDark mt-0.5">0.0°</div>
+                        </div>
+                        <div class="bg-white/60 p-2.5 rounded-xl border border-white/80">
+                            <div class="text-[9px] text-swissGray font-bold">CURRENT SPEED</div>
+                            <div id="val-speed" class="text-sm font-bold text-swissDark mt-0.5">0.00 m/s</div>
+                        </div>
+                        <div class="bg-white/60 p-2.5 rounded-xl border border-white/80">
+                            <div class="text-[9px] text-swissGray font-bold">LIDAR PROXIMITY</div>
+                            <div id="val-lidar" class="text-sm font-bold text-swissGreen mt-0.5">CLEAR</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Speed Adjustment Slider -->
+                <div>
+                    <div class="flex justify-between items-center text-xs font-mono font-bold mb-1">
+                        <span class="text-swissGray">MAX SPEED LIMIT</span>
+                        <span id="val-max-speed" class="text-swissDark">5.0 m/s</span>
+                    </div>
+                    <input type="range" id="slider-speed" min="1" max="10" step="0.5" value="5" class="w-full h-1.5 bg-black/10 rounded-lg appearance-none cursor-pointer accent-swissRed">
+                </div>
+
+                <!-- Control Buttons -->
+                <div class="grid grid-cols-2 gap-2 pt-1">
+                    <button id="btn-toggle-sim" class="py-2.5 px-3 rounded-xl font-mono text-xs font-bold text-white bg-swissRed hover:bg-red-600 shadow-md transition-all uppercase">
+                        PAUSE SIM
+                    </button>
+                    <button id="btn-reset-robot" class="py-2.5 px-3 rounded-xl font-mono text-xs font-bold text-swissDark bg-white/80 hover:bg-white border border-black/10 shadow-sm transition-all uppercase">
+                        RESET POS
+                    </button>
+                    <button id="btn-spawn-random" class="col-span-1 py-2 px-3 rounded-xl font-mono text-[11px] font-bold text-swissDark bg-white/60 hover:bg-white border border-black/10 transition-all">
+                        + RANDOM BLOCK
+                    </button>
+                    <button id="btn-clear-obstacles" class="col-span-1 py-2 px-3 rounded-xl font-mono text-[11px] font-bold text-swissRed bg-swissRed/10 hover:bg-swissRed/20 border border-swissRed/20 transition-all">
+                        CLEAR ALL
+                    </button>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- FOOTER / LOG -->
+        <footer class="glass-panel rounded-2xl px-4 py-2 pointer-events-auto flex justify-between items-center text-[10px] font-mono text-swissGray max-w-6xl mx-auto w-full">
+            <div>MODE: <span id="footer-mode" class="text-swissDark font-bold">NAVIGATION</span></div>
+            <div id="footer-log" class="hidden sm:block truncate max-w-md">System initialized with potential field steering & collision resolution.</div>
+            <div>ACTIVE OBSTACLES: <span id="val-obstacle-count" class="text-swissDark font-bold">0</span></div>
+        </footer>
+
+    </div>
+
+    <!-- 3D SIMULATION ENGINE SCRIPT -->
+    <script>
+        // --- SCENE SETUP ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xe5e5ea);
+        scene.fog = new THREE.FogExp2(0xe5e5ea, 0.015);
+
+        // Camera
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 24, 28);
+
+        // Renderer
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+
+        // Controls
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxPolarAngle = Math.PI / 2 - 0.05; // Don't clip beneath floor
+        controls.minDistance = 5;
+        controls.maxDistance = 80;
+        controls.target.set(0, 0, 0);
+
+        // Lighting System
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+        dirLight.position.set(20, 45, 20);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        dirLight.shadow.camera.near = 0.5;
+        dirLight.shadow.camera.far = 120;
+        const d = 35;
+        dirLight.shadow.camera.left = -d;
+        dirLight.shadow.camera.right = d;
+        dirLight.shadow.camera.top = d;
+        dirLight.shadow.camera.bottom = -d;
+        scene.add(dirLight);
+
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x8d8d93, 0.35);
+        scene.add(hemiLight);
+
+        // --- GROUND & GRID ---
+        const floorSize = 60;
+        const floorGeo = new THREE.PlaneGeometry(floorSize, floorSize);
+        const floorMat = new THREE.MeshStandardMaterial({ 
+            color: 0xf2f2f7, 
+            roughness: 0.8, 
+            metalness: 0.1 
+        });
+        const floor = new THREE.Mesh(floorGeo, floorMat);
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+
+        // Swiss Grid Overlay
+        const gridHelper = new THREE.GridHelper(floorSize, 30, 0x111111, 0x8e8e93);
+        gridHelper.position.y = 0.01;
+        gridHelper.material.opacity = 0.25;
+        gridHelper.material.transparent = true;
+        scene.add(gridHelper);
+
+        // Floor Border Ring
+        const borderGeo = new THREE.BoxGeometry(floorSize, 0.5, floorSize);
+        const borderMat = new THREE.MeshBasicMaterial({ color: 0x111111, wireframe: true });
+        const borderMesh = new THREE.LineSegments(new THREE.WireframeGeometry(borderGeo), borderMat);
+        borderMesh.position.y = 0.25;
+        scene.add(borderMesh);
+
+        // --- ROBOT MODEL BUILD (AGV Swiss Style) ---
+        const robotGroup = new THREE.Group();
+        scene.add(robotGroup);
+
+        const robotRadius = 1.2;
+        const robotHeight = 0.8;
+
+        // Chassis Body
+        const chassisMat = new THREE.MeshStandardMaterial({
+            color: 0xffffff,
+            roughness: 0.2,
+            metalness: 0.1
+        });
+        const chassisGeo = new THREE.CylinderGeometry(robotRadius, robotRadius * 1.05, robotHeight, 32);
+        const chassis = new THREE.Mesh(chassisGeo, chassisMat);
+        chassis.position.y = robotHeight / 2 + 0.2;
+        chassis.castShadow = true;
+        chassis.receiveShadow = true;
+        robotGroup.add(chassis);
+
+        // Dark Trim Line
+        const trimMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.5 });
+        const trimGeo = new THREE.CylinderGeometry(robotRadius * 1.02, robotRadius * 1.02, 0.15, 32);
+        const trim = new THREE.Mesh(trimGeo, trimMat);
+        trim.position.y = robotHeight / 2 + 0.15;
+        robotGroup.add(trim);
+
+        // Heading Front Direction Indicator (Swiss Red Top Plate Stripe)
+        const stripeGeo = new THREE.BoxGeometry(0.3, 0.02, robotRadius * 1.8);
+        const stripeMat = new THREE.MeshBasicMaterial({ color: 0xff3b30 });
+        const stripe = new THREE.Mesh(stripeGeo, stripeMat);
+        stripe.position.set(0, robotHeight + 0.21, -robotRadius * 0.1);
+        robotGroup.add(stripe);
+
+        // LiDAR Sensor Dome
+        const lidarGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.25, 16);
+        const lidarMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.8, roughness: 0.2 });
+        const lidar = new THREE.Mesh(lidarGeo, lidarMat);
+        lidar.position.y = robotHeight + 0.35;
+        lidar.castShadow = true;
+        robotGroup.add(lidar);
+
+        // LiDAR Beam Ring Visualization
+        const lidarBeamGeo = new THREE.RingGeometry(1.2, 5.0, 32);
+        const lidarBeamMat = new THREE.MeshBasicMaterial({ 
+            color: 0x34c759, 
+            side: THREE.DoubleSide, 
+            transparent: true, 
+            opacity: 0.18 
+        });
+        const lidarBeam = new THREE.Mesh(lidarBeamGeo, lidarBeamMat);
+        lidarBeam.rotation.x = -Math.PI / 2;
+        lidarBeam.position.y = 0.05;
+        robotGroup.add(lidarBeam);
+
+        // Drive Wheels
+        const wheelGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.2, 16);
+        const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.8 });
+        const wheels = [];
+        [-robotRadius * 0.85, robotRadius * 0.85].forEach((xPos) => {
+            const wheel = new THREE.Mesh(wheelGeo, wheelMat);
+            wheel.rotation.z = Math.PI / 2;
+            wheel.position.set(xPos, 0.3, 0);
+            wheel.castShadow = true;
+            robotGroup.add(wheel);
+            wheels.push(wheel);
+        });
+
+        // --- TARGET MARKER (Swiss Red Cross Marker & Goal Line) ---
+        const targetGroup = new THREE.Group();
+        targetGroup.position.set(0, 0, -12);
+        scene.add(targetGroup);
+
+        const targetCrossMat = new THREE.MeshBasicMaterial({ color: 0xff3b30 });
+        const bar1 = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.05, 0.3), targetCrossMat);
+        const bar2 = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.05, 1.8), targetCrossMat);
+        targetGroup.add(bar1, bar2);
+
+        const targetRingGeo = new THREE.RingGeometry(1.2, 1.35, 32);
+        const targetRingMat = new THREE.MeshBasicMaterial({ color: 0xff3b30, side: THREE.DoubleSide, transparent: true, opacity: 0.6 });
+        const targetRing = new THREE.Mesh(targetRingGeo, targetRingMat);
+        targetRing.rotation.x = -Math.PI / 2;
+        targetRing.position.y = 0.01;
+        targetGroup.add(targetRing);
+
+        // Goal Beam Vertical Light Line
+        const goalBeamGeo = new THREE.CylinderGeometry(0.05, 0.05, 12, 16);
+        const goalBeamMat = new THREE.MeshBasicMaterial({ color: 0xff3b30, transparent: true, opacity: 0.4 });
+        const goalBeam = new THREE.Mesh(goalBeamGeo, goalBeamMat);
+        goalBeam.position.y = 6;
+        targetGroup.add(goalBeam);
+
+        // Connecting Dynamic Line (Robot to Target)
+        const pathLineGeo = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(0, 0.1, 0),
+            new THREE.Vector3(0, 0.1, -12)
+        ]);
+        const pathLineMat = new THREE.LineDashedMaterial({
+            color: 0xff3b30,
+            dashSize: 0.6,
+            gapSize: 0.4,
+            transparent: true,
+            opacity: 0.5
+        });
+        const pathLine = new THREE.Line(pathLineGeo, pathLineMat);
+        scene.add(pathLine);
+
+        // --- OBSTACLES MANAGEMENT ---
+        const obstacles = [];
+        const obstacleMeshes = [];
+
+        // Obstacle Materials
+        const obstacleMatDark = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.4, metalness: 0.2 });
+        const obstacleMatGlass = new THREE.MeshPhysicalMaterial({
+            color: 0xffffff,
+            transmission: 0.6,
+            opacity: 1,
+            transparent: true,
+            roughness: 0.1,
+            ior: 1.5,
+            thickness: 1.2
+        });
+        const obstacleMatAccent = new THREE.MeshStandardMaterial({ color: 0xff3b30, roughness: 0.3 });
+
+        function createObstacle(x, z, type = 'box') {
+            let mesh, radius;
+            const materials = [obstacleMatDark, obstacleMatGlass, obstacleMatAccent];
+            const mat = materials[Math.floor(Math.random() * materials.length)];
+
+            if (type === 'pillar') {
+                const height = 2.5 + Math.random() * 2;
+                radius = 0.8 + Math.random() * 0.4;
+                mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, height, 24), mat);
+                mesh.position.set(x, height / 2, z);
+            } else if (type === 'sphere') {
+                radius = 1.0 + Math.random() * 0.5;
+                mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 24, 24), mat);
+                mesh.position.set(x, radius, z);
+            } else { // Box
+                const width = 1.5 + Math.random() * 1.5;
+                const depth = 1.5 + Math.random() * 1.5;
+                const height = 2 + Math.random() * 2;
+                mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), mat);
+                mesh.position.set(x, height / 2, z);
+                radius = Math.hypot(width / 2, depth / 2);
+            }
+
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+
+            // Subtle wireframe border
+            const wireframe = new THREE.LineSegments(
+                new THREE.WireframeGeometry(mesh.geometry),
+                new THREE.MeshBasicMaterial({ color: 0x111111, opacity: 0.2, transparent: true })
+            );
+            mesh.add(wireframe);
+
+            scene.add(mesh);
+            obstacleMeshes.push(mesh);
+            obstacles.push({ mesh, x, z, radius });
+
+            document.getElementById('val-obstacle-count').textContent = obstacles.length;
+            logSystem(`Obstacle created at (${x.toFixed(1)}, ${z.toFixed(1)})`);
+        }
+
+        function initDefaultObstacles() {
+            clearObstacles();
+            createObstacle(-8, -5, 'box');
+            createObstacle(6, -8, 'pillar');
+            createObstacle(-4, 6, 'pillar');
+            createObstacle(5, 5, 'sphere');
+            createObstacle(0, -10, 'box');
+        }
+
+        function clearObstacles() {
+            obstacleMeshes.forEach(mesh => scene.remove(mesh));
+            obstacles.length = 0;
+            obstacleMeshes.length = 0;
+            document.getElementById('val-obstacle-count').textContent = '0';
+            logSystem("All obstacles cleared.");
+        }
+
+        // --- SIMULATION STATE & NAVIGATION PHYSICS ---
+        let simRunning = true;
+        let maxSpeed = 5.0;
+        let currentSpeed = 0.0;
+        let interactionMode = 'NAV'; // 'NAV' or 'OBSTACLE'
+
+        const robotState = {
+            x: 0,
+            z: 0,
+            yaw: -Math.PI / 2, // Facing forward (-Z)
+            targetX: 0,
+            targetZ: -12
+        };
+
+        initDefaultObstacles();
+
+        // --- RAYCAST STEERING & POTENTIAL FIELD AVOIDANCE ---
+        function computeSteering() {
+            const dx = robotState.targetX - robotState.x;
+            const dz = robotState.targetZ - robotState.z;
+            const distToTarget = Math.hypot(dx, dz);
+
+            if (distToTarget < 0.3) {
+                return { speed: 0, yawRate: 0, arrived: true, hazard: false };
+            }
+
+            // Desired direct angle towards goal
+            let desiredYaw = Math.atan2(-dz, dx);
+
+            // Repulsive Potential / Proximity Force
+            let repulseX = 0;
+            let repulseZ = 0;
+            let hazardDetected = false;
+            const safetyMargin = 2.2; // Proximity field distance
+
+            obstacles.forEach(obs => {
+                const ox = robotState.x - obs.x;
+                const oz = robotState.z - obs.z;
+                const oDist = Math.hypot(ox, oz);
+                const minDist = robotRadius + obs.radius + safetyMargin;
+
+                if (oDist < minDist) {
+                    hazardDetected = true;
+                    // Exponential repulsion force
+                    const force = Math.pow((minDist - oDist) / minDist, 2) * 14.0;
+                    repulseX += (ox / oDist) * force;
+                    repulseZ += (oz / oDist) * force;
+                }
+            });
+
+            // Attraction vector towards target
+            const attrX = (dx / distToTarget) * 2.5;
+            const attrZ = (dz / distToTarget) * 2.5;
+
+            // Combined steering vector
+            const finalX = attrX + repulseX;
+            const finalZ = attrZ + repulseZ;
+
+            let finalYaw = Math.atan2(-finalZ, finalX);
+
+            // Calculate shortest yaw turning angle
+            let yawError = finalYaw - robotState.yaw;
+            while (yawError > Math.PI) yawError -= Math.PI * 2;
+            while (yawError < -Math.PI) yawError += Math.PI * 2;
+
+            // Decelerate during sharp turns or near hazard
+            const turnFactor = Math.max(0.15, Math.cos(yawError));
+            const targetSpeed = Math.min(maxSpeed, distToTarget * 1.5) * turnFactor;
+
+            return {
+                speed: targetSpeed,
+                yawRate: yawError * 6.0,
+                arrived: false,
+                hazard: hazardDetected
+            };
+        }
+
+        // --- PHYSICAL COLLISION RESOLUTION (SOLID WALL SLIDING) ---
+        function resolveHardCollisions() {
+            // Keep strictly inside floor boundary
+            const limit = floorSize / 2 - robotRadius;
+            robotState.x = THREE.MathUtils.clamp(robotState.x, -limit, limit);
+            robotState.z = THREE.MathUtils.clamp(robotState.z, -limit, limit);
+
+            let colliding = false;
+
+            obstacles.forEach(obs => {
+                const dx = robotState.x - obs.x;
+                const dz = robotState.z - obs.z;
+                const dist = Math.hypot(dx, dz);
+                const minAllowedDist = robotRadius + obs.radius + 0.05;
+
+                if (dist < minAllowedDist) {
+                    colliding = true;
+                    // Physics position pushout (Solid Collision Resolution)
+                    const overlap = minAllowedDist - dist;
+                    const nx = dx / (dist || 0.001);
+                    const nz = dz / (dist || 0.001);
+
+                    robotState.x += nx * overlap;
+                    robotState.z += nz * overlap;
+                }
+            });
+
+            return colliding;
+        }
+
+        // --- INTERACTION & RAYCASTING ---
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        function handlePointer(event) {
+            // Only trigger if clicking directly on canvas, not on glass UI
+            if (event.target !== renderer.domElement) return;
+
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(floor);
+
+            if (intersects.length > 0) {
+                const point = intersects[0].point;
+
+                if (interactionMode === 'NAV') {
+                    robotState.targetX = point.x;
+                    robotState.targetZ = point.z;
+                    targetGroup.position.set(point.x, 0, point.z);
+                    logSystem(`Target Goal updated to (${point.x.toFixed(1)}, ${point.z.toFixed(1)})`);
+                } else if (interactionMode === 'OBSTACLE') {
+                    // Check spawn distance from robot
+                    if (Math.hypot(point.x - robotState.x, point.z - robotState.z) > robotRadius + 1.5) {
+                        const types = ['box', 'pillar', 'sphere'];
+                        const randomType = types[Math.floor(Math.random() * types.length)];
+                        createObstacle(point.x, point.z, randomType);
+                    } else {
+                        logSystem("Obstacle cannot be placed directly on robot!");
+                    }
+                }
+            }
+        }
+
+        window.addEventListener('pointerdown', handlePointer);
+
+        // Handle Responsive Window Resizing
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // --- UI LOGIC & EVENT LISTENERS ---
+        const statusDot = document.getElementById('status-dot');
+        const statusText = document.getElementById('status-text');
+        const lidarStatus = document.getElementById('val-lidar');
+        const btnModeNav = document.getElementById('btn-mode-nav');
+        const btnModeObstacle = document.getElementById('btn-mode-obstacle');
+        const interactionDesc = document.getElementById('interaction-mode-desc');
+        const footerMode = document.getElementById('footer-mode');
+
+        function setInteractionMode(mode) {
+            interactionMode = mode;
+            footerMode.textContent = mode === 'NAV' ? 'NAVIGATION' : 'OBSTACLE PLACEMENT';
+            if (mode === 'NAV') {
+                btnModeNav.className = "flex-1 py-2 px-3 rounded-xl text-xs font-bold font-mono transition-all bg-swissDark text-white shadow-sm";
+                btnModeObstacle.className = "flex-1 py-2 px-3 rounded-lg text-xs font-bold font-mono transition-all bg-white/80 text-swissDark border border-black/10 hover:bg-white";
+                interactionDesc.textContent = "SET TARGET GOAL";
+                interactionDesc.className = "font-mono text-swissRed font-bold";
+            } else {
+                btnModeObstacle.className = "flex-1 py-2 px-3 rounded-xl text-xs font-bold font-mono transition-all bg-swissDark text-white shadow-sm";
+                btnModeNav.className = "flex-1 py-2 px-3 rounded-lg text-xs font-bold font-mono transition-all bg-white/80 text-swissDark border border-black/10 hover:bg-white";
+                interactionDesc.textContent = "CLICK TO PLACE BLOCK";
+                interactionDesc.className = "font-mono text-swissDark font-bold";
+            }
+        }
+
+        btnModeNav.addEventListener('click', () => setInteractionMode('NAV'));
+        btnModeObstacle.addEventListener('click', () => setInteractionMode('OBSTACLE'));
+
+        document.getElementById('slider-speed').addEventListener('input', (e) => {
+            maxSpeed = parseFloat(e.target.value);
+            document.getElementById('val-max-speed').textContent = `${maxSpeed.toFixed(1)} m/s`;
+        });
+
+        const btnToggleSim = document.getElementById('btn-toggle-sim');
+        btnToggleSim.addEventListener('click', () => {
+            simRunning = !simRunning;
+            btnToggleSim.textContent = simRunning ? 'PAUSE SIM' : 'RESUME SIM';
+            btnToggleSim.className = simRunning ? 
+                'py-2.5 px-3 rounded-xl font-mono text-xs font-bold text-white bg-swissRed hover:bg-red-600 shadow-md transition-all uppercase' :
+                'py-2.5 px-3 rounded-xl font-mono text-xs font-bold text-white bg-swissGreen hover:bg-green-600 shadow-md transition-all uppercase';
+            logSystem(simRunning ? "Simulation Resumed." : "Simulation Paused.");
+        });
+
+        document.getElementById('btn-reset-robot').addEventListener('click', () => {
+            robotState.x = 0;
+            robotState.z = 0;
+            robotState.yaw = -Math.PI / 2;
+            robotState.targetX = 0;
+            robotState.targetZ = -12;
+            targetGroup.position.set(0, 0, -12);
+            logSystem("Robot position reset to origin.");
+        });
+
+        document.getElementById('btn-spawn-random').addEventListener('click', () => {
+            const rx = (Math.random() - 0.5) * (floorSize * 0.7);
+            const rz = (Math.random() - 0.5) * (floorSize * 0.7);
+            const types = ['box', 'pillar', 'sphere'];
+            createObstacle(rx, rz, types[Math.floor(Math.random() * types.length)]);
+        });
+
+        document.getElementById('btn-clear-obstacles').addEventListener('click', clearObstacles);
+
+        function logSystem(msg) {
+            document.getElementById('footer-log').textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        }
+
+        // --- ANIMATION LOOP ---
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const dt = Math.min(clock.getDelta(), 0.1);
+
+            if (simRunning) {
+                // Compute dynamic path steering
+                const steer = computeSteering();
+
+                // Smooth speed acceleration/deceleration
+                currentSpeed += (steer.speed - currentSpeed) * 5.0 * dt;
+                robotState.yaw += steer.yawRate * dt;
+
+                // Position integration
+                robotState.x += Math.cos(robotState.yaw) * currentSpeed * dt;
+                robotState.z -= Math.sin(robotState.yaw) * currentSpeed * dt;
+
+                // Physics Collision Check & Hard Wall Sliding
+                const isPhysicalCollision = resolveHardCollisions();
+
+                // Update 3D Robot Transform
+                robotGroup.position.set(robotState.x, 0, robotState.z);
+                robotGroup.rotation.y = robotState.yaw + Math.PI / 2; // Offset rotation to align mesh forward
+
+                // Animate wheels rotation
+                wheels.forEach(w => w.rotation.x += currentSpeed * dt * 2.5);
+
+                // Animate LiDAR dome rotation
+                lidar.rotation.y += 8.0 * dt;
+
+                // Update connecting path line points
+                const pathPositions = pathLine.geometry.attributes.position.array;
+                pathPositions[0] = robotState.x;
+                pathPositions[1] = 0.1;
+                pathPositions[2] = robotState.z;
+                pathPositions[3] = robotState.targetX;
+                pathPositions[4] = 0.1;
+                pathPositions[5] = robotState.targetZ;
+                pathLine.geometry.attributes.position.needsUpdate = true;
+                pathLine.computeLineDistances();
+
+                // UI Telemetry Updates
+                document.getElementById('val-pos').textContent = `${robotState.x.toFixed(1)}, ${robotState.z.toFixed(1)}`;
+                let deg = Math.round((robotState.yaw * 180 / Math.PI) % 360);
+                if (deg < 0) deg += 360;
+                document.getElementById('val-heading').textContent = `${deg}°`;
+                document.getElementById('val-speed').textContent = `${currentSpeed.toFixed(2)} m/s`;
+
+                // Sensor Status Indicators
+                if (isPhysicalCollision || steer.hazard) {
+                    statusDot.className = "w-2.5 h-2.5 rounded-full bg-swissRed status-pulse-red";
+                    statusText.textContent = isPhysicalCollision ? "COLLISION DETECTED" : "OBSTACLE AVOIDANCE";
+                    lidarStatus.textContent = isPhysicalCollision ? "IMPACT" : "HAZARD NEAR";
+                    lidarStatus.className = "text-sm font-bold text-swissRed mt-0.5";
+                    lidarBeamMat.color.setHex(0xff3b30);
+                } else if (steer.arrived) {
+                    statusDot.className = "w-2.5 h-2.5 rounded-full bg-swissGreen";
+                    statusText.textContent = "TARGET REACHED";
+                    lidarStatus.textContent = "CLEAR";
+                    lidarStatus.className = "text-sm font-bold text-swissGreen mt-0.5";
+                    lidarBeamMat.color.setHex(0x34c759);
+                } else {
+                    statusDot.className = "w-2.5 h-2.5 rounded-full bg-swissGreen status-pulse-green";
+                    statusText.textContent = "AUTONOMOUS NAV";
+                    lidarStatus.textContent = "CLEAR";
+                    lidarStatus.className = "text-sm font-bold text-swissGreen mt-0.5";
+                    lidarBeamMat.color.setHex(0x34c759);
+                }
+            }
+
+            // Target Cross Ring Pulse Animation
+            targetRing.rotation.z += 0.5 * dt;
+
+            // Orbit controls render update
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // Start Loop
+        animate();
+    </script>
+</body>
+</html>
