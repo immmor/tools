@@ -1,0 +1,1137 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Swiss SimStudio | 3D Humanoid Physics Engine</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        swiss: {
+                            50: '#F8F9FA',
+                            100: '#EBECEE',
+                            200: '#E9ECEF',
+                            300: '#DEE2E6',
+                            700: '#495057',
+                            800: '#343A40',
+                            900: '#1E2022',
+                            red: '#E63946',
+                            redDark: '#D90429',
+                            blue: '#0066FF',
+                            teal: '#2A9D8F'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .glass-panel-light {
+            background: rgba(255, 255, 255, 0.88);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.95);
+            box-shadow: 0 16px 36px -10px rgba(30, 32, 34, 0.08), 0 4px 12px -2px rgba(30, 32, 34, 0.04);
+        }
+        .glass-pill-light {
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(222, 226, 230, 0.9);
+            box-shadow: 0 4px 14px rgba(30, 32, 34, 0.04);
+        }
+        ::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.02);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(230, 57, 70, 0.4);
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(230, 57, 70, 0.8);
+        }
+        .key-badge {
+            transition: all 0.12s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .key-badge.active {
+            background-color: #E63946 !important;
+            color: #FFFFFF !important;
+            border-color: #D90429 !important;
+            transform: translateY(2px) scale(0.96);
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.2), 0 0 12px rgba(230, 57, 70, 0.45);
+        }
+    </style>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Three.js Engine Suite -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- Cannon.js Physics Engine -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+    <!-- Chart.js Telemetry -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-swiss-100 text-swiss-900 font-sans h-screen w-screen overflow-hidden select-none">
+
+    <!-- 3D Viewport Canvas -->
+    <div id="canvas-container" class="absolute inset-0 w-full h-full z-0 cursor-grab active:cursor-grabbing"></div>
+
+    <!-- Header Control Bar -->
+    <header class="absolute top-4 left-4 right-4 z-20 flex justify-between items-center pointer-events-none">
+        <div class="glass-panel-light px-4 py-2.5 rounded-2xl flex items-center space-x-3 pointer-events-auto">
+            <div class="w-8 h-8 rounded-xl bg-swiss-red text-white flex items-center justify-center font-black text-lg shadow-md shadow-swiss-red/30">
+                +
+            </div>
+            <div>
+                <div class="flex items-center space-x-2">
+                    <h1 class="text-xs font-bold uppercase tracking-wider text-swiss-900 font-mono">SWISS SIMSTUDIO</h1>
+                    <span class="text-[10px] bg-swiss-red/10 text-swiss-red font-semibold px-2 py-0.5 rounded-full border border-swiss-red/20 font-mono">SMOOTH GAIT v4.5</span>
+                </div>
+                <p class="text-[11px] text-swiss-700 font-mono">Organic Kinematic Humanoid Engine</p>
+            </div>
+        </div>
+
+        <!-- Telemetry Pill Display -->
+        <div class="glass-pill-light px-4 py-2 rounded-2xl hidden md:flex items-center space-x-4 pointer-events-auto text-xs font-mono">
+            <div class="flex items-center space-x-1.5">
+                <span class="w-2 h-2 rounded-full bg-swiss-teal animate-pulse"></span>
+                <span class="text-swiss-700">FPS:</span>
+                <span id="val-fps" class="text-swiss-900 font-bold">60</span>
+            </div>
+            <div class="flex items-center space-x-1.5 border-l border-swiss-300 pl-3">
+                <span class="text-swiss-700">SPEED:</span>
+                <span id="val-tele-vel" class="text-swiss-red font-bold">0.0 km/h</span>
+            </div>
+            <div class="flex items-center space-x-1.5 border-l border-swiss-300 pl-3">
+                <span class="text-swiss-700">COLLISIONS:</span>
+                <span id="val-tele-contacts" class="text-swiss-blue font-bold">0</span>
+            </div>
+            <div class="flex items-center space-x-1.5 border-l border-swiss-300 pl-3">
+                <span class="text-swiss-700">GAIT:</span>
+                <span id="val-tele-state" class="text-swiss-red font-bold uppercase">IDLE</span>
+            </div>
+        </div>
+
+        <!-- Camera Views & Mobile Toggle -->
+        <div class="glass-panel-light p-1.5 rounded-2xl flex items-center space-x-1 pointer-events-auto">
+            <button onclick="setCameraPreset('orbit')" id="btn-cam-orbit" class="p-2 rounded-xl bg-swiss-red text-white transition shadow-sm" title="Orbit Camera">
+                <i data-lucide="orbit" class="w-4 h-4"></i>
+            </button>
+            <button onclick="setCameraPreset('follow')" id="btn-cam-follow" class="p-2 rounded-xl text-swiss-700 hover:bg-swiss-100 transition" title="Third Person Follow">
+                <i data-lucide="crosshair" class="w-4 h-4"></i>
+            </button>
+            <button onclick="setCameraPreset('fps')" id="btn-cam-fps" class="p-2 rounded-xl text-swiss-700 hover:bg-swiss-100 transition" title="Visor First Person View">
+                <i data-lucide="eye" class="w-4 h-4"></i>
+            </button>
+            <button onclick="toggleMobileSidebar()" class="lg:hidden p-2 rounded-xl text-swiss-700 hover:bg-swiss-100 transition" title="Toggle Sidebar">
+                <i data-lucide="sliders" class="w-4 h-4"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Visual Keyboard Listener Badges Overlay -->
+    <div class="absolute bottom-6 left-6 z-20 pointer-events-auto flex flex-col space-y-2">
+        <div class="glass-panel-light p-3 rounded-2xl flex flex-col items-center space-y-2 w-48">
+            <div class="text-[10px] font-mono font-bold text-swiss-700 uppercase tracking-wider flex items-center justify-between w-full">
+                <span>WASD Controls</span>
+                <span id="badge-sprint" class="text-[9px] px-1.5 py-0.5 rounded bg-swiss-200 text-swiss-700 font-bold">SHIFT (SPRINT)</span>
+            </div>
+            
+            <!-- WASD Key Visualizer -->
+            <div class="flex flex-col items-center space-y-1">
+                <div id="key-w" class="key-badge w-10 h-10 rounded-xl bg-white border border-swiss-300 font-mono font-bold text-swiss-900 text-sm flex items-center justify-center shadow-sm">W</div>
+                <div class="flex space-x-1">
+                    <div id="key-a" class="key-badge w-10 h-10 rounded-xl bg-white border border-swiss-300 font-mono font-bold text-swiss-900 text-sm flex items-center justify-center shadow-sm">A</div>
+                    <div id="key-s" class="key-badge w-10 h-10 rounded-xl bg-white border border-swiss-300 font-mono font-bold text-swiss-900 text-sm flex items-center justify-center shadow-sm">S</div>
+                    <div id="key-d" class="key-badge w-10 h-10 rounded-xl bg-white border border-swiss-300 font-mono font-bold text-swiss-900 text-sm flex items-center justify-center shadow-sm">D</div>
+                </div>
+                <div id="key-space" class="key-badge w-32 h-7 mt-1 rounded-lg bg-white border border-swiss-300 font-mono font-bold text-swiss-700 text-[10px] flex items-center justify-center shadow-sm uppercase">Space (Jump)</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Sidebar Drawer -->
+    <aside id="main-sidebar" class="absolute top-20 right-4 bottom-6 w-96 z-20 transition-all duration-300 transform lg:translate-x-0 translate-x-[120%] flex flex-col space-y-3 pointer-events-none">
+        
+        <!-- Navigation Tabs -->
+        <div class="glass-panel-light p-1.5 rounded-2xl flex items-center justify-between pointer-events-auto">
+            <button onclick="switchTab('control')" id="tab-btn-control" class="flex-1 py-1.5 rounded-xl text-xs font-semibold transition bg-swiss-red text-white shadow-md flex items-center justify-center space-x-1">
+                <i data-lucide="gamepad-2" class="w-3.5 h-3.5"></i>
+                <span>Controls</span>
+            </button>
+            <button onclick="switchTab('joints')" id="tab-btn-joints" class="flex-1 py-1.5 rounded-xl text-xs font-medium transition text-swiss-700 hover:text-swiss-900 flex items-center justify-center space-x-1">
+                <i data-lucide="sliders" class="w-3.5 h-3.5"></i>
+                <span>Joints</span>
+            </button>
+            <button onclick="switchTab('world')" id="tab-btn-world" class="flex-1 py-1.5 rounded-xl text-xs font-medium transition text-swiss-700 hover:text-swiss-900 flex items-center justify-center space-x-1">
+                <i data-lucide="box" class="w-3.5 h-3.5"></i>
+                <span>Objects</span>
+            </button>
+            <button onclick="switchTab('telemetry')" id="tab-btn-telemetry" class="flex-1 py-1.5 rounded-xl text-xs font-medium transition text-swiss-700 hover:text-swiss-900 flex items-center justify-center space-x-1">
+                <i data-lucide="activity" class="w-3.5 h-3.5"></i>
+                <span>Telemetry</span>
+            </button>
+        </div>
+
+        <!-- Dashboard Content Body -->
+        <div class="glass-panel-light flex-1 rounded-3xl p-4 overflow-y-auto pointer-events-auto flex flex-col space-y-4">
+            
+            <!-- TAB 1: CONTROLS & AUTOMATION -->
+            <div id="tab-content-control" class="tab-content space-y-4">
+                
+                <!-- Speed Multiplier -->
+                <div class="bg-white/90 rounded-2xl p-3.5 border border-swiss-300 shadow-sm space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-swiss-900">Locomotion Speed Multiplier</span>
+                        <span id="val-speed-mult" class="text-xs font-mono text-swiss-red font-bold">2.5x</span>
+                    </div>
+                    <input type="range" id="slider-speed" min="1.0" max="5.0" step="0.2" value="2.5" oninput="updateSpeedMultiplier(this.value)" class="w-full accent-swiss-red h-1.5 bg-swiss-200 rounded-lg appearance-none cursor-pointer">
+                    <div class="flex justify-between text-[10px] font-mono text-swiss-700">
+                        <span>Normal (1.0x)</span>
+                        <span>Agile (2.5x)</span>
+                        <span>Hyper (5.0x)</span>
+                    </div>
+                </div>
+
+                <!-- Automated Routines -->
+                <div class="bg-white/90 rounded-2xl p-3.5 border border-swiss-300 shadow-sm space-y-2.5">
+                    <label class="text-[10px] font-mono text-swiss-700 uppercase font-bold tracking-wider block">Preset Motion Routines</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="triggerRoutine('sprint')" class="py-2.5 px-2.5 rounded-xl bg-swiss-50 hover:bg-swiss-red hover:text-white border border-swiss-200 text-xs font-semibold text-swiss-900 transition flex items-center justify-center space-x-1.5">
+                            <i data-lucide="zap" class="w-3.5 h-3.5"></i>
+                            <span>Sprint Run</span>
+                        </button>
+                        <button onclick="triggerRoutine('push')" class="py-2.5 px-2.5 rounded-xl bg-swiss-50 hover:bg-swiss-red hover:text-white border border-swiss-200 text-xs font-semibold text-swiss-900 transition flex items-center justify-center space-x-1.5">
+                            <i data-lucide="move" class="w-3.5 h-3.5"></i>
+                            <span>Push Crate</span>
+                        </button>
+                        <button onclick="triggerRoutine('patrol')" class="py-2.5 px-2.5 rounded-xl bg-swiss-50 hover:bg-swiss-red hover:text-white border border-swiss-200 text-xs font-semibold text-swiss-900 transition flex items-center justify-center space-x-1.5">
+                            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                            <span>Patrol Circle</span>
+                        </button>
+                        <button onclick="triggerRoutine('dance')" class="py-2.5 px-2.5 rounded-xl bg-swiss-50 hover:bg-swiss-red hover:text-white border border-swiss-200 text-xs font-semibold text-swiss-900 transition flex items-center justify-center space-x-1.5">
+                            <i data-lucide="music" class="w-3.5 h-3.5"></i>
+                            <span>Dance Pose</span>
+                        </button>
+                        <button onclick="triggerRoutine('stop')" class="col-span-2 py-2 px-2.5 rounded-xl bg-swiss-red/10 hover:bg-swiss-red text-swiss-red hover:text-white border border-swiss-red/30 text-xs font-bold transition flex items-center justify-center space-x-1.5">
+                            <i data-lucide="square" class="w-3.5 h-3.5"></i>
+                            <span>E-Stop / Reset Gait</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Bipedal Ground Reaction Sensors -->
+                <div class="bg-white/90 rounded-2xl p-3.5 border border-swiss-300 shadow-sm space-y-2">
+                    <label class="text-[10px] font-mono text-swiss-700 uppercase font-bold tracking-wider block">Bipedal Foot Pressure Sensors</label>
+                    <div class="grid grid-cols-2 gap-3 font-mono text-xs">
+                        <div id="status-foot-left" class="p-2.5 rounded-xl border border-swiss-teal/40 bg-swiss-teal/10 text-swiss-teal flex items-center justify-between">
+                            <span class="font-bold">LEFT FOOT</span>
+                            <span class="text-[10px] font-bold uppercase">TOUCH</span>
+                        </div>
+                        <div id="status-foot-right" class="p-2.5 rounded-xl border border-swiss-teal/40 bg-swiss-teal/10 text-swiss-teal flex items-center justify-between">
+                            <span class="font-bold">RIGHT FOOT</span>
+                            <span class="text-[10px] font-bold uppercase">TOUCH</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- TAB 2: MANUAL JOINT KINEMATICS -->
+            <div id="tab-content-joints" class="tab-content space-y-3 hidden">
+                <div class="flex items-center justify-between">
+                    <label class="text-[10px] font-mono text-swiss-700 uppercase font-bold tracking-wider">Articulated Joint Overrides</label>
+                    <button onclick="resetJoints()" class="text-[10px] text-swiss-red font-bold hover:underline font-mono">Reset Joints</button>
+                </div>
+                <div class="space-y-2.5" id="joint-sliders-container">
+                    <!-- Dynamic Slider Controls Injected Here -->
+                </div>
+            </div>
+
+            <!-- TAB 3: SOLID OBJECT SPAWNER -->
+            <div id="tab-content-world" class="tab-content space-y-3.5 hidden">
+                <div class="bg-white/90 rounded-2xl p-3.5 border border-swiss-300 shadow-sm space-y-3">
+                    <div class="flex items-center justify-between">
+                        <label class="text-[10px] font-mono text-swiss-700 uppercase font-bold tracking-wider">Spawn Solid Obstacles</label>
+                        <span class="text-[10px] text-swiss-blue font-bold font-mono">100% Solid Physics</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2">
+                        <button onclick="spawnObstacle('box')" class="py-2.5 rounded-xl bg-swiss-50 hover:bg-swiss-100 border border-swiss-200 text-xs font-medium text-swiss-900 transition flex flex-col items-center justify-center space-y-1">
+                            <i data-lucide="box" class="w-4 h-4 text-swiss-red"></i>
+                            <span>Heavy Crate</span>
+                        </button>
+                        <button onclick="spawnObstacle('sphere')" class="py-2.5 rounded-xl bg-swiss-50 hover:bg-swiss-100 border border-swiss-200 text-xs font-medium text-swiss-900 transition flex flex-col items-center justify-center space-y-1">
+                            <i data-lucide="circle" class="w-4 h-4 text-swiss-blue"></i>
+                            <span>Physics Ball</span>
+                        </button>
+                        <button onclick="spawnObstacle('ramp')" class="py-2.5 rounded-xl bg-swiss-50 hover:bg-swiss-100 border border-swiss-200 text-xs font-medium text-swiss-900 transition flex flex-col items-center justify-center space-y-1">
+                            <i data-lucide="triangle" class="w-4 h-4 text-swiss-teal"></i>
+                            <span>Incline Ramp</span>
+                        </button>
+                    </div>
+                    <button onclick="clearObstacles()" class="w-full py-2 rounded-xl bg-swiss-red/10 text-swiss-red border border-swiss-red/30 text-xs font-bold hover:bg-swiss-red hover:text-white transition flex items-center justify-center space-x-1.5">
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                        <span>Clear World Objects</span>
+                    </button>
+                </div>
+
+                <div class="bg-white/90 rounded-2xl p-3.5 border border-swiss-300 shadow-sm space-y-2">
+                    <label class="text-[10px] font-mono text-swiss-700 uppercase font-bold tracking-wider block">Waypoint Pathfinding</label>
+                    <p class="text-xs text-swiss-700">Click anywhere on the floor grid to direct the robot to sprint toward the target point.</p>
+                </div>
+            </div>
+
+            <!-- TAB 4: TELEMETRY & DATA OSCILLOSCOPE -->
+            <div id="tab-content-telemetry" class="tab-content space-y-3 hidden">
+                <label class="text-[10px] font-mono text-swiss-700 uppercase font-bold tracking-wider block">Live Locomotion Telemetry</label>
+                <div class="bg-white rounded-2xl p-3 border border-swiss-300 shadow-sm h-44 relative">
+                    <canvas id="telemetryChart"></canvas>
+                </div>
+
+                <!-- Position Readouts -->
+                <div class="bg-white/90 rounded-2xl p-3.5 border border-swiss-300 shadow-sm space-y-2 font-mono text-xs">
+                    <div class="text-[10px] text-swiss-700 uppercase font-bold tracking-wider">World Coordinates</div>
+                    <div class="grid grid-cols-3 gap-2 text-center">
+                        <div class="bg-swiss-50 p-2 rounded-xl border border-swiss-200">
+                            <span class="text-swiss-700 text-[10px] block">X (m)</span>
+                            <span id="readout-pos-x" class="text-swiss-red font-bold">+0.00</span>
+                        </div>
+                        <div class="bg-swiss-50 p-2 rounded-xl border border-swiss-200">
+                            <span class="text-swiss-700 text-[10px] block">Y (m)</span>
+                            <span id="readout-pos-y" class="text-swiss-teal font-bold">+1.05</span>
+                        </div>
+                        <div class="bg-swiss-50 p-2 rounded-xl border border-swiss-200">
+                            <span class="text-swiss-700 text-[10px] block">Z (m)</span>
+                            <span id="readout-pos-z" class="text-swiss-blue font-bold">+0.00</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Simulation Play / Pause & Reset Bar -->
+        <div class="glass-panel-light p-2.5 rounded-2xl flex items-center justify-between pointer-events-auto">
+            <div class="flex items-center space-x-2">
+                <button onclick="togglePlayPause()" id="btn-play-pause" class="w-9 h-9 rounded-xl bg-swiss-red text-white font-bold flex items-center justify-center hover:bg-swiss-redDark transition shadow-md">
+                    <i data-lucide="pause" class="w-4 h-4 fill-current"></i>
+                </button>
+                <button onclick="resetRobotPosition()" class="w-9 h-9 rounded-xl bg-swiss-100 border border-swiss-300 text-swiss-900 flex items-center justify-center hover:bg-swiss-200 transition" title="Reset Robot Position">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                </button>
+            </div>
+            <div class="font-mono text-xs text-swiss-900">
+                <span class="text-swiss-700">TIME:</span> <span id="val-sim-time" class="font-bold">00:00.00</span>
+            </div>
+        </div>
+
+    </aside>
+
+    <!-- JavaScript Engine -->
+    <script>
+        // Helper Math function for linear interpolation
+        function lerp(start, end, amt) {
+            return (1 - amt) * start + amt * end;
+        }
+
+        // --- 1. STATE CONFIGURATION ---
+        const state = {
+            playing: true,
+            simTime: 0,
+            cameraMode: 'orbit', // 'orbit', 'follow', 'fps'
+            speedMultiplier: 2.5,
+            activeRoutine: null,
+            routineTimer: 0,
+            robotPos: new THREE.Vector3(0, 1.05, 0),
+            headingAngle: 0,
+            velocity: 0,
+            isJumping: false,
+            targetWaypoint: null,
+            gaitPhase: 0,
+            smoothedSpeed: 0, // Smooth speed factor for locomotion blending
+            joints: {
+                headYaw: 0, headPitch: 0,
+                lArmPitch: 0, rArmPitch: 0,
+                lLegPitch: 0, rLegPitch: 0
+            },
+            keys: { forward: false, backward: false, left: false, right: false, sprint: false, space: false }
+        };
+
+        // --- 2. GLOBAL ENGINE VARIABLES ---
+        let scene, camera, renderer, controls;
+        let world; // Cannon.js Physics Engine
+        let robotGroup, pelvisMesh, torsoMesh, headMesh, visorMesh, comMesh, statusLightMesh;
+        let leftLeg = {}, rightLeg = {}, leftArm = {}, rightArm = {};
+        let physicsBodyRoot; // Cannon.js Solid Rigid Body
+        let obstacles = [];
+        let waypointMarker;
+        let telemetryChart;
+        let clock = new THREE.Clock();
+
+        // --- 3. INITIALIZATION ---
+        window.onload = function() {
+            initPhysics();
+            initScene();
+            buildHumanoidRobot();
+            initTelemetryChart();
+            setupInputListeners();
+            buildJointSlidersUI();
+            lucide.createIcons();
+            animate();
+        };
+
+        // Cannon.js Rigid-Body Physics Engine Initialization
+        function initPhysics() {
+            world = new CANNON.World();
+            world.gravity.set(0, -18.0, 0);
+            world.broadphase = new CANNON.NaiveBroadphase();
+            world.solver.iterations = 20;
+
+            const groundMat = new CANNON.Material("groundMat");
+            groundMat.friction = 0.9;
+            groundMat.restitution = 0.05;
+
+            const groundBody = new CANNON.Body({ mass: 0, material: groundMat });
+            groundBody.addShape(new CANNON.Plane());
+            groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 2);
+            world.addBody(groundBody);
+        }
+
+        // Three.js Scene Setup (Swiss Minimalist Light Mode)
+        function initScene() {
+            const container = document.getElementById('canvas-container');
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xEBECEE);
+            scene.fog = new THREE.FogExp2(0xEBECEE, 0.022);
+
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+            camera.position.set(4.2, 2.6, 4.8);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.1;
+            container.appendChild(renderer.domElement);
+
+            // Orbit Controls
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxPolarAngle = Math.PI / 2 - 0.02;
+            controls.target.set(0, 0.95, 0);
+
+            // Lighting Setup
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.88);
+            scene.add(ambientLight);
+
+            const sunLight = new THREE.DirectionalLight(0xffffff, 0.95);
+            sunLight.position.set(12, 20, 15);
+            sunLight.castShadow = true;
+            sunLight.shadow.mapSize.width = 2048;
+            sunLight.shadow.mapSize.height = 2048;
+            sunLight.shadow.camera.near = 0.5;
+            sunLight.shadow.camera.far = 40;
+            sunLight.shadow.camera.left = -15;
+            sunLight.shadow.camera.right = 15;
+            sunLight.shadow.camera.top = 15;
+            sunLight.shadow.camera.bottom = -15;
+            sunLight.shadow.bias = -0.0003;
+            scene.add(sunLight);
+
+            const fillLight = new THREE.DirectionalLight(0x0066FF, 0.22);
+            fillLight.position.set(-10, 8, -10);
+            scene.add(fillLight);
+
+            // Floor & Precision Grid
+            createSwissStudioFloor();
+
+            // Center of Mass Visualizer
+            const comGeo = new THREE.SphereGeometry(0.045, 16, 16);
+            const comMat = new THREE.MeshStandardMaterial({ color: 0xE63946, emissive: 0xE63946, emissiveIntensity: 0.6 });
+            comMesh = new THREE.Mesh(comGeo, comMat);
+            scene.add(comMesh);
+
+            // Waypoint Ground Ring
+            const wayGeo = new THREE.RingGeometry(0.18, 0.28, 32);
+            const wayMat = new THREE.MeshBasicMaterial({ color: 0xE63946, side: THREE.DoubleSide });
+            waypointMarker = new THREE.Mesh(wayGeo, wayMat);
+            waypointMarker.rotation.x = Math.PI / 2;
+            waypointMarker.position.y = 0.01;
+            waypointMarker.visible = false;
+            scene.add(waypointMarker);
+
+            renderer.domElement.addEventListener('pointerdown', onGroundClick);
+            window.addEventListener('resize', onWindowResize, false);
+        }
+
+        // Studio Floor & Grid
+        function createSwissStudioFloor() {
+            const floorGeo = new THREE.PlaneGeometry(80, 80);
+            const floorMat = new THREE.MeshStandardMaterial({ color: 0xF8F9FA, roughness: 0.75, metalness: 0.05 });
+            const floor = new THREE.Mesh(floorGeo, floorMat);
+            floor.rotation.x = -Math.PI / 2;
+            floor.receiveShadow = true;
+            scene.add(floor);
+
+            const gridHelper = new THREE.GridHelper(50, 100, 0x1E2022, 0xDEE2E6);
+            gridHelper.position.y = 0.002;
+            scene.add(gridHelper);
+        }
+
+        // --- 4. DETAILED 3D HUMANOID ROBOT MODEL & CANNON.JS RIGID-BODY ---
+        function buildHumanoidRobot() {
+            robotGroup = new THREE.Group();
+            scene.add(robotGroup);
+
+            // Materials
+            const matWhite = new THREE.MeshStandardMaterial({ color: 0xFFFFFF, roughness: 0.2, metalness: 0.1 });
+            const matDark = new THREE.MeshStandardMaterial({ color: 0x1E2022, roughness: 0.35, metalness: 0.8 });
+            const matRed = new THREE.MeshStandardMaterial({ color: 0xE63946, roughness: 0.25, metalness: 0.5 });
+            const matVisor = new THREE.MeshStandardMaterial({ color: 0x1E2022, roughness: 0.1, metalness: 0.9, emissive: 0x0066FF, emissiveIntensity: 0.35 });
+
+            // 1. Pelvis Root
+            pelvisMesh = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.14, 0.20), matDark);
+            pelvisMesh.position.y = 0.95;
+            pelvisMesh.castShadow = true;
+            robotGroup.add(pelvisMesh);
+
+            // 2. Torso Chest
+            torsoMesh = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.40, 0.22), matWhite);
+            torsoMesh.position.y = 0.27;
+            torsoMesh.castShadow = true;
+            pelvisMesh.add(torsoMesh);
+
+            const chestBadge = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.04, 16), matRed);
+            chestBadge.rotation.x = Math.PI / 2;
+            chestBadge.position.set(0, 0.08, 0.11);
+            torsoMesh.add(chestBadge);
+
+            // Dynamic Status Light Indicator
+            statusLightMesh = new THREE.Mesh(new THREE.SphereGeometry(0.025, 16, 16), new THREE.MeshStandardMaterial({ color: 0x2A9D8F, emissive: 0x2A9D8F, emissiveIntensity: 0.8 }));
+            statusLightMesh.position.set(0, 0.15, 0.12);
+            torsoMesh.add(statusLightMesh);
+
+            // 3. Head & Visor
+            headMesh = new THREE.Group();
+            headMesh.position.y = 0.30;
+            torsoMesh.add(headMesh);
+
+            const headBase = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.20, 0.20), matWhite);
+            headBase.castShadow = true;
+            headMesh.add(headBase);
+
+            visorMesh = new THREE.Mesh(new THREE.BoxGeometry(0.21, 0.07, 0.12), matVisor);
+            visorMesh.position.set(0, 0.02, 0.06);
+            headMesh.add(visorMesh);
+
+            // 4. Limbs
+            leftLeg = buildLeg(-0.11, matWhite, matDark, matRed);
+            rightLeg = buildLeg(0.11, matWhite, matDark, matRed);
+            pelvisMesh.add(leftLeg.hip);
+            pelvisMesh.add(rightLeg.hip);
+
+            leftArm = buildArm(-0.22, matWhite, matDark);
+            rightArm = buildArm(0.22, matWhite, matDark);
+            torsoMesh.add(leftArm.shoulder);
+            torsoMesh.add(rightArm.shoulder);
+
+            // CANNON.JS SOLID RIGID BODY
+            const robotShape = new CANNON.Box(new CANNON.Vec3(0.22, 0.55, 0.18));
+            const robotMat = new CANNON.Material("robotMat");
+            robotMat.friction = 0.9;
+
+            physicsBodyRoot = new CANNON.Body({
+                mass: 80,
+                position: new CANNON.Vec3(0, 1.05, 0),
+                material: robotMat,
+                fixedRotation: true
+            });
+            physicsBodyRoot.addShape(robotShape);
+            world.addBody(physicsBodyRoot);
+        }
+
+        function buildLeg(offsetX, matWhite, matDark, matRed) {
+            const hip = new THREE.Group();
+            hip.position.set(offsetX, -0.07, 0);
+
+            const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.05, 0.40, 16), matWhite);
+            thigh.position.y = -0.20;
+            thigh.castShadow = true;
+            hip.add(thigh);
+
+            const knee = new THREE.Group();
+            knee.position.y = -0.40;
+            hip.add(knee);
+
+            const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.04, 0.38, 16), matDark);
+            shin.position.y = -0.19;
+            shin.castShadow = true;
+            knee.add(shin);
+
+            const ankle = new THREE.Group();
+            ankle.position.y = -0.38;
+            knee.add(ankle);
+
+            const foot = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.06, 0.20), matRed);
+            foot.position.set(0, -0.03, 0.05);
+            foot.castShadow = true;
+            ankle.add(foot);
+
+            return { hip, knee, ankle, foot };
+        }
+
+        function buildArm(offsetX, matWhite, matDark) {
+            const shoulder = new THREE.Group();
+            shoulder.position.set(offsetX, 0.14, 0);
+
+            const upperArm = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.04, 0.30, 16), matWhite);
+            upperArm.position.y = -0.15;
+            upperArm.castShadow = true;
+            shoulder.add(upperArm);
+
+            const elbow = new THREE.Group();
+            elbow.position.y = -0.30;
+            shoulder.add(elbow);
+
+            const lowerArm = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.03, 0.28, 16), matDark);
+            lowerArm.position.y = -0.14;
+            lowerArm.castShadow = true;
+            elbow.add(lowerArm);
+
+            return { shoulder, elbow };
+        }
+
+        // --- 5. KEYBOARD INPUT LISTENERS & WASD BADGE UPDATE ---
+        function setupInputListeners() {
+            window.addEventListener('keydown', (e) => handleKey(e, true));
+            window.addEventListener('keyup', (e) => handleKey(e, false));
+        }
+
+        function handleKey(e, isDown) {
+            const code = e.code;
+            let updated = false;
+
+            if (code === 'KeyW' || code === 'ArrowUp') { state.keys.forward = isDown; updateBadge('key-w', isDown); updated = true; }
+            if (code === 'KeyS' || code === 'ArrowDown') { state.keys.backward = isDown; updateBadge('key-s', isDown); updated = true; }
+            if (code === 'KeyA' || code === 'ArrowLeft') { state.keys.left = isDown; updateBadge('key-a', isDown); updated = true; }
+            if (code === 'KeyD' || code === 'ArrowRight') { state.keys.right = isDown; updateBadge('key-d', isDown); updated = true; }
+            if (code === 'ShiftLeft' || code === 'ShiftRight') { state.keys.sprint = isDown; updateBadge('badge-sprint', isDown); updated = true; }
+            if (code === 'Space') {
+                state.keys.space = isDown;
+                updateBadge('key-space', isDown);
+                if (isDown && !state.isJumping) {
+                    physicsBodyRoot.velocity.y = 6.5;
+                    state.isJumping = true;
+                }
+                updated = true;
+            }
+
+            if (updated && isDown) {
+                state.activeRoutine = null;
+            }
+        }
+
+        function updateBadge(id, active) {
+            const el = document.getElementById(id);
+            if (el) {
+                if (active) el.classList.add('active');
+                else el.classList.remove('active');
+            }
+        }
+
+        // --- 6. HIGH-SPEED ORGANIC LOCOMOTION ENGINE & KINEMATICS ---
+        function updateLocomotionEngine(dt) {
+            let moveSpeed = (state.keys.sprint ? 7.5 : 3.8) * state.speedMultiplier;
+            let turnSpeed = 4.5;
+            let isMoving = false;
+
+            let fwdInput = (state.keys.forward ? 1 : 0) - (state.keys.backward ? 1 : 0);
+            let turnInput = (state.keys.left ? 1 : 0) - (state.keys.right ? 1 : 0);
+
+            // Waypoint Navigation
+            if (state.targetWaypoint) {
+                const distToWay = state.robotPos.distanceTo(state.targetWaypoint);
+                if (distToWay > 0.4) {
+                    const dirToWay = state.targetWaypoint.clone().sub(state.robotPos).normalize();
+                    const targetAngle = Math.atan2(dirToWay.x, dirToWay.z);
+
+                    let diffAngle = targetAngle - state.headingAngle;
+                    while (diffAngle > Math.PI) diffAngle -= Math.PI * 2;
+                    while (diffAngle < -Math.PI) diffAngle += Math.PI * 2;
+
+                    if (Math.abs(diffAngle) > 0.1) {
+                        state.headingAngle += Math.sign(diffAngle) * turnSpeed * dt;
+                    }
+                    fwdInput = 1.0;
+                    isMoving = true;
+                } else {
+                    state.targetWaypoint = null;
+                    waypointMarker.visible = false;
+                }
+            }
+
+            if (fwdInput !== 0 || turnInput !== 0) {
+                isMoving = true;
+            }
+
+            if (turnInput !== 0) {
+                state.headingAngle += turnInput * turnSpeed * dt;
+            }
+            robotGroup.rotation.y = state.headingAngle;
+
+            // Target velocity logic
+            let targetSpeedFactor = isMoving ? (state.keys.sprint ? 1.5 : 1.0) : 0;
+            state.smoothedSpeed = lerp(state.smoothedSpeed, targetSpeedFactor, dt * 8.0);
+
+            if (isMoving) {
+                document.getElementById('val-tele-state').innerText = state.keys.sprint ? 'SPRINTING' : 'FAST WALK';
+                document.getElementById('val-tele-state').className = 'text-swiss-red font-bold uppercase';
+                statusLightMesh.material.color.setHex(0xE63946);
+                statusLightMesh.material.emissive.setHex(0xE63946);
+
+                const vx = Math.sin(state.headingAngle) * fwdInput * moveSpeed;
+                const vz = Math.cos(state.headingAngle) * fwdInput * moveSpeed;
+
+                physicsBodyRoot.velocity.x = vx;
+                physicsBodyRoot.velocity.z = vz;
+                state.velocity = moveSpeed * Math.abs(fwdInput);
+            } else {
+                document.getElementById('val-tele-state').innerText = 'IDLE';
+                document.getElementById('val-tele-state').className = 'text-swiss-700 font-bold uppercase';
+                statusLightMesh.material.color.setHex(0x2A9D8F);
+                statusLightMesh.material.emissive.setHex(0x2A9D8F);
+
+                physicsBodyRoot.velocity.x *= 0.8;
+                physicsBodyRoot.velocity.z *= 0.8;
+                state.velocity = 0;
+            }
+
+            // ADVANCED PROCEDURAL BIPEDAL GAIT KINEMATICS
+            const freq = (state.keys.sprint ? 12.0 : 8.0) * (state.speedMultiplier / 2.5);
+            if (isMoving) {
+                state.gaitPhase += dt * freq;
+            }
+
+            const p = state.gaitPhase;
+            const spd = state.smoothedSpeed;
+
+            // Leg 1 (Left) Phase: p, Leg 2 (Right) Phase: p + Math.PI
+            const phaseL = p;
+            const phaseR = p + Math.PI;
+
+            // Natural Hip Swing (Bends backward and forward naturally)
+            const targetHipL = Math.sin(phaseL) * 0.5 * spd + state.joints.lLegPitch;
+            const targetHipR = Math.sin(phaseR) * 0.5 * spd + state.joints.rLegPitch;
+
+            // Anatomical Knee Flexion: Knees ONLY flex backward (>= 0), maximum flex during swing
+            const targetKneeL = Math.max(0, -Math.sin(phaseL + 0.3) * 0.85 * spd);
+            const targetKneeR = Math.max(0, -Math.sin(phaseR + 0.3) * 0.85 * spd);
+
+            // Ankle Counter-Rotation: Keeps foot level during stance and toe-down during lift
+            const targetAnkleL = -targetHipL - targetKneeL * 0.5 + (Math.sin(phaseL) < 0 ? -0.15 * spd : 0);
+            const targetAnkleR = -targetHipR - targetKneeR * 0.5 + (Math.sin(phaseR) < 0 ? -0.15 * spd : 0);
+
+            // Arm Counter-Swing (Opposite to leg motion)
+            const targetArmL = -Math.sin(phaseL) * 0.6 * spd + state.joints.lArmPitch;
+            const targetArmR = -Math.sin(phaseR) * 0.6 * spd + state.joints.rArmPitch;
+
+            // Smooth Interpolation to avoid sudden snapping
+            leftLeg.hip.rotation.x = lerp(leftLeg.hip.rotation.x, targetHipL, dt * 15);
+            rightLeg.hip.rotation.x = lerp(rightLeg.hip.rotation.x, targetHipR, dt * 15);
+
+            leftLeg.knee.rotation.x = lerp(leftLeg.knee.rotation.x, targetKneeL, dt * 15);
+            rightLeg.knee.rotation.x = lerp(rightLeg.knee.rotation.x, targetKneeR, dt * 15);
+
+            leftLeg.ankle.rotation.x = lerp(leftLeg.ankle.rotation.x, targetAnkleL, dt * 15);
+            rightLeg.ankle.rotation.x = lerp(rightLeg.ankle.rotation.x, targetAnkleR, dt * 15);
+
+            leftArm.shoulder.rotation.x = lerp(leftArm.shoulder.rotation.x, targetArmL, dt * 15);
+            rightArm.shoulder.rotation.x = lerp(rightArm.shoulder.rotation.x, targetArmR, dt * 15);
+
+            // Pelvis Weight Transfer & Body Bobbing
+            const bodyBob = -Math.abs(Math.cos(p * 2.0)) * 0.05 * spd;
+            pelvisMesh.position.y = lerp(pelvisMesh.position.y, 0.95 + bodyBob, dt * 12);
+
+            const bodySway = Math.sin(phaseL) * 0.04 * spd;
+            torsoMesh.rotation.z = lerp(torsoMesh.rotation.z, bodySway, dt * 10);
+            pelvisMesh.rotation.z = lerp(pelvisMesh.rotation.z, -bodySway * 0.5, dt * 10);
+
+            // Update Foot Sensor State
+            updateFootSensors(Math.sin(phaseL) < 0.2, Math.sin(phaseR) < 0.2);
+
+            // Sync Visual Mesh with Cannon Physics Body
+            state.robotPos.set(physicsBodyRoot.position.x, physicsBodyRoot.position.y - 0.55, physicsBodyRoot.position.z);
+            robotGroup.position.copy(state.robotPos);
+
+            if (physicsBodyRoot.position.y <= 1.06) {
+                state.isJumping = false;
+            }
+
+            // Head controls
+            headMesh.rotation.y = state.joints.headYaw;
+            headMesh.rotation.x = state.joints.headPitch;
+
+            comMesh.position.set(state.robotPos.x, state.robotPos.y + 0.82, state.robotPos.z);
+
+            updateCameraModes();
+        }
+
+        function updateCameraModes() {
+            if (state.cameraMode === 'follow') {
+                const camOffset = new THREE.Vector3(-Math.sin(state.headingAngle) * 3.8, 2.0, -Math.cos(state.headingAngle) * 3.8);
+                camera.position.copy(state.robotPos).add(camOffset);
+                controls.target.copy(state.robotPos).add(new THREE.Vector3(0, 0.9, 0));
+            } else if (state.cameraMode === 'fps') {
+                const visorWorldPos = new THREE.Vector3();
+                visorMesh.getWorldPosition(visorWorldPos);
+                camera.position.copy(visorWorldPos);
+
+                const lookTarget = visorWorldPos.clone().add(new THREE.Vector3(Math.sin(state.headingAngle), 0, Math.cos(state.headingAngle)));
+                camera.lookAt(lookTarget);
+                controls.target.copy(lookTarget);
+            }
+        }
+
+        function setCameraPreset(mode) {
+            state.cameraMode = mode;
+            document.getElementById('btn-cam-orbit').className = mode === 'orbit' ? 'p-2 rounded-xl bg-swiss-red text-white transition shadow-sm' : 'p-2 rounded-xl text-swiss-700 hover:bg-swiss-100 transition';
+            document.getElementById('btn-cam-follow').className = mode === 'follow' ? 'p-2 rounded-xl bg-swiss-red text-white transition shadow-sm' : 'p-2 rounded-xl text-swiss-700 hover:bg-swiss-100 transition';
+            document.getElementById('btn-cam-fps').className = mode === 'fps' ? 'p-2 rounded-xl bg-swiss-red text-white transition shadow-sm' : 'p-2 rounded-xl text-swiss-700 hover:bg-swiss-100 transition';
+
+            if (mode === 'orbit') {
+                camera.position.set(state.robotPos.x + 4.2, state.robotPos.y + 2.6, state.robotPos.z + 4.8);
+                controls.target.copy(state.robotPos).add(new THREE.Vector3(0, 0.9, 0));
+            }
+        }
+
+        // --- 7. SOLID PHYSICS OBSTACLE SPAWNER ---
+        function spawnObstacle(type) {
+            let mesh, body;
+            const spawnDist = 2.2;
+            const spawnX = state.robotPos.x + Math.sin(state.headingAngle) * spawnDist;
+            const spawnZ = state.robotPos.z + Math.cos(state.headingAngle) * spawnDist;
+
+            if (type === 'box') {
+                const matBox = new THREE.MeshStandardMaterial({ color: 0xE63946, roughness: 0.3 });
+                mesh = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 0.8), matBox);
+
+                const shape = new CANNON.Box(new CANNON.Vec3(0.4, 0.4, 0.4));
+                body = new CANNON.Body({ mass: 25, position: new CANNON.Vec3(spawnX, 0.4, spawnZ) });
+                body.addShape(shape);
+            } else if (type === 'sphere') {
+                const matBall = new THREE.MeshStandardMaterial({ color: 0x0066FF, roughness: 0.2 });
+                mesh = new THREE.Mesh(new THREE.SphereGeometry(0.45, 32, 32), matBall);
+
+                const shape = new CANNON.Sphere(0.45);
+                body = new CANNON.Body({ mass: 12, position: new CANNON.Vec3(spawnX, 0.6, spawnZ) });
+                body.addShape(shape);
+            } else if (type === 'ramp') {
+                const matRamp = new THREE.MeshStandardMaterial({ color: 0x2A9D8F, roughness: 0.4 });
+                mesh = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.35, 2.0), matRamp);
+                mesh.rotation.x = -Math.PI / 7;
+
+                const shape = new CANNON.Box(new CANNON.Vec3(0.7, 0.175, 1.0));
+                body = new CANNON.Body({ mass: 0, position: new CANNON.Vec3(spawnX, 0.175, spawnZ) });
+                body.quaternion.setFromAxisAngle(new CANNON.Vec3(1, 0, 0), -Math.PI / 7);
+                body.addShape(shape);
+            }
+
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            scene.add(mesh);
+            world.addBody(body);
+
+            obstacles.push({ mesh, body });
+        }
+
+        function clearObstacles() {
+            obstacles.forEach(o => {
+                scene.remove(o.mesh);
+                world.remove(o.body);
+            });
+            obstacles = [];
+        }
+
+        function onGroundClick(event) {
+            if (event.button !== 0) return;
+
+            const rect = renderer.domElement.getBoundingClientRect();
+            const mouse = new THREE.Vector2(
+                ((event.clientX - rect.left) / rect.width) * 2 - 1,
+                -((event.clientY - rect.top) / rect.height) * 2 + 1
+            );
+
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(mouse, camera);
+
+            const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+            const target = new THREE.Vector3();
+
+            if (raycaster.ray.intersectPlane(plane, target)) {
+                state.targetWaypoint = target;
+                waypointMarker.position.x = target.x;
+                waypointMarker.position.z = target.z;
+                waypointMarker.visible = true;
+            }
+        }
+
+        // --- 8. MANUAL JOINT SLIDERS & AUTOMATION ---
+        function buildJointSlidersUI() {
+            const container = document.getElementById('joint-sliders-container');
+            const jointConfig = [
+                { id: 'headYaw', label: 'Neck Yaw (Pan)', min: -1.2, max: 1.2, step: 0.05 },
+                { id: 'headPitch', label: 'Neck Pitch (Tilt)', min: -0.6, max: 0.6, step: 0.05 },
+                { id: 'lArmPitch', label: 'Left Shoulder Pitch', min: -1.5, max: 1.5, step: 0.05 },
+                { id: 'rArmPitch', label: 'Right Shoulder Pitch', min: -1.5, max: 1.5, step: 0.05 },
+                { id: 'lLegPitch', label: 'Left Hip Offset', min: -0.8, max: 0.8, step: 0.05 },
+                { id: 'rLegPitch', label: 'Right Hip Offset', min: -0.8, max: 0.8, step: 0.05 }
+            ];
+
+            container.innerHTML = jointConfig.map(j => `
+                <div class="bg-white/90 rounded-2xl p-2.5 border border-swiss-300 shadow-sm space-y-1">
+                    <div class="flex justify-between items-center text-xs font-semibold text-swiss-900">
+                        <span>${j.label}</span>
+                        <span id="val-${j.id}" class="font-mono text-[11px] text-swiss-red">0.00 rad</span>
+                    </div>
+                    <input type="range" id="slider-${j.id}" min="${j.min}" max="${j.max}" step="${j.step}" value="0"
+                        oninput="updateJointValue('${j.id}', this.value)"
+                        class="w-full accent-swiss-red h-1.5 bg-swiss-200 rounded-lg appearance-none cursor-pointer">
+                </div>
+            `).join('');
+        }
+
+        function updateJointValue(joint, val) {
+            val = parseFloat(val);
+            state.joints[joint] = val;
+            const readout = document.getElementById(`val-${joint}`);
+            if (readout) readout.innerText = `${val.toFixed(2)} rad`;
+        }
+
+        function resetJoints() {
+            Object.keys(state.joints).forEach(k => {
+                state.joints[k] = 0;
+                const slider = document.getElementById(`slider-${k}`);
+                const readout = document.getElementById(`val-${k}`);
+                if (slider) slider.value = 0;
+                if (readout) readout.innerText = `0.00 rad`;
+            });
+        }
+
+        function triggerRoutine(routine) {
+            state.activeRoutine = routine;
+            state.routineTimer = 0;
+
+            if (routine === 'stop') {
+                state.activeRoutine = null;
+                state.targetWaypoint = null;
+                state.keys.forward = false;
+                state.keys.sprint = false;
+                waypointMarker.visible = false;
+                resetJoints();
+            } else if (routine === 'push') {
+                if (obstacles.length === 0) spawnObstacle('box');
+            }
+        }
+
+        function updateRoutines(dt) {
+            if (!state.activeRoutine) return;
+            state.routineTimer += dt;
+
+            if (state.activeRoutine === 'sprint') {
+                state.keys.forward = true;
+                state.keys.sprint = true;
+            } else if (state.activeRoutine === 'push') {
+                state.keys.forward = true;
+                state.keys.sprint = false;
+                state.joints.lArmPitch = -Math.PI * 0.45;
+                state.joints.rArmPitch = -Math.PI * 0.45;
+            } else if (state.activeRoutine === 'patrol') {
+                state.headingAngle += 1.2 * dt;
+                state.keys.forward = true;
+            } else if (state.activeRoutine === 'dance') {
+                state.keys.forward = false;
+                state.joints.lArmPitch = Math.sin(state.routineTimer * 6) * 0.9;
+                state.joints.rArmPitch = Math.cos(state.routineTimer * 6) * 0.9;
+                torsoMesh.rotation.z = Math.sin(state.routineTimer * 8) * 0.15;
+            }
+        }
+
+        function updateFootSensors(leftTouch, rightTouch) {
+            const elL = document.getElementById('status-foot-left');
+            const elR = document.getElementById('status-foot-right');
+
+            if (leftTouch) {
+                elL.className = 'p-2.5 rounded-xl border border-swiss-teal/40 bg-swiss-teal/10 text-swiss-teal flex items-center justify-between';
+            } else {
+                elL.className = 'p-2.5 rounded-xl border border-swiss-300 bg-swiss-50 text-swiss-700 flex items-center justify-between opacity-50';
+            }
+
+            if (rightTouch) {
+                elR.className = 'p-2.5 rounded-xl border border-swiss-teal/40 bg-swiss-teal/10 text-swiss-teal flex items-center justify-between';
+            } else {
+                elR.className = 'p-2.5 rounded-xl border border-swiss-300 bg-swiss-50 text-swiss-700 flex items-center justify-between opacity-50';
+            }
+        }
+
+        // --- 9. TELEMETRY CHART & READOUTS ---
+        function initTelemetryChart() {
+            const ctx = document.getElementById('telemetryChart').getContext('2d');
+            telemetryChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: Array(25).fill(''),
+                    datasets: [
+                        {
+                            label: 'Speed (km/h)',
+                            data: Array(25).fill(0),
+                            borderColor: '#E63946',
+                            borderWidth: 2,
+                            tension: 0.3,
+                            pointRadius: 0
+                        },
+                        {
+                            label: 'CoM Height (m)',
+                            data: Array(25).fill(1.05),
+                            borderColor: '#0066FF',
+                            borderWidth: 2,
+                            tension: 0.3,
+                            pointRadius: 0
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    scales: {
+                        x: { display: false },
+                        y: {
+                            min: 0,
+                            max: 30,
+                            ticks: { font: { family: 'JetBrains Mono', size: 9 } }
+                        }
+                    },
+                    plugins: {
+                        legend: { labels: { font: { family: 'Inter', size: 10, weight: 'bold' } } }
+                    }
+                }
+            });
+        }
+
+        function updateTelemetryChart() {
+            if (!telemetryChart) return;
+
+            const speedKmh = (state.velocity * 3.6);
+            const speedData = telemetryChart.data.datasets[0].data;
+            const comData = telemetryChart.data.datasets[1].data;
+
+            speedData.shift();
+            speedData.push(speedKmh);
+
+            comData.shift();
+            comData.push(comMesh.position.y);
+
+            telemetryChart.update('none');
+
+            document.getElementById('val-tele-vel').innerText = `${speedKmh.toFixed(1)} km/h`;
+            document.getElementById('val-tele-contacts').innerText = world.contacts.length;
+
+            document.getElementById('readout-pos-x').innerText = (state.robotPos.x >= 0 ? '+' : '') + state.robotPos.x.toFixed(2);
+            document.getElementById('readout-pos-y').innerText = '+' + comMesh.position.y.toFixed(2);
+            document.getElementById('readout-pos-z').innerText = (state.robotPos.z >= 0 ? '+' : '') + state.robotPos.z.toFixed(2);
+        }
+
+        // --- 10. MAIN ANIMATION SIMULATION LOOP ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const dt = Math.min(clock.getDelta(), 0.05);
+
+            if (state.playing) {
+                state.simTime += dt;
+
+                world.step(1 / 60, dt, 5);
+
+                obstacles.forEach(o => {
+                    o.mesh.position.copy(o.body.position);
+                    o.mesh.quaternion.copy(o.body.quaternion);
+                });
+
+                updateLocomotionEngine(dt);
+                updateRoutines(dt);
+                updateTelemetryChart();
+
+                const mins = Math.floor(state.simTime / 60).toString().padStart(2, '0');
+                const secs = (state.simTime % 60).toFixed(2).padStart(5, '0');
+                document.getElementById('val-sim-time').innerText = `${mins}:${secs}`;
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // --- 11. UI TAB SWITCHER & HELPER CONTROLS ---
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById(`tab-content-${tabId}`).classList.remove('hidden');
+
+            ['control', 'joints', 'world', 'telemetry'].forEach(t => {
+                const btn = document.getElementById(`tab-btn-${t}`);
+                if (t === tabId) {
+                    btn.className = 'flex-1 py-1.5 rounded-xl text-xs font-semibold transition bg-swiss-red text-white shadow-md flex items-center justify-center space-x-1';
+                } else {
+                    btn.className = 'flex-1 py-1.5 rounded-xl text-xs font-medium transition text-swiss-700 hover:text-swiss-900 flex items-center justify-center space-x-1';
+                }
+            });
+        }
+
+        function updateSpeedMultiplier(val) {
+            state.speedMultiplier = parseFloat(val);
+            document.getElementById('val-speed-mult').innerText = `${parseFloat(val).toFixed(1)}x`;
+        }
+
+        function togglePlayPause() {
+            state.playing = !state.playing;
+            const btn = document.getElementById('btn-play-pause');
+            btn.innerHTML = state.playing ? '<i data-lucide="pause" class="w-4 h-4 fill-current"></i>' : '<i data-lucide="play" class="w-4 h-4 fill-current"></i>';
+            lucide.createIcons();
+        }
+
+        function resetRobotPosition() {
+            physicsBodyRoot.position.set(0, 1.05, 0);
+            physicsBodyRoot.velocity.set(0, 0, 0);
+            state.headingAngle = 0;
+            state.targetWaypoint = null;
+            waypointMarker.visible = false;
+            resetJoints();
+        }
+
+        function toggleMobileSidebar() {
+            const sidebar = document.getElementById('main-sidebar');
+            sidebar.classList.toggle('translate-x-[120%]');
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+    </script>
+</body>
+</html>

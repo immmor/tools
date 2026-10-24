@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>人形机器人模拟环境</title>
+<style>
+:root{--bg:#e8e8e4;--fg:#101010;--mut:#6a6a66;--glass:rgba(255,255,255,.52);--line:rgba(0,0,0,.14);--acc:#e30613;--grid:#b4b4ae;--floor:#f3f3ef;--link:#fafaf8}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121212;--fg:#f1f1ee;--mut:#9b9b96;--glass:rgba(34,34,34,.5);--line:rgba(255,255,255,.16);--grid:#3c3c3c;--floor:#1b1b1b;--link:#d8d8d4}}
+:root[data-theme="dark"]{--bg:#121212;--fg:#f1f1ee;--mut:#9b9b96;--glass:rgba(34,34,34,.5);--line:rgba(255,255,255,.16);--grid:#3c3c3c;--floor:#1b1b1b;--link:#d8d8d4}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{font-family:"Helvetica Neue",Helvetica,Arial,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;color:var(--fg);background-color:var(--bg);background-image:radial-gradient(circle at 12% 18%,rgba(227,6,19,.2),transparent 42%),radial-gradient(circle at 88% 82%,rgba(70,100,255,.16),transparent 46%);overflow:hidden;-webkit-tap-highlight-color:transparent}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.glass{background:var(--glass);-webkit-backdrop-filter:blur(22px) saturate(1.5);backdrop-filter:blur(22px) saturate(1.5);border:1px solid var(--line);border-radius:6px}
+header{position:fixed;z-index:5;left:calc(16px + env(safe-area-inset-left,0px));right:calc(16px + env(safe-area-inset-right,0px));top:calc(14px + env(safe-area-inset-top,0px));display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;pointer-events:none}
+header>*{pointer-events:auto}
+h1{font-size:clamp(22px,3.2vw,40px);font-weight:700;letter-spacing:-.03em;line-height:1}
+h1 small{display:block;margin-top:6px;font-size:12px;font-weight:400;letter-spacing:0;color:var(--mut)}
+.bar{display:flex;gap:2px;padding:3px;flex-wrap:wrap}
+button,select{font:inherit;font-size:13px;color:var(--fg);background:transparent;border:0;border-radius:4px;min-height:36px;padding:0 12px;cursor:pointer}
+button:hover,select:hover{background:var(--line)}
+button[aria-pressed="true"],button.on{background:var(--fg);color:var(--bg)}
+button.acc{color:var(--acc);font-weight:700}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+.panel{position:fixed;z-index:4;padding:16px;overflow:auto}
+body.hideP .panel{display:none!important}
+.left{left:calc(16px + env(safe-area-inset-left,0px));top:calc(96px + env(safe-area-inset-top,0px));width:310px;max-height:calc(100% - 116px - env(safe-area-inset-top,0px))}
+.right{right:calc(16px + env(safe-area-inset-right,0px));top:calc(96px + env(safe-area-inset-top,0px));width:260px}
+h2{font-size:13px;font-weight:700;margin-bottom:12px}
+.sec+.sec{margin-top:18px}
+.ctl{display:flex;gap:14px;align-items:center}
+#pad{width:112px;height:112px;border-radius:50%;border:1px solid var(--line);position:relative;touch-action:none;background:rgba(127,127,127,.1);flex:none}
+#knob{position:absolute;width:44px;height:44px;border-radius:50%;background:var(--acc);left:33px;top:33px}
+.acts{display:grid;grid-template-columns:1fr 1fr;gap:6px;flex:1}
+.acts button{border:1px solid var(--line)}
+.hint{font-size:11px;color:var(--mut);margin-top:10px;line-height:1.5}
+.j{padding:6px 0;border-top:1px solid var(--line)}
+.j div{display:flex;justify-content:space-between;align-items:baseline;font-size:13px}
+.j b{font-size:16px;font-weight:300;font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--acc);margin:2px 0;height:22px}
+.k{display:grid;grid-template-columns:1fr 1fr;gap:14px 12px}
+.k div{border-top:1px solid var(--line);padding-top:6px}
+.k span{display:block;font-size:11px;color:var(--mut)}
+.k b{display:block;font-size:24px;font-weight:300;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.k .w{grid-column:span 2}.k .w b{font-size:40px}
+nav{display:none}
+@media (hover:none){.hint{display:none}}
+@media (max-width:899px){
+ .bar button,.bar select{min-height:40px;padding:0 10px}
+ .panel{left:calc(8px + env(safe-area-inset-left,0px));right:calc(8px + env(safe-area-inset-right,0px));top:auto;width:auto;bottom:calc(60px + env(safe-area-inset-bottom,0px));max-height:40vh;padding:12px 14px}
+ nav{display:flex;position:fixed;z-index:6;left:calc(8px + env(safe-area-inset-left,0px));right:calc(8px + env(safe-area-inset-right,0px));bottom:calc(8px + env(safe-area-inset-bottom,0px));padding:3px;gap:2px}
+ nav button{flex:1;min-height:42px}
+ body[data-tab="ctl"] .sec-j,body[data-tab="jnt"] .sec-c,body[data-tab="ctl"] .right,body[data-tab="jnt"] .right,body[data-tab="tel"] .left,body.fold .panel{display:none}
+ .sec+.sec{margin-top:0}
+}
+@media (max-width:420px){h1 small{display:none}}
+</style>
+</head>
+<body data-tab="ctl">
+<header>
+ <h1>人形机器人<small>十二关节 · PD 控制 · 步态生成</small></h1>
+ <div class="bar glass" role="toolbar" aria-label="仿真控制">
+  <button id="play" class="acc">暂停</button><button id="reset">重置</button>
+  <select id="spd" aria-label="仿真速度"><option value=".25">0.25×</option><option value="1" selected>1×</option><option value="2">2×</option></select>
+  <button id="hp">隐藏</button>
+ </div>
+</header>
+<section class="panel left glass" aria-label="控制">
+ <div class="sec sec-c"><h2>控制</h2>
+  <div class="ctl"><div id="pad" aria-label="移动摇杆"><div id="knob"></div></div><div class="acts" id="acts"></div></div>
+  <p class="hint">键盘：W A S D 移动，Shift 加速，空格跳跃，数字 1 到 5 切换动作。左右为转向，机器人朝向即前进方向。</p></div>
+ <div class="sec sec-j"><h2>关节</h2><div id="joints"></div></div>
+</section>
+<section class="panel right glass" aria-label="遥测数据"><h2>遥测</h2>
+ <div class="k">
+  <div class="w"><span>速度（米/秒）</span><b id="v">0.00</b></div>
+  <div><span>当前动作</span><b id="act">站立</b></div><div><span>骨盆高度</span><b id="ph">0</b></div>
+  <div><span>位置 x</span><b id="px">0</b></div><div><span>位置 z</span><b id="pz">0</b></div>
+  <div><span>朝向（度）</span><b id="hd">0</b></div><div><span>仿真时间</span><b id="t">0</b></div>
+  <div><span>帧率</span><b id="fps">0</b></div>
+ </div>
+ <div class="bar" style="padding:12px 0 0"><button id="trail" aria-pressed="true">轨迹</button><button id="cam">重置视角</button></div>
+</section>
+<nav class="glass"><button data-t="ctl" class="on">控制</button><button data-t="jnt">关节</button><button data-t="tel">遥测</button></nav>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function(){
+const $=id=>document.getElementById(id),clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const cv=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const R=new THREE.WebGLRenderer({antialias:true,alpha:true});
+R.setPixelRatio(Math.min(devicePixelRatio||1,2));document.body.prepend(R.domElement);
+const S=new THREE.Scene(),C=new THREE.PerspectiveCamera(42,1,.1,100),O=new THREE.OrbitControls(C,R.domElement);
+O.enableDamping=true;O.maxPolarAngle=Math.PI*.495;O.minDistance=2.5;O.maxDistance=12;
+function homeCam(){C.position.set(2.6,2.1,4.2);O.target.set(root.position.x,.95,root.position.z);O.update()}
+S.add(new THREE.HemisphereLight(0xffffff,0x888890,.9));
+const dl=new THREE.DirectionalLight(0xffffff,.8);dl.position.set(3,6,4);S.add(dl);
+const linkMat=new THREE.MeshStandardMaterial({color:0xfafaf8,roughness:.45,metalness:.1}),accMat=new THREE.MeshStandardMaterial({color:0xe30613,roughness:.4}),darkMat=new THREE.MeshStandardMaterial({color:0x1a1a1c,roughness:.3});
+let grid,floor;
+function env(){
+ if(grid)S.remove(grid);if(floor)S.remove(floor);
+ grid=new THREE.GridHelper(28,28,cv('--grid'),cv('--grid'));grid.material.transparent=true;grid.material.opacity=.7;S.add(grid);
+ floor=new THREE.Mesh(new THREE.CircleGeometry(14,64),new THREE.MeshBasicMaterial({color:cv('--floor'),transparent:true,opacity:.55}));
+ floor.rotation.x=-Math.PI/2;floor.position.y=-.002;S.add(floor);linkMat.color.set(cv('--link'));
+}
+// 场景参照物
+const obs=[];
+for(let i=0;i<10;i++){const a=i*2.4+.5,r=4+(i*37%9),s=.5+(i%3)*.3,m=new THREE.Mesh(new THREE.BoxGeometry(s,s,s),i%4?linkMat:accMat);m.position.set(Math.cos(a)*r,s/2,Math.sin(a)*r);m.rotation.y=i;S.add(m);
+ obs.push({x:m.position.x,z:m.position.z,h:s/2,a:i})}
+// 把机器人当作半径 r 的圆，与每个旋转盒子做 XZ 平面推挤求解
+function collide(){const r=.34;for(const o of obs){const c=Math.cos(o.a),s=Math.sin(o.a),dx=root.position.x-o.x,dz=root.position.z-o.z,hx=o.h+r,hz=o.h+r;let lx=dx*c-dz*s,lz=dx*s+dz*c;
+ if(Math.abs(lx)<hx&&Math.abs(lz)<hz){const px=hx-Math.abs(lx),pz=hz-Math.abs(lz);if(px<pz)lx=lx<0?-hx:hx;else lz=lz<0?-hz:hz;root.position.x=o.x+lx*c+lz*s;root.position.z=o.z-lx*s+lz*c}}}
+// 机器人模型
+const bx=(w,h,d,m,x,y,z,p)=>{const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);o.position.set(x,y,z);p.add(o);return o};
+const sp=(r,m,x,y,z,p)=>{const o=new THREE.Mesh(new THREE.SphereGeometry(r,20,14),m);o.position.set(x,y,z);p.add(o);return o};
+const grp=(p,x,y,z,order)=>{const g=new THREE.Group();g.position.set(x,y,z);if(order)g.rotation.order=order;p.add(g);return g};
+const root=grp(S,0,1.02,0);
+bx(.34,.16,.2,linkMat,0,0,0,root);
+const W=grp(root,0,.08,0);bx(.42,.52,.24,linkMat,0,.26,0,W);bx(.16,.16,.02,accMat,0,.34,.125,W);
+const N=grp(W,0,.56,0);sp(.05,darkMat,0,0,0,N);bx(.24,.24,.24,linkMat,0,.16,0,N);bx(.2,.08,.02,darkMat,0,.18,.125,N);
+function arm(s){const sh=grp(W,s*.28,.46,0,'ZXY');sp(.07,accMat,0,0,0,sh);bx(.09,.32,.09,linkMat,0,-.16,0,sh);
+ const el=grp(sh,0,-.32,0);sp(.055,accMat,0,0,0,el);bx(.075,.3,.075,linkMat,0,-.15,0,el);sp(.06,darkMat,0,-.32,0,el);return[sh,el]}
+function leg(s){const hp=grp(root,s*.12,-.05,0);sp(.07,accMat,0,0,0,hp);bx(.12,.45,.13,linkMat,0,-.225,0,hp);
+ const kn=grp(hp,0,-.45,0);sp(.06,accMat,0,0,0,kn);bx(.1,.45,.11,linkMat,0,-.225,0,kn);
+ const ft=grp(kn,0,-.45,0);bx(.12,.06,.26,darkMat,0,-.03,.05,ft);return[hp,kn,ft]}
+const[SL,EL]=arm(1),[SR,ER]=arm(-1),[HL,KL,FL]=leg(1),[HR,KR,FR]=leg(-1);
+// 路径轨迹
+const TN=300,trail=[],tg0=new THREE.BufferGeometry();tg0.setAttribute('position',new THREE.BufferAttribute(new Float32Array(TN*3),3));
+const tl=new THREE.Line(tg0,new THREE.LineBasicMaterial({color:0xe30613,transparent:true,opacity:.7}));tl.frustumCulled=false;S.add(tl);
+// 关节
+const JN=['腰部','颈部','左肩前后','左肩外展','左肘','右肩前后','右肩外展','右肘','左髋','左膝','右髋','右膝'];
+const LIM=[[-1,1],[-1.2,1.2],[-2.6,2.6],[-.3,2.8],[0,2.5],[-2.6,2.6],[-.3,2.8],[0,2.5],[-1.2,1.6],[0,2.4],[-1.2,1.6],[0,2.4]];
+const STAND=[0,0,0,.1,.1,0,.1,.1,0,0,0,0],KP=140,KD=18;
+let q,qd,tg,act,jsS,jt,jy,jv,ph,T,v,heading,playing=true,speed=1,trailOn=true;
+const ACTS={stand:'站立',wave:'挥手',squat:'下蹲',dance:'舞蹈',manual:'手动',walk:'行走',jump:'跳跃'};
+function reset(){q=STAND.slice();qd=q.map(()=>0);tg=STAND.slice();act='stand';jsS=0;jt=0;jy=0;jv=0;ph=0;T=0;v=0;
+ root.position.set(0,1.02,0);root.rotation.y=0;trail.length=0;apply();homeCam()}
+$('joints').innerHTML=JN.map((n,i)=>`<div class="j"><div><span>${n}</span><b id="v${i}">0°</b></div><input type="range" id="s${i}" min="${LIM[i][0]}" max="${LIM[i][1]}" step=".01" aria-label="${n}目标角度"></div>`).join('');
+JN.forEach((n,i)=>$('s'+i).addEventListener('input',e=>{act='manual';tg[i]=+e.target.value}));
+const AB=[['stand','站立'],['wave','挥手'],['squat','下蹲'],['dance','舞蹈'],['jump','跳跃']];
+$('acts').innerHTML=AB.map(a=>`<button data-a="${a[0]}">${a[1]}</button>`).join('');
+function setAct(a){if(a==='jump'){if(!jsS){jsS=1;jt=0}}else act=(a==='wave'&&act==='wave')?'stand':a}
+$('acts').addEventListener('click',e=>{const b=e.target.closest('button');if(b)setAct(b.dataset.a)});
+// 输入：键盘 + 摇杆
+const K={};let jx=0,jyy=0;
+const KM={w:'u',arrowup:'u',s:'d',arrowdown:'d',a:'l',arrowleft:'l',d:'r',arrowright:'r'};
+addEventListener('keydown',e=>{if(/INPUT|SELECT/.test(e.target.tagName))return;const k=e.key.toLowerCase();
+ if(KM[k]){K[KM[k]]=1;e.preventDefault()}else if(k==='shift')K.sh=1;
+ else if(k===' '){setAct('jump');e.preventDefault()}else if(k>='1'&&k<='5')setAct(AB[k-1][0])});
+addEventListener('keyup',e=>{const k=e.key.toLowerCase();if(KM[k])K[KM[k]]=0;else if(k==='shift')K.sh=0});
+const pad=$('pad'),kn=$('knob');
+function pm(e){const r=pad.getBoundingClientRect(),x=(e.clientX-r.left-r.width/2)/(r.width/2),y=(e.clientY-r.top-r.height/2)/(r.height/2),m=Math.hypot(x,y),s=m>1?1/m:1;
+ jx=x*s;jyy=-y*s;kn.style.transform=`translate(${jx*34}px,${-jyy*34}px)`}
+pad.addEventListener('pointerdown',e=>{pad.setPointerCapture(e.pointerId);pm(e)});
+pad.addEventListener('pointermove',e=>{if(pad.hasPointerCapture(e.pointerId))pm(e)});
+const pe=()=>{jx=jyy=0;kn.style.transform=''};pad.addEventListener('pointerup',pe);pad.addEventListener('pointercancel',pe);
+// 控制按钮
+$('play').onclick=()=>{playing=!playing;$('play').textContent=playing?'暂停':'继续'};
+$('reset').onclick=reset;$('spd').onchange=e=>speed=+e.target.value;$('cam').onclick=homeCam;
+$('trail').onclick=e=>{trailOn=!trailOn;e.target.setAttribute('aria-pressed',trailOn);tl.visible=trailOn};
+$('hp').onclick=()=>{const h=document.body.classList.toggle('hideP');$('hp').textContent=h?'显示面板':'隐藏面板'};
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
+ if(document.body.dataset.tab===b.dataset.t)document.body.classList.toggle('fold');else document.body.classList.remove('fold');
+ document.body.dataset.tab=b.dataset.t;document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('on',x===b))});
+// 运动学
+function apply(){
+ W.rotation.y=q[0];N.rotation.y=q[1];
+ SL.rotation.set(-q[2],0,q[3]);EL.rotation.x=-q[4];SR.rotation.set(-q[5],0,-q[6]);ER.rotation.x=-q[7];
+ HL.rotation.x=-q[8];KL.rotation.x=q[9];FL.rotation.x=q[8]-q[9];HR.rotation.x=-q[10];KR.rotation.x=q[11];FR.rotation.x=q[10]-q[11];
+ const ext=(h,k)=>.45*Math.cos(h)+.45*Math.cos(k-h);
+ root.position.y=Math.max(ext(q[8],q[9]),ext(q[10],q[11]))+.12+jy;
+}
+function targets(w,ix,iy){
+ const t=T,s=Math.sin(ph),c=Math.cos(ph),a=tg;
+ if(act==='manual')return;
+ for(let i=0;i<12;i++)a[i]=STAND[i];
+ if(act==='squat'){a[8]=a[10]=1;a[9]=a[11]=1.9;a[2]=a[5]=.6;a[4]=a[7]=.4}
+ else if(act==='dance'){const b=Math.sin(t*6);a[0]=Math.sin(t*3)*.5;a[1]=Math.sin(t*3)*.5;a[2]=1.2+.8*b;a[5]=1.2-.8*b;a[3]=a[6]=.7;a[4]=a[7]=1;a[8]=.15*b;a[10]=-.15*b;a[9]=.3+.3*b;a[11]=.3-.3*b}
+ if(w>.02&&act!=='squat'&&act!=='dance'){const A=.55*w;
+  a[8]=A*s;a[10]=-A*s;a[9]=w*Math.max(0,c);a[11]=w*Math.max(0,-c);a[2]=-A*s*1.1;a[5]=A*s*1.1;a[4]=a[7]=.3+.5*w;a[0]=-.2*w*s}
+ if(act==='wave'){a[6]=2.3;a[5]=0;a[7]=.7+.6*Math.sin(t*9)}
+ if(jsS===1){a[8]=a[10]=.7;a[9]=a[11]=1.4;a[2]=a[5]=-.6}
+ else if(jsS===2){a[8]=a[10]=.6;a[9]=a[11]=1.3;a[2]=a[5]=1.8;a[3]=a[6]=.6}
+}
+let last=performance.now(),fr=0,ft=0,hud=0;
+function loop(now){
+ requestAnimationFrame(loop);
+ const rdt=Math.min((now-last)/1000,.05);last=now;fr++;ft+=rdt;if(ft>=.5){$('fps').textContent=Math.round(fr/ft);fr=ft=fr*0}
+ if(playing){
+  const dt=rdt*speed,ix=clamp((K.r||0)-(K.l||0)+jx,-1,1),iy=clamp((K.u||0)-(K.d||0)+jyy,-1,1),mv=Math.hypot(ix,iy)>.08;
+  if(mv&&act!=='wave'&&act!=='walk')act='walk';else if(!mv&&act==='walk')act='stand';
+  const run=K.sh?1.6:1,spd=(Math.abs(iy)>.08&&!jsS||jsS===2?iy:0)*1.1*run,om=-ix*1.8;
+  v=spd;root.rotation.y+=om*dt;root.position.x+=Math.sin(root.rotation.y)*spd*dt;root.position.z+=Math.cos(root.rotation.y)*spd*dt;collide();
+  const gr=Math.abs(spd)*4.5+(Math.abs(iy)<.08?Math.abs(om)*1.5:0),w=Math.min(1,gr/3);ph+=gr*dt;T+=dt;
+  if(jsS===1){jt+=dt;if(jt>.22){jsS=2;jv=3.6}}else if(jsS===2){jv-=9.8*dt;jy+=jv*dt;if(jy<=0){jy=0;jsS=0}}
+  targets(w,ix,iy);
+  const n=Math.ceil(dt*120)||1,h=dt/n;
+  for(let k=0;k<n;k++)for(let i=0;i<12;i++){qd[i]+=(KP*(tg[i]-q[i])-KD*qd[i])*h;q[i]+=qd[i]*h;q[i]=clamp(q[i],LIM[i][0],LIM[i][1])}
+  apply();
+  if(trailOn&&fr%2===0){trail.push(root.position.x,.02,root.position.z);if(trail.length>TN*3)trail.splice(0,3);
+   const p=tg0.attributes.position.array,m=trail.length/3;p.set(trail);for(let i=m;i<TN;i++){p[i*3]=trail[trail.length-3];p[i*3+1]=.02;p[i*3+2]=trail[trail.length-1]}tg0.attributes.position.needsUpdate=true}
+ }
+ const rp=root.position,d=new THREE.Vector3(rp.x,.95,rp.z).sub(O.target).multiplyScalar(.12);O.target.add(d);C.position.add(d);
+ grid.position.set(Math.round(rp.x),0,Math.round(rp.z));floor.position.x=rp.x;floor.position.z=rp.z;
+ hud+=rdt;if(hud>.07){hud=0;
+  $('v').textContent=Math.abs(v).toFixed(2);$('act').textContent=jsS?ACTS.jump:ACTS[act];$('ph').textContent=rp.y.toFixed(2);
+  $('px').textContent=rp.x.toFixed(1);$('pz').textContent=rp.z.toFixed(1);$('hd').textContent=Math.round(((root.rotation.y*180/Math.PI)%360+360)%360);$('t').textContent=T.toFixed(1);
+  JN.forEach((n,i)=>{$('v'+i).textContent=Math.round(q[i]*180/Math.PI)+'°';if(act!=='manual')$('s'+i).value=tg[i]});
+  document.querySelectorAll('#acts button').forEach(b=>b.classList.toggle('on',b.dataset.a===act));
+ }
+ O.update();R.render(S,C);
+}
+function resize(){R.setSize(innerWidth,innerHeight);C.aspect=innerWidth/innerHeight;C.updateProjectionMatrix()}
+addEventListener('resize',resize);resize();
+matchMedia('(prefers-color-scheme:dark)').addEventListener('change',()=>setTimeout(env,0));
+env();reset();requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
