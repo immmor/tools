@@ -13,7 +13,7 @@
   const VOICE_I18N = {
     'zh-CN': {
       voice_login: '声纹登录', voice_login_title: '声纹识别登录',
-      voice_login_tip: '对着麦克风朗读，点击“开始录音”后“声纹登录”',
+      voice_login_tip: '对着麦克风朗读下方文本，点击“开始录音”，录音将自动录满 5 秒',
       voice_status_ready: '点击“开始录音”录入声纹', voice_record: '开始录音', voice_stop_record: '停止录音',
       voice_recognize: '声纹登录', voice_back_account: '返回账号登录',
       voice_loading_model: '正在加载声纹模型…', voice_recording: '正在录音…请朗读',
@@ -28,7 +28,7 @@
     },
     'en-US': {
       voice_login: 'Voice Login', voice_login_title: 'Voiceprint Login',
-      voice_login_tip: 'Read aloud to the mic, then tap “Voice Login”',
+      voice_login_tip: 'Read the text below to the mic, then tap “Start Recording”; recording auto-stops after 5 seconds',
       voice_status_ready: 'Tap “Start Recording” to begin', voice_record: 'Start Recording', voice_stop_record: 'Stop Recording',
       voice_recognize: 'Voice Login', voice_back_account: 'Back to account login',
       voice_loading_model: 'Loading voiceprint model…', voice_recording: 'Recording… please speak',
@@ -43,7 +43,7 @@
     },
     'ja-JP': {
       voice_login: '声紋ログイン', voice_login_title: '声紋認証ログイン',
-      voice_login_tip: 'マイクに向かって読み上げ、「声紋ログイン」をタップ',
+      voice_login_tip: 'マイクに向かって下の文章を読み上げ、「録音開始」をタップ。録音は5秒で自動停止します',
       voice_status_ready: '「録音開始」をタップして開始', voice_record: '録音開始', voice_stop_record: '録音停止',
       voice_recognize: '声紋ログイン', voice_back_account: 'アカウントログインに戻る',
       voice_loading_model: '声紋モデルを読み込み中…', voice_recording: '録音中…声を出してください',
@@ -58,7 +58,7 @@
     },
     'ko-KR': {
       voice_login: '음성 로그인', voice_login_title: '음성 인증 로그인',
-      voice_login_tip: '마이크에 대고 읽고 “음성 로그인”을 탭',
+      voice_login_tip: '마이크에 대고 아래 문장을 읽고 “녹음 시작”을 탭하세요. 녹음은 5초 후 자동 종료됩니다.',
       voice_status_ready: '“녹음 시작”을 탭하여 시작', voice_record: '녹음 시작', voice_stop_record: '녹음 중지',
       voice_recognize: '음성 로그인', voice_back_account: '계정 로그인으로 돌아가기',
       voice_loading_model: '음성 모델 로딩 중…', voice_recording: '녹음 중… 말씀해 주세요',
@@ -73,7 +73,7 @@
     },
     'es-ES': {
       voice_login: 'Inicio de sesión por voz', voice_login_title: 'Inicio de sesión por voz',
-      voice_login_tip: 'Lee en voz alta al micrófono y pulsa “Iniciar sesión por voz”',
+      voice_login_tip: 'Lee el texto en voz alta al micrófono y pulsa “Iniciar grabación”; la grabación se detiene sola tras 5 s',
       voice_status_ready: 'Pulsa “Iniciar grabación” para empezar', voice_record: 'Iniciar grabación', voice_stop_record: 'Detener grabación',
       voice_recognize: 'Iniciar sesión por voz', voice_back_account: 'Volver al inicio de sesión por cuenta',
       voice_loading_model: 'Cargando modelo de voz…', voice_recording: 'Grabando… por favor habla',
@@ -88,7 +88,7 @@
     },
     'vi-VN': {
       voice_login: 'Đăng nhập bằng giọng nói', voice_login_title: 'Đăng nhập bằng giọng nói',
-      voice_login_tip: 'Đọc to vào mic, sau đó nhấn “Đăng nhập bằng giọng nói”',
+      voice_login_tip: 'Đọc to văn bản bên dưới vào mic rồi nhấn “Bắt đầu ghi”; ghi âm tự dừng sau 5 giây',
       voice_status_ready: 'Nhấn “Bắt đầu ghi” để bắt đầu', voice_record: 'Bắt đầu ghi', voice_stop_record: 'Dừng ghi',
       voice_recognize: 'Đăng nhập bằng giọng nói', voice_back_account: 'Quay lại đăng nhập tài khoản',
       voice_loading_model: 'Đang tải mô hình giọng nói…', voice_recording: 'Đang ghi… hãy nói',
@@ -103,7 +103,7 @@
     },
     'ar-SA': {
       voice_login: 'تسجيل الدخول بالصوت', voice_login_title: 'تسجيل الدخول ببصمة الصوت',
-      voice_login_tip: 'اقرأ بصوت عالٍ أمام الميكروفون ثم اضغط “تسجيل الدخول بالصوت”',
+      voice_login_tip: 'اقرأ النص أدناه بصوت عالٍ أمام الميكروفون ثم اضغط “بدء التسجيل”؛ يتوقف التسجيل تلقائيًا بعد 5 ثوانٍ',
       voice_status_ready: 'اضغط “بدء التسجيل” للبدء', voice_record: 'بدء التسجيل', voice_stop_record: 'إيقاف التسجيل',
       voice_recognize: 'تسجيل الدخول بالصوت', voice_back_account: 'العودة إلى تسجيل الدخول بالحساب',
       voice_loading_model: 'جارٍ تحميل نموذج الصوت…', voice_recording: 'جارٍ التسجيل… تحدث الآن',
@@ -118,7 +118,7 @@
     },
     'ru-RU': {
       voice_login: 'Вход по голосу', voice_login_title: 'Вход по голосовому отпечатку',
-      voice_login_tip: 'Произнесите фразу в микрофон, затем нажмите «Вход по голосу»',
+      voice_login_tip: 'Прочитайте текст ниже в микрофон, затем нажмите «Начать запись»; запись остановится через 5 секунд',
       voice_status_ready: 'Нажмите «Начать запись», чтобы начать', voice_record: 'Начать запись', voice_stop_record: 'Остановить запись',
       voice_recognize: 'Вход по голосу', voice_back_account: 'Назад к входу по аккаунту',
       voice_loading_model: 'Загрузка голосовой модели…', voice_recording: 'Идёт запись… говорите',
@@ -399,7 +399,9 @@
         });
         const data = await res.json();
         if (data && data.success) {
-          const msg = t('voice_login_ok', '声纹登录成功！');
+          // 成功时也展示识别结果（相似度 / 阈值），便于核对与校准
+          let msg = data.message || t('voice_login_ok', '声纹登录成功！');
+          if (typeof data.sim === 'number') msg += `（相似度 ${data.sim}${data.threshold ? ' / 阈值 ' + data.threshold : ''}）`;
           if (status) { status.textContent = msg; status.style.color = 'var(--neon-green)'; }
           setTimeout(() => { completeLogin(data); closeVoiceAndRestore(); }, 1300);
         } else {

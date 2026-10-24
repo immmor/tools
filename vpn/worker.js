@@ -1109,7 +1109,7 @@ export default {
         await DB.prepare('UPDATE user SET login_info = ? WHERE username = ?').bind(updatedLoginInfo, username).run();
         const pricePlan = u.price_plan ? JSON.parse(u.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
         const cardNumber = u.card_number || await ensureCardNumber(DB, u.rowid);
-        return resJson({ success: true, message: '声纹登录成功！', userInfo: { id: u.rowid, username: u.username, balance: u.balance, v_token: u.v_token, p_token: pToken, v_expire_date: u.v_expire_date, not_trusted: u.not_trusted || '', vorders: u.vorders, invite_code: u.invite_code, invited_user: u.invited_user, rebates: u.rebates, card_number: cardNumber }, pricePlan });
+        return resJson({ success: true, message: '声纹登录成功！', sim: +sim.toFixed(3), threshold: VOICE_THRESHOLD, userInfo: { id: u.rowid, username: u.username, balance: u.balance, v_token: u.v_token, p_token: pToken, v_expire_date: u.v_expire_date, not_trusted: u.not_trusted || '', vorders: u.vorders, invite_code: u.invite_code, invited_user: u.invited_user, rebates: u.rebates, card_number: cardNumber }, pricePlan });
       }
 
       // ========== 录入/更新声纹特征接口（需登录态：p_token 校验） ==========
