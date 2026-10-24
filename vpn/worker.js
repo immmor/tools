@@ -1088,13 +1088,15 @@ export default {
         let stored;
         try { stored = JSON.parse(u.voice_embedding); } catch (e) { return resJson({ success: false, message: '声纹数据已损坏' }, 500); }
         if (!Array.isArray(stored) || stored.length !== embedding.length) return resJson({ success: false, message: '声纹数据无效' }, 500);
-        // 余弦相似度阈值，需根据实际中文录音测试微调（参考区间约 0.7~0.9）
-        const VOICE_THRESHOLD = 0.75;
+        // 余弦相似度阈值，需根据实际中文录音测试微调。
+        // mobile-128 同人相似度多分布在 0.6~0.75，原 0.75 过严导致几乎全部失败。
+        // 这里同时把实测 sim 与阈值回传前端，便于用真实录音校准最佳阈值。
+        const VOICE_THRESHOLD = 0.6;
         let dot = 0, na = 0, nb = 0;
         for (let i = 0; i < embedding.length; i++) { dot += embedding[i] * stored[i]; na += embedding[i] * embedding[i]; nb += stored[i] * stored[i]; }
         const sim = (na > 0 && nb > 0) ? dot / (Math.sqrt(na) * Math.sqrt(nb)) : -Infinity;
         if (sim < VOICE_THRESHOLD) {
-          return resJson({ success: false, message: '声纹验证失败' }, 401);
+          return resJson({ success: false, message: '声纹验证失败', sim: +sim.toFixed(3), threshold: VOICE_THRESHOLD }, 401);
         }
         const pToken = await newPToken(DB, username);
         const now = new Date(new Date().getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');

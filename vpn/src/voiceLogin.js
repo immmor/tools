@@ -253,7 +253,7 @@
       // 录音期间按钮变红且禁用，显示 3 秒倒计时
       if (recordBtn) { recordBtn.disabled = true; recordBtn.classList.add('opacity-50', 'cursor-not-allowed'); recordBtn.style.background = '#dc2626'; }
       if (status) status.textContent = t('voice_recording', '正在录音…请朗读上方文本');
-      let remain = 3;
+      let remain = 5;
       if (recordBtn) recordBtn.textContent = t('voice_rec', '录音中') + ' (' + remain + ')';
       recordCountdownTimer = setInterval(() => {
         remain--;
@@ -264,10 +264,10 @@
           recordCountdownTimer = null;
         }
       }, 1000);
-      // 强制录满 3 秒后自动停止
+      // 强制录满 5 秒后自动停止
       recordStopTimer = setTimeout(() => {
         if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop();
-      }, 3000);
+      }, 5000);
     } catch (err) {
       recording = false;
       if (recordCountdownTimer) { clearInterval(recordCountdownTimer); recordCountdownTimer = null; }
@@ -403,7 +403,9 @@
           if (status) { status.textContent = msg; status.style.color = 'var(--neon-green)'; }
           setTimeout(() => { completeLogin(data); closeVoiceAndRestore(); }, 1300);
         } else {
-          const msg = t('voice_login_fail', '声纹验证失败');
+          // 显示实测相似度，辅助校准阈值（data.sim 由后端在失败时返回）
+          let msg = data && data.message ? data.message : t('voice_login_fail', '声纹验证失败');
+          if (data && typeof data.sim === 'number') msg += `（相似度 ${data.sim}${data.threshold ? ' / 阈值 ' + data.threshold : ''}）`;
           if (status) { status.textContent = msg; status.style.color = 'var(--neon-red)'; }
           if (submitBtn) submitBtn.disabled = false;
         }
