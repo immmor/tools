@@ -44,6 +44,16 @@
   .beatbar{display:flex; gap:8px; margin-top:12px}
   .beatbar i{flex:1; height:6px; border-radius:3px; background:var(--line); transition:background .1s}
   .beatbar i.on{background:var(--accent)}
+  .patName{color:var(--accent); font-weight:600}
+  #poseLib{display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; margin-top:6px}
+  .pose{background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:8px; display:flex; gap:8px; align-items:center}
+  .poseDia{flex:0 0 auto; background:#0c0e13; border-radius:8px; border:1px solid var(--line)}
+  .poseTxt{font-size:12.5px; color:var(--sub); line-height:1.5}
+  .poseTxt b{color:var(--txt)}
+  .poseTxt span{color:var(--sub)}
+  .special{display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px; margin-top:6px}
+  .sp{background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:10px; font-size:12.5px; color:var(--sub); line-height:1.6}
+  .sp b{color:var(--txt); display:block; margin-bottom:3px; font-size:13px}
 </style>
 <base target="_blank">
 </head>
@@ -66,6 +76,7 @@
           <option value="2">2/4</option>
           <option value="3">3/4</option>
           <option value="4" selected>4/4</option>
+          <option value="6">6/8</option>
         </select>
       </label>
       <label>速度 <span id="bpmVal">72</span> BPM
@@ -118,6 +129,20 @@
 
     <h3>5 · 评分逻辑</h3>
     <div class="step">手落在某拍点的<b>±25% 拍时值</b>窗口内且距离理想拍点小于约 1/6 画面宽 = 命中（绿）。距离过远（红）说明图式幅度过大或过小，应控制在躯干前方约 30–40cm 区域。</div>
+
+    <h2 style="margin-top:18px">姿势库 · <span class="patName" id="patName"></span></h2>
+    <div class="step" style="margin-top:0">下图式每一拍的理想位置（蓝点）、运动方向（绿箭头）与手姿势说明。跟着节拍器，让手在箭头所指方向依次落到每个蓝点。</div>
+    <div id="poseLib"></div>
+
+    <h3>通用姿势（任何拍号都适用）</h3>
+    <div class="special">
+      <div class="sp"><b>预备拍 · 呼吸拍</b>起拍前一拍抬手吸气，给出进入暗示；乐队在第 1 拍下拍点整齐进入。先打 1 小节空拍再进入。</div>
+      <div class="sp"><b>收拍 · Cutoff</b>最后一拍给明确拍点后双手向身体快速收回，示意「奏完即收」，避免拖长音。</div>
+      <div class="sp"><b>延长音 · Fermata</b>双手停在某一拍点上方不动，示意保持延长，收时再给收拍。</div>
+      <div class="sp"><b>声部提示 · Cue</b>非主拍手指向某一声部（如长笛），在该声部进入前一拍给提示。</div>
+      <div class="sp"><b>渐强 / 渐弱</b>手下压、收拢 = 弱；手上抬、双臂展开 = 强。渐强时逐渐张开双臂。</div>
+      <div class="sp"><b>基本站姿</b>身体直立、双脚与肩同宽；双手抬至胸前肘部张开，手腕放松、手指并拢略弯，手势「有拍点、有反弹」。</div>
+    </div>
   </div>
 </div>
 
@@ -134,14 +159,62 @@ let hands=null, camera=null, handPos=null, lastSeen=0;
 let running=false, beatIdx=0, beatTimes=[], hits=0, tries=0, judgedThisBeat=false;
 let audioCtx=null;
 
-// 各拍号拍点相对位置（相对画面宽高的归一化坐标，0..1，x已按镜像考虑）
-function beatPoints(meter){
-  const cx=0.5;
-  if(meter==='2') return [{x:cx,y:0.62,label:'1'},{x:cx,y:0.30,label:'2'}];
-  if(meter==='3') return [{x:cx,y:0.62,label:'1'},{x:cx+0.16,y:0.40,label:'2'},{x:cx,y:0.30,label:'3'}];
-  return [{x:cx,y:0.62,label:'1'},{x:cx-0.16,y:0.46,label:'2'},{x:cx+0.16,y:0.40,label:'3'},{x:cx,y:0.30,label:'4'}];
+// 所有拍号的完整图式：每拍含 理想位置(归一化坐标, x 已按镜像)、标号、运动方向、手姿势说明
+const PATTERNS={
+  '2':{name:'2/4 · 进行曲',beats:[
+    {x:0.50,y:0.62,label:'1',move:'向下果断击拍',palm:'手掌朝下、手背向外，前臂带动手腕下击',arrow:{dx:0,dy:1}},
+    {x:0.50,y:0.30,label:'2',move:'向上反弹',palm:'手掌转向上，自然回提至预备高度',arrow:{dx:0,dy:-1}},
+  ]},
+  '3':{name:'3/4 · 圆舞曲',beats:[
+    {x:0.50,y:0.62,label:'1',move:'向下（强拍）',palm:'手背向外，向下重击',arrow:{dx:0,dy:1}},
+    {x:0.66,y:0.42,label:'2',move:'向右外带',palm:'手掌向右前，平带出去',arrow:{dx:1,dy:0}},
+    {x:0.50,y:0.30,label:'3',move:'向上回收',palm:'手掌向上，收回至上方顶点',arrow:{dx:0,dy:-1}},
+  ]},
+  '4':{name:'4/4 · 通用拍',beats:[
+    {x:0.50,y:0.62,label:'1',move:'向下（强拍）',palm:'手背向外，坚定下击',arrow:{dx:0,dy:1}},
+    {x:0.36,y:0.46,label:'2',move:'向左里带',palm:'手掌向左内，横带',arrow:{dx:-1,dy:0}},
+    {x:0.64,y:0.40,label:'3',move:'向右外带',palm:'手掌向右外，横带',arrow:{dx:1,dy:0}},
+    {x:0.50,y:0.30,label:'4',move:'向上（弱拍）',palm:'手掌向上，轻提回顶点',arrow:{dx:0,dy:-1}},
+  ]},
+  '6':{name:'6/8 · 复拍子',beats:[
+    {x:0.42,y:0.62,label:'1',move:'下（主拍）',palm:'手背向外，向下重击',arrow:{dx:0,dy:1}},
+    {x:0.56,y:0.46,label:'2',move:'右上小带',palm:'手掌右前，轻带第 1 拍后半',arrow:{dx:1,dy:-0.4}},
+    {x:0.42,y:0.34,label:'3',move:'回上',palm:'手掌向上，收至顶点',arrow:{dx:0,dy:-1}},
+    {x:0.58,y:0.62,label:'4',move:'下（次主拍）',palm:'手背向外，再次下击',arrow:{dx:0,dy:1}},
+    {x:0.72,y:0.46,label:'5',move:'右上小带',palm:'手掌右前，轻带第 2 拍后半',arrow:{dx:1,dy:-0.4}},
+    {x:0.58,y:0.34,label:'6',move:'回上',palm:'手掌向上，收至顶点',arrow:{dx:0,dy:-1}},
+  ]},
+};
+let curName='', points=PATTERNS['4'].beats;
+const poseLib=document.getElementById('poseLib'), patName=document.getElementById('patName');
+
+// 根据拍号重建：当前图式、节拍条、姿势库
+function loadPattern(meter){
+  const p=PATTERNS[meter]; if(!p) return;
+  curName=p.name; points=p.beats; patName.textContent=curName;
+  // 动态节拍条：每拍一个格
+  beatbar.innerHTML=''; for(let i=0;i<points.length;i++){const i2=document.createElement('i'); beatbar.appendChild(i2);}
+  buildPoseLib();
 }
-let points=beatPoints('4');
+function poseSVG(beats,idx){
+  const pt=(b)=>(b.x*100).toFixed(1)+','+(b.y*100).toFixed(1);
+  let s=`<svg viewBox="0 0 100 100" width="78" height="78">`;
+  s+=`<polyline points="${beats.map(pt).join(' ')}" fill="none" stroke="rgba(110,168,254,.25)" stroke-width="1.5" stroke-dasharray="3 3"/>`;
+  beats.forEach((b,i)=>{ s+=`<circle cx="${(b.x*100).toFixed(1)}" cy="${(b.y*100).toFixed(1)}" r="${i===idx?4:2.4}" fill="${i===idx?'#6ea8fe':'rgba(110,168,254,.5)'}"/>`; });
+  const b=beats[idx], a=b.arrow||{dx:0,dy:0}, n=Math.hypot(a.dx,a.dy)||1, L=14;
+  const x=b.x*100, y=b.y*100, ex=x+a.dx/n*L, ey=y+a.dy/n*L;
+  s+=`<line x1="${x}" y1="${y}" x2="${ex.toFixed(1)}" y2="${ey.toFixed(1)}" stroke="#3fb96b" stroke-width="2"/>`;
+  s+=`<circle cx="${ex.toFixed(1)}" cy="${ey.toFixed(1)}" r="2.5" fill="#3fb96b"/></svg>`;
+  return s;
+}
+function buildPoseLib(){
+  poseLib.innerHTML=points.map((b,i)=>`
+    <div class="pose">
+      <div class="poseDia">${poseSVG(points,i)}</div>
+      <div class="poseTxt"><b>第 ${b.label} 拍</b> · ${b.move}<br><span>${b.palm}</span></div>
+    </div>`).join('');
+}
+loadPattern('4');
 
 camBtn.onclick=async()=>{
   camBtn.disabled=true; hint.textContent='正在加载 MediaPipe Hands 模型…';
@@ -183,10 +256,19 @@ function drawGuide(){
   octx.beginPath();
   points.forEach((p,i)=>{const x=p.x*w,y=p.y*h; i?octx.lineTo(x,y):octx.moveTo(x,y);});
   octx.stroke(); octx.setLineDash([]);
+  const cur=running?(beatIdx-1)%points.length:-1;
   points.forEach((p,i)=>{
-    octx.beginPath(); octx.arc(p.x*w,p.y*h,10,0,7);
-    octx.fillStyle = (running&&i===beatIdx%points.length)?'#6ea8fe':'rgba(110,168,254,.25)'; octx.fill();
-    octx.fillStyle='#e8eaf0'; octx.font='bold 14px sans-serif'; octx.fillText(p.label,p.x*w-4,p.y*h+5);
+    const isCur=(i===cur);
+    // 运动方向箭头（绿），当前拍更醒目
+    const a=p.arrow||{dx:0,dy:0}, n=Math.hypot(a.dx,a.dy)||1, L=isCur?26:18;
+    const cxp=p.x*w, cyp=p.y*h, ex=cxp+a.dx/n*L, ey=cyp+a.dy/n*L;
+    octx.strokeStyle=isCur?'#3fb96b':'rgba(63,185,107,.45)'; octx.lineWidth=isCur?3:2;
+    octx.beginPath(); octx.moveTo(cxp,cyp); octx.lineTo(ex,ey); octx.stroke();
+    octx.beginPath(); octx.arc(ex,ey,isCur?4:3,0,7); octx.fillStyle=isCur?'#3fb96b':'rgba(63,185,107,.6)'; octx.fill();
+    // 拍点
+    octx.beginPath(); octx.arc(cxp,cyp,10,0,7);
+    octx.fillStyle = isCur?'#6ea8fe':'rgba(110,168,254,.25)'; octx.fill();
+    octx.fillStyle='#e8eaf0'; octx.font='bold 14px sans-serif'; octx.fillText(p.label,cxp-4,cyp+5);
   });
   // 手
   if(handPos){
@@ -217,7 +299,7 @@ metBtn.onclick=()=>{
   setMsg('节拍器已启动。试着让手在蓝点亮起时正好到达对应拍点！','ok');
 };
 bpmIn.oninput=()=>{bpmVal.textContent=bpmIn.value; if(window._met){metBtn.onclick();}};
-meterSel.onchange=()=>{points=beatPoints(meterSel.value); setMsg('已切换为 '+meterSel.value+'/4 图式。','ok'); if(window._met){metBtn.onclick();}};
+meterSel.onchange=()=>{loadPattern(meterSel.value); setMsg('已切换为 '+curName+'。','ok'); if(window._met){metBtn.onclick();}};
 
 function click(accent){
   const o=audioCtx.createOscillator(), g=audioCtx.createGain();

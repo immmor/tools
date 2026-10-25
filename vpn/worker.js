@@ -295,7 +295,9 @@ async function autoRenewUser(DB, user) {
     created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
     method: 'balance',
     status: 'success',
-    auto: true
+    auto: true,
+    balance_before: user.balance, // 续费前余额：函数入参 user 已从 DB 读出
+    balance_after: null // 续费后余额：UPDATE 后从 DB 回读再补全
   });
   if (vorders.length > 50) vorders = vorders.slice(0, 50);
   const vordersStr = JSON.stringify(vorders);
@@ -308,6 +310,11 @@ async function autoRenewUser(DB, user) {
   
   if (r.success && r.meta.changes > 0) {
     const nowStr = new Date().toISOString().slice(0,19).replace('T',' ');
+
+    // 续费后余额：从 DB 回读的真实值（非计算值），补全订单并写回 vorders
+    const afterBal = await DB.prepare('SELECT balance FROM user WHERE username = ?').bind(user.username).first();
+    vorders[0].balance_after = afterBal ? afterBal.balance : null;
+    await DB.prepare('UPDATE user SET vorders = ? WHERE username = ?').bind(JSON.stringify(vorders), user.username).run();
 
     // 邀请返现：自动续费是一笔 VIP 订单，按阶梯比例给邀请人生成待审核返现记录（orderId 保证幂等）
     await grantRebate(DB, user.username, pr, yr, renewOrderId);
@@ -1700,7 +1707,9 @@ export default {
             coupon_code: couponCode || null,
             created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
             method: 'balance',
-            status: 'success'
+            status: 'success',
+            balance_before: user.balance, // 支付前余额：开通前 SELECT 读出的真实值
+            balance_after: null // 支付后余额：UPDATE 后从 DB 回读再补全
           };
           
           vorders.unshift(newOrder);
@@ -1743,6 +1752,10 @@ export default {
               .prepare('SELECT username, balance, v_expire_date, v_token, v_link_clash, v_link_v2ray, vorders FROM user WHERE username = ?')
               .bind(username)
               .first();
+
+            // 支付后余额：从 DB 回读的真实值（非计算值），补全订单并写回 vorders
+            newOrder.balance_after = updatedUser.balance;
+            await DB.prepare('UPDATE user SET vorders = ? WHERE username = ?').bind(JSON.stringify(vorders), username).run();
             
             return resJson({
               code: 200,

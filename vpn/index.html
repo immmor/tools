@@ -3422,12 +3422,18 @@
         };
 
         // ==================== 开通VIP功能 ====================
+        let isOpeningVip = false; // 防重复点击：同一时刻只允许一笔开通请求在飞
         const openVip = async (username, duration = 30, price = 10.00, coupon = null) => {
+            if (isOpeningVip) {
+                console.warn('开通VIP请求进行中，已忽略重复点击');
+                return false;
+            }
             const finalPrice = (coupon && coupon.discount) ? Math.max(0, price - coupon.discount) : price;
             const confirmOpenVip = translations[currentLang]?.alert_confirm_open_vip || '确定要开通VIP吗？将从您的余额中扣除¥{price}。';
             if (!confirm(confirmOpenVip.replace('{price}', finalPrice.toFixed(2)))) {
-                return;
+                return false;
             }
+            isOpeningVip = true;
             
             try {
                 const savedUser = JSON.parse(localStorage.getItem('userInfo') || '{}');
@@ -3500,7 +3506,10 @@
                 console.error('开通VIP失败详情:', error);
                 const networkErr = translations[currentLang]?.alert_network_error?.replace('{error}', error.message) || '网络错误';
                 alert(networkErr);
+            } finally {
+                isOpeningVip = false; // 无论结果如何都复位，避免按钮永久锁死
             }
+            return undefined;
         };
 
         // ==================== 增加流量功能 ====================
