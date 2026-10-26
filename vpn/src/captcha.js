@@ -556,4 +556,213 @@
   }
 
   window.initAudioCaptcha = initAudioCaptcha;
+
+  // 可复用的“按顺序点击图片中的文字”验证码
+  // 用法：
+  //   const ctl = initClickSequenceCaptcha({
+  //     canvas,            // 绘制验证码的 canvas
+  //     promptEl,          // 提示文案（显示点击顺序）元素
+  //     refreshBtn,        // 刷新按钮（可选）
+  //     statusEl,          // 状态提示（可选）
+  //     onVerifiedChange,  // (verified:boolean) => void
+  //     length             // 需要按顺序点击的字符数，默认 4
+  //   });
+  //   ctl.reset()      重新生成
+  //   ctl.isVerified() 当前是否已验证
+  function initClickSequenceCaptcha(opts) {
+    const { canvas, promptEl, refreshBtn, statusEl, onVerifiedChange, length = 4 } = opts || {};
+    if (!canvas) return null;
+
+    const i18n = () => (window.translations && window.translations[window.currentLang]) || {};
+    const notify = (v) => { if (typeof onVerifiedChange === 'function') onVerifiedChange(v); };
+    const ctx = canvas.getContext('2d');
+    const CW = canvas.width, CH = canvas.height;
+    // 按当前语言返回可点击字符池（不同语言显示对应语言文字）
+    const langChars = () => {
+      const L = window.currentLang || 'zh-CN';
+      if (L.startsWith('zh')) return '天地玄黄宇宙洪荒日月盈昃辰宿列张寒来暑往秋收冬藏闰余成岁律吕调阳云腾致雨露结为霜金生丽水玉出昆冈';
+      if (L.startsWith('ko')) return '가나다라마바사아자차카타파하거너더러머버서어저처커테토포허';
+      if (L.startsWith('ja')) return 'あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめも';
+      if (L.startsWith('ru')) return 'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ';
+      if (L.startsWith('ar')) return 'ابتثجحخدذرزسشصضطظعغفقكلمنهوي';
+      return 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    };
+    const rand = (a, b) => a + Math.random() * (b - a);
+    const JUDGE_R = Math.round(CH * 0.11); // 用户所画圈的半径，也是“圈覆盖指定文字≥60%”的判定半径
+
+    // 离屏画布缓存底图（含噪点），点击高亮时只在其上叠加，噪点保持稳定
+    const off = document.createElement('canvas');
+    off.width = CW; off.height = CH;
+    const octx = off.getContext('2d');
+
+    let placed = [];       // { char, x, y, r } 已放置字符
+    let targetOrder = [];  // 需要按顺序点击的字符下标
+    let clicked = [];      // 已点击位置 {x, y}（每点一下在点击处画一个圈）
+    let verified = false;
+
+    const drawBase = () => {
+      // 浅色渐变背景
+      const g = octx.createLinearGradient(0, 0, CW, CH);
+      g.addColorStop(0, `hsl(${Math.floor(Math.random() * 360)}, 25%, 90%)`);
+      g.addColorStop(1, `hsl(${Math.floor(Math.random() * 360)}, 25%, 82%)`);
+      octx.fillStyle = g; octx.fillRect(0, 0, CW, CH);
+      // 干扰线
+      for (let i = 0; i < 6; i++) {
+        octx.strokeStyle = `hsla(${Math.floor(Math.random() * 360)}, 70%, 50%, 0.4)`;
+        octx.lineWidth = rand(1, 2.5);
+        octx.beginPath();
+        octx.moveTo(rand(0, CW), rand(0, CH));
+        octx.lineTo(rand(0, CW), rand(0, CH));
+        octx.stroke();
+      }
+      // 干扰点
+      for (let i = 0; i < 60; i++) {
+        octx.fillStyle = `rgba(0,0,0,${rand(0.05, 0.18)})`;
+        octx.beginPath();
+        octx.arc(rand(0, CW), rand(0, CH), rand(0.5, 1.6), 0, Math.PI * 2);
+        octx.fill();
+      }
+      // 放置字符：字符不重复（避免歧义），总数 = length + 2（含 2 个干扰项）
+      placed = [];
+      const total = length + 2;
+      const usedChars = new Set();
+      const positions = [];
+      const margin = 26;
+      for (let i = 0; i < total; i++) {
+        const pool = langChars();
+        let ch, guard = 0;
+        do { ch = pool.charAt(Math.floor(Math.random() * pool.length)); guard++; } while (usedChars.has(ch) && guard < 50);
+        usedChars.add(ch);
+        let x, y, tries = 0;
+        do {
+          x = rand(margin, CW - margin);
+          y = rand(CH * 0.3, CH * 0.7);
+          tries++;
+        } while (positions.some(p => Math.hypot(p.x - x, p.y - y) < 36) && tries < 40);
+        positions.push({ x, y });
+        const size = Math.floor(rand(CH * 0.15, CH * 0.24));
+        const rot = rand(-0.4, 0.4);
+        octx.save();
+        octx.translate(x, y);
+        octx.rotate(rot);
+        octx.font = `bold ${size}px Georgia, "Times New Roman", "PingFang SC", "Microsoft YaHei", sans-serif`;
+        octx.fillStyle = `hsl(${Math.floor(Math.random() * 360)}, 65%, 38%)`;
+        octx.textAlign = 'center';
+        octx.textBaseline = 'middle';
+        octx.fillText(ch, 0, 0);
+        octx.restore();
+        placed.push({ char: ch, x, y, r: size * 0.6, size });
+      }
+      // 目标顺序：从 placed 随机取 length 个下标，并打乱顺序
+      const idxs = placed.map((_, i) => i);
+      for (let i = idxs.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [idxs[i], idxs[j]] = [idxs[j], idxs[i]];
+      }
+      targetOrder = idxs.slice(0, length);
+      renderPrompt();
+    };
+
+    const renderPrompt = () => {
+      if (!promptEl) return;
+      const seq = targetOrder.map(i => placed[i].char).join(' → ');
+      const t = i18n();
+      promptEl.innerHTML = (t.click_captcha_tip || '请按顺序点击图片中的文字：') + ' <span class="font-bold tracking-widest text-[var(--neon-green)]">' + seq + '</span>';
+    };
+
+    // 在底图上叠加用户所画的圈（每点一下在点击处画一个圈，并标序号）
+    const compose = () => {
+      ctx.clearRect(0, 0, CW, CH);
+      ctx.drawImage(off, 0, 0);
+      clicked.forEach((p, k) => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, JUDGE_R, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(34,197,94,0.12)';
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#22c55e';
+        ctx.stroke();
+        ctx.fillStyle = '#14532d';
+        ctx.font = `bold ${Math.floor(JUDGE_R * 0.7)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(k + 1), p.x, p.y);
+      });
+    };
+
+    const showStatus = (msg, type) => {
+      if (!statusEl) return;
+      statusEl.textContent = msg;
+      statusEl.className = `absolute bottom-1 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded text-[10px] z-10 ${type === 'ok' ? 'bg-[var(--neon-green)]/80 text-black' : 'bg-red-500/80 text-white'}`;
+      statusEl.classList.remove('hidden');
+      if (type === 'error') setTimeout(() => statusEl.classList.add('hidden'), 1500);
+    };
+
+    // 两圆重叠面积占“字符圆”的比例（用于判断圈是否覆盖指定文字≥60%）
+    const overlapRatio = (d, r0, r1) => {
+      if (d >= r0 + r1) return 0;
+      if (d <= Math.abs(r1 - r0)) {
+        const m = Math.min(r0, r1);
+        return (m * m) / (r0 * r0);
+      }
+      const r0s = r0 * r0, r1s = r1 * r1;
+      const a1 = r0s * Math.acos((d * d + r0s - r1s) / (2 * d * r0));
+      const a2 = r1s * Math.acos((d * d + r1s - r0s) / (2 * d * r1));
+      const a3 = 0.5 * Math.sqrt(Math.max(0, (-d + r0 + r1) * (d + r0 - r1) * (d - r0 + r1) * (d + r0 + r1)));
+      return (a1 + a2 - a3) / (Math.PI * r0s);
+    };
+
+    const check = () => {
+      if (verified) return;
+      // 每个圈（按点击顺序）必须覆盖对应“指定文字”≥60% 的面积
+      const ok = clicked.length === targetOrder.length && clicked.every((p, i) => {
+        const c = placed[targetOrder[i]];
+        const charR = c.size * 0.4;
+        const d = Math.hypot(c.x - p.x, c.y - p.y);
+        return overlapRatio(d, charR, JUDGE_R) >= 0.6;
+      });
+      if (ok) {
+        verified = true;
+        notify(true);
+        canvas.style.pointerEvents = 'none';
+        showStatus(i18n().click_captcha_ok || '验证成功', 'ok');
+      } else {
+        showStatus(i18n().click_captcha_fail || '顺序不正确，请重试', 'error');
+        setTimeout(() => { if (!verified) generate(); }, 700);
+      }
+    };
+
+    const generate = () => {
+      verified = false;
+      notify(false);
+      clicked = [];
+      canvas.style.pointerEvents = 'auto';
+      drawBase();
+      compose();
+    };
+
+    const reset = () => { generate(); };
+
+    const onClick = (e) => {
+      if (verified || clicked.length >= targetOrder.length) return;
+      const rect = canvas.getBoundingClientRect();
+      const sx = canvas.width / rect.width;
+      const sy = canvas.height / rect.height;
+      const cx = (e.clientX - rect.left) * sx;
+      const cy = (e.clientY - rect.top) * sy;
+      // 用户点哪，就在哪画一个圈（圈的位置完全由用户点击决定）
+      clicked.push({ x: cx, y: cy });
+      compose();
+      if (clicked.length >= targetOrder.length) check();
+    };
+
+    canvas.addEventListener('click', onClick);
+    if (refreshBtn) refreshBtn.addEventListener('click', reset);
+
+    generate();
+    return { reset, isVerified: () => verified };
+  }
+
+  window.initClickSequenceCaptcha = initClickSequenceCaptcha;
+
 })();

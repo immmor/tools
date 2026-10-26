@@ -4736,7 +4736,19 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
         console.error('数据库绑定失败！');
         return;
       }
-      
+
+      // 清理：删除 2 个月前且已读的消息
+      // created_at 为 UTC 文本 'YYYY-MM-DD HH:MM:SS'，与 datetime('now','-2 months') 可直接按字典序比较
+      try {
+        const delRes = await DB
+          .prepare(`DELETE FROM messages WHERE is_read = 1 AND created_at < datetime('now', '-2 months')`)
+          .run();
+        const deleted = delRes?.meta?.changes ?? 0;
+        if (deleted > 0) console.log(`已清理 ${deleted} 条 2 个月前已读消息`);
+      } catch (e) {
+        console.error('清理过期消息失败:', e);
+      }
+
       // 计算过期前1天和当前时间
       const now = new Date();
       const oneDayLater = new Date(now.getTime() + 24 * 60 * 60 * 1000);
