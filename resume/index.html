@@ -192,23 +192,6 @@
         </div>
     </div>
 
-    <!-- 手机端保存/分享浮层（桌面端用锚点直接下载，不触发此浮层） -->
-    <div class="modal-overlay" id="save-overlay" onclick="if(event.target===this)closeSaveOverlay()">
-        <div class="modal save-modal">
-            <div class="modal-title">
-                <span id="save-title">保存文件</span>
-                <span style="cursor:pointer;color:#94a3b8;font-size:22px;line-height:1;" onclick="closeSaveOverlay()">&times;</span>
-            </div>
-            <div id="save-body"></div>
-            <div id="save-hint" class="save-hint"></div>
-            <div style="display:flex;gap:10px;margin-top:14px;">
-                <button class="btn-png" style="flex:1" onclick="closeSaveOverlay()">关闭</button>
-                <button class="btn-ai" style="flex:1" id="save-share-btn" onclick="saveOverlayShare()">分享 / 保存</button>
-                <button class="btn-png" style="flex:1" id="save-open-btn" onclick="saveOverlayOpen()">新窗口打开</button>
-            </div>
-        </div>
-    </div>
-
     <div class="modal-overlay" id="ai-modal">
         <div class="modal">
             <div class="modal-title">
@@ -406,6 +389,8 @@
         }
 
         function exportToPDF() {
+            // 移动端同步开空白窗口，保留用户手势，避免被拦截
+            const mobileWin = isMobile() ? window.open('', '_blank') : null;
             generateCanvas(function(canvas) {
                 if (!canvas) { alert('PDF 导出失败，请重试！'); return; }
                 try {
@@ -467,7 +452,6 @@
                     const pdfBlob = new Blob(parts, { type: 'application/pdf' });
                     const filename = getExportFilename('.pdf');
 
-                    // 桌面端：锚点直接下载（移动端浏览器会忽略 download 属性，故走浮层）
                     if (!isMobile()) {
                         const downloadLink = document.createElement('a');
                         downloadLink.href = URL.createObjectURL(pdfBlob);
@@ -477,7 +461,10 @@
                         document.body.removeChild(downloadLink);
                         setTimeout(() => URL.revokeObjectURL(downloadLink.href), 100);
                     } else {
-                        showSaveOverlay(pdfBlob, filename, 'application/pdf', false);
+                        // 移动端浏览器忽略 download 属性，直接新窗口打开供保存
+                        const url = URL.createObjectURL(pdfBlob);
+                        if (mobileWin && !mobileWin.closed) mobileWin.location.href = url;
+                        else location.href = url;
                     }
 
                 } catch(err) {
@@ -489,8 +476,9 @@
         }
 
         function exportToPNG() {
+            const mobileWin = isMobile() ? window.open('', '_blank') : null;
             generateCanvas(function(canvas) {
-                if (!canvas) { alert('图片导出失败，请重试！'); return; }
+                if (!canvas) { alert('图片导出失败，请重试！'); if (mobileWin) mobileWin.close(); return; }
                 const filename = getExportFilename('.png');
                 if (!isMobile()) {
                     try {
@@ -504,83 +492,18 @@
                         alert('图片下载失败，请重试！');
                     }
                 } else {
-                    // 移动端：先产出 Blob，再经浮层/系统分享保存
-                    if (canvas.toBlob) {
-                        canvas.toBlob(function(blob) {
-                            if (!blob) { alert('图片导出失败，请重试！'); return; }
-                            showSaveOverlay(blob, filename, 'image/png', true);
-                        }, 'image/png');
-                    } else {
-                        const a = document.createElement('a');
-                        a.download = filename;
-                        a.href = canvas.toDataURL('image/png', 1.0);
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                    }
+                    // 移动端直接新窗口打开图片，长按即可保存
+                    const url = canvas.toDataURL('image/png', 1.0);
+                    if (mobileWin && !mobileWin.closed) mobileWin.location.href = url;
+                    else location.href = url;
                 }
             });
         }
 
-        /* ===================== 手机端保存 / 分享 ===================== */
-        // 触摸设备（含 iPadOS 伪装为 Mac 的情况）才走此分支
+        /* ===================== 手机端：直接新窗口打开 ===================== */
         function isMobile() {
             return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
                 (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform || ''));
-        }
-
-        let _saveBlob = null;
-        let _saveName = '';
-        let _saveUrl = null;
-
-        function showSaveOverlay(blob, filename, mime, isImage) {
-            _saveBlob = blob;
-            _saveName = filename;
-            closeSaveOverlay(); // 先释放上一次的 URL
-            _saveUrl = URL.createObjectURL(blob);
-
-            const body = document.getElementById('save-body');
-            const hint = document.getElementById('save-hint');
-            const shareBtn = document.getElementById('save-share-btn');
-            const openBtn = document.getElementById('save-open-btn');
-
-            if (isImage) {
-                body.innerHTML = '<img src="' + _saveUrl + '" alt="预览" class="save-preview-img">';
-                hint.textContent = '长按图片即可保存到相册；或点「分享 / 保存」调用系统菜单。';
-            } else {
-                body.innerHTML = '<iframe src="' + _saveUrl + '" class="save-preview-pdf"></iframe>';
-                hint.textContent = '点「分享 / 保存」或「新窗口打开」，用浏览器菜单存为 PDF / 保存到文件。';
-            }
-
-            // 系统分享可用（移动端）才展示，否则仅保留新窗口打开
-            const canShare = navigator.share &&
-                navigator.canShare && navigator.canShare({ files: [new File([blob], filename, { type: mime })] });
-            shareBtn.style.display = canShare ? '' : 'none';
-            openBtn.style.display = '';
-
-            document.getElementById('save-overlay').style.display = 'flex';
-        }
-
-        function closeSaveOverlay() {
-            document.getElementById('save-overlay').style.display = 'none';
-            if (_saveUrl) { URL.revokeObjectURL(_saveUrl); _saveUrl = null; }
-            _saveBlob = null;
-        }
-
-        function _saveFile() {
-            return new File([_saveBlob], _saveName, { type: _saveBlob.type });
-        }
-
-        function saveOverlayShare() {
-            if (!_saveBlob || !navigator.share) return;
-            const f = _saveFile();
-            const payload = navigator.canShare && navigator.canShare({ files: [f] })
-                ? { files: [f], title: _saveName } : { title: _saveName, text: _saveName };
-            navigator.share(payload).catch(function() {});
-        }
-
-        function saveOverlayOpen() {
-            if (_saveUrl) window.open(_saveUrl, '_blank');
         }
 
         function openAI() {
