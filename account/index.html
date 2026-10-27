@@ -136,6 +136,32 @@
             .vertical-label { display: none; }
         }
 
+        /* 加载动画 */
+        .grid-broken > .grid-loading {
+            flex: 0 0 100%;
+            max-width: 100%;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            padding: 90px 0;
+            color: #94a3b8;
+            font-size: 13px;
+            letter-spacing: 0.05em;
+        }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(0,0,0,0.10);
+            border-top-color: #111;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .grid-error { color: #b91c1c; }
+
         /* 商品卡片：去掉炫酷光效，改为极简边框和排版 */
         .item-card {
             background: #fff;
@@ -308,7 +334,7 @@
             margin: 0 auto;            /* 物理左右 margin 居中 → 窄条内左右居中（不受书写模式影响） */
         }
         #noticeBar .notice-view {
-            height: 28rem;
+            height: 30rem;
             overflow: hidden;
             position: relative;
         }
@@ -454,13 +480,13 @@
 
     <div class="vertical-label">账号小卖部 / 真的好用</div>
 
-    <header class="flex justify-between items-end mb-4 enter" style="animation-delay: 0.05s">
+    <header class="flex justify-between items-end mb-4 enter relative z-50" style="animation-delay: 0.05s">
         <div>
             <h1 class="text-2xl font-bold tracking-tighter">账号小卖部</h1>
         </div>
         <nav class="flex gap-8 text-[11px] font-bold uppercase tracking-widest relative">
             <a href="#" id="loginBtn" class="nav-link text-gray-600 hover:text-black transition-colors">登录</a>
-            <div id="userDropdown" class="hidden absolute right-0 top-full mt-2 bg-white border border-gray-200 shadow-lg min-w-[100px]">
+            <div id="userDropdown" class="hidden absolute right-0 top-full mt-2 z-50 bg-white border border-gray-200 shadow-lg min-w-[100px]">
                 <div class="px-4 text-xs text-center flex items-center justify-center h-10 border-b">
                     <div class="font-bold text-lg" id="userBalance">¥0.00</div>
                 </div>
@@ -500,7 +526,10 @@
     <aside id="categoryBar" class="flex flex-col gap-2"></aside>
 
     <main class="grid-broken pb-10">
-
+        <div id="gridLoading" class="grid-loading">
+            <div class="spinner"></div>
+            <p>加载中…</p>
+        </div>
     </main>
 
     <div class="modal-overlay" id="loginModal">
@@ -548,7 +577,7 @@
     <div class="modal-overlay" id="successModal">
         <div class="modal">
             <span class="modal-close" id="closeSuccessModal">&times;</span>
-            <h3 class="text-xl font-bold mb-4">购买成功</h3>
+            <h3 class="text-xl font-bold mb-4" id="successTitle">购买成功</h3>
             <div class="mb-4 text-sm space-y-2">
                 <div class="flex justify-between">
                     <span class="text-gray-400">订单号：</span>
@@ -772,19 +801,29 @@
             requestAnimationFrame(tick);
         }
 
-        // 加载真实数据：talangya/data.json（由 hao.js 从 talangya.com 抓取）
-        // 原始结构：{ code, msg, data: [ { id, name, price(数字), stock, cover(相对路径), ... } ] }
+        // 分档加价：<5 加 5；5~20 乘 2；20~50 加 50%；≥50 加 35%
+        function markupPrice(p) {
+            p = Number(p) || 0;
+            if (p < 5) return p + 5;
+            if (p < 20) return p * 2;
+            if (p < 50) return p * 1.5;
+            return p * 1.35;
+        }
+
+        // 加载真实数据：直接请求后端接口 api.immmor.com（取代本地 talangya/data.json）
+        // 返回结构：{ code:200, msg:"success", data: [ { id, name, price(数字), stock, cover(相对路径), ... } ] }
         // 渲染所需结构：{ name, price("¥xx"), cover(完整URL), description, stock }
-        fetch('talangya/data.json')
+        fetch('https://api.immmor.com/api/talangya/commodity')
             .then(res => res.json())
             .then(json => {
+                if (json.code !== 200) throw new Error(json.msg || '接口返回异常');
                 const list = (json.data || [])
                     .filter(item => String(item.stock).trim() !== '0')   // 隐藏库存为 0 的商品
                     .map(item => ({
                         id: item.id,
                         name: item.name,
                         category: item.category_id,
-                        price: '¥' + item.price,
+                        price: '¥' + markupPrice(item.price).toFixed(2),
                         cover: item.cover
                             ? (item.cover.startsWith('http') ? item.cover : 'https://talangya.com' + item.cover)
                             : '',
@@ -795,7 +834,14 @@
                 renderCategories();
                 applyFilter();
             })
-            .catch(err => console.error('加载 talangya/data.json 失败：', err));
+            .catch(err => {
+                console.error('加载商品数据失败：', err);
+                const main = document.querySelector('main');
+                main.innerHTML = '<div id="gridLoading" class="grid-loading grid-error">'
+                    + '<p>加载失败，请刷新重试</p>'
+                    + '<p style="font-size:11px;opacity:.7;">' + (err && err.message ? err.message : err) + '</p>'
+                    + '</div>';
+            });
 
         // 求购（市场）暂无真实数据源，保持为空
         allMarketAccounts = [];
@@ -930,9 +976,9 @@
             } else {
                 historyList.innerHTML = orderHistory.map((o, i) => `
                     <div class="border-b pb-2 text-xs cursor-pointer hover:bg-gray-50 px-2 py-1" onclick="showOrderDetail(${i})">
-                        <div class="flex justify-between mb-1">
-                            <span class="font-bold">${o.name}</span>
-                            <span class="text-gray-400">${o.date}</span>
+                        <div class="flex justify-between gap-2 mb-1">
+                            <span class="font-bold truncate">${o.name}</span>
+                            <span class="text-gray-400 shrink-0 whitespace-nowrap">${o.date}</span>
                         </div>
                         <div class="text-gray-400">账号：${o.account}</div>
                     </div>
@@ -954,6 +1000,7 @@
 
         window.showOrderDetail = (index) => {
             const order = orderHistory[index];
+            document.getElementById('successTitle').textContent = '订单详情';
             document.getElementById('successOrderId').textContent = order.orderId;
             document.getElementById('successItemName').textContent = order.name;
             document.getElementById('successAccount').textContent = order.account;
@@ -1165,6 +1212,7 @@
                     localStorage.setItem('orderHistory', JSON.stringify(orderHistory));
                     
                     buyModal.classList.remove('active');
+                    document.getElementById('successTitle').textContent = '购买成功';
                     successModal.classList.add('active');
                 } else {
                     alert('购买失败，请稍后重试');
