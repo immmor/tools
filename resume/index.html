@@ -492,10 +492,19 @@
                         alert('图片下载失败，请重试！');
                     }
                 } else {
-                    // 移动端直接新窗口打开图片，长按即可保存
-                    const url = canvas.toDataURL('image/png', 1.0);
-                    if (mobileWin && !mobileWin.closed) mobileWin.location.href = url;
-                    else location.href = url;
+                    // 移动端用 blob URL 新窗口打开（data: URL 在 iOS 会被拦截，故转 blob）
+                    const open = function(url) {
+                        if (mobileWin && !mobileWin.closed) mobileWin.location.href = url;
+                        else location.href = url;
+                    };
+                    if (canvas.toBlob) {
+                        canvas.toBlob(function(blob) {
+                            if (!blob) { alert('图片导出失败，请重试！'); if (mobileWin) mobileWin.close(); return; }
+                            open(URL.createObjectURL(blob));
+                        }, 'image/png');
+                    } else {
+                        open(canvas.toDataURL('image/png', 1.0));
+                    }
                 }
             });
         }
