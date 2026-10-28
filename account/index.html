@@ -233,7 +233,7 @@
             height: 64px;
             border-radius: 6px;
             overflow: hidden;
-            background: #f3f3f3;
+            background: #ffffff;
         }
         .card-thumb img {
             width: 100%;
@@ -755,7 +755,7 @@
                 const div = document.createElement('div');
                 const inner = currentTab === 'sell' ? `
                     <div class="item-card" style="animation: cardIn 0.5s cubic-bezier(0.2,0.8,0.2,1) both; animation-delay: ${j * 0.03}s;">
-                        <div class="card-thumb">${acc.cover ? '<img src="' + acc.cover + '" alt="" loading="lazy" data-base="' + acc.cover.slice(0,-4) + '" data-fb="0" onerror="imgFallback(this)">' : ''}</div>
+                        <div class="card-thumb">${acc.cover ? '<img src="./logo-square.svg" alt="" loading="lazy" data-base="' + acc.cover.slice(0,-4) + '">' : '<img src="./logo-square.svg" alt="" loading="lazy">'}</div>
                         <div class="card-content">
                             <h3 class="text-base font-bold mb-1 line-clamp-2">${acc.name}</h3>
                             <p class="text-xs text-gray-400 mb-2 leading-relaxed line-clamp-2">${acc.description}</p>
@@ -769,7 +769,7 @@
                         </div>
                     </div>` : `
                     <div class="market-card" style="animation: cardIn 0.5s cubic-bezier(0.2,0.8,0.2,1) both; animation-delay: ${j * 0.03}s;">
-                        <div class="card-thumb">${acc.cover ? '<img src="' + acc.cover + '" alt="" loading="lazy" data-base="' + acc.cover.slice(0,-4) + '" data-fb="0" onerror="imgFallback(this)">' : ''}</div>
+                        <div class="card-thumb">${acc.cover ? '<img src="./logo-square.svg" alt="" loading="lazy" data-base="' + acc.cover.slice(0,-4) + '">' : '<img src="./logo-square.svg" alt="" loading="lazy">'}</div>
                         <div class="card-content">
                             <h3 class="text-base font-bold mb-1 line-clamp-2">${acc.name}</h3>
                             <p class="text-xs text-gray-400 mb-2 leading-relaxed line-clamp-2">${acc.description}</p>
@@ -784,6 +784,7 @@
                     </div>`;
                 div.innerHTML = inner;
                 main.appendChild(div);
+                div.querySelectorAll('.card-thumb img[data-base]').forEach(loadThumbReal);
                 renderedCount++;
             });
         }
@@ -1251,16 +1252,19 @@
             }
         });
 
-        // 卡片封面回退：png(0) -> jpg(1) -> logo-square.svg(2，默认)。不提前摘掉 onerror，保证逐级回退。
-        window.imgFallback = (img) => {
-            const stage = parseInt(img.dataset.fb || '0', 10);
-            if (stage === 0) {
-                img.dataset.fb = '1';
-                img.src = img.dataset.base + '.jpg';
-            } else if (stage === 1) {
-                img.dataset.fb = '2';
-                img.src = './logo-square.svg';
-            }
+        // 卡片封面：默认显示 logo（不露灰底），后台预加载对应分类图，成功才替换，失败保持 logo
+        window.loadThumbReal = (img) => {
+            const base = img.dataset.base;
+            if (!base) return;
+            const real = new Image();
+            real.onload = () => { img.src = real.src; };
+            real.onerror = () => {
+                const jpg = new Image();
+                jpg.onload = () => { img.src = jpg.src; };
+                jpg.onerror = () => { /* 保持 logo 默认 */ };
+                jpg.src = base + '.jpg';
+            };
+            real.src = base + '.png';
         };
 
         // 购买功能
