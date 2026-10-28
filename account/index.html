@@ -162,6 +162,54 @@
         @keyframes spin { to { transform: rotate(360deg); } }
         .grid-error { color: #b91c1c; }
 
+        /* 全屏加载动画 */
+        #pageLoader {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+            background: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            transition: opacity 0.5s ease;
+        }
+        #pageLoader.hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+        #pageLoader .loader-inner {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+            animation: loaderIn 0.6s cubic-bezier(0.2,0.8,0.2,1) both;
+        }
+        #pageLoader .loader-logo { width: 120px; height: auto; }
+        #pageLoader .loader-text {
+            font-size: 14px;
+            letter-spacing: 0.3em;
+            font-weight: 700;
+            /* 流光文字：移动的高光扫过 */
+            background: linear-gradient(110deg, #111 0%, #111 38%, #b0b0b0 50%, #111 62%, #111 100%);
+            background-size: 220% 100%;
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            -webkit-text-fill-color: transparent;
+            animation: loaderShimmer 1.8s linear infinite;
+        }
+        @keyframes loaderShimmer {
+            0%   { background-position: 220% 0; }
+            100% { background-position: -220% 0; }
+        }
+        @keyframes loaderIn {
+            from { opacity: 0; transform: translateY(10px) scale(0.96); }
+            to   { opacity: 1; transform: none; }
+        }
+
         /* 商品卡片：去掉炫酷光效，改为极简边框和排版 */
         .item-card {
             background: #fff;
@@ -474,6 +522,14 @@
     </style>
 </head>
 <body class="p-6 md:p-16 lg:px-48">
+
+    <!-- 全屏加载动画：数据加载完成且动画跑满最小时长后才消失 -->
+    <div id="pageLoader">
+        <div class="loader-inner">
+            <img class="loader-logo" src="./logo-animation.svg" alt="账号小卖铺">
+            <div class="loader-text">加载中…</div>
+        </div>
+    </div>
 
     <div class="grain"></div>
     <canvas class="grid-canvas" id="gridCanvas"></canvas>
@@ -812,6 +868,32 @@
 
         // 加载真实数据：直接请求后端接口 api.immmor.com（取代本地 talangya/data.json）
         // 返回结构：{ code:200, msg:"success", data: [ { id, name, price(数字), stock, cover(相对路径), ... } ] }
+        // 全屏加载动画：数据加载完成 + 动画跑满最小时长后才消失（不提前退出）
+        const pageLoader = document.getElementById('pageLoader');
+        const loaderStart = Date.now();
+        let dataReady = false;
+        // 加载文案轮换
+        const loaderTextEl = pageLoader.querySelector('.loader-text');
+        const loaderTexts = ['加载中…', '加载数据…', '加载图片…', '准备商品…'];
+        const LOADER_TEXT_INTERVAL = 700;
+        // 最短停留 = 跑完一整轮文案（保证四个文本都至少显示一遍）
+        const LOADER_MIN_MS = loaderTexts.length * LOADER_TEXT_INTERVAL;
+        let loaderTextIdx = 0;
+        const loaderTextTimer = setInterval(() => {
+            loaderTextIdx = (loaderTextIdx + 1) % loaderTexts.length;
+            loaderTextEl.textContent = loaderTexts[loaderTextIdx];
+        }, LOADER_TEXT_INTERVAL);
+        const tryHideLoader = () => {
+            if (!dataReady) return;
+            const remain = LOADER_MIN_MS - (Date.now() - loaderStart);
+            const hide = () => {
+                clearInterval(loaderTextTimer);
+                pageLoader.classList.add('hidden');
+            };
+            if (remain <= 0) hide();
+            else setTimeout(hide, remain);
+        };
+
         // 渲染所需结构：{ name, price("¥xx"), cover(完整URL), description, stock }
         fetch('https://api.immmor.com/api/talangya/commodity')
             .then(res => res.json())
@@ -831,6 +913,8 @@
                 allAccounts = list;
                 renderCategories();
                 applyFilter();
+                dataReady = true;
+                tryHideLoader();
             })
             .catch(err => {
                 console.error('加载商品数据失败：', err);
@@ -839,6 +923,8 @@
                     + '<p>加载失败，请刷新重试</p>'
                     + '<p style="font-size:11px;opacity:.7;">' + (err && err.message ? err.message : err) + '</p>'
                     + '</div>';
+                dataReady = true;
+                tryHideLoader();
             });
 
         // 求购（市场）暂无真实数据源，保持为空
@@ -1173,7 +1259,7 @@
                 img.src = img.dataset.base + '.jpg';
             } else if (stage === 1) {
                 img.dataset.fb = '2';
-                img.src = 'talangya/static/logo-square.svg';
+                img.src = './logo-square.svg';
             }
         };
 
