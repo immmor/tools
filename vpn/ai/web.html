@@ -1,88 +1,263 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>本地 RAG 知识库</title>
-  <style>
-    * { box-sizing: border-box; }
-    body { margin: 0; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
-           background: #f5f6f8; color: #1f2329; }
-    .wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px; }
-    h1 { font-size: 20px; margin: 0 0 16px; }
-    .box { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
-    #log { min-height: 320px; max-height: 60vh; overflow-y: auto; }
-    .msg { margin-bottom: 14px; }
-    .msg .role { font-size: 12px; color: #8a9099; margin-bottom: 4px; }
-    .msg .bubble { background: #f0f2f5; padding: 10px 12px; border-radius: 10px; white-space: pre-wrap; line-height: 1.6; }
-    .msg.me .bubble { background: #d6e4ff; }
-    .src { font-size: 12px; color: #8a9099; margin-top: 6px; }
-    .input { display: flex; gap: 8px; margin-top: 16px; }
-    input { flex: 1; padding: 10px 12px; border: 1px solid #d9dce1; border-radius: 10px; font-size: 14px; }
-    button { padding: 10px 18px; border: none; background: #3370ff; color: #fff; border-radius: 10px; cursor: pointer; }
-    button:disabled { opacity: .5; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>淘宝客服意图识别</title>
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/ort.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+            max-width: 640px;
+            margin: 40px auto;
+            padding: 0 16px;
+            color: #333;
+        }
+        h2 { margin-bottom: 8px; }
+        .hint { color: #888; font-size: 13px; margin-bottom: 16px; }
+        textarea {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 10px;
+            font-size: 15px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            resize: vertical;
+        }
+        button {
+            margin-top: 12px;
+            padding: 9px 20px;
+            font-size: 15px;
+            background: #ff5000;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        #status { margin-top: 10px; font-size: 13px; color: #888; }
+        #resultBox {
+            margin-top: 20px;
+            padding: 16px;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            background: #fafafa;
+            display: none;
+        }
+        .intent { font-size: 20px; font-weight: bold; color: #ff5000; }
+        .badge {
+            display: inline-block;
+            margin-left: 8px;
+            padding: 2px 8px;
+            font-size: 12px;
+            border-radius: 10px;
+            vertical-align: middle;
+        }
+        .badge-high { background: #e8f7e8; color: #2e7d32; }
+        .badge-low { background: #fff7e6; color: #b26a00; }
+        .badge-other { background: #f0f0f0; color: #888; }
+        .tip {
+            margin-top: 8px;
+            font-size: 13px;
+            color: #999;
+        }
+        .prob-list { margin-top: 12px; }
+        .prob-row {
+            display: flex;
+            align-items: center;
+            margin: 6px 0;
+            font-size: 14px;
+        }
+        .prob-label { width: 90px; flex-shrink: 0; }
+        .prob-bar-bg {
+            flex: 1;
+            height: 10px;
+            background: #e5e5e5;
+            border-radius: 5px;
+            overflow: hidden;
+            margin: 0 8px;
+        }
+        .prob-bar { height: 100%; background: #ff5000; width: 0; transition: width .3s; }
+        .prob-value { width: 52px; text-align: right; color: #666; }
+        .samples { margin-top: 10px; }
+        .sample-tag {
+            display: inline-block;
+            padding: 4px 10px;
+            margin: 4px 6px 0 0;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 14px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        .sample-tag:hover { border-color: #ff5000; color: #ff5000; }
+    </style>
 </head>
 <body>
-  <div class="wrap">
-    <h1>本地 RAG 知识库 · qwen2.5:3b</h1>
-    <div class="box">
-      <div id="log"></div>
-      <div class="input">
-        <input id="q" placeholder="输入你的问题，回车发送" autofocus>
-        <button id="send">发送</button>
-      </div>
+    <h2>淘宝客服意图识别</h2>
+    <div class="hint">输入用户消息，模型会判断意图。不属于已知意图或置信度不足时，会给出相应提示。</div>
+
+    <textarea id="inputText" rows="3" placeholder="例如：我的快递到哪里了"></textarea>
+    <div class="samples">
+        <span class="sample-tag">我的快递到哪里了</span>
+        <span class="sample-tag">我要退款</span>
+        <span class="sample-tag">这个衣服有XL码吗</span>
+        <span class="sample-tag">我要投诉你们客服</span>
+        <span class="sample-tag">你好在吗</span>
+        <span class="sample-tag">今天天气怎么样</span>
+        <span class="sample-tag">这个怎么弄</span>
     </div>
-  </div>
 
-  <script>
-    const log = document.getElementById('log');
-    const q = document.getElementById('q');
-    const send = document.getElementById('send');
+    <button id="runBtn" disabled>识别意图</button>
+    <div id="status">正在加载模型...</div>
 
-    function addMsg(role, text, src) {
-      const el = document.createElement('div');
-      el.className = 'msg ' + (role === 'me' ? 'me' : '');
-      el.innerHTML = `<div class="role">${role === 'me' ? '你' : '助手'}</div>
-                      <div class="bubble"></div>`;
-      el.querySelector('.bubble').textContent = text;
-      if (src && src.length) {
-        const s = document.createElement('div');
-        s.className = 'src';
-        s.textContent = '参考来源：' + src.map(x => `${x.source} (${x.score})`).join('，');
-        el.appendChild(s);
-      }
-      log.appendChild(el);
-      log.scrollTop = log.scrollHeight;
-    }
+    <div id="resultBox">
+        <div>
+            预测意图：<span class="intent" id="intentText">-</span>
+            <span class="badge" id="confBadge"></span>
+        </div>
+        <div class="tip" id="tipText" style="display:none;"></div>
+        <div class="prob-list" id="probList"></div>
+    </div>
 
-    async function ask() {
-      const text = q.value.trim();
-      if (!text) return;
-      q.value = '';
-      send.disabled = true;
-      addMsg('me', text);
-      addMsg('bot', '思考中…');
-      try {
-        const r = await fetch('/api/query', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: text })
+    <script>
+        const MODEL_PATH = './taobao_intent.onnx';
+        const INPUT_NAME = 'text_input';
+        // 必须与 Python 打印的 classes_ 完全一致（5 类，不含“其他”）
+        const CLASSES = ['商品咨询', '投诉建议', '物流查询', '退款退货', '问候'];
+        const LOW_CONF = 0.30;
+        const HIGH_CONF = 0.45;
+
+        let session = null;
+
+        async function initModel() {
+            const statusEl = document.getElementById('status');
+            const runBtn = document.getElementById('runBtn');
+            try {
+                session = await ort.InferenceSession.create(MODEL_PATH, {
+                    executionProviders: ['wasm'],
+                    graphOptimizationLevel: 'all'
+                });
+                console.log('输入:', session.inputNames, '输出:', session.outputNames);
+                statusEl.textContent = '模型已就绪';
+                runBtn.disabled = false;
+            } catch (e) {
+                console.error('模型加载失败:', e);
+                statusEl.textContent = '模型加载失败，请检查控制台（需通过 HTTP 服务访问）';
+            }
+        }
+
+        async function runInference() {
+            if (!session) return;
+            const text = document.getElementById('inputText').value.trim();
+            if (!text) {
+                alert('请输入文本');
+                return;
+            }
+
+            const runBtn = document.getElementById('runBtn');
+            const statusEl = document.getElementById('status');
+            runBtn.disabled = true;
+            statusEl.textContent = '推理中...';
+
+            try {
+                const tensor = new ort.Tensor('string', [text], [1, 1]);
+                const feeds = {};
+                feeds[INPUT_NAME] = tensor;
+
+                const results = await session.run(feeds);
+                console.log('原始输出:', results);
+
+                const outputNames = session.outputNames;
+                const labelKey = outputNames.find(n => n.includes('label')) || outputNames[0];
+                const probKey = outputNames.find(n => n.includes('prob')) || outputNames[1];
+
+                const rawLabel = results[labelKey].data[0];
+                const modelIntent = typeof rawLabel === 'string'
+                    ? rawLabel
+                    : (CLASSES[Number(rawLabel)] || `类别索引 ${rawLabel}`);
+
+                const probs = Array.from(results[probKey].data);
+                const maxProb = Math.max(...probs);
+
+                let finalIntent, level;
+                if (maxProb < LOW_CONF) {
+                    finalIntent = '其他';
+                    level = 'other';
+                } else if (maxProb < HIGH_CONF) {
+                    finalIntent = modelIntent;
+                    level = 'low';
+                } else {
+                    finalIntent = modelIntent;
+                    level = 'high';
+                }
+
+                renderResult(finalIntent, probs, level, maxProb, modelIntent);
+                statusEl.textContent = '完成';
+            } catch (e) {
+                console.error('推理失败:', e);
+                statusEl.textContent = '推理出错：' + e.message;
+            } finally {
+                runBtn.disabled = false;
+            }
+        }
+
+        function renderResult(intent, probs, level, maxProb, modelIntent) {
+            document.getElementById('resultBox').style.display = 'block';
+            document.getElementById('intentText').textContent = intent;
+
+            const badge = document.getElementById('confBadge');
+            const tip = document.getElementById('tipText');
+
+            if (level === 'high') {
+                badge.textContent = '高置信';
+                badge.className = 'badge badge-high';
+                tip.style.display = 'none';
+            } else if (level === 'low') {
+                badge.textContent = '低置信';
+                badge.className = 'badge badge-low';
+                tip.style.display = 'block';
+                tip.textContent = `最高置信度 ${(maxProb * 100).toFixed(1)}%，建议人工确认。`;
+            } else {
+                badge.textContent = '其他';
+                badge.className = 'badge badge-other';
+                tip.style.display = 'block';
+                tip.textContent = `最高置信度 ${(maxProb * 100).toFixed(1)}% 低于阈值 ${(LOW_CONF * 100).toFixed(0)}%，已归为“其他”。模型倾向：${modelIntent}。`;
+            }
+
+            const listEl = document.getElementById('probList');
+            listEl.innerHTML = '';
+            if (!probs) return;
+
+            const pairs = CLASSES.map((name, i) => ({
+                name,
+                prob: probs[i] !== undefined ? probs[i] : 0
+            })).sort((a, b) => b.prob - a.prob);
+
+            pairs.forEach(({ name, prob }) => {
+                const percent = (prob * 100).toFixed(1);
+                const row = document.createElement('div');
+                row.className = 'prob-row';
+                row.innerHTML = `
+                    <span class="prob-label">${name}</span>
+                    <span class="prob-bar-bg"><span class="prob-bar" style="width:${percent}%"></span></span>
+                    <span class="prob-value">${percent}%</span>
+                `;
+                listEl.appendChild(row);
+            });
+        }
+
+        document.getElementById('runBtn').addEventListener('click', runInference);
+        document.getElementById('inputText').addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') runInference();
         });
-        const data = await r.json();
-        log.lastChild.remove(); // 移除“思考中”
-        if (data.error) addMsg('bot', '错误：' + data.error);
-        else addMsg('bot', data.answer, data.sources);
-      } catch (e) {
-        log.lastChild.remove();
-        addMsg('bot', '请求失败：' + e.message);
-      } finally {
-        send.disabled = false;
-      }
-    }
+        document.querySelectorAll('.sample-tag').forEach(tag => {
+            tag.addEventListener('click', () => {
+                document.getElementById('inputText').value = tag.textContent;
+            });
+        });
 
-    send.onclick = ask;
-    q.onkeydown = e => { if (e.key === 'Enter') ask(); };
-  </script>
+        window.addEventListener('load', initModel);
+    </script>
 </body>
 </html>

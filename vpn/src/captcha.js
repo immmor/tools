@@ -765,4 +765,145 @@
 
   window.initClickSequenceCaptcha = initClickSequenceCaptcha;
 
+  // ===== Matter.js 物理小游戏验证码：把小球拖进绿色目标框并停留即通关 =====
+  function initPhysicsCaptcha(opts) {
+    const { canvas, statusEl, progressEl, refreshBtn, onVerifiedChange } = opts || {};
+    if (!canvas) return null;
+    if (typeof Matter === 'undefined') {
+      if (statusEl) {
+        statusEl.textContent = '物理引擎未加载';
+        statusEl.className = 'absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 px-3 py-1 rounded text-xs font-bold z-20 bg-red-600 text-white';
+      }
+      return null;
+    }
+    const { Engine, Render, Runner, Bodies, Composite, Mouse, MouseConstraint, Constraint, Events } = Matter;
+    const W = canvas.width || 380;
+    const H = canvas.height || 240;
+    canvas.width = W; canvas.height = H;
+
+    const setStatus = (msg, ok) => {
+      if (!statusEl) return;
+      if (!msg) { statusEl.classList.add('hidden'); return; }
+      statusEl.textContent = msg;
+      statusEl.className = 'absolute bottom-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded text-xs font-bold z-20 ' +
+        (ok ? 'bg-[var(--neon-green)] text-black shadow-lg shadow-[var(--neon-green)]/40' : 'bg-black/80 text-zinc-200');
+    };
+    const setProgress = (n) => {
+      if (progressEl) progressEl.textContent = verified ? '通关 ✓' : ('已撞倒 ' + n + '/' + TOWER_N);
+    };
+
+    const engine = Engine.create();
+    engine.gravity.y = 1;
+    const world = engine.world;
+
+    // 边界
+    const wallStyle = { isStatic: true, render: { fillStyle: '#3f3f46' } };
+    const t = 80;
+    Composite.add(world, [
+      Bodies.rectangle(W / 2, H + t / 2 - 2, W, t, wallStyle),   // 地面
+      Bodies.rectangle(-t / 2, H / 2, t, H * 3, wallStyle),       // 左墙
+      Bodies.rectangle(W + t / 2, H / 2, t, H * 3, wallStyle)     // 右墙
+    ]);
+
+    // 目标区（视觉高亮）：平台以下的地面带
+    const platformTopY = 150;
+    const goalZone = Bodies.rectangle(W / 2, (platformTopY + H) / 2, W, H - platformTopY, {
+      isStatic: true, isSensor: true, render: { fillStyle: 'rgba(34,197,94,0.10)' }
+    });
+    Composite.add(world, goalZone);
+
+    // 平台（积木塔站立处）
+    const towerX = 280;
+    const platform = Bodies.rectangle(towerX, platformTopY + 10, 120, 20, {
+      isStatic: true, render: { fillStyle: '#52525b' }
+    });
+    Composite.add(world, platform);
+
+    // 积木塔（堆叠刚体 + 多彩）
+    const TOWER_N = 5;
+    const BLOCK = 28;
+    const GREENS = ['#22c55e', '#16a34a', '#4ade80', '#15803d', '#86efac'];
+    let towerBlocks = [];
+    const buildTower = () => {
+      towerBlocks.forEach((b) => Composite.remove(world, b));
+      towerBlocks = [];
+      for (let i = 0; i < TOWER_N; i++) {
+        const b = Bodies.rectangle(towerX, platformTopY - BLOCK / 2 - i * BLOCK, BLOCK, BLOCK, {
+          friction: 0.5, restitution: 0.04, density: 0.002,
+          render: { fillStyle: GREENS[i % GREENS.length], strokeStyle: '#0a0a0a', lineWidth: 1 }
+        });
+        towerBlocks.push(b);
+      }
+      Composite.add(world, towerBlocks);
+    };
+    buildTower();
+
+    // 摆锤铁球：绳索约束（pendulum / 经典复杂 demo 精髓）
+    const anchor = { x: 150, y: 24 };
+    const ropeLen = 150;
+    let ball = null, rope = null;
+    const pivot = Bodies.circle(anchor.x, anchor.y, 7, { isStatic: true, render: { fillStyle: '#71717a' } });
+    Composite.add(world, pivot);
+    const buildBall = () => {
+      if (ball) Composite.remove(world, ball);
+      if (rope) Composite.remove(world, rope);
+      ball = Bodies.circle(anchor.x, anchor.y + ropeLen, 24, {
+        density: 0.045, restitution: 0.3, friction: 0.05,
+        render: { fillStyle: '#d4d4d8', strokeStyle: '#52525b', lineWidth: 2 }
+      });
+      rope = Constraint.create({
+        pointA: anchor, bodyB: ball, length: ropeLen, stiffness: 0.9, damping: 0.02,
+        render: { strokeStyle: '#71717a', lineWidth: 3 }
+      });
+      Composite.add(world, [ball, rope]);
+    };
+    buildBall();
+
+    // 鼠标 / 触摸拖拽（把铁球拉到一侧再松手即可甩出）
+    const mouse = Mouse.create(canvas);
+    const mc = MouseConstraint.create(engine, { mouse, constraint: { stiffness: 0.2, render: { visible: false } } });
+    Composite.add(world, mc);
+
+    const render = Render.create({ canvas, engine, options: { width: W, height: H, wireframes: false, background: 'transparent' } });
+    Render.run(render);
+    const runner = Runner.create();
+    Runner.run(runner, engine);
+
+    const REQUIRED = 3;
+    let verified = false;
+    Events.on(engine, 'afterUpdate', () => {
+      const fallen = towerBlocks.filter((b) => b.position.y > platformTopY + 14).length;
+      setProgress(fallen);
+      if (!verified && fallen >= REQUIRED) {
+        verified = true;
+        setStatus('验证通过 ✓', true);
+        if (onVerifiedChange) onVerifiedChange(true);
+      }
+    });
+
+    setProgress(0);
+
+    const reset = () => {
+      verified = false;
+      buildTower();
+      buildBall();
+      setStatus('');
+      setProgress(0);
+      if (onVerifiedChange) onVerifiedChange(false);
+    };
+    if (refreshBtn) refreshBtn.addEventListener('click', reset);
+
+    const destroy = () => {
+      Render.stop(render);
+      Runner.stop(runner);
+      Composite.clear(world, false);
+      Engine.clear(engine);
+      Mouse.clearSourceEvents(mouse);
+    };
+
+    return { reset, isVerified: () => verified, destroy };
+  }
+
+  window.initPhysicsCaptcha = initPhysicsCaptcha;
+
 })();

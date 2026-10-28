@@ -2031,10 +2031,11 @@
                 </div>
                 <div class="space-y-2">
                     <label class="text-xs text-zinc-400 block mb-2" data-i18n="withdraw_verify_method">安全验证方式</label>
-                    <div class="grid grid-cols-3 gap-2" id="withdraw-verify-tabs">
-                        <button type="button" data-vmode="slider" class="withdraw-verify-tab flex-1 py-2 rounded-lg border border-[var(--neon-green)] text-sm text-white bg-[var(--neon-green)]/10 transition-all" data-i18n="withdraw_verify_tab_slider">滑块验证</button>
-                        <button type="button" data-vmode="gesture" class="withdraw-verify-tab flex-1 py-2 rounded-lg border border-zinc-700 text-sm text-zinc-400 hover:border-[var(--neon-green)] hover:text-white transition-all" data-i18n="withdraw_verify_tab_gesture">手势验证</button>
-                        <button type="button" data-vmode="clickseq" class="withdraw-verify-tab flex-1 py-2 rounded-lg border border-zinc-700 text-sm text-zinc-400 hover:border-[var(--neon-green)] hover:text-white transition-all" data-i18n="withdraw_verify_tab_clickseq">文字验证</button>
+                    <div class="grid grid-cols-4 gap-2" id="withdraw-verify-tabs">
+                        <button type="button" data-vmode="slider" class="withdraw-verify-tab flex-1 py-2 rounded-lg border leading-tight break-words text-center px-1 border-[var(--neon-green)] text-sm text-white bg-[var(--neon-green)]/10 transition-all" data-i18n="withdraw_verify_tab_slider">滑块验证</button>
+                        <button type="button" data-vmode="gesture" class="withdraw-verify-tab flex-1 py-2 rounded-lg border leading-tight break-words text-center px-1 border-zinc-700 text-sm text-zinc-400 hover:border-[var(--neon-green)] hover:text-white transition-all" data-i18n="withdraw_verify_tab_gesture">手势验证</button>
+                        <button type="button" data-vmode="clickseq" class="withdraw-verify-tab flex-1 py-2 rounded-lg border leading-tight break-words text-center px-1 border-zinc-700 text-sm text-zinc-400 hover:border-[var(--neon-green)] hover:text-white transition-all" data-i18n="withdraw_verify_tab_clickseq">文字验证</button>
+                        <button type="button" data-vmode="physics" data-i18n="withdraw_verify_tab_physics" class="withdraw-verify-tab flex-1 py-2 rounded-lg border leading-tight break-words text-center px-1 border-zinc-700 text-sm text-zinc-400 hover:border-[var(--neon-green)] hover:text-white transition-all">游戏验证</button>
                     </div>
                 </div>
                 <div id="withdraw-slider-wrap" class="space-y-4">
@@ -2075,6 +2076,15 @@
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
                         </button>
                         <div id="withdraw-clickseq-status" class="absolute bottom-1 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded text-[10px] hidden z-10"></div>
+                    </div>
+                </div>
+                <div id="withdraw-physics-wrap" class="space-y-3 hidden">
+                    <div class="relative rounded-lg overflow-hidden border border-zinc-700 bg-gradient-to-b from-zinc-800 to-zinc-950 w-full" style="aspect-ratio: 380/240;">
+                        <canvas id="withdraw-physics-canvas" width="380" height="240" class="block w-full h-full cursor-grab touch-none"></canvas>
+                        <button id="withdraw-physics-refresh" type="button" class="absolute bottom-2 right-2 p-1 rounded bg-black/40 text-zinc-300 hover:text-white hover:bg-black/60 transition-colors z-10" title="重置">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                        </button>
+                        <div id="withdraw-physics-status" class="hidden absolute bottom-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded text-xs font-bold z-20"></div>
                     </div>
                 </div>
                 <button id="withdraw-submit" type="button" class="w-full py-3 bg-[var(--neon-green)] text-black font-bold rounded-lg text-sm hover:opacity-90 transition-opacity" data-i18n="withdraw_submit">提交申请</button>
@@ -3332,6 +3342,7 @@
 
     <script src="src/initLoading.js"></script>
     <script src="game.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
     <script src="src/captcha.js"></script>
     <script>
         lucide.createIcons();
@@ -6652,6 +6663,17 @@
                     });
                 }
 
+                // 物理小游戏验证初始化（src/captcha.js 的 initPhysicsCaptcha，Matter.js）
+                if (typeof initPhysicsCaptcha === 'function' && !window.withdrawPhysicsCtl) {
+                    window.withdrawPhysicsCtl = initPhysicsCaptcha({
+                        canvas: document.getElementById('withdraw-physics-canvas'),
+                        statusEl: document.getElementById('withdraw-physics-status'),
+                        progressEl: document.getElementById('withdraw-physics-progress'),
+                        refreshBtn: document.getElementById('withdraw-physics-refresh'),
+                        onVerifiedChange: (v) => { window.isWithdrawVerified = v; updateWithdrawChecks(); }
+                    });
+                }
+
                 // ===== 视频手势识别验证（MediaPipe GestureRecognizer）=====
                 let gestureRecognizerInst = null;
                 let gestureStreamInst = null;
@@ -6818,6 +6840,9 @@
                     if (mode !== 'gesture') stopGestureVerification();
                     if (els.withdrawClickSeqWrap) els.withdrawClickSeqWrap.classList.toggle('hidden', mode !== 'clickseq');
                     if (mode !== 'clickseq' && window.withdrawClickSeqCtl) window.withdrawClickSeqCtl.reset();
+                    const pw = document.getElementById('withdraw-physics-wrap');
+                    if (pw) pw.classList.toggle('hidden', mode !== 'physics');
+                    if (mode !== 'physics' && window.withdrawPhysicsCtl) window.withdrawPhysicsCtl.reset();
                 };
 
                 document.querySelectorAll('.withdraw-verify-tab').forEach(tab => {
