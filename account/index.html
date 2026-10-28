@@ -491,6 +491,7 @@
                     <div class="font-bold text-lg" id="userBalance">¥0.00</div>
                 </div>
                 <button id="orderHistoryBtn" class="w-full text-center px-4 text-xs hover:bg-gray-50 h-10 flex items-center justify-center border-b">购买记录</button>
+                <button id="rechargeBtn" class="w-full text-center px-4 text-xs hover:bg-gray-50 h-10 flex items-center justify-center border-b">余额充值</button>
                 <button id="logoutBtn" class="w-full text-center px-4 text-xs hover:bg-gray-50 text-red-500 h-10 flex items-center justify-center">退出登录</button>
             </div>
         </nav>
@@ -540,14 +541,17 @@
                 <button class="flex-1 pb-2 text-gray-400" id="showRegister">注册</button>
             </div>
             <form id="loginForm">
-                <input type="text" placeholder="用户名" class="w-full mb-4 px-4 py-2 border border-gray-200 text-sm focus:outline-none focus:border-black" required>
-                <input type="password" placeholder="密码" class="w-full mb-6 px-4 py-2 border border-gray-200 text-sm focus:outline-none focus:border-black" required>
+                <input type="text" id="loginEmail" placeholder="邮箱" class="w-full mb-4 px-4 py-2 border border-gray-200 text-sm focus:outline-none focus:border-black" required>
+                <input type="password" id="loginPassword" placeholder="密码" class="w-full mb-6 px-4 py-2 border border-gray-200 text-sm focus:outline-none focus:border-black" required>
                 <button type="submit" class="w-full bg-black text-white py-2 text-sm font-bold hover:bg-gray-800 transition-colors">登录</button>
             </form>
             <form id="registerForm" style="display:none;">
-                <input type="text" placeholder="用户名" class="w-full mb-4 px-4 py-2 border border-gray-200 text-sm focus:outline-none focus:border-black" required>
-                <input type="email" placeholder="邮箱" class="w-full mb-4 px-4 py-2 border border-gray-200 text-sm focus:outline-none focus:border-black" required>
-                <input type="password" placeholder="密码" class="w-full mb-6 px-4 py-2 border border-gray-200 text-sm focus:outline-none focus:border-black" required>
+                <input type="email" id="regEmail" placeholder="邮箱" class="w-full mb-4 px-4 py-2 border border-gray-200 text-sm focus:outline-none focus:border-black" required>
+                <div class="flex gap-2 mb-4">
+                    <input type="text" id="regCode" placeholder="验证码" maxlength="6" class="flex-1 px-4 py-2 border border-gray-200 text-sm focus:outline-none focus:border-black" required>
+                    <button type="button" id="sendCodeBtn" class="shrink-0 bg-black text-white px-3 text-sm font-bold hover:bg-gray-800 disabled:opacity-50">获取</button>
+                </div>
+                <input type="password" id="regPassword" placeholder="密码" class="w-full mb-6 px-4 py-2 border border-gray-200 text-sm focus:outline-none focus:border-black" required>
                 <button type="submit" class="w-full bg-black text-white py-2 text-sm font-bold hover:bg-gray-800 transition-colors">注册</button>
             </form>
         </div>
@@ -588,12 +592,8 @@
                     <span id="successItemName" class="font-bold break-words min-w-0"></span>
                 </div>
                 <div class="flex justify-between gap-3">
-                    <span class="text-gray-400 shrink-0 whitespace-nowrap">账号：</span>
-                    <span id="successAccount" class="font-mono break-words min-w-0"></span>
-                </div>
-                <div class="flex justify-between gap-3">
-                    <span class="text-gray-400 shrink-0 whitespace-nowrap">密码：</span>
-                    <span id="successPassword" class="font-mono break-words min-w-0"></span>
+                    <span class="text-gray-400 shrink-0 whitespace-nowrap">卡密：</span>
+                    <span id="successSecret" class="font-mono break-words min-w-0"></span>
                 </div>
             </div>
             <button id="closeSuccess" class="w-full bg-black text-white py-2 text-sm font-bold hover:bg-gray-800">完成</button>
@@ -708,7 +708,7 @@
                                     <span class="text-[10px] uppercase tracking-widest font-bold">库存：${acc.stock}</span>
                                     <span class="price-tag mono">${acc.price}</span>
                                 </div>
-                                <button class="text-xs border-b border-black pb-1 hover:text-gray-400 transition-colors buy-btn" data-name="${acc.name}" data-price="${acc.price}">购买</button>
+                                <button class="text-xs border-b border-black pb-1 hover:text-gray-400 transition-colors buy-btn" data-id="${acc.id}" data-name="${acc.name}" data-price="${acc.price}">购买</button>
                             </div>
                         </div>
                     </div>` : `
@@ -923,12 +923,14 @@
         const closeModal = document.getElementById('closeModal');
         const loginForm = document.getElementById('loginForm');
         const registerForm = document.getElementById('registerForm');
+        const sendCodeBtn = document.getElementById('sendCodeBtn');
         const showLogin = document.getElementById('showLogin');
         const showRegister = document.getElementById('showRegister');
         const userDropdown = document.getElementById('userDropdown');
         const userBalance = document.getElementById('userBalance');
         const logoutBtn = document.getElementById('logoutBtn');
         const orderHistoryBtn = document.getElementById('orderHistoryBtn');
+        const rechargeBtn = document.getElementById('rechargeBtn');
         const historyModal = document.getElementById('historyModal');
         const closeHistoryModal = document.getElementById('closeHistoryModal');
         const historyList = document.getElementById('historyList');
@@ -980,12 +982,37 @@
                             <span class="font-bold truncate">${o.name}</span>
                             <span class="text-gray-400 shrink-0 whitespace-nowrap">${o.date}</span>
                         </div>
-                        <div class="text-gray-400">账号：${o.account}</div>
+                        <div class="text-gray-400">卡密：${o.secret || o.account || ''}</div>
                     </div>
                 `).join('');
             }
             historyModal.classList.add('active');
             userDropdown.classList.add('hidden');
+        });
+
+        // 余额充值：生成一次性免密授权码，跳转到 funbua.uk/vpay 完成充值
+        rechargeBtn.addEventListener('click', async () => {
+            if (!currentUser) {
+                alert('请先登录');
+                return;
+            }
+            try {
+                const res = await fetch('https://api.immmor.com/api/quick-login-ticket', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: currentUser.username })
+                });
+                const data = await res.json();
+                if (data.success && data.ticket) {
+                    userDropdown.classList.add('hidden');
+                    window.location.href = 'https://funbua.uk/vpay?ticket=' + encodeURIComponent(data.ticket);
+                } else {
+                    alert('跳转充值失败：' + (data.message || '未知错误'));
+                }
+            } catch (err) {
+                console.error('Recharge redirect error:', err);
+                alert('跳转充值失败，请稍后重试');
+            }
         });
 
         closeHistoryModal.addEventListener('click', () => {
@@ -1003,8 +1030,7 @@
             document.getElementById('successTitle').textContent = '订单详情';
             document.getElementById('successOrderId').textContent = order.orderId;
             document.getElementById('successItemName').textContent = order.name;
-            document.getElementById('successAccount').textContent = order.account;
-            document.getElementById('successPassword').textContent = order.password;
+            document.getElementById('successSecret').textContent = order.secret || order.account || '';
             historyModal.classList.remove('active');
             successModal.classList.add('active');
         };
@@ -1040,22 +1066,21 @@
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const formData = new FormData(loginForm);
-            const username = loginForm.querySelector('input[type="text"]').value;
-            const password = loginForm.querySelector('input[type="password"]').value;
-            
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+
             try {
                  const res = await fetch('https://api.immmor.com/api/login', {
                      method: 'POST',
                      headers: { 'Content-Type': 'application/json' },
-                     body: JSON.stringify({ username, password })
+                     body: JSON.stringify({ username: email, password })
                  });
                  const data = await res.json();
                  if (data.success) {
-                     alert('登录成功！');
                      loginModal.classList.remove('active');
-                     currentUser = { username, balance: data.userInfo?.balance || 0 };
+                     currentUser = { username: email, balance: data.userInfo?.balance || 0 };
                      localStorage.setItem('currentUser', JSON.stringify(currentUser));
-                     const displayUsername = username.length > 6 ? username.slice(0, 6) + '*' : username;
+                     const displayUsername = email.length > 6 ? email.slice(0, 6) + '*' : email;
                      loginBtn.textContent = displayUsername;
                      loginBtn.classList.remove('text-gray-300');
                      loginBtn.classList.add('text-black');
@@ -1068,23 +1093,68 @@
             }
         });
 
-        registerForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const username = registerForm.querySelector('input[type="text"]').value;
-            const email = registerForm.querySelector('input[type="email"]').value;
-            const password = registerForm.querySelector('input[type="password"]').value;
-            
+        // 获取邮箱验证码
+        let sendCodeTimer = null;
+        sendCodeBtn.addEventListener('click', async () => {
+            const email = document.getElementById('regEmail').value.trim();
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                return;
+            }
             try {
-                const res = await fetch('https://api.immmor.com/api/register', {
+                const res = await fetch('https://api.immmor.com/api/send-verify-code', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password })
+                    body: JSON.stringify({ email })
                 });
                 const data = await res.json();
                 if (data.success) {
-                    alert('注册成功！');
+                    let left = 60;
+                    sendCodeBtn.disabled = true;
+                    sendCodeBtn.textContent = left + 's';
+                    sendCodeTimer = setInterval(() => {
+                        left -= 1;
+                        if (left <= 0) {
+                            clearInterval(sendCodeTimer);
+                            sendCodeBtn.disabled = false;
+                            sendCodeBtn.textContent = '获取';
+                        } else {
+                            sendCodeBtn.textContent = left + 's';
+                        }
+                    }, 1000);
+                }
+            } catch (err) {
+                // 静默失败，不弹窗
+            }
+        });
+
+        registerForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('regEmail').value.trim();
+            const code = document.getElementById('regCode').value.trim();
+            const password = document.getElementById('regPassword').value;
+
+            try {
+                // 1) 先校验邮箱验证码（后端注册要求 verify_passed）
+                const vRes = await fetch('https://api.immmor.com/api/verify-code', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, code })
+                });
+                const vData = await vRes.json();
+                if (!vData.success) {
+                    alert(vData.message || '验证码错误');
+                    return;
+                }
+                // 2) 再注册
+                const res = await fetch('https://api.immmor.com/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: email, password })
+                });
+                const data = await res.json();
+                if (data.success) {
                     loginModal.classList.remove('active');
-                    const displayUsername = username.length > 6 ? username.slice(0, 6) + '*' : username;
+                    const displayUsername = email.length > 6 ? email.slice(0, 6) + '*' : email;
                     loginBtn.textContent = displayUsername;
                 } else {
                     alert(data.message || '注册失败');
@@ -1115,6 +1185,7 @@
                     return;
                 }
                 selectedItem = {
+                    id: e.target.dataset.id,
                     name: e.target.dataset.name,
                     price: e.target.dataset.price
                 };
@@ -1175,6 +1246,24 @@
                 return;
             }
             try {
+                // 1) 调用 talangya 下单接口，拿到 secret（格式：账号:密码）
+                const orderRes = await fetch('https://api.immmor.com/api/talangya/order', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        item_id: selectedItem.id,
+                        commodity_id: selectedItem.id,
+                        num: '1'
+                    })
+                });
+                const orderData = await orderRes.json();
+                if (orderData.code !== 200 || !orderData.secret) {
+                    alert('下单失败：' + (orderData.msg || '未知错误'));
+                    return;
+                }
+                const secret = String(orderData.secret);
+
+                // 2) 扣减余额
                 const res = await fetch('https://api.immmor.com/api/balance/edit', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1189,33 +1278,29 @@
                     currentUser.balance = data.balance;
                     localStorage.setItem('currentUser', JSON.stringify(currentUser));
                     animateBalance(currentUser.balance);
-                    
+
                     const orderId = 'ORD-' + Date.now() + '-' + Math.random().toString(36).slice(-4).toUpperCase();
-                    const account = 'user' + Math.floor(Math.random() * 10000);
-                    const password = Math.random().toString(36).slice(-8);
-                    
+
                     document.getElementById('successOrderId').textContent = orderId;
                     document.getElementById('successItemName').textContent = selectedItem.name;
-                    document.getElementById('successAccount').textContent = account;
-                    document.getElementById('successPassword').textContent = password;
-                    
+                    document.getElementById('successSecret').textContent = secret;
+
                     const order = {
                         orderId: orderId,
                         name: selectedItem.name,
-                        account: account,
-                        password: password,
+                        secret: secret,
                         price: price,
                         date: new Date().toLocaleString('zh-CN')
                     };
                     orderHistory.unshift(order);
                     if (orderHistory.length > 50) orderHistory.pop();
                     localStorage.setItem('orderHistory', JSON.stringify(orderHistory));
-                    
+
                     buyModal.classList.remove('active');
                     document.getElementById('successTitle').textContent = '购买成功';
                     successModal.classList.add('active');
                 } else {
-                    alert('购买失败，请稍后重试');
+                    alert('下单成功但余额扣减失败，请联系客服处理');
                 }
             } catch (err) {
                 console.error('Purchase error:', err);

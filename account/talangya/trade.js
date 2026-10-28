@@ -37,8 +37,8 @@ const req = https.request(options, function (res) {
 });
 
 req.write(new URLSearchParams({
-  'item_id': '3485',
-  'commodity_id': '3485',
+  'item_id': '8213',
+  'commodity_id': '8213',
   'pay_id': '1',
   'race': '',
   'card_id': '0',
@@ -49,6 +49,6 @@ req.write(new URLSearchParams({
   'coupon': '',
   'password': '',
   'captcha': '',
-  'request_no': 'mv4lf8h0ev8ye0q'
+  // 'request_no': 'mv4lf8h0ev8ye0q'
 }).toString());
 req.end();

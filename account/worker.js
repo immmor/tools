@@ -462,6 +462,73 @@ export default {
         });
       }
 
+      // ========== talangya 下单代理（绕过CORS，原样下单并把 secret 返回前端） ==========
+      if (path === '/api/talangya/order' && request.method === 'POST') {
+        try {
+          const p = await request.json();
+          const itemId = p.item_id || p.commodity_id || p.id;
+          if (!itemId) {
+            return resJson({ code: 400, msg: '缺少 item_id 参数' }, 400);
+          }
+          const body = new URLSearchParams({
+            item_id: String(itemId),
+            commodity_id: String(itemId),
+            pay_id: p.pay_id || '1',
+            race: p.race || '',
+            card_id: p.card_id || '0',
+            device: p.device || '0',
+            from: p.from || '0',
+            num: p.num || '1',
+            contact: p.contact || '',
+            coupon: p.coupon || '',
+            password: p.password || '',
+            captcha: p.captcha || ''
+          }).toString();
+          const r = await fetch('https://talangya.com/user/api/order/trade', {
+            method: 'POST',
+            headers: {
+              'accept': '*/*',
+              'accept-language': 'zh-CN,zh;q=0.9',
+              'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
+              'origin': 'https://talangya.com',
+              'referer': 'https://talangya.com/',
+              'sec-ch-ua': '"Chromium";v="154", "Google Chrome";v="154", "Not A(Brand";v="99"',
+              'sec-ch-ua-mobile': '?0',
+              'sec-ch-ua-platform': '"macOS"',
+              'sec-fetch-dest': 'empty',
+              'sec-fetch-mode': 'cors',
+              'sec-fetch-site': 'same-origin',
+              'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36',
+              'x-requested-with': 'XMLHttpRequest',
+              'cookie': 'ACG-SHOP=l9hhhl05jctiudp28lqm8ae4is; USER_SESSION=ZXlKMGVYQWlPaUpLVjFRaUxDSjFhV1FpT2pNNU16QXdMQ0poYkdjaU9pSklVekkxTmlKOS5leUpsZUhCcGNtVWlPakU0TWpNek1EVTJNelFzSW14dloybHVWR2x0WlNJNklqSXdNall0TVRBdE1USWdNRGs2TkRjNk1UUWlmUS5xMjAzbHN2VTZ1Q0JFVnpQbWJUYjAxX0ZZMUYweFVXQnJyRDZ6ZllOU1d3'
+            },
+            body
+          });
+          const text = await r.text();
+          let json;
+          try {
+            json = JSON.parse(text);
+          } catch {
+            return new Response(text, { headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json; charset=utf-8' } });
+          }
+          // 下单成功：把 secret（账号:密码）透传给前端
+          if (json && json.code === 200 && json.data) {
+            return resJson({
+              code: 200,
+              msg: json.msg || '下单成功',
+              secret: json.data.secret,
+              tradeNo: json.data.tradeNo,
+              amount: json.data.amount,
+              data: json.data
+            });
+          }
+          return resJson(json);
+        } catch (err) {
+          console.error('Talangya order error:', err);
+          return resJson({ code: 500, msg: '下单失败', error: err.message }, 500);
+        }
+      }
+
       // ========== 无头浏览器抓取页面文字接口（Browser Run Quick Actions，无需 npm 依赖） ==========
       // GET /api/baidu-text?url=https://www.baidu.com （url 可选，默认百度）
       // 依赖：控制台已添加 Browser Run binding（名称 BROWSER），且兼容日期 >= 2026-03-24
@@ -1176,17 +1243,19 @@ export default {
       }
 
       // 校验请求来源域名是否在白名单内（优先取 Origin，兜底取 Referer 的 host）
-      const ALLOWED_ORIGINS = ['phantom.immmor.com', 'phantom.funbua.uk'];
+      const ALLOWED_ORIGINS = ['phantom.immmor.com', 'phantom.funbua.uk', 'tools.immmor.com', '127.0.0.1'];
       const isAllowedOrigin = (request) => {
-        const origin = request.headers.get('Origin');
-        if (origin) {
-          try { return ALLOWED_ORIGINS.includes(new URL(origin).host); } catch (e) {}
-        }
-        const referer = request.headers.get('Referer');
-        if (referer) {
-          try { return ALLOWED_ORIGINS.includes(new URL(referer).host); } catch (e) {}
-        }
-        return false;
+        const check = (raw) => {
+          if (!raw) return false;
+          try {
+            const host = new URL(raw).host;
+            if (ALLOWED_ORIGINS.includes(host)) return true;
+            // 本地开发：127.0.0.1 任意端口（如 127.0.0.1:8123）均放行
+            if (host === '127.0.0.1' || host.startsWith('127.0.0.1:')) return true;
+            return false;
+          } catch (e) { return false; }
+        };
+        return check(request.headers.get('Origin')) || check(request.headers.get('Referer'));
       };
 
       // ========== 生成一次性免密授权码（Authorization Code） ==========
