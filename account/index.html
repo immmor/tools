@@ -640,16 +640,16 @@
             <h3 class="text-xl font-bold mb-4" id="successTitle">购买成功</h3>
             <div class="mb-4 text-sm space-y-2">
                 <div class="flex justify-between">
-                    <span class="text-gray-400">订单号：</span>
-                    <span id="successOrderId" class="font-mono"></span>
+                    <span class="text-gray-400">订单：</span>
+                    <span id="successOrderId" class="font-mono text-right"></span>
                 </div>
                 <div class="flex justify-between gap-3">
                     <span class="text-gray-400 shrink-0 whitespace-nowrap">商品：</span>
-                    <span id="successItemName" class="font-bold break-words min-w-0"></span>
+                    <span id="successItemName" class="font-bold break-words min-w-0 text-right"></span>
                 </div>
                 <div class="flex justify-between gap-3">
                     <span class="text-gray-400 shrink-0 whitespace-nowrap">卡密：</span>
-                    <span id="successSecret" class="font-mono break-words min-w-0"></span>
+                    <span id="successSecret" class="font-mono break-words min-w-0 text-right"></span>
                 </div>
             </div>
             <button id="closeSuccess" class="w-full bg-black text-white py-2 text-sm font-bold hover:bg-gray-800">完成</button>
@@ -1023,7 +1023,7 @@
         const closeHistoryModal = document.getElementById('closeHistoryModal');
         const historyList = document.getElementById('historyList');
         let currentUser = null;
-        let orderHistory = JSON.parse(localStorage.getItem('orderHistory') || '[]');
+        let orderHistory = [];
 
         // 从 localStorage 恢复登录状态
         const savedUser = localStorage.getItem('currentUser');
@@ -1060,17 +1060,27 @@
             userDropdown.classList.add('hidden');
         });
 
-        orderHistoryBtn.addEventListener('click', () => {
+        orderHistoryBtn.addEventListener('click', async () => {
+            if (!currentUser) {
+                alert('请先登录');
+                return;
+            }
+            // 只从 account_order 表加载购买记录，不使用本地数据
+            try {
+                const res = await fetch('https://api.immmor.com/api/account/orders?username=' + encodeURIComponent(currentUser.username));
+                const d = await res.json();
+                orderHistory = (d.code === 200 && Array.isArray(d.orders)) ? d.orders : [];
+            } catch (e) {
+                console.error('加载购买记录失败', e);
+                orderHistory = [];
+            }
             if (!orderHistory.length) {
                 historyList.innerHTML = '<div class="text-center text-gray-400 py-8">暂无购买记录</div>';
             } else {
                 historyList.innerHTML = orderHistory.map((o, i) => `
                     <div class="border-b pb-2 text-xs cursor-pointer hover:bg-gray-50 px-2 py-1" onclick="showOrderDetail(${i})">
-                        <div class="flex justify-between gap-2 mb-1">
-                            <span class="font-bold truncate">${o.name}</span>
-                            <span class="text-gray-400 shrink-0 whitespace-nowrap">${o.date}</span>
-                        </div>
-                        <div class="text-gray-400">卡密：${o.secret || o.account || ''}</div>
+                        <div class="font-bold break-words">${o.name}</div>
+                        <div class="text-gray-400 text-right">${o.date}</div>
                     </div>
                 `).join('');
             }
@@ -1341,6 +1351,7 @@
         contactModal.addEventListener('click', (e) => { if (e.target === contactModal) contactModal.classList.remove('active'); });
 
         confirmBuy.addEventListener('click', async () => {
+            if (confirmBuy.disabled) return;
             if (!selectedItem) return;
             const price = parseFloat(selectedItem.price.replace('¥', ''));
             if (currentUser.balance < price) {
@@ -1348,6 +1359,10 @@
                 buyModal.classList.remove('active');
                 return;
             }
+            const buyOriginalText = confirmBuy.textContent;
+            confirmBuy.disabled = true;
+            confirmBuy.classList.add('opacity-50', 'cursor-not-allowed');
+            confirmBuy.textContent = '正在处理';
             try {
                 // 1) 调用 talangya 下单接口，拿到 secret（格式：账号:密码）
                 const orderRes = await fetch('https://api.immmor.com/api/talangya/order', {
@@ -1388,16 +1403,24 @@
                     document.getElementById('successItemName').textContent = selectedItem.name;
                     document.getElementById('successSecret').textContent = secret;
 
-                    const order = {
-                        orderId: orderId,
-                        name: selectedItem.name,
-                        secret: secret,
-                        price: price,
-                        date: new Date().toLocaleString('zh-CN')
-                    };
-                    orderHistory.unshift(order);
-                    if (orderHistory.length > 50) orderHistory.pop();
-                    localStorage.setItem('orderHistory', JSON.stringify(orderHistory));
+                    // 持久化订单到 account_order 表（完整信息：订单号/商品/价格/卡密/余额前后）
+                    const afterBalance = (typeof data.balance === 'number') ? data.balance : currentUser.balance;
+                    fetch('https://api.immmor.com/api/account/orders', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            username: currentUser.username,
+                            order_id: orderId,
+                            item_id: selectedItem.id,
+                            item_name: selectedItem.name,
+                            price: price,
+                            secret: secret,
+                            balance_before: afterBalance + price,
+                            balance_after: afterBalance,
+                            status: 'paid',
+                            created_at: new Date().toLocaleString('zh-CN')
+                        })
+                    }).catch(e => console.error('保存订单失败', e));
 
                     buyModal.classList.remove('active');
                     document.getElementById('successTitle').textContent = '购买成功';
@@ -1408,6 +1431,10 @@
             } catch (err) {
                 console.error('Purchase error:', err);
                 alert('购买失败，请稍后重试');
+            } finally {
+                confirmBuy.disabled = false;
+                confirmBuy.classList.remove('opacity-50', 'cursor-not-allowed');
+                confirmBuy.textContent = buyOriginalText;
             }
         });
 

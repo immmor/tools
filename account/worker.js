@@ -2294,6 +2294,44 @@ export default {
         }
       }
 
+      // ========== 账号订单：account_order 表（POST 落库 / GET 查记录，购买记录面板从此加载） ==========
+      if (path === '/api/account/orders') {
+        try {
+          if (request.method === 'POST') {
+            const p = await request.json();
+            const { username, order_id, item_id, item_name, price, secret, balance_before, balance_after, status } = p;
+            if (!username || !order_id) {
+              return resJson({ code: 400, msg: '缺少 username 或 order_id 参数' }, 400);
+            }
+            await DB.prepare('INSERT INTO account_order (order_id, username, item_id, item_name, price, secret, balance_before, balance_after, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+              .bind(order_id, username, item_id || '', item_name || '', price || 0, secret || '', (balance_before === undefined ? null : balance_before), (balance_after === undefined ? null : balance_after), status || 'paid', p.created_at || new Date().toLocaleString('zh-CN'))
+              .run();
+            return resJson({ code: 200, msg: '订单已保存' });
+          }
+          if (request.method === 'GET') {
+            const username = url.searchParams.get('username');
+            if (!username) return resJson({ code: 400, msg: '缺少username参数' }, 400);
+            const rows = await DB.prepare('SELECT * FROM account_order WHERE username = ? ORDER BY created_at DESC, id DESC LIMIT 50').bind(username).all();
+            const orders = (rows.results || []).map(o => ({
+              orderId: o.order_id,
+              name: o.item_name,
+              itemId: o.item_id,
+              price: o.price,
+              secret: o.secret,
+              balanceBefore: o.balance_before,
+              balanceAfter: o.balance_after,
+              status: o.status,
+              date: o.created_at
+            }));
+            return resJson({ code: 200, orders });
+          }
+          return resJson({ code: 405, msg: '方法不允许' }, 405);
+        } catch (err) {
+          console.error('Account order error:', err);
+          return resJson({ code: 500, msg: '操作失败', error: err.message }, 500);
+        }
+      }
+
       // ========== 理财：定期存款（1年期 · 年化4% · 到期手动赎回 · 支持多笔） ==========
       // 查询理财状态（返回存款列表）
       if (path === '/api/finance/status' && request.method === 'GET') {
