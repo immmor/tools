@@ -1038,7 +1038,7 @@
 
         async function loadUserData() {
             try {
-                const response = await fetch('users.json');
+                const response = await fetch('zhenai/users.json');
                 userData = await response.json();
                 init();
             } catch (error) {
@@ -1096,7 +1096,7 @@
                 <img src="${user.photos[0]}" class="w-full h-full object-cover main-img">
                 <div class="info-scrim">
                     <h2 class="text-2xl font-bold">${user.name}, ${user.age}</h2>
-                    <p class="text-sm opacity-80">${user.job || user.bio}</p>
+                    <p class="text-sm opacity-80">${[user.residence, user.marital, user.income].filter(Boolean).join(' · ') || user.bio}</p>
                 </div>
             `;
 
@@ -1519,7 +1519,7 @@
             if (currentUser) {
                 document.getElementById('account-avatar').src = currentUser.photos[0];
                 document.getElementById('account-name').textContent = currentUser.name;
-                document.getElementById('account-info').textContent = `${currentUser.age}岁 · ${currentUser.job}`;
+                document.getElementById('account-info').textContent = `${currentUser.age}岁 · ${currentUser.residence || currentUser.job || ''}`;
                 document.getElementById('profile-avatar').src = currentUser.photos[0];
                 document.getElementById('profile-name').value = currentUser.name;
                 document.getElementById('profile-age').value = currentUser.age;
@@ -2125,26 +2125,26 @@
                 return parseInt(card.style.zIndex) > parseInt(max.style.zIndex) ? card : max;
             }, stack[0]);
             if (!topCard) return;
-            
+
             const user = userData.find(u => u.id == topCard.dataset.userId);
             const infoScrim = topCard.querySelector('.info-scrim');
-            const currentContent = infoScrim.innerHTML;
-            
-            if (currentContent.includes(user.hobby)) {
-                infoScrim.innerHTML = `<h2 class="text-2xl font-bold">${user.name}, ${user.age}</h2><p class="text-sm opacity-80">${user.job || user.bio}</p>`;
+            const expanded = topCard.dataset.expanded === '1';
+
+            if (expanded) {
+                // 收起：恢复简短信息
+                infoScrim.innerHTML = `<h2 class="text-2xl font-bold">${user.name}, ${user.age}</h2><p class="text-sm opacity-80">${[user.residence, user.marital, user.income].filter(Boolean).join(' · ') || user.bio}</p>`;
+                topCard.dataset.expanded = '0';
             } else {
-                infoScrim.innerHTML = `
-                    <h2 class="text-2xl font-bold">${user.name}, ${user.age}</h2>
-                    <p class="text-sm opacity-80 mb-1">${user.job}</p>
-                    <p class="text-xs mb-1">${user.height}cm · ${user.constellation} · ${user.bloodType}</p>
-                    <p class="text-xs mb-1">教育: ${user.education}</p>
-                    <p class="text-xs mb-1">收入: ${user.income}</p>
-                    <p class="text-xs mb-1">家乡: ${user.hometown}</p>
-                    <p class="text-xs mb-1">学校: ${user.school}</p>
-                    <p class="text-xs mb-1">专业: ${user.major}</p>
-                    <p class="text-xs mb-1">爱好: ${user.hobby}</p>
-                    <p class="text-xs mt-2 leading-relaxed">${user.bio}</p>
-                `;
+                // 展开：详细信息（只显示有值的字段）
+                const lines = [];
+                if (user.height) lines.push(`<p class="text-xs mb-1">身高: ${user.height}cm</p>`);
+                if (user.education) lines.push(`<p class="text-xs mb-1">学历: ${user.education}</p>`);
+                if (user.income) lines.push(`<p class="text-xs mb-1">收入: ${user.income}</p>`);
+                if (user.residence) lines.push(`<p class="text-xs mb-1">居住地: ${user.residence}</p>`);
+                if (user.marital) lines.push(`<p class="text-xs mb-1">婚况: ${user.marital}</p>`);
+                if (user.bio) lines.push(`<p class="text-xs mt-2 leading-relaxed">${user.bio}</p>`);
+                infoScrim.innerHTML = `<h2 class="text-2xl font-bold">${user.name}, ${user.age}</h2>${lines.join('')}`;
+                topCard.dataset.expanded = '1';
             }
         };
 
