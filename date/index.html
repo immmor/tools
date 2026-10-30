@@ -6,6 +6,9 @@
     <title>心动 | 我们约会吧</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
     <style>
         :root {
             --primary-color: #fb7185;
@@ -100,6 +103,39 @@
         }
         .label-like { color: #ec4899; border-color: #ec4899; left: 30px; transform: rotate(-20deg); }
         .label-nope { color: #4ade80; border-color: #4ade80; right: 30px; transform: rotate(20deg); }
+
+        /* 评分扫描动画（覆盖在照片上） */
+        .score-scan {
+            position: absolute; inset: 0; z-index: 70;
+            pointer-events: none; overflow: hidden;
+        }
+        /* 评分后的 468 点网格 */
+        .score-mesh {
+            position: absolute; inset: 0; width: 100%; height: 100%;
+            z-index: 65; pointer-events: none;
+        }
+        .score-scan::before {
+            content: ''; position: absolute; left: 0; right: 0; height: 30%;
+            background: linear-gradient(to bottom, rgba(236,72,153,0) 0%, rgba(236,72,153,0.3) 65%, rgba(236,72,153,0.75) 100%);
+            border-bottom: 2px solid rgba(255,255,255,0.9);
+            box-shadow: 0 0 30px rgba(236,72,153,0.7);
+            animation: scoreScanY 1.6s ease-in-out infinite;
+        }
+        @keyframes scoreScanY {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(340%); }
+        }
+        .score-scan .scan-tip {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.6); color: #fff; font-size: 12px; font-weight: 600;
+            padding: 6px 14px; border-radius: 999px; white-space: nowrap;
+            backdrop-filter: blur(4px);
+            animation: scorePulse 1.2s ease-in-out infinite;
+        }
+        @keyframes scorePulse {
+            0%, 100% { opacity: 0.55; }
+            50% { opacity: 1; }
+        }
 
         /* 电脑端适配 */
         @media (min-width: 768px) {
@@ -234,7 +270,7 @@
         </div>
     </main>
 
-    <footer class="fixed bottom-0 left-0 right-0 p-3 flex justify-center items-center gap-4 bg-white border-t z-50">
+    <footer class="fixed bottom-0 left-0 right-0 p-3 flex justify-center items-center gap-3 sm:gap-4 bg-white border-t z-50">
         <button onclick="handleBtnSwipe('left')" class="w-12 h-12 bg-gradient-to-br from-green-400 to-green-600 rounded-full shadow-lg shadow-green-500/40 text-white text-xl active:scale-90 transition hover:shadow-[0_0_40px_rgba(74,222,128,1)] hover:scale-105 hover:shadow-green-500/90 border-2 border-green-300/50">
             <i class="fas fa-times"></i>
         </button>
@@ -247,7 +283,47 @@
         <button onclick="handleBtnSwipe('right')" class="w-12 h-12 bg-gradient-to-br from-pink-400 to-pink-600 rounded-full shadow-lg shadow-pink-500/40 text-white text-xl active:scale-90 transition hover:shadow-[0_0_40px_rgba(236,72,153,1)] hover:scale-105 hover:shadow-pink-500/90 border-2 border-pink-300/50">
             <i class="fas fa-heart"></i>
         </button>
+        <button id="btn_score_photo" onclick="scoreCurrentPhoto()" title="给当前照片打分" class="w-12 h-12 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full shadow-lg shadow-orange-500/40 text-white text-xl active:scale-90 transition hover:shadow-[0_0_40px_rgba(251,146,60,1)] hover:scale-105 border-2 border-amber-300/50">
+            <i class="fas fa-wand-magic-sparkles"></i>
+        </button>
     </footer>
+
+    <!-- 颜值评分结果浮层 -->
+    <div id="score-panel" class="fixed bottom-24 left-1/2 -translate-x-1/2 z-[100000] w-[92%] max-w-sm bg-white rounded-2xl shadow-2xl p-4 space-y-3" style="display: none;">
+        <div class="flex items-start gap-3">
+            <div class="text-center flex-shrink-0">
+                <div id="score-panel-num" class="text-3xl font-black text-pink-500 leading-none">--</div>
+                <div class="text-[10px] text-gray-400 mt-1">/ 100</div>
+            </div>
+            <div class="flex-grow min-w-0">
+                <div class="flex items-center gap-2">
+                    <span id="score-panel-tag" class="text-[11px] font-bold bg-pink-500 text-white px-2 py-0.5 rounded">未检测</span>
+                    <button id="mesh_toggle" onclick="toggleScoreMesh()" class="ml-auto text-[10px] font-bold px-2 py-0.5 rounded border border-pink-200 text-pink-600 hover:bg-pink-50">网格 ON</button>
+                    <button onclick="hideScorePanel()" class="ml-1 w-6 h-6 text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+                </div>
+                <p id="score-panel-title" class="text-sm font-bold text-gray-800 mt-1">点击右下角按钮给当前照片打分</p>
+                <p id="score-panel-desc" class="text-[11px] text-gray-500 leading-relaxed mt-0.5"></p>
+            </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2 text-[10px] text-gray-500">
+            <div>
+                <div class="flex justify-between"><span>对称度</span><span id="sp_sym">--%</span></div>
+                <div class="h-1.5 bg-pink-100 rounded-full overflow-hidden"><div id="sp_sym_bar" class="h-full bg-pink-500 rounded-full transition-all duration-500" style="width:0%"></div></div>
+            </div>
+            <div>
+                <div class="flex justify-between"><span>黄金比例</span><span id="sp_ratio">--%</span></div>
+                <div class="h-1.5 bg-pink-100 rounded-full overflow-hidden"><div id="sp_ratio_bar" class="h-full bg-pink-500 rounded-full transition-all duration-500" style="width:0%"></div></div>
+            </div>
+            <div>
+                <div class="flex justify-between"><span>五官协调</span><span id="sp_feat">--%</span></div>
+                <div class="h-1.5 bg-pink-100 rounded-full overflow-hidden"><div id="sp_feat_bar" class="h-full bg-pink-500 rounded-full transition-all duration-500" style="width:0%"></div></div>
+            </div>
+            <div>
+                <div class="flex justify-between"><span>下颌轮廓</span><span id="sp_jaw">--%</span></div>
+                <div class="h-1.5 bg-pink-100 rounded-full overflow-hidden"><div id="sp_jaw_bar" class="h-full bg-pink-500 rounded-full transition-all duration-500" style="width:0%"></div></div>
+            </div>
+        </div>
+    </div>
 
     <div id="chat-list-interface" class="flex flex-col h-screen fixed inset-0 z-50 bg-pink-50" style="display: none;">
         <header class="p-4 bg-white border-b flex items-center justify-between">
@@ -1235,6 +1311,10 @@
             card.querySelector('.main-img').src = user.photos[pIdx];
             const bars = card.querySelectorAll('.progress-bar');
             bars.forEach((b, i) => b.classList.toggle('active', i === pIdx));
+
+            // 换图后旧评分与网格失效，自动收起
+            hideScorePanel();
+            card.querySelectorAll('.score-mesh').forEach(el => el.remove());
         };
 
         // 核心：处理拖拽与点击冲突
@@ -2350,6 +2430,235 @@
             oscillator2.start(now + 0.35);
             oscillator2.stop(now + 0.6);
         }
+
+        // ================= 颜值评分（MediaPipe FaceMesh 468 点） =================
+        const SCORE_TITLES = [
+            { min: 92, tag: "绝世颜霸", title: "黄金比例惊艳脸", desc: "符合极严苛的三庭五眼黄金切割，面部对称度近乎完美，镜头感极强。" },
+            { min: 85, tag: "高级感", title: "高质感骨相名颜", desc: "骨骼线条清晰有张力，五官比例均衡流畅，审美质感高级。" },
+            { min: 78, tag: "氛围感", title: "精致耐看型颜系", desc: "五官分布匀称，轮廓柔和具亲和力，非常符合当下流行审美。" },
+            { min: 70, tag: "自然清新", title: "舒展标致风貌", desc: "面部特征具个性辨识度，结构自然真实，自带独特风格魅力。" },
+            { min: 0, tag: "独特个性", title: "辨识度风骨颜", desc: "轮廓独特、五官组合独具一格，个性表达强。" }
+        ];
+
+        let scoreEngine = null;
+        let scorePending = false;
+        let scoreTimeout = null;
+        let scanStart = 0;
+        let scoreCardEl = null;   // 本次评分的卡片
+        let scoreImg = null;      // 本次评分的原图
+        let scoreLm = null;       // 本次评分的 468 点
+        let meshVisible = true;   // 网格开关
+
+        window.toggleScoreMesh = function () {
+            meshVisible = !meshVisible;
+            document.querySelectorAll('.score-mesh').forEach(c => c.style.display = meshVisible ? 'block' : 'none');
+            document.getElementById('mesh_toggle').textContent = meshVisible ? '网格 ON' : '网格 OFF';
+        };
+        const SCAN_MIN_MS = 1600;   // 扫描动画至少完整跑一遍
+
+        function getTopCard() {
+            if (typeof stack === 'undefined' || !stack.length) return null;
+            return stack.reduce((max, card) => parseInt(card.style.zIndex) > parseInt(max.style.zIndex) ? card : max, stack[0]);
+        }
+
+        function ensureScoreEngine() {
+            if (scoreEngine) return scoreEngine;
+            scoreEngine = new FaceMesh({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}` });
+            scoreEngine.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+            scoreEngine.onResults(res => {
+                if (!scorePending) return;
+                scorePending = false;
+                const lm = res.multiFaceLandmarks && res.multiFaceLandmarks[0];
+                if (!lm) return renderScoreError('照片中没识别到清晰正脸，换一张再试');
+                scoreImg = res.image;
+                scoreLm = lm;
+                renderScore(analyzePhotoLandmarks(lm));
+            });
+            return scoreEngine;
+        }
+
+        // 先按 CORS 方式加载；失败再退回普通加载（部分图床不开跨域）
+        function loadImageForScore(src) {
+            return new Promise(resolve => {
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.onload = () => resolve(img);
+                img.onerror = () => {
+                    const fallback = new Image();
+                    fallback.onload = () => resolve(fallback);
+                    fallback.onerror = () => resolve(null);
+                    fallback.src = src;
+                };
+                img.src = src;
+            });
+        }
+
+        function analyzePhotoLandmarks(lm) {
+            const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, (a.z || 0) - (b.z || 0));
+
+            const eyeL = dist(lm[33], lm[1]), eyeR = dist(lm[263], lm[1]);
+            const eyeSym = 1 - Math.min(Math.abs(eyeL - eyeR) / (((eyeL + eyeR) / 2) || 1), 1);
+            const cheekL = dist(lm[234], lm[1]), cheekR = dist(lm[454], lm[1]);
+            const cheekSym = 1 - Math.min(Math.abs(cheekL - cheekR) / (((cheekL + cheekR) / 2) || 1), 1);
+            const symmetry = Math.round((eyeSym * 0.6 + cheekSym * 0.4) * 100);
+
+            const faceH = dist(lm[10], lm[152]);
+            const faceW = dist(lm[234], lm[454]) || 1;
+            const ratio = Math.max(0, Math.round(100 - Math.abs(faceH / faceW - 1.618) / 1.618 * 110));
+
+            const mouthEye = dist(lm[61], lm[291]) / (dist(lm[133], lm[362]) || 1);
+            const feat = Math.max(0, Math.round(100 - Math.abs(mouthEye - 1.42) * 55));
+
+            const jaw = Math.max(0, Math.round(100 - Math.abs(dist(lm[172], lm[397]) / faceW - 0.72) * 95));
+
+            const total = Math.min(99, Math.max(62, Math.round(symmetry * 0.3 + ratio * 0.25 + feat * 0.25 + jaw * 0.2)));
+            const t = SCORE_TITLES.find(i => total >= i.min) || SCORE_TITLES[SCORE_TITLES.length - 1];
+            return { total, symmetry, ratio, feat, jaw, tag: t.tag, title: t.title, desc: t.desc };
+        }
+
+        function startScanAnim(card) {
+            stopScanAnim();
+            if (!card) return;
+            card.querySelectorAll('.score-mesh').forEach(el => el.remove());
+            scanStart = Date.now();
+            const scan = document.createElement('div');
+            scan.className = 'score-scan';
+            scan.innerHTML = '<div class="scan-tip"><i class="fas fa-wand-magic-sparkles mr-1"></i>正在分析颜值…</div>';
+            card.appendChild(scan);
+        }
+
+        function stopScanAnim() {
+            document.querySelectorAll('.score-scan').forEach(el => el.remove());
+        }
+
+        // 结果先攒着，等扫描动画播完一遍再展示
+        function afterScan(fn) {
+            const wait = Math.max(0, SCAN_MIN_MS - (Date.now() - scanStart));
+            setTimeout(fn, wait);
+        }
+
+        // 把 468 点网格画在卡片照片上（照片是 object-cover，需要按 cover 的缩放/偏移换算）
+        function drawScoreMesh(card, img, lm) {
+            if (!card || !lm) return;
+            const cw = card.clientWidth, ch = card.clientHeight;
+            if (!cw || !ch) return;
+            const dpr = window.devicePixelRatio || 1;
+
+            let canvas = card.querySelector('.score-mesh');
+            if (!canvas) {
+                canvas = document.createElement('canvas');
+                canvas.className = 'score-mesh';
+                card.appendChild(canvas);
+            }
+            canvas.width = Math.round(cw * dpr);
+            canvas.height = Math.round(ch * dpr);
+
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const iw = img.naturalWidth || img.width || cw;
+            const ih = img.naturalHeight || img.height || ch;
+            const s = Math.max(cw / iw, ch / ih);
+            const dw = iw * s, dh = ih * s;
+            const ox = (cw - dw) / 2, oy = (ch - dh) / 2;
+
+            // 映射成相对卡片框的 0~1 坐标，drawConnectors 内部会乘 canvas 宽高（设备像素）
+            const pts = lm.map(p => ({ x: (ox + p.x * dw) / cw, y: (oy + p.y * dh) / ch }));
+
+            drawConnectors(ctx, pts, FACEMESH_TESSELATION, { color: 'rgba(236,72,153,0.35)', lineWidth: dpr });
+            drawConnectors(ctx, pts, FACEMESH_FACE_OVAL, { color: 'rgba(255,255,255,0.85)', lineWidth: 1.5 * dpr });
+            drawConnectors(ctx, pts, FACEMESH_LEFT_EYE, { color: '#ec4899', lineWidth: 2 * dpr });
+            drawConnectors(ctx, pts, FACEMESH_RIGHT_EYE, { color: '#ec4899', lineWidth: 2 * dpr });
+            drawConnectors(ctx, pts, FACEMESH_LIPS, { color: '#ffffff', lineWidth: 2 * dpr });
+            canvas.style.display = meshVisible ? 'block' : 'none';
+        }
+
+        function showScorePanel() {
+            const panel = document.getElementById('score-panel');
+            const card = getTopCard();
+            if (card) {
+                // 宽度跟着当前照片（卡片）走，窄屏时不超过可视宽度
+                const w = Math.min(card.getBoundingClientRect().width, window.innerWidth - 24);
+                panel.style.width = w + 'px';
+                panel.style.maxWidth = 'none';
+            }
+            panel.style.display = 'block';
+        }
+
+        window.hideScorePanel = function () {
+            document.getElementById('score-panel').style.display = 'none';
+        };
+
+        function setScorePanelText(num, tag, title, desc) {
+            document.getElementById('score-panel-num').textContent = num;
+            document.getElementById('score-panel-tag').textContent = tag;
+            document.getElementById('score-panel-title').textContent = title;
+            document.getElementById('score-panel-desc').textContent = desc;
+        }
+
+        function setScoreBars(d) {
+            [['sp_sym', d ? d.symmetry : null], ['sp_ratio', d ? d.ratio : null], ['sp_feat', d ? d.feat : null], ['sp_jaw', d ? d.jaw : null]].forEach(([id, v]) => {
+                document.getElementById(id).textContent = v === null ? '--%' : v + '%';
+                document.getElementById(id + '_bar').style.width = (v === null ? 0 : v) + '%';
+            });
+        }
+
+        function renderScore(d) {
+            afterScan(() => {
+                drawScoreMesh(scoreCardEl, scoreImg, scoreLm);
+                stopScanAnim();
+                clearTimeout(scoreTimeout);
+                showScorePanel();
+                setScorePanelText(d.total, d.tag, d.title, d.desc);
+                setScoreBars(d);
+            });
+        }
+
+        function renderScoreError(msg) {
+            afterScan(() => {
+                stopScanAnim();
+                clearTimeout(scoreTimeout);
+                showScorePanel();
+                setScorePanelText('--', '未检测', '无法评分', msg);
+                setScoreBars(null);
+            });
+        }
+
+        window.scoreCurrentPhoto = async function () {
+            try {
+                const card = getTopCard();
+                const img = card && card.querySelector('.main-img');
+                if (!img) return alert('当前没有可评分的照片');
+                if (scorePending) return;
+
+                scoreCardEl = card;
+                scoreImg = null;
+                scoreLm = null;
+                startScanAnim(card);
+
+                // 兜底：15 秒仍无结果就复位，避免按钮一直卡死
+                clearTimeout(scoreTimeout);
+                scoreTimeout = setTimeout(() => {
+                    if (!scorePending) return;
+                    scorePending = false;
+                    renderScoreError('分析超时，请检查网络后重试');
+                }, 15000);
+
+                if (typeof FaceMesh === 'undefined') {
+                    return renderScoreError('人脸模型未加载（MediaPipe CDN 被拦截）');
+                }
+                if (!scoreEngine) ensureScoreEngine();
+
+                const photo = await loadImageForScore(img.src);
+                if (!photo) return renderScoreError('图片读取失败（图床未开放跨域），换张照片再试');
+
+                scorePending = true;
+                await scoreEngine.send({ image: photo });
+            } catch (err) {
+                scorePending = false;
+                renderScoreError('分析失败：' + (err && err.message || err));
+            }
+        };
     </script>
 </body>
 </html>
