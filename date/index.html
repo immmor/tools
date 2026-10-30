@@ -1034,12 +1034,14 @@
         let stack = [];
         let loadedUsers = 0;
         const BATCH_SIZE = 20;
-        let userData = [];
+        let userData = [];      // 全量数据（master）
+        let displayData = [];   // 当前展示/筛选后的数据
 
         async function loadUserData() {
             try {
                 const response = await fetch('zhenai/users.json');
                 userData = await response.json();
+                displayData = userData;
                 init();
             } catch (error) {
                 console.error('加载用户数据失败:', error);
@@ -1052,7 +1054,7 @@
 
         function loadMoreUsers() {
             const start = loadedUsers;
-            const end = Math.min(start + BATCH_SIZE, userData.length);
+            const end = Math.min(start + BATCH_SIZE, displayData.length);
             
             if (start >= end) {
                 showEmptyState();
@@ -1060,7 +1062,7 @@
             }
 
             for (let i = start; i < end; i++) {
-                const user = userData[i];
+                const user = displayData[i];
                 const card = createCard(user, i);
                 document.getElementById('deck').appendChild(card);
                 stack.push(card);
@@ -1079,7 +1081,7 @@
         function createCard(user, idx) {
             const card = document.createElement('div');
             card.className = 'card';
-            card.style.zIndex = userData.length - idx;
+            card.style.zIndex = displayData.length - idx;
             card.dataset.userId = user.id;
             card.dataset.photoIdx = 0;
 
@@ -1108,7 +1110,7 @@
         window.changePhoto = function(e, dir) {
             e.stopPropagation();
             const card = e.currentTarget.closest('.card');
-            const user = userData.find(u => u.id == card.dataset.userId);
+            const user = displayData.find(u => u.id == card.dataset.userId);
             let pIdx = parseInt(card.dataset.photoIdx);
             
             pIdx = (pIdx + dir + user.photos.length) % user.photos.length;
@@ -1197,7 +1199,7 @@
             card.style.transform = `translate(${x}px, 0) rotate(${dir === 'right' ? 45 : -45}deg)`;
             card.style.opacity = '0';
             
-            const user = userData.find(u => u.id == card.dataset.userId);
+            const user = displayData.find(u => u.id == card.dataset.userId);
             swipeHistory.push({ user, dir });
             
             if (dir === 'right') {
@@ -1407,7 +1409,7 @@
             const chatInterface = document.getElementById('chat-interface');
             chatInterface.style.display = 'flex';
 
-            const user = userData.find(u => u.id == userId);
+            const user = displayData.find(u => u.id == userId);
             if (user) {
                 const chatHeader = chatInterface.querySelector('header .flex.items-center.gap-3');
                 if (chatHeader) {
@@ -1436,7 +1438,7 @@
             const userDetailInterface = document.getElementById('user-detail-interface');
             userDetailInterface.style.display = 'flex';
 
-            const user = userData.find(u => u.id == userId);
+            const user = displayData.find(u => u.id == userId);
             if (user) {
                 document.getElementById('user-detail-avatar').src = user.photos[0];
                 document.getElementById('user-detail-name').value = user.name;
@@ -2061,6 +2063,16 @@
                         <option value="重庆">重庆</option>
                     </select>
                 </div>
+                <div class="mb-4">
+                    <div class="flex justify-between mb-2">
+                        <span class="text-sm text-gray-600">性别</span>
+                    </div>
+                    <select id="filter-gender" class="w-full px-3 py-2 rounded-xl bg-gray-100 text-sm">
+                        <option value="all">全部</option>
+                        <option value="男">男</option>
+                        <option value="女">女</option>
+                    </select>
+                </div>
                 <button onclick="applyFilter(); document.getElementById('filter-modal').remove();" class="w-full py-3 bg-pink-500 text-white rounded-full font-bold text-sm">应用</button>
             `;
             
@@ -2085,7 +2097,8 @@
             const education = document.getElementById('filter-education').value;
             const income = document.getElementById('filter-income').value;
             const hometown = document.getElementById('filter-hometown').value;
-            
+            const gender = document.getElementById('filter-gender').value;
+
             const filteredData = userData.filter(u => {
                 const age = u.age;
                 const height = u.height;
@@ -2094,18 +2107,23 @@
                 const matchEducation = education === 'all' || u.education.includes(education);
                 const matchIncome = income === 'all' || u.income === income;
                 const matchHometown = hometown === 'all' || u.hometown === hometown;
-                return matchAge && matchHeight && matchEducation && matchIncome && matchHometown;
+                const matchGender = gender === 'all' || u.gender === gender;
+                return matchAge && matchHeight && matchEducation && matchIncome && matchHometown && matchGender;
             });
             
-            if (filteredData.length < userData.length) {
-                document.getElementById('deck').innerHTML = '';
-                stack = [];
-                filteredData.forEach((user, idx) => {
-                    const card = createCard(user, idx);
-                    document.getElementById('deck').appendChild(card);
-                    stack.push(card);
-                });
+            // 切换展示数据为筛选结果，按批次加载（不再一次性全渲染）
+            displayData = filteredData;
+            loadedUsers = 0;
+            document.getElementById('deck').innerHTML = '';
+            stack = [];
+            const deck = document.getElementById('deck');
+            deck.style.display = '';
+            const emptyState = document.getElementById('empty-state');
+            if (emptyState) {
+                emptyState.classList.add('hidden');
+                emptyState.classList.remove('flex');
             }
+            loadMoreUsers();
         };
 
         window.updateAgeRange = function() {
@@ -2126,7 +2144,7 @@
             }, stack[0]);
             if (!topCard) return;
 
-            const user = userData.find(u => u.id == topCard.dataset.userId);
+            const user = displayData.find(u => u.id == topCard.dataset.userId);
             const infoScrim = topCard.querySelector('.info-scrim');
             const expanded = topCard.dataset.expanded === '1';
 
