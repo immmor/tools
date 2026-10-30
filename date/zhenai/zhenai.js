@@ -4,26 +4,152 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 // 地区名 -> 该市/区拼音 slug 列表（URL 用）；按需增删
+// 用法：node zhenai.js <地区名>  （不传默认 hunan）
 const PROVINCES = {
+  beijing: [
+    'dongcheng', 'xicheng', 'chaoyang', 'haidian', 'fengtai', 'shijingshan',
+    'tongzhou', 'shunyi', 'changping', 'daxing', 'huairou', 'pinggu',
+    'mentougou', 'fangshan', 'miyun', 'yanqing',
+  ],
+  tianjin: ['tianjin'],
+  hebei: [
+    'shijiazhuang', 'tangshan', 'qinhuangdao', 'handan', 'xingtai', 'baoding',
+    'zhangjiakou', 'chengde', 'cangzhou', 'langfang', 'hengshui',
+  ],
+  shanxi: [
+    'taiyuan', 'datong', 'yangquan', 'changzhi', 'jincheng', 'shuozhou',
+    'jinzhong', 'yuncheng', 'xinzhou', 'linfen', 'luliang',
+  ],
+  shanghai: [
+    'huangpu', 'xuhui', 'changning', 'jingan', 'putuo', 'hongkou',
+    'yangpu', 'minhang', 'baoshan', 'jiading', 'pudong', 'jinshan',
+    'songjiang', 'qingpu', 'fengxian', 'chongming',
+  ],
+  jiangsu: [
+    'nanjing', 'suzhou', 'wuxi', 'changzhou', 'xuzhou', 'nantong',
+    'lianyungang', 'huaian', 'yancheng', 'yangzhou', 'zhenjiang',
+    'taizhou', 'suqian',
+  ],
+  zhejiang: [
+    'hangzhou', 'ningbo', 'wenzhou', 'jiaxing', 'huzhou', 'shaoxing',
+    'jinhua', 'quzhou', 'zhoushan', 'taizhou', 'lishui',
+  ],
+  anhui: [
+    'hefei', 'wuhu', 'bengbu', 'huainan', 'maanshan', 'huaibei', 'tongling',
+    'anqing', 'huangshan', 'chuzhou', 'fuyang', 'suzhou', 'luan', 'bozhou',
+    'chizhou', 'xuancheng',
+  ],
+  fujian: [
+    'fuzhou', 'xiamen', 'putian', 'sanming', 'quanzhou', 'zhangzhou',
+    'nanping', 'longyan', 'ningde',
+  ],
+  jiangxi: [
+    'nanchang', 'jingdezhen', 'pingxiang', 'jiujiang', 'xinyu', 'yingtan',
+    'ganzhou', 'jian', 'yichun', 'fuzhou', 'shangrao',
+  ],
+  shandong: [
+    'jinan', 'qingdao', 'zibo', 'zaozhuang', 'dongying', 'yantai', 'weifang',
+    'jining', 'taian', 'weihai', 'rizhao', 'linyi', 'dezhou', 'liaocheng',
+    'binzhou', 'heze',
+  ],
+  henan: [
+    'zhengzhou', 'kaifeng', 'luoyang', 'pingdingshan', 'anyang', 'hebi',
+    'xinxiang', 'jiaozuo', 'puyang', 'xuchang', 'luohe', 'sanmenxia',
+    'nanyang', 'shangqiu', 'xinyang', 'zhoukou', 'zhumadian', 'jiyuan',
+  ],
+  hubei: [
+    'wuhan', 'huangshi', 'shiyan', 'yichang', 'xiangyang', 'ezhou', 'jingmen',
+    'xiaogan', 'jingzhou', 'huanggang', 'xianning', 'suizhou', 'enshi',
+  ],
   hunan: [
     'changsha', 'zhuzhou', 'xiangtan', 'hengyang', 'shaoyang', 'yueyang',
     'changde', 'zhangjiajie', 'yiyang', 'chenzhou', 'yongzhou', 'huaihua',
     'loudi', 'xiangxi',
   ],
+  guangdong: [
+    'guangzhou', 'shenzhen', 'dongguan', 'foshan', 'zhuhai', 'zhongshan',
+    'huizhou', 'shantou', 'jiangmen', 'zhanjiang', 'zhaoqing', 'maoming',
+    'jieyang', 'meizhou', 'qingyuan', 'shaoguan', 'heyuan', 'yangjiang',
+    'chaozhou', 'yunfu',
+  ],
+  guangxi: [
+    'nanning', 'liuzhou', 'guilin', 'wuzhou', 'beihai', 'fangchenggang',
+    'qinzhou', 'guigang', 'yulin', 'baise', 'hezhou', 'hechi', 'laibin',
+    'chongzuo',
+  ],
+  hainan: [
+    'haikou', 'sanya', 'sansha', 'danzhou', 'wuzhishan', 'qionghai', 'wenchang',
+    'wanning', 'dongfang',
+  ],
+  chongqing: ['chongqing'],
+  sichuan: [
+    'chengdu', 'zigong', 'panzhihua', 'luzhou', 'deyang', 'mianyang',
+    'guangyuan', 'suining', 'neijiang', 'leshan', 'nanchong', 'meishan',
+    'yibin', 'guangan', 'dazhou', 'bazhong', 'ziyang', 'yaan',
+    'aba', 'ganzi', 'liangshan',
+  ],
+  guizhou: [
+    'guiyang', 'liupanshui', 'zunyi', 'anshun', 'bijie', 'tongren',
+    'qianxinan', 'qiandongnan', 'qiannan',
+  ],
+  yunnan: [
+    'kunming', 'qujing', 'yuxi', 'baoshan', 'zhaotong', 'lijiang', 'puer',
+    'lincang', 'chuxiong', 'honghe', 'wenshan', 'xishuangbanna', 'dali',
+    'dehong', 'nujiang', 'diqing',
+  ],
+  xizang: [
+    'lhasa', 'rikaze', 'shannan', 'naqu', 'linzhi', 'ali',
+  ],
+  shaanxi: [
+    'xian', 'tongchuan', 'baoji', 'xianyang', 'weinan', 'yanan', 'hanzhong',
+    'yulin', 'ankang', 'shangluo',
+  ],
+  gansu: [
+    'lanzhou', 'jiayuguan', 'jinchang', 'tianshui', 'wuwei', 'zhangye',
+    'pingliang', 'jiuquan', 'qingyang', 'dingxi', 'longnan', 'linxia', 'gannan',
+  ],
+  qinghai: [
+    'xining', 'haidong', 'haibei', 'huangnan', 'hainan', 'guoluo', 'yushu',
+    'haixi',
+  ],
+  ningxia: [
+    'yinchuan', 'shizuishan', 'wuzhong', 'guyuan', 'zhongwei',
+  ],
+  xinjiang: [
+    'wulumuqi', 'kelamayi', 'tulufan', 'hami', 'changji', 'bortala',
+    'bayinguoleng', 'akesu', 'kezilesu', 'kashi', 'hetian', 'yili',
+    'tacheng', 'aletai',
+  ],
+  neimenggu: [
+    'hohhot', 'baotou', 'wuhai', 'chifeng', 'tongliao', 'ordos', 'hulunbuir',
+    'bayannur', 'wulanchabu', 'xingan', 'xilingol', 'alashan',
+  ],
+  liaoning: [
+    'shenyang', 'dalian', 'anshan', 'fushun', 'benxi', 'dandong', 'jinzhou',
+    'yingkou', 'fuxin', 'liaoyang', 'panjin', 'tieling', 'chaoyang', 'huludao',
+  ],
+  jilin: [
+    'changchun', 'jilin', 'siping', 'liaoyuan', 'tonghua', 'baishan',
+    'songyuan', 'baicheng', 'yanbian',
+  ],
+  heilongjiang: [
+    'harbin', 'qiqihar', 'jixi', 'hegang', 'shuangyashan', 'daqing', 'yichun',
+    'jiamusi', 'qitaihe', 'mudanjiang', 'heihe', 'suihua', 'daxinganling',
+  ],
 };
 
-// 用法：node zhenai.js hunan （不传默认 hunan）
-const REGION = process.argv[2] || 'hunan';
-const DISTRICTS = PROVINCES[REGION];
-if (!DISTRICTS) {
-  console.error(`未知地区：${REGION}。可选：${Object.keys(PROVINCES).join(', ')}`);
-  process.exit(1);
-}
-
+const REGION = process.argv[2] || '--all';   // 不传参数 = 跑全部（自动跳过已抓过的省份）
 const MAX_PAGE = 50;        // 单区最多翻页数（安全上限，遇到空页会自动停）
-const DELAY_MIN = 500;      // 请求间隔下限(ms)
-const DELAY_MAX = 1800;     // 请求间隔上限(ms)，随机区间避免被识别为脚本
-const OUT_DIR = fileURLToPath(new URL('./' + REGION, import.meta.url));
+const DELAY_MIN = 0;        // 请求间隔下限(ms)
+const DELAY_MAX = 5000;     // 请求间隔上限(ms)，随机区间(0-5秒)避免被识别为脚本
+
+// 省份输出目录；该目录下已有 all.json 视为已抓取过，自动跳过
+function regionOutDir(region) {
+  return fileURLToPath(new URL('./' + region, import.meta.url));
+}
+function isRegionDone(region) {
+  return fs.existsSync(path.join(regionOutDir(region), 'all.json'));
+}
 
 const HEADERS = {
   'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/jxl,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
@@ -70,14 +196,24 @@ async function crawlDistrict(district) {
   return [...seen.values()];
 }
 
-async function main() {
-  fs.mkdirSync(OUT_DIR, { recursive: true });
+async function scrapeRegion(region) {
+  const districts = PROVINCES[region];
+  if (!districts) {
+    console.error(`未知地区：${region}。可选：${Object.keys(PROVINCES).join(', ')}`);
+    return;
+  }
+  if (isRegionDone(region)) {
+    console.log(`⏭  跳过 ${region}（已抓取过：${regionOutDir(region)}）`);
+    return;
+  }
+  const outDir = regionOutDir(region);
+  fs.mkdirSync(outDir, { recursive: true });
   const all = [];
-  for (const district of DISTRICTS) {
-    console.log(`抓取 ${district} ...`);
+  for (const district of districts) {
+    console.log(`抓取 ${region}/${district} ...`);
     const users = await crawlDistrict(district);
     if (users.length) {
-      fs.writeFileSync(path.join(OUT_DIR, `${district}.json`), JSON.stringify(users, null, 2), 'utf8');
+      fs.writeFileSync(path.join(outDir, `${district}.json`), JSON.stringify(users, null, 2), 'utf8');
       all.push(...users);
       console.log(`  ${district} 完成：${users.length} 条`);
     } else {
@@ -85,8 +221,19 @@ async function main() {
     }
     await sleep(randDelay());
   }
-  fs.writeFileSync(path.join(OUT_DIR, 'all.json'), JSON.stringify(all, null, 2), 'utf8');
-  console.log(`\n全部完成，共 ${all.length} 条，已写入 ${OUT_DIR}`);
+  fs.writeFileSync(path.join(outDir, 'all.json'), JSON.stringify(all, null, 2), 'utf8');
+  console.log(`\n${region} 完成，共 ${all.length} 条，已写入 ${outDir}`);
+}
+
+async function main() {
+  if (REGION === '--all') {
+    for (const key of Object.keys(PROVINCES)) {
+      await scrapeRegion(key);
+    }
+    console.log('\n全部省份处理完毕（已抓过的自动跳过）。');
+  } else {
+    await scrapeRegion(REGION);
+  }
 }
 
 main().catch((e) => { console.error('运行出错：', e); process.exit(1); });
