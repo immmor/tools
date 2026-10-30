@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="h-full bg-slate-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>智能扫码点餐与购物系统</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#fffbea',
+                            100: '#fff3c4',
+                            500: '#f59e0b',
+                            600: '#d97706',
+                            700: '#b45309',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom Scrollbar for sleek appearance */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        /* Smooth transitions */
+        .modal-backdrop {
+            background-color: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+        }
+        /* Hide scrollbar for category tabs on mobile */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col font-sans antialiased text-slate-800 select-none">
+
+    <!-- Top Navigation Header -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-sm flex-shrink-0">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <!-- Store Branding & Table Info -->
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-md shadow-amber-200 font-bold text-xl">
+                    <i data-lucide="utensils-crossed" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <div class="flex items-center space-x-2">
+                        <h1 class="font-bold text-slate-900 text-base sm:text-lg leading-tight">美味寻味美食工坊</h1>
+                        <span class="bg-amber-100 text-amber-800 text-xs font-semibold px-2 py-0.5 rounded-full border border-amber-200">营业中</span>
+                    </div>
+                    <p class="text-xs text-slate-500 flex items-center mt-0.5">
+                        <i data-lucide="qr-code" class="w-3.5 h-3.5 mr-1 text-slate-400"></i>
+                        桌号: <span class="font-semibold text-slate-700 ml-1">A-08 桌</span>
+                        <span class="mx-1.5 text-slate-300">|</span>
+                        <span>堂食</span>
+                    </p>
+                </div>
+            </div>
+
+            <!-- Actions / Status -->
+            <div class="flex items-center space-x-2 sm:space-x-4">
+                <button onclick="toggleQRModal(true)" class="flex items-center space-x-1 text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-lg transition">
+                    <i data-lucide="scan" class="w-4 h-4 text-slate-500"></i>
+                    <span class="hidden sm:inline">我的二维码</span>
+                </button>
+                <div class="relative">
+                    <button onclick="showToast('已通知服务员，请稍候')" class="flex items-center space-x-1 text-xs text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-3 py-2 rounded-lg transition font-medium">
+                        <i data-lucide="bell" class="w-4 h-4 text-amber-600"></i>
+                        <span>呼叫服务</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container (Desktop & Mobile Adaptive Grid) -->
+    <div class="flex-1 max-w-7xl w-full mx-auto flex overflow-hidden relative">
+
+        <!-- 1. Category Navigation (Sidebar on Desktop, Horizontal Scroll / Left Nav on Mobile) -->
+        <aside class="w-24 sm:w-32 md:w-56 bg-white border-r border-slate-200 flex-shrink-0 flex flex-col overflow-y-auto">
+            <div class="p-3 text-xs font-bold text-slate-400 uppercase tracking-wider hidden md:block">
+                菜品分类
+            </div>
+            <nav class="space-y-1 p-2" id="categoryNav">
+                <!-- Categories rendered dynamically -->
+            </nav>
+        </aside>
+
+        <!-- 2. Product List Grid View -->
+        <main class="flex-1 bg-slate-50 overflow-y-auto p-3 sm:p-5 pb-24 md:pb-6" id="productContainer">
+            <!-- Category Title & Banner -->
+            <div class="mb-4 bg-gradient-to-r from-amber-500 to-orange-500 rounded-2xl p-4 text-white shadow-md flex justify-between items-center">
+                <div>
+                    <h2 class="text-xl font-bold" id="currentCategoryTitle">招牌推荐</h2>
+                    <p class="text-xs text-amber-100 mt-1">严选新鲜食材，主厨匠心推荐</p>
+                </div>
+                <i data-lucide="sparkles" class="w-8 h-8 text-amber-200 opacity-80"></i>
+            </div>
+
+            <!-- Products Grid -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4" id="productList">
+                <!-- Products rendered dynamically -->
+            </div>
+        </main>
+
+        <!-- 3. Desktop Permanent Cart Drawer (Hidden on mobile screen, Visible on md/lg+) -->
+        <aside class="hidden md:flex flex-col w-80 lg:w-96 bg-white border-l border-slate-200 flex-shrink-0 shadow-lg z-10">
+            <!-- Cart Header -->
+            <div class="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                <div class="flex items-center space-x-2">
+                    <i data-lucide="shopping-bag" class="w-5 h-5 text-amber-500"></i>
+                    <h2 class="font-bold text-slate-800 text-base">购物车菜单</h2>
+                    <span id="desktopCartBadge" class="bg-amber-100 text-amber-800 text-xs font-bold px-2 py-0.5 rounded-full">0</span>
+                </div>
+                <button onclick="clearCart()" class="text-xs text-slate-400 hover:text-red-500 flex items-center space-x-1 transition">
+                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                    <span>清空</span>
+                </button>
+            </div>
+
+            <!-- Cart Item List -->
+            <div class="flex-1 overflow-y-auto p-4 space-y-3 divide-y divide-slate-100" id="desktopCartList">
+                <!-- Desktop Cart Items Inserted Here -->
+            </div>
+
+            <!-- Desktop Cart Summary & Footer -->
+            <div class="p-4 border-t border-slate-200 bg-white space-y-3">
+                <div class="space-y-1 text-xs text-slate-500">
+                    <div class="flex justify-between">
+                        <span>小计</span>
+                        <span id="desktopSubtotal">¥0.00</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>餐位费 / 服务费</span>
+                        <span>¥0.00</span>
+                    </div>
+                    <div class="flex justify-between font-bold text-slate-800 text-sm pt-2 border-t border-slate-100">
+                        <span>应付总计</span>
+                        <span class="text-amber-600 text-xl font-black" id="desktopTotal">¥0.00</span>
+                    </div>
+                </div>
+
+                <!-- Remark Option -->
+                <div class="mt-2">
+                    <input type="text" id="orderRemarkDesktop" placeholder="添加备注 (如：不要辣、少盐...)" 
+                        class="w-full text-xs px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500/50 bg-slate-50">
+                </div>
+
+                <button onclick="openCheckoutModal()" id="desktopCheckoutBtn" disabled
+                    class="w-full py-3 bg-amber-500 hover:bg-amber-600 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold rounded-xl shadow-md transition flex items-center justify-center space-x-2">
+                    <span>立即提交订单</span>
+                    <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </aside>
+
+    </div>
+
+    <!-- 4. Mobile Bottom Floating Cart Bar (Only visible on small screens) -->
+    <div class="md:hidden fixed bottom-0 left-0 right-0 z-30 p-3 bg-gradient-to-t from-slate-900/60 via-slate-900/20 to-transparent pointer-events-none">
+        <div class="bg-slate-900/90 backdrop-blur-md text-white rounded-2xl p-2.5 shadow-2xl flex items-center justify-between pointer-events-auto border border-slate-700/50 max-w-lg mx-auto">
+            <!-- Clickable Info Area to Expand Bottom Sheet -->
+            <div class="flex items-center space-x-3 flex-1 pl-2 cursor-pointer" onclick="toggleMobileCartSheet(true)">
+                <div class="relative">
+                    <div class="w-12 h-12 bg-amber-500 rounded-xl flex items-center justify-center shadow-lg text-white">
+                        <i data-lucide="shopping-bag" class="w-6 h-6"></i>
+                    </div>
+                    <span id="mobileCartCount" class="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-slate-900">0</span>
+                </div>
+                <div>
+                    <div class="text-lg font-black text-white leading-none" id="mobileTotal">¥0.00</div>
+                    <div class="text-[10px] text-slate-400 mt-1">点击查看已选菜品明细</div>
+                </div>
+            </div>
+
+            <!-- Checkout Button -->
+            <button id="mobileCheckoutBtn" onclick="openCheckoutModal()" disabled
+                class="bg-amber-500 hover:bg-amber-600 disabled:bg-slate-700 disabled:text-slate-500 text-white font-bold px-5 py-3 rounded-xl transition text-sm flex items-center space-x-1 shadow-md">
+                <span>去结算</span>
+                <i data-lucide="chevron-right" class="w-4 h-4"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- 5. Mobile Bottom-Sheet Cart Modal -->
+    <div id="mobileCartModal" class="fixed inset-0 z-40 hidden">
+        <div class="modal-backdrop absolute inset-0" onclick="toggleMobileCartSheet(false)"></div>
+        <div class="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl max-h-[80vh] flex flex-col shadow-2xl transition-transform transform duration-300">
+            <!-- Modal Bar Indicator -->
+            <div class="w-12 h-1.5 bg-slate-300 rounded-full mx-auto my-2.5"></div>
+            
+            <div class="px-4 py-2 border-b border-slate-100 flex justify-between items-center">
+                <span class="font-bold text-slate-800 text-sm flex items-center">
+                    <i data-lucide="shopping-bag" class="w-4 h-4 mr-1.5 text-amber-500"></i>已选菜品
+                </span>
+                <button onclick="clearCart()" class="text-xs text-slate-400 hover:text-red-500 flex items-center space-x-1">
+                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                    <span>清空购物车</span>
+                </button>
+            </div>
+
+            <div class="overflow-y-auto p-4 space-y-3 max-h-[50vh] divide-y divide-slate-100" id="mobileCartList">
+                <!-- Mobile Cart Items dynamically rendered -->
+            </div>
+
+            <div class="p-4 border-t border-slate-100 bg-slate-50 space-y-3">
+                <input type="text" id="orderRemarkMobile" placeholder="备注：口味要求、特殊叮嘱等" 
+                    class="w-full text-xs px-3 py-2 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500">
+                <div class="flex justify-between items-center">
+                    <span class="text-xs text-slate-500">合计:</span>
+                    <span class="text-xl font-black text-amber-600" id="mobileSheetTotal">¥0.00</span>
+                </div>
+                <button onclick="openCheckoutModal()" id="mobileSheetCheckoutBtn"
+                    class="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl shadow-md transition text-center">
+                    确认并提交订单
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 6. Item Specification / Customization Modal -->
+    <div id="specModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+        <div class="modal-backdrop absolute inset-0" onclick="closeSpecModal()"></div>
+        <div class="bg-white rounded-2xl max-w-md w-full z-10 overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            <!-- Header Image / Info -->
+            <div class="relative h-48 bg-slate-100 flex-shrink-0">
+                <img id="specModalImg" src="" alt="" class="w-full h-full object-cover">
+                <button onclick="closeSpecModal()" class="absolute top-3 right-3 bg-slate-900/60 text-white rounded-full p-1.5 hover:bg-slate-900 transition">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <!-- Content -->
+            <div class="p-4 overflow-y-auto space-y-4 flex-1">
+                <div>
+                    <h3 class="text-lg font-bold text-slate-800" id="specModalTitle">菜品名称</h3>
+                    <p class="text-xs text-slate-500 mt-1" id="specModalDesc">详细描述</p>
+                </div>
+
+                <!-- Spec Group: Taste / Option 1 -->
+                <div class="space-y-2">
+                    <label class="text-xs font-bold text-slate-700">辣度选择</label>
+                    <div class="grid grid-cols-4 gap-2" id="spicyOptions">
+                        <button onclick="selectSpecOption('spicy', '不辣', this)" class="spec-btn-spicy px-3 py-1.5 text-xs rounded-lg border border-slate-200 text-slate-700 hover:border-amber-500 active">不辣</button>
+                        <button onclick="selectSpecOption('spicy', '微辣', this)" class="spec-btn-spicy px-3 py-1.5 text-xs rounded-lg border border-slate-200 text-slate-700 hover:border-amber-500">微辣</button>
+                        <button onclick="selectSpecOption('spicy', '中辣', this)" class="spec-btn-spicy px-3 py-1.5 text-xs rounded-lg border border-slate-200 text-slate-700 hover:border-amber-500">中辣</button>
+                        <button onclick="selectSpecOption('spicy', '重辣', this)" class="spec-btn-spicy px-3 py-1.5 text-xs rounded-lg border border-slate-200 text-slate-700 hover:border-amber-500">重辣</button>
+                    </div>
+                </div>
+
+                <!-- Spec Group: Portion / Option 2 -->
+                <div class="space-y-2">
+                    <label class="text-xs font-bold text-slate-700">规格/份量</label>
+                    <div class="grid grid-cols-3 gap-2" id="portionOptions">
+                        <button onclick="selectSpecOption('portion', '标准份', this)" class="spec-btn-portion px-3 py-1.5 text-xs rounded-lg border border-slate-200 text-slate-700 hover:border-amber-500 active">标准份</button>
+                        <button onclick="selectSpecOption('portion', '大份(+¥8)', this)" class="spec-btn-portion px-3 py-1.5 text-xs rounded-lg border border-slate-200 text-slate-700 hover:border-amber-500">大份 (+8元)</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer Price & Add -->
+            <div class="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between flex-shrink-0">
+                <div>
+                    <span class="text-xs text-slate-400">选择后价格</span>
+                    <div class="text-xl font-black text-amber-600" id="specModalPrice">¥0.00</div>
+                </div>
+                <button onclick="confirmSpecAddToCart()" class="bg-amber-500 hover:bg-amber-600 text-white font-bold px-6 py-2.5 rounded-xl shadow-md transition flex items-center space-x-1">
+                    <i data-lucide="plus" class="w-4 h-4"></i>
+                    <span>加入购物车</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 7. Checkout / Payment Modal -->
+    <div id="checkoutModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+        <div class="modal-backdrop absolute inset-0" onclick="closeCheckoutModal()"></div>
+        <div class="bg-white rounded-2xl max-w-md w-full z-10 overflow-hidden shadow-2xl p-5 space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="text-lg font-bold text-slate-800">确认订单与支付</h3>
+                <button onclick="closeCheckoutModal()" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <!-- Order Summary Info -->
+            <div class="bg-slate-50 rounded-xl p-3 space-y-2 text-xs">
+                <div class="flex justify-between text-slate-600">
+                    <span>用餐方式</span>
+                    <span class="font-bold text-slate-800">堂食 (A-08桌)</span>
+                </div>
+                <div class="flex justify-between text-slate-600">
+                    <span>订单菜品</span>
+                    <span id="checkoutItemSummary" class="text-slate-800">共 0 件菜品</span>
+                </div>
+                <div class="flex justify-between text-slate-600">
+                    <span>备注要求</span>
+                    <span id="checkoutRemarkSummary" class="text-slate-800">无</span>
+                </div>
+                <div class="pt-2 border-t border-slate-200 flex justify-between text-sm font-bold">
+                    <span>支付金额</span>
+                    <span id="checkoutPayAmount" class="text-amber-600 text-lg">¥0.00</span>
+                </div>
+            </div>
+
+            <!-- Payment Method Selection -->
+            <div class="space-y-2">
+                <label class="text-xs font-bold text-slate-700">选择支付方式</label>
+                <div class="space-y-2">
+                    <label class="flex items-center justify-between p-3 border border-amber-500 rounded-xl bg-amber-50/30 cursor-pointer">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-7 h-7 rounded-full bg-emerald-500 text-white flex items-center justify-center">
+                                <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+                            </div>
+                            <span class="text-sm font-medium text-slate-800">微信支付 / WeChat Pay</span>
+                        </div>
+                        <input type="radio" name="payMethod" checked class="accent-amber-500">
+                    </label>
+                    <label class="flex items-center justify-between p-3 border border-slate-200 rounded-xl hover:border-slate-300 cursor-pointer">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-7 h-7 rounded-full bg-sky-500 text-white flex items-center justify-center">
+                                <i data-lucide="wallet" class="w-4 h-4"></i>
+                            </div>
+                            <span class="text-sm font-medium text-slate-800">支付宝 / Alipay</span>
+                        </div>
+                        <input type="radio" name="payMethod" class="accent-amber-500">
+                    </label>
+                </div>
+            </div>
+
+            <!-- Pay Action Button -->
+            <button onclick="processPayment()" id="payBtn"
+                class="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl shadow-lg transition flex items-center justify-center space-x-2">
+                <i data-lucide="lock" class="w-4 h-4"></i>
+                <span>确认支付</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- 8. Payment Success Simulation Screen -->
+    <div id="successModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+        <div class="modal-backdrop absolute inset-0"></div>
+        <div class="bg-white rounded-2xl max-w-sm w-full z-10 overflow-hidden shadow-2xl p-6 text-center space-y-4">
+            <div class="w-16 h-16 bg-emerald-100 text-emerald-500 rounded-full flex items-center justify-center mx-auto shadow-inner">
+                <i data-lucide="check" class="w-10 h-10"></i>
+            </div>
+            <div>
+                <h3 class="text-xl font-bold text-slate-900">下单成功！</h3>
+                <p class="text-xs text-slate-500 mt-1">订单已实时推送到后厨，请耐心等待上菜</p>
+            </div>
+            <div class="bg-slate-50 p-3 rounded-xl text-left space-y-1 text-xs text-slate-600">
+                <div>订单号: <span class="font-mono text-slate-800">ORD-20261030-088</span></div>
+                <div>桌号: <span class="font-semibold text-slate-800">A-08 桌</span></div>
+                <div>时间: <span id="successTime" class="text-slate-800">--:--</span></div>
+            </div>
+            <button onclick="resetOrder()" class="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition">
+                返回菜单 / 继续加菜
+            </button>
+        </div>
+    </div>
+
+    <!-- 9. QR Code Modal -->
+    <div id="qrModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+        <div class="modal-backdrop absolute inset-0" onclick="toggleQRModal(false)"></div>
+        <div class="bg-white rounded-2xl max-w-xs w-full z-10 p-5 text-center space-y-3">
+            <h3 class="text-base font-bold text-slate-800">桌号二维码</h3>
+            <p class="text-xs text-slate-500">同桌好友扫码即可同步加入点餐</p>
+            <div class="bg-slate-100 p-4 rounded-xl inline-block">
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=https://order.restaurant.com/table/A08" 
+                     alt="Table QR Code" class="w-44 h-44 mx-auto rounded-lg shadow-sm"
+                     onerror="this.src='https://placehold.co/180x180/f1f5f9/475569?text=QR+Code+Error'">
+            </div>
+            <div class="text-xs text-amber-600 font-bold">桌号: A-08</div>
+            <button onclick="toggleQRModal(false)" class="w-full py-2 bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold">关闭</button>
+        </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toast" class="fixed top-20 left-1/2 transform -translate-x-1/2 bg-slate-900/90 text-white text-xs px-4 py-2.5 rounded-full shadow-xl z-50 opacity-0 pointer-events-none transition-opacity duration-300 flex items-center space-x-2">
+        <i data-lucide="info" class="w-4 h-4 text-amber-400"></i>
+        <span id="toastMsg">消息提示</span>
+    </div>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        // Sample Products & Menu Data Structure
+        const categories = [
+            { id: 'c1', name: '招牌热销', icon: 'flame' },
+            { id: 'c2', name: '主食炒菜', icon: 'utensils' },
+            { id: 'c3', name: '精选特饮', icon: 'cup-soda' },
+            { id: 'c4', name: '甜品小吃', icon: 'cookie' },
+            { id: 'c5', name: '零售零食', icon: 'shopping-bag' }
+        ];
+
+        const products = [
+            {
+                id: 'p1',
+                categoryId: 'c1',
+                name: '招牌秘制酸菜鱼',
+                price: 68.0,
+                rating: '4.9',
+                sales: 1280,
+                tag: '招牌推荐',
+                image: 'https://images.unsplash.com/photo-1534422298391-e4f8c172dddb?auto=format&fit=crop&w=500&q=80',
+                desc: '庄园老坛酸菜，活鱼现杀，肉质鲜嫩爽滑，酸辣开胃。',
+                hasSpecs: true
+            },
+            {
+                id: 'p2',
+                categoryId: 'c1',
+                name: '经典红烧肉配米饭',
+                price: 38.0,
+                rating: '4.8',
+                sales: 950,
+                tag: '热销',
+                image: 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=500&q=80',
+                desc: '五花肉肥而不腻，肥瘦相间，浓油赤酱，入味十足。',
+                hasSpecs: false
+            },
+            {
+                id: 'p3',
+                categoryId: 'c2',
+                name: '宫保鸡丁',
+                price: 32.0,
+                rating: '4.7',
+                sales: 620,
+                tag: '辣',
+                image: 'https://images.unsplash.com/photo-1525755662778-989d0524087e?auto=format&fit=crop&w=500&q=80',
+                desc: '鸡丁鲜嫩，花生米香脆，麻辣酸甜适口。',
+                hasSpecs: true
+            },
+            {
+                id: 'p4',
+                categoryId: 'c2',
+                name: '干锅手撕包菜',
+                price: 22.0,
+                rating: '4.6',
+                sales: 410,
+                tag: '',
+                image: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=500&q=80',
+                desc: '包菜脆嫩，五花肉提香，微微带辣。',
+                hasSpecs: false
+            },
+            {
+                id: 'p5',
+                categoryId: 'c3',
+                name: '冰爽手打柠檬茶',
+                price: 15.0,
+                rating: '4.9',
+                sales: 2100,
+                tag: '人气冷饮',
+                image: 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?auto=format&fit=crop&w=500&q=80',
+                desc: '广东香水柠檬，爆打出汁，清爽解腻。',
+                hasSpecs: true
+            },
+            {
+                id: 'p6',
+                categoryId: 'c3',
+                name: '多肉葡萄芝士奶盖',
+                price: 22.0,
+                rating: '4.8',
+                sales: 1500,
+                tag: '推荐',
+                image: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?auto=format&fit=crop&w=500&q=80',
+                desc: '手剥葡萄果肉，搭配浓郁芝士奶盖，层次丰富。',
+                hasSpecs: true
+            },
+            {
+                id: 'p7',
+                categoryId: 'c4',
+                name: '香酥黄金小蛋挞(2个)',
+                price: 12.0,
+                rating: '4.7',
+                sales: 780,
+                tag: '甜品',
+                image: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=500&q=80',
+                desc: '外酥里嫩，奶香浓郁，现烤现卖。',
+                hasSpecs: false
+            },
+            {
+                id: 'p8',
+                categoryId: 'c5',
+                name: '手工烘焙曲奇礼盒',
+                price: 45.0,
+                rating: '4.9',
+                sales: 300,
+                tag: '零售',
+                image: 'https://images.unsplash.com/photo-1558961363-fa8fdf82db35?auto=format&fit=crop&w=500&q=80',
+                desc: '进口黄油制作，入口即化，伴手礼首选。',
+                hasSpecs: false
+            }
+        ];
+
+        // State Management
+        let currentCategoryId = 'c1';
+        let cart = []; // Array of cart items { id, productId, name, price, qty, specs }
+        let selectedProductForSpec = null;
+        let selectedSpecs = { spicy: '不辣', portion: '标准份' };
+
+        // Initialize App
+        window.addEventListener('DOMContentLoaded', () => {
+            renderCategories();
+            renderProducts();
+            updateCartUI();
+            lucide.createIcons();
+        });
+
+        // Render Category Navigation
+        function renderCategories() {
+            const nav = document.getElementById('categoryNav');
+            nav.innerHTML = categories.map(cat => {
+                const isActive = cat.id === currentCategoryId;
+                return `
+                    <button onclick="switchCategory('${cat.id}')" 
+                        class="w-full flex flex-col md:flex-row items-center space-y-1 md:space-y-0 md:space-x-3 px-3 py-3 rounded-xl transition text-xs sm:text-sm font-medium ${
+                            isActive 
+                            ? 'bg-amber-500 text-white shadow-md shadow-amber-200' 
+                            : 'text-slate-600 hover:bg-slate-100'
+                        }">
+                        <i data-lucide="${cat.icon}" class="w-5 h-5"></i>
+                        <span class="truncate">${cat.name}</span>
+                    </button>
+                `;
+            }).join('');
+            lucide.createIcons();
+        }
+
+        // Switch Active Category
+        function switchCategory(catId) {
+            currentCategoryId = catId;
+            const categoryObj = categories.find(c => c.id === catId);
+            document.getElementById('currentCategoryTitle').innerText = categoryObj ? categoryObj.name : '菜品列表';
+            renderCategories();
+            renderProducts();
+        }
+
+        // Render Product Items
+        function renderProducts() {
+            const container = document.getElementById('productList');
+            const filteredProducts = products.filter(p => p.categoryId === currentCategoryId);
+
+            if (filteredProducts.length === 0) {
+                container.innerHTML = `<div class="col-span-full py-12 text-center text-slate-400 text-xs">暂无相关菜品</div>`;
+                return;
+            }
+
+            container.innerHTML = filteredProducts.map(p => {
+                const qtyInCart = getCartProductQty(p.id);
+                return `
+                    <div class="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition">
+                        <div class="relative">
+                            <img src="${p.image}" alt="${p.name}" class="w-full h-36 sm:h-40 object-cover rounded-xl bg-slate-100" onerror="this.src='https://placehold.co/400x300/f1f5f9/94a3b8?text=Food+Image'">
+                            ${p.tag ? `<span class="absolute top-2 left-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow">${p.tag}</span>` : ''}
+                        </div>
+                        <div class="mt-3 flex-1 flex flex-col justify-between">
+                            <div>
+                                <h3 class="font-bold text-slate-800 text-sm sm:text-base leading-snug line-clamp-1">${p.name}</h3>
+                                <p class="text-slate-400 text-xs mt-1 line-clamp-2">${p.desc}</p>
+                            </div>
+                            <div class="mt-3 flex items-center justify-between">
+                                <div>
+                                    <span class="text-xs text-amber-600 font-bold">¥</span>
+                                    <span class="text-lg font-black text-amber-600">${p.price.toFixed(2)}</span>
+                                </div>
+                                ${p.hasSpecs ? `
+                                    <button onclick="openSpecModal('${p.id}')" class="bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow transition flex items-center space-x-1">
+                                        <span>选规格</span>
+                                        ${qtyInCart > 0 ? `<span class="bg-white text-amber-600 font-bold w-4 h-4 rounded-full text-[10px] flex items-center justify-center ml-1">${qtyInCart}</span>` : ''}
+                                    </button>
+                                ` : `
+                                    <div class="flex items-center space-x-2">
+                                        ${qtyInCart > 0 ? `
+                                            <button onclick="updateCartItemQty('${p.id}', -1)" class="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-sm transition">-</button>
+                                            <span class="text-xs font-bold text-slate-800">${qtyInCart}</span>
+                                        ` : ''}
+                                        <button onclick="addToCartDirect('${p.id}')" class="w-7 h-7 rounded-lg bg-amber-500 hover:bg-amber-600 text-white flex items-center justify-center font-bold text-sm shadow transition">+</button>
+                                    </div>
+                                `}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Get total count for product in cart
+        function getCartProductQty(productId) {
+            return cart.filter(item => item.productId === productId).reduce((sum, item) => sum + item.qty, 0);
+        }
+
+        // Direct Add to Cart (Without Specs)
+        function addToCartDirect(productId) {
+            const product = products.find(p => p.id === productId);
+            if (!product) return;
+
+            const existingIndex = cart.findIndex(item => item.productId === productId && !item.specs);
+            if (existingIndex > -1) {
+                cart[existingIndex].qty += 1;
+            } else {
+                cart.push({
+                    id: Date.now().toString(),
+                    productId: product.id,
+                    name: product.name,
+                    price: product.price,
+                    qty: 1,
+                    specs: null
+                });
+            }
+            updateCartUI();
+            showToast(`已添加 ${product.name} 到购物车`);
+        }
+
+        // Open Specification Picker Modal
+        function openSpecModal(productId) {
+            selectedProductForSpec = products.find(p => p.id === productId);
+            if (!selectedProductForSpec) return;
+
+            document.getElementById('specModalImg').src = selectedProductForSpec.image;
+            document.getElementById('specModalTitle').innerText = selectedProductForSpec.name;
+            document.getElementById('specModalDesc').innerText = selectedProductForSpec.desc;
+            document.getElementById('specModalPrice').innerText = `¥${selectedProductForSpec.price.toFixed(2)}`;
+
+            // Reset active buttons
+            selectedSpecs = { spicy: '不辣', portion: '标准份' };
+            resetSpecButtons();
+
+            document.getElementById('specModal').classList.remove('hidden');
+        }
+
+        function closeSpecModal() {
+            document.getElementById('specModal').classList.add('hidden');
+        }
+
+        function resetSpecButtons() {
+            document.querySelectorAll('.spec-btn-spicy').forEach(btn => {
+                btn.classList.toggle('border-amber-500', btn.innerText === selectedSpecs.spicy);
+                btn.classList.toggle('bg-amber-50', btn.innerText === selectedSpecs.spicy);
+                btn.classList.toggle('text-amber-700', btn.innerText === selectedSpecs.spicy);
+            });
+            document.querySelectorAll('.spec-btn-portion').forEach(btn => {
+                const isMatch = btn.innerText.includes(selectedSpecs.portion);
+                btn.classList.toggle('border-amber-500', isMatch);
+                btn.classList.toggle('bg-amber-50', isMatch);
+                btn.classList.toggle('text-amber-700', isMatch);
+            });
+        }
+
+        function selectSpecOption(type, value, btnElement) {
+            selectedSpecs[type] = value;
+            let currentPrice = selectedProductForSpec.price;
+            if (selectedSpecs.portion.includes('大份')) {
+                currentPrice += 8;
+            }
+            document.getElementById('specModalPrice').innerText = `¥${currentPrice.toFixed(2)}`;
+            
+            // Highlight styling
+            const parent = btnElement.parentElement;
+            parent.querySelectorAll('button').forEach(b => {
+                b.classList.remove('border-amber-500', 'bg-amber-50', 'text-amber-700');
+            });
+            btnElement.classList.add('border-amber-500', 'bg-amber-50', 'text-amber-700');
+        }
+
+        function confirmSpecAddToCart() {
+            if (!selectedProductForSpec) return;
+
+            let finalPrice = selectedProductForSpec.price;
+            if (selectedSpecs.portion.includes('大份')) {
+                finalPrice += 8;
+            }
+
+            const specString = `${selectedSpecs.spicy} / ${selectedSpecs.portion}`;
+
+            const existingIndex = cart.findIndex(item => item.productId === selectedProductForSpec.id && item.specs === specString);
+            if (existingIndex > -1) {
+                cart[existingIndex].qty += 1;
+            } else {
+                cart.push({
+                    id: Date.now().toString(),
+                    productId: selectedProductForSpec.id,
+                    name: selectedProductForSpec.name,
+                    price: finalPrice,
+                    qty: 1,
+                    specs: specString
+                });
+            }
+
+            closeSpecModal();
+            updateCartUI();
+            showToast(`已添加 ${selectedProductForSpec.name} (${specString})`);
+        }
+
+        // Update Cart Quantities
+        function updateCartItemQty(cartItemIdOrProductId, delta) {
+            // Check if it's a cart item ID or direct product ID
+            let itemIndex = cart.findIndex(i => i.id === cartItemIdOrProductId);
+            if (itemIndex === -1) {
+                // If not found, try finding direct item without specs
+                itemIndex = cart.findIndex(i => i.productId === cartItemIdOrProductId && !i.specs);
+            }
+
+            if (itemIndex > -1) {
+                cart[itemIndex].qty += delta;
+                if (cart[itemIndex].qty <= 0) {
+                    cart.splice(itemIndex, 1);
+                }
+            }
+            updateCartUI();
+        }
+
+        function clearCart() {
+            if (cart.length === 0) return;
+            cart = [];
+            updateCartUI();
+            showToast('购物车已清空');
+        }
+
+        // Render & Update UI for both Desktop and Mobile Cart Components
+        function updateCartUI() {
+            const totalCount = cart.reduce((sum, item) => sum + item.qty, 0);
+            const totalPrice = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+
+            // Desktop Elements
+            document.getElementById('desktopCartBadge').innerText = totalCount;
+            document.getElementById('desktopSubtotal').innerText = `¥${totalPrice.toFixed(2)}`;
+            document.getElementById('desktopTotal').innerText = `¥${totalPrice.toFixed(2)}`;
+            document.getElementById('desktopCheckoutBtn').disabled = totalCount === 0;
+
+            // Mobile Elements
+            document.getElementById('mobileCartCount').innerText = totalCount;
+            document.getElementById('mobileTotal').innerText = `¥${totalPrice.toFixed(2)}`;
+            document.getElementById('mobileSheetTotal').innerText = `¥${totalPrice.toFixed(2)}`;
+            document.getElementById('mobileCheckoutBtn').disabled = totalCount === 0;
+
+            // Render Cart Lists HTML
+            const cartItemsHTML = cart.length === 0 ? `
+                <div class="py-12 text-center text-slate-400 text-xs flex flex-col items-center justify-center space-y-2">
+                    <i data-lucide="shopping-cart" class="w-8 h-8 text-slate-300"></i>
+                    <span>购物车空空如也，快去点菜吧</span>
+                </div>
+            ` : cart.map(item => `
+                <div class="flex items-center justify-between pt-2">
+                    <div class="flex-1 pr-2">
+                        <div class="text-xs font-bold text-slate-800 leading-snug">${item.name}</div>
+                        ${item.specs ? `<div class="text-[10px] text-slate-400 mt-0.5">${item.specs}</div>` : ''}
+                        <div class="text-xs font-bold text-amber-600 mt-1">¥${item.price.toFixed(2)}</div>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button onclick="updateCartItemQty('${item.id}', -1)" class="w-6 h-6 rounded bg-slate-100 text-slate-700 flex items-center justify-center text-xs font-bold hover:bg-slate-200 transition">-</button>
+                        <span class="text-xs font-bold text-slate-800">${item.qty}</span>
+                        <button onclick="updateCartItemQty('${item.id}', 1)" class="w-6 h-6 rounded bg-amber-500 text-white flex items-center justify-center text-xs font-bold hover:bg-amber-600 transition">+</button>
+                    </div>
+                </div>
+            `).join('');
+
+            document.getElementById('desktopCartList').innerHTML = cartItemsHTML;
+            document.getElementById('mobileCartList').innerHTML = cartItemsHTML;
+
+            // Re-render product grid buttons to reflect quantities
+            renderProducts();
+            lucide.createIcons();
+        }
+
+        // Toggle Mobile Bottom Sheet Modal
+        function toggleMobileCartSheet(show) {
+            const modal = document.getElementById('mobileCartModal');
+            if (show) {
+                modal.classList.remove('hidden');
+            } else {
+                modal.classList.add('hidden');
+            }
+        }
+
+        // QR Modal Toggle
+        function toggleQRModal(show) {
+            document.getElementById('qrModal').classList.toggle('hidden', !show);
+        }
+
+        // Checkout Process
+        function openCheckoutModal() {
+            if (cart.length === 0) return;
+
+            const totalCount = cart.reduce((sum, item) => sum + item.qty, 0);
+            const totalPrice = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+
+            const remarkDesktop = document.getElementById('orderRemarkDesktop').value;
+            const remarkMobile = document.getElementById('orderRemarkMobile').value;
+            const remark = remarkDesktop || remarkMobile || '无';
+
+            document.getElementById('checkoutItemSummary').innerText = `共 ${totalCount} 件菜品`;
+            document.getElementById('checkoutRemarkSummary').innerText = remark;
+            document.getElementById('checkoutPayAmount').innerText = `¥${totalPrice.toFixed(2)}`;
+
+            toggleMobileCartSheet(false);
+            document.getElementById('checkoutModal').classList.remove('hidden');
+        }
+
+        function closeCheckoutModal() {
+            document.getElementById('checkoutModal').classList.add('hidden');
+        }
+
+        function processPayment() {
+            const payBtn = document.getElementById('payBtn');
+            payBtn.disabled = true;
+            payBtn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>处理支付中...</span>`;
+            lucide.createIcons();
+
+            setTimeout(() => {
+                payBtn.disabled = false;
+                payBtn.innerHTML = `<i data-lucide="lock" class="w-4 h-4"></i><span>确认支付</span>`;
+                closeCheckoutModal();
+
+                // Set currentTime
+                const now = new Date();
+                document.getElementById('successTime').innerText = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+                document.getElementById('successModal').classList.remove('hidden');
+            }, 1200);
+        }
+
+        function resetOrder() {
+            cart = [];
+            document.getElementById('orderRemarkDesktop').value = '';
+            document.getElementById('orderRemarkMobile').value = '';
+            updateCartUI();
+            document.getElementById('successModal').classList.add('hidden');
+            showToast('已完成下单，可继续加菜');
+        }
+
+        // Toast Helper
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMsg').innerText = message;
+            toast.classList.remove('opacity-0', 'pointer-events-none');
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'pointer-events-none');
+            }, 2000);
+        }
+    </script>
+</body>
+</html>
