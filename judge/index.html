@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 美女帅哥黄金比例审美评估系统</title>
+
+    <!-- Apply saved theme before paint -->
+    <script>
+        if (localStorage.getItem('judge-theme') !== 'dark') document.documentElement.classList.add('light');
+    </script>
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts: Inter & Space Grotesk -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- MediaPipe Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['Space Grotesk', 'monospace'],
+                    },
+                    colors: {
+                        swiss: {
+                            black: '#0a0a0c',
+                            white: '#fcfcfc',
+                            pink: '#ff2d75',
+                            softpink: '#ffe8f0',
+                            hotpink: '#ff0055',
+                            glass: 'rgba(255, 220, 235, 0.25)',
+                            glassDark: 'rgba(15, 12, 20, 0.75)',
+                            border: 'rgba(255, 255, 255, 0.4)',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Base & Swiss Glassmorphism Style Tokens */
+        body {
+            background-color: #0b0914;
+            background-image: 
+                radial-gradient(at 15% 15%, rgba(255, 45, 117, 0.28) 0px, transparent 50%),
+                radial-gradient(at 85% 85%, rgba(255, 130, 180, 0.22) 0px, transparent 50%),
+                radial-gradient(at 50% 50%, rgba(13, 10, 22, 1) 0px, transparent 100%);
+            background-attachment: fixed;
+            color: #f8fafc;
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* Frosted Glass Panels */
+        .glass-card {
+            background: rgba(255, 225, 238, 0.12);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            box-shadow: 0 12px 40px 0 rgba(255, 45, 117, 0.08);
+        }
+
+        .glass-card-light {
+            background: rgba(255, 240, 246, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.8);
+            box-shadow: 0 8px 32px 0 rgba(255, 45, 117, 0.12);
+            color: #0f172a;
+        }
+
+        /* Swiss Strict Grid Background overlay */
+        .swiss-grid-overlay {
+            background-size: 32px 32px;
+            background-image: 
+                linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+        }
+
+        /* Circular score animation ring */
+        .score-circle {
+            transition: stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1);
+            transform: rotate(-90deg);
+            transform-origin: 50% 50%;
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(10, 10, 15, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #ff2d75;
+            border-radius: 3px;
+        }
+
+        /* DAY (LIGHT) MODE */
+        .light body {
+            background-color: #f8f6fc;
+            background-image:
+                linear-gradient(to right, rgba(15, 23, 42, 0.045) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(15, 23, 42, 0.045) 1px, transparent 1px),
+                radial-gradient(at 15% 15%, rgba(255, 45, 117, 0.16) 0px, transparent 50%),
+                radial-gradient(at 85% 85%, rgba(255, 130, 180, 0.2) 0px, transparent 50%);
+            background-size: 32px 32px, 32px 32px, auto, auto;
+            color: #0f172a;
+        }
+
+        .light .glass-card {
+            background: rgba(255, 255, 255, 0.72);
+            border-color: rgba(15, 23, 42, 0.1);
+            box-shadow: 0 12px 40px 0 rgba(255, 45, 117, 0.12);
+        }
+
+        .light .glass-card-light {
+            background: rgba(255, 255, 255, 0.92);
+            border-color: rgba(15, 23, 42, 0.06);
+        }
+
+        /* dark-mode-only text turns slate; keep white text on solid pink buttons */
+        .light .text-white:not(.bg-pink-500):not(.bg-gradient-to-r),
+        .light .text-zinc-300,
+        .light .text-zinc-400 { color: #334155; }
+
+        .light .text-pink-300,
+        .light .text-pink-300\/80,
+        .light .text-pink-400,
+        .light .text-pink-400\/80 { color: #db2777; }
+
+        .light .bg-black\/30 { background-color: rgba(15, 23, 42, 0.05); }
+        .light .bg-black\/40,
+        .light .bg-black\/60,
+        .light .bg-black\/70 { background-color: rgba(255, 255, 255, 0.55); }
+
+        .light .bg-white\/10,
+        .light .bg-white\/60,
+        .light .bg-zinc-900\/80,
+        .light .hover\:bg-black:hover,
+        .light .hover\:bg-black\/80:hover,
+        .light .hover\:bg-white\/20:hover { background-color: rgba(15, 23, 42, 0.06); }
+
+        .light .border-white,
+        .light .border-white\/5,
+        .light .border-white\/10,
+        .light .border-white\/20 { border-color: rgba(15, 23, 42, 0.12); }
+
+        .light ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.06); }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between swiss-grid-overlay relative overflow-x-hidden selection:bg-pink-500 selection:text-white">
+
+    <!-- HEADER / NAVIGATION BAR -->
+    <header class="w-full border-b border-white/10 glass-card sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+            <div class="flex items-center space-x-3 sm:space-x-4">
+                <div class="bg-gradient-to-r from-pink-500 to-rose-500 text-white font-black text-lg sm:text-xl px-3 py-1 tracking-tighter uppercase rounded-sm shadow-lg shadow-pink-500/30">
+                    FACE WOW
+                </div>
+                <div>
+                    <p class="text-[10px] sm:text-xs text-pink-300/80 tracking-widest uppercase">美女帅哥黄金比例与<br>面部对称度评估系统</p>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-4 sm:space-x-6">
+                <!-- Header Badge Info -->
+                <div class="hidden md:flex items-center space-x-6 text-xs font-mono text-zinc-300">
+                    <div class="flex items-center space-x-2 bg-black/30 px-3 py-1.5 rounded-full border border-white/10">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                        <span>MEDIAPIPE 468-MESH</span>
+                    </div>
+                    <div class="bg-pink-500/10 border border-pink-500/30 text-pink-300 px-3 py-1.5 rounded-full">
+                        PHI (Φ) = 1.618033
+                    </div>
+                </div>
+
+                <!-- Day / Night Toggle -->
+                <button id="btn_theme" title="切换白天 / 夜间模式" class="w-10 h-10 flex-shrink-0 rounded-full bg-black/30 border border-white/10 text-pink-300 flex items-center justify-center transition-transform hover:scale-110">
+                    <i id="theme_icon" class="fa-solid fa-sun"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN DASHBOARD CONTENT WRAPPER -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8">
+        
+        <!-- LEFT PANEL: CAMERA & CANVAS VIEWPORT (7 COLS ON DESKTOP) -->
+        <section class="lg:col-span-7 h-full flex flex-col space-y-4">
+            
+            <!-- Video & Canvas Render Viewport Container -->
+            <div class="relative w-full aspect-[4/3] sm:aspect-[16/10] rounded-2xl overflow-hidden glass-card border border-white/20 shadow-2xl flex items-center justify-center bg-black/60 group">
+                
+                <!-- MediaPipe Hidden Video Feed -->
+                <video id="webcam" class="hidden" playsinline></video>
+                
+                <!-- Main Processing Canvas -->
+                <canvas id="output_canvas" class="absolute inset-0 w-full h-full object-contain"></canvas>
+
+                <!-- Initial Empty State Placeholder UI -->
+                <div id="placeholder_ui" class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-black/40 backdrop-blur-sm transition-opacity duration-300">
+                    <div class="w-20 h-20 rounded-2xl bg-gradient-to-tr from-pink-500/20 to-rose-500/30 border border-pink-500/40 flex items-center justify-center mb-4 text-pink-400 text-3xl shadow-xl shadow-pink-500/10">
+                        <i class="fa-solid fa-face-smile-beam"></i>
+                    </div>
+                    <h2 class="text-lg sm:text-xl font-bold uppercase tracking-wide text-white mb-2 font-mono">等待人脸采集 / AWAITING INPUT</h2>
+                    <p class="text-xs text-zinc-300 max-w-md mb-6 leading-relaxed">
+                        请上传高清正面人脸肖像照片，或直接开启实时摄像头进行面部 468 点位三庭五眼及黄金比例深度测算。
+                    </p>
+                    
+                    <div class="flex flex-wrap justify-center gap-3 sm:gap-4 w-full sm:w-auto">
+                        <button onclick="document.getElementById('image_upload').click()" class="w-full sm:w-auto bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white font-extrabold px-6 py-3 rounded-xl text-xs uppercase tracking-wider transition-all transform hover:scale-105 shadow-lg shadow-pink-500/30 flex items-center justify-center space-x-2">
+                            <i class="fa-solid fa-cloud-arrow-up text-sm"></i>
+                            <span>上传肖像照片</span>
+                        </button>
+                        <button id="btn_webcam_start" class="w-full sm:w-auto bg-zinc-900/80 hover:bg-black text-white border border-white/20 font-extrabold px-6 py-3 rounded-xl text-xs uppercase tracking-wider transition-all transform hover:scale-105 backdrop-blur-md flex items-center justify-center space-x-2">
+                            <i class="fa-solid fa-camera text-sm text-pink-400"></i>
+                            <span>开启实时摄像头</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- AI Processing Overlay Spinner -->
+                <div id="loading_spinner" class="hidden absolute inset-0 bg-black/70 backdrop-blur-md flex flex-col items-center justify-center space-y-4 z-20">
+                    <div class="relative flex items-center justify-center">
+                        <div class="w-14 h-14 border-4 border-pink-500/30 border-t-pink-500 rounded-full animate-spin"></div>
+                        <i class="fa-solid fa-wand-magic-sparkles absolute text-pink-400 text-lg"></i>
+                    </div>
+                    <p class="text-xs font-mono text-pink-300 tracking-widest uppercase animate-pulse">Processing Facial Landmarks Mesh...</p>
+                </div>
+
+                <!-- HUD Mesh Toggle Overlay -->
+                <div id="hud_controls" class="hidden absolute top-4 right-4 flex items-center space-x-2 z-10">
+                    <button id="btn_toggle_mesh" class="bg-black/60 hover:bg-black/80 backdrop-blur-md border border-pink-500/40 text-pink-300 px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center space-x-1">
+                        <i class="fa-solid fa-circle-nodes"></i>
+                        <span id="mesh_btn_label">网格: ON</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Input Controls Bar -->
+            <div class="glass-card p-4 rounded-xl flex flex-wrap items-center justify-between gap-4">
+                <input type="file" id="image_upload" accept="image/*" class="hidden">
+                
+                <div class="flex items-center space-x-3 w-full sm:w-auto">
+                    <button onclick="document.getElementById('image_upload').click()" class="flex-1 sm:flex-initial bg-white/10 hover:bg-white/20 text-white border border-white/20 px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center justify-center space-x-2 transition-all">
+                        <i class="fa-solid fa-image text-pink-400"></i>
+                        <span>更换图片</span>
+                    </button>
+                    <button id="btn_camera_toggle" class="flex-1 sm:flex-initial bg-pink-500 hover:bg-pink-600 text-white px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider flex items-center justify-center space-x-2 transition-all shadow-md shadow-pink-500/20">
+                        <i class="fa-solid fa-video"></i>
+                        <span id="camera_btn_text">开启摄像头</span>
+                    </button>
+                </div>
+
+                <div class="text-[11px] text-zinc-400 font-mono hidden sm:flex items-center space-x-2">
+                    <i class="fa-solid fa-shield-halved text-emerald-400"></i>
+                    <span>纯本地分析 · 零数据上传</span>
+                </div>
+            </div>
+
+            <!-- Bottom Info Panel: scoring weights -->
+            <div class="glass-card p-5 rounded-xl lg:flex-1 lg:min-h-0 flex flex-col justify-center space-y-4">
+                <h4 class="text-xs font-mono font-bold tracking-widest text-pink-400 uppercase flex justify-between items-center">
+                    <span>SCORING WEIGHTS / 评分维度权重</span>
+                    <span class="text-[10px] text-zinc-400 tracking-normal">468-POINT MESH</span>
+                </h4>
+
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center font-mono">
+                    <div class="bg-white/10 border border-white/10 rounded-xl py-3">
+                        <div class="text-lg font-black text-pink-500 tracking-tighter">30%</div>
+                        <div class="text-[10px] text-zinc-300 mt-1">面部对称度</div>
+                    </div>
+                    <div class="bg-white/10 border border-white/10 rounded-xl py-3">
+                        <div class="text-lg font-black text-pink-500 tracking-tighter">25%</div>
+                        <div class="text-[10px] text-zinc-300 mt-1">黄金比例 Φ</div>
+                    </div>
+                    <div class="bg-white/10 border border-white/10 rounded-xl py-3">
+                        <div class="text-lg font-black text-pink-500 tracking-tighter">25%</div>
+                        <div class="text-[10px] text-zinc-300 mt-1">五官协调度</div>
+                    </div>
+                    <div class="bg-white/10 border border-white/10 rounded-xl py-3">
+                        <div class="text-lg font-black text-pink-500 tracking-tighter">20%</div>
+                        <div class="text-[10px] text-zinc-300 mt-1">下颌与轮廓</div>
+                    </div>
+                </div>
+
+                <p class="text-[11px] text-zinc-400 leading-relaxed">
+                    综合得分由上述四项加权计算，取值区间 62–99。正脸、均匀顺光、无遮挡时数据最稳定；分项偏低多为拍摄角度或光线所致，可调整后重测。
+                </p>
+            </div>
+
+        </section>
+
+        <!-- RIGHT PANEL: BEAUTY SCORE & DETAILED ANALYTICS CARDS (5 COLS ON DESKTOP) -->
+        <section class="lg:col-span-5 flex flex-col space-y-6">
+
+            <!-- MAIN SCORE GLASS CARD (Frosted Glass Pink Style) -->
+            <div class="glass-card-light p-6 rounded-2xl relative overflow-hidden border border-white/80 shadow-2xl">
+                
+                <!-- Swiss Style Design Accents -->
+                <div class="absolute top-4 right-4 text-pink-500/20 text-5xl select-none font-mono font-light">+</div>
+
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-[11px] font-mono font-extrabold tracking-widest text-pink-600 uppercase">AESTHETIC RATING INDEX</span>
+                    <span id="vibe_tag" class="text-xs font-mono px-2.5 py-1 rounded-md bg-pink-500 text-white font-extrabold uppercase shadow-sm">
+                        未检测
+                    </span>
+                </div>
+
+                <h3 id="aesthetic_title" class="text-2xl font-black tracking-tight text-slate-900 font-sans mb-4">
+                    等待分析...
+                </h3>
+
+                <!-- SCORE DISPLAY WITH CIRCULAR PROGRESS -->
+                <div class="flex items-center justify-between py-4 border-y border-pink-900/10 my-2">
+                    <div class="relative flex items-center justify-center w-32 h-32 flex-shrink-0">
+                        <svg class="w-full h-full" viewBox="0 0 100 100">
+                            <!-- Background Circle -->
+                            <circle class="text-pink-200/80" stroke-width="8" stroke="currentColor" fill="transparent" r="38" cx="50" cy="50"/>
+                            <!-- Dynamic Progress Circle -->
+                            <circle id="score_circle" class="text-pink-600 score-circle" stroke-width="8" stroke-dasharray="238.76" stroke-dashoffset="238.76" stroke-linecap="round" stroke="currentColor" fill="transparent" r="38" cx="50" cy="50"/>
+                        </svg>
+                        <div class="absolute flex flex-col items-center justify-center">
+                            <span id="score_number" class="text-4xl font-black text-slate-900 tracking-tighter">00</span>
+                            <span class="text-[9px] font-mono text-slate-500 tracking-widest">/ 100 PTS</span>
+                        </div>
+                    </div>
+
+                    <div class="flex-1 ml-6 space-y-1.5 text-slate-800">
+                        <div class="text-xs font-bold text-slate-900 uppercase tracking-wide">AI 综合测评评语</div>
+                        <p id="aesthetic_desc" class="text-slate-600 text-xs leading-relaxed font-normal">
+                            导入图像后系统将基于三庭五眼、黄金分割比(1.618)、左右两侧对称度及下颌骨结构进行精准综合打分。
+                        </p>
+                    </div>
+                </div>
+
+                <!-- 4 DETAILED METRIC PROGRESS BARS -->
+                <div class="grid grid-cols-2 gap-3 mt-4">
+                    <!-- Metric 1: Symmetry -->
+                    <div class="bg-white/60 p-3 rounded-xl border border-white">
+                        <div class="flex justify-between items-center text-[11px] font-mono text-slate-700 mb-1.5">
+                            <span class="font-bold">面部对称度</span>
+                            <span id="metric_symmetry" class="font-extrabold text-slate-900">--%</span>
+                        </div>
+                        <div class="w-full bg-pink-100 rounded-full h-2 overflow-hidden">
+                            <div id="bar_symmetry" class="bg-gradient-to-r from-pink-500 to-rose-500 h-2 rounded-full transition-all duration-700" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Metric 2: Golden Ratio -->
+                    <div class="bg-white/60 p-3 rounded-xl border border-white">
+                        <div class="flex justify-between items-center text-[11px] font-mono text-slate-700 mb-1.5">
+                            <span class="font-bold">黄金比例(Φ)</span>
+                            <span id="metric_ratio" class="font-extrabold text-slate-900">--%</span>
+                        </div>
+                        <div class="w-full bg-pink-100 rounded-full h-2 overflow-hidden">
+                            <div id="bar_ratio" class="bg-gradient-to-r from-pink-500 to-rose-500 h-2 rounded-full transition-all duration-700" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Metric 3: Features Harmony -->
+                    <div class="bg-white/60 p-3 rounded-xl border border-white">
+                        <div class="flex justify-between items-center text-[11px] font-mono text-slate-700 mb-1.5">
+                            <span class="font-bold">五官协调度</span>
+                            <span id="metric_features" class="font-extrabold text-slate-900">--%</span>
+                        </div>
+                        <div class="w-full bg-pink-100 rounded-full h-2 overflow-hidden">
+                            <div id="bar_features" class="bg-gradient-to-r from-pink-500 to-rose-500 h-2 rounded-full transition-all duration-700" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Metric 4: Jawline Structure -->
+                    <div class="bg-white/60 p-3 rounded-xl border border-white">
+                        <div class="flex justify-between items-center text-[11px] font-mono text-slate-700 mb-1.5">
+                            <span class="font-bold">轮廓折角与下颌</span>
+                            <span id="metric_jaw" class="font-extrabold text-slate-900">--%</span>
+                        </div>
+                        <div class="w-full bg-pink-100 rounded-full h-2 overflow-hidden">
+                            <div id="bar_jaw" class="bg-gradient-to-r from-pink-500 to-rose-500 h-2 rounded-full transition-all duration-700" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Export Action Footer -->
+                <div class="mt-5 pt-3 border-t border-pink-900/10 flex items-center justify-between">
+                    <span class="text-[10px] font-mono text-slate-500">FORMAT: FACE WOW REPORT</span>
+                    <button id="btn_export_card" class="text-xs font-mono font-bold text-pink-600 hover:text-pink-800 flex items-center space-x-1.5 transition-colors bg-pink-50 px-3 py-1.5 rounded-lg border border-pink-200">
+                        <i class="fa-solid fa-download text-pink-500"></i>
+                        <span>导出评分海报</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- GEOMETRIC BREAKDOWN PARAMETER CARD -->
+            <div class="glass-card p-6 rounded-2xl border border-white/10 space-y-4">
+                <h4 class="text-xs font-mono font-bold tracking-widest text-pink-400 uppercase border-b border-white/10 pb-2 flex justify-between items-center">
+                    <span>GEOMETRIC ANALYSIS PARAMETERS</span>
+                    <i class="fa-solid fa-microchip text-pink-500"></i>
+                </h4>
+
+                <div class="space-y-3 text-xs text-zinc-300 font-mono">
+                    <div class="flex justify-between py-1 border-b border-white/5">
+                        <span class="text-zinc-400">长宽纵横比 (Face Aspect Ratio)</span>
+                        <span id="detail_eye_ratio" class="font-bold text-white">--</span>
+                    </div>
+                    <div class="flex justify-between py-1 border-b border-white/5">
+                        <span class="text-zinc-400">三庭比例均等度 (Vertical Thirds)</span>
+                        <span id="detail_thirds" class="font-bold text-white">--</span>
+                    </div>
+                    <div class="flex justify-between py-1 border-b border-white/5">
+                        <span class="text-zinc-400">双眼与鼻尖对称偏差 (Eye-Nose Offset)</span>
+                        <span id="detail_nose_chin" class="font-bold text-white">--</span>
+                    </div>
+                    <div class="flex justify-between py-1 border-b border-white/5">
+                        <span class="text-zinc-400">颧骨与下颌骨比例 (Cheek-Jaw Balance)</span>
+                        <span id="detail_cheek_offset" class="font-bold text-white">--</span>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="w-full border-t border-white/10 py-4 glass-card mt-auto">
+        <div class="max-w-7xl mx-auto px-4 text-center sm:flex sm:justify-between items-center text-xs text-zinc-400 font-mono">
+            <p>© FACE WOW LABS — MEDIAPIPE FACE MESH RATIO SYSTEM</p>
+            <p class="mt-2 sm:mt-0 text-pink-400/80">PURE CLIENT-SIDE COMPUTATION · PRIVACY PROTECTED</p>
+        </div>
+    </footer>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        // Global Application State
+        const state = {
+            webcamActive: false,
+            showMesh: true,
+            cameraStream: null,
+            faceMeshEngine: null,
+            currentImage: null,
+            lastLandmarks: null,
+            animationFrameId: null
+        };
+
+        // UI DOM Element Handles
+        const canvasElement = document.getElementById('output_canvas');
+        const canvasCtx = canvasElement.getContext('2d');
+        const videoElement = document.getElementById('webcam');
+        const placeholderUi = document.getElementById('placeholder_ui');
+        const loadingSpinner = document.getElementById('loading_spinner');
+        const hudControls = document.getElementById('hud_controls');
+        const imageUploadInput = document.getElementById('image_upload');
+        const btnCameraToggle = document.getElementById('btn_camera_toggle');
+        const btnWebcamStart = document.getElementById('btn_webcam_start');
+        const cameraBtnText = document.getElementById('camera_btn_text');
+        const btnToggleMesh = document.getElementById('btn_toggle_mesh');
+        const meshBtnLabel = document.getElementById('mesh_btn_label');
+        const btnExportCard = document.getElementById('btn_export_card');
+
+        // Day / Night Theme Toggle
+        const btnTheme = document.getElementById('btn_theme');
+        const themeIcon = document.getElementById('theme_icon');
+        const rootEl = document.documentElement;
+
+        function applyTheme(isLight) {
+            rootEl.classList.toggle('light', isLight);
+            themeIcon.className = isLight ? 'fa-solid fa-moon' : 'fa-solid fa-sun';
+        }
+
+        applyTheme(rootEl.classList.contains('light'));
+
+        btnTheme.addEventListener('click', () => {
+            const isLight = !rootEl.classList.contains('light');
+            applyTheme(isLight);
+            localStorage.setItem('judge-theme', isLight ? 'light' : 'dark');
+        });
+
+        // Analytics UI Handles
+        const scoreNumberEl = document.getElementById('score_number');
+        const scoreCircleEl = document.getElementById('score_circle');
+        const aestheticTitleEl = document.getElementById('aesthetic_title');
+        const aestheticDescEl = document.getElementById('aesthetic_desc');
+        const vibeTagEl = document.getElementById('vibe_tag');
+
+        // Progress Metric Bars
+        const metricSymmetry = document.getElementById('metric_symmetry');
+        const barSymmetry = document.getElementById('bar_symmetry');
+        const metricRatio = document.getElementById('metric_ratio');
+        const barRatio = document.getElementById('bar_ratio');
+        const metricFeatures = document.getElementById('metric_features');
+        const barFeatures = document.getElementById('bar_features');
+        const metricJaw = document.getElementById('metric_jaw');
+        const barJaw = document.getElementById('bar_jaw');
+
+        // Detail Text Elements
+        const detailEyeRatio = document.getElementById('detail_eye_ratio');
+        const detailThirds = document.getElementById('detail_thirds');
+        const detailNoseChin = document.getElementById('detail_nose_chin');
+        const detailCheekOffset = document.getElementById('detail_cheek_offset');
+
+        // Flattering Titles and Vibe Tags Array
+        const AESTHETIC_TITLES = [
+            { min: 92, tag: "绝世颜霸", title: "黄金比例惊艳脸", desc: "符合极其严苛的斐波那契三庭五眼黄金切割比例，面部对称度近乎完美，具有极高的视觉冲击力与镜头感。" },
+            { min: 85, tag: "高级感电影脸", title: "高质感骨相名颜", desc: "骨骼线条清晰而富有张力，五官比例均衡流畅，在不同灯光与视角下均展现出极佳的审美质感。" },
+            { min: 78, tag: "氛围感帅哥/甜妹", title: "精致耐看型颜系", desc: "五官分布匀称，面部轮廓柔和且具亲和力，整体舒展协调，极其符合现代流行审美需求。" },
+            { min: 70, tag: "自然清新风", title: "舒展标致风貌", desc: "面部特征具个性辨识度，结构自然真实，整体轮廓与五官具有独特的个人风格魅力。" },
+            { min: 0,  tag: "独特个性风骨", title: "辨识度风骨颜", desc: "面部轮廓独特且富有辨识度，五官组合独具一格，蕴含极高的个性表达。" }
+        ];
+
+        // Initialize MediaPipe FaceMesh Engine
+        function initFaceMesh() {
+            const faceMesh = new FaceMesh({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+            });
+
+            faceMesh.setOptions({
+                maxNumFaces: 1,
+                refineLandmarks: true,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+
+            faceMesh.onResults(onMeshResults);
+            state.faceMeshEngine = faceMesh;
+        }
+
+        // Process FaceMesh Detection Results
+        function onMeshResults(results) {
+            loadingSpinner.classList.add('hidden');
+
+            const width = results.image.width || canvasElement.width;
+            const height = results.image.height || canvasElement.height;
+
+            if (canvasElement.width !== width || canvasElement.height !== height) {
+                canvasElement.width = width;
+                canvasElement.height = height;
+            }
+
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+            if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+                placeholderUi.classList.add('hidden');
+                hudControls.classList.remove('hidden');
+
+                const landmarks = results.multiFaceLandmarks[0];
+                state.lastLandmarks = landmarks;
+
+                // 1. Draw Mesh Overlay if enabled
+                if (state.showMesh) {
+                    drawSwissFaceMesh(canvasCtx, landmarks, width, height);
+                }
+
+                // 2. Compute Beauty Metrics
+                analyzeFacialLandmarks(landmarks);
+
+            } else {
+                if (!state.webcamActive) {
+                    placeholderUi.classList.remove('hidden');
+                }
+            }
+            canvasCtx.restore();
+        }
+
+        // Draw Custom Swiss Style Landmarks Overlay on Canvas
+        function drawSwissFaceMesh(ctx, landmarks, w, h) {
+            // Draw Tesselation Mesh in Glowing Soft Pink
+            drawConnectors(ctx, landmarks, FACEMESH_TESSELATION, { color: 'rgba(255, 45, 117, 0.22)', lineWidth: 0.7 });
+            drawConnectors(ctx, landmarks, FACEMESH_RIGHT_EYE, { color: '#ff2d75', lineWidth: 1.5 });
+            drawConnectors(ctx, landmarks, FACEMESH_LEFT_EYE, { color: '#ff2d75', lineWidth: 1.5 });
+            drawConnectors(ctx, landmarks, FACEMESH_LIPS, { color: '#ffffff', lineWidth: 1.5 });
+            drawConnectors(ctx, landmarks, FACEMESH_FACE_OVAL, { color: 'rgba(255, 255, 255, 0.7)', lineWidth: 1.2 });
+
+            // Highlight Golden Key Points with Swiss Crosshairs
+            const keyPoints = [1, 33, 263, 61, 291, 199, 10]; // Nose, eyes, lips, chin, forehead
+            keyPoints.forEach(idx => {
+                const pt = landmarks[idx];
+                const x = pt.x * w;
+                const y = pt.y * h;
+
+                ctx.strokeStyle = '#ff2d75';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.arc(x, y, 3, 0, 2 * Math.PI);
+                ctx.stroke();
+
+                // Crosshair accent
+                ctx.beginPath();
+                ctx.moveTo(x - 4, y); ctx.lineTo(x + 4, y);
+                ctx.moveTo(x, y - 4); ctx.lineTo(x, y + 4);
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+                ctx.stroke();
+            });
+        }
+
+        // Math & Geometry Calculation Algorithm
+        function analyzeFacialLandmarks(lm) {
+            const dist = (p1, p2) => Math.hypot(p1.x - p2.x, p1.y - p2.y, (p1.z || 0) - (p2.z || 0));
+
+            // 1. SYMMETRY ANALYSIS
+            const leftEyeNose = dist(lm[33], lm[1]);
+            const rightEyeNose = dist(lm[263], lm[1]);
+            const eyeSymmetry = 1 - Math.min(Math.abs(leftEyeNose - rightEyeNose) / ((leftEyeNose + rightEyeNose)/2), 1);
+
+            const leftCheekNose = dist(lm[234], lm[1]);
+            const rightCheekNose = dist(lm[454], lm[1]);
+            const cheekSymmetry = 1 - Math.min(Math.abs(leftCheekNose - rightCheekNose) / ((leftCheekNose + rightCheekNose)/2), 1);
+
+            const symmetryScore = Math.round(((eyeSymmetry * 0.6) + (cheekSymmetry * 0.4)) * 100);
+
+            // 2. GOLDEN RATIO (1.618)
+            const faceHeight = dist(lm[10], lm[152]);
+            const faceWidth = dist(lm[234], lm[454]);
+            const actualRatio = faceHeight / (faceWidth || 1);
+            const targetRatio = 1.618;
+            const ratioDiff = Math.abs(actualRatio - targetRatio);
+            const ratioScore = Math.max(0, Math.round(100 - (ratioDiff / targetRatio) * 110));
+
+            // Vertical Thirds Analysis
+            const upperThird = dist(lm[10], lm[9]);
+            const middleThird = dist(lm[9], lm[1]);
+            const lowerThird = dist(lm[1], lm[152]);
+            const avgThird = (upperThird + middleThird + lowerThird) / 3;
+            const thirdsVariance = (Math.abs(upperThird - avgThird) + Math.abs(middleThird - avgThird) + Math.abs(lowerThird - avgThird)) / avgThird;
+
+            // 3. FEATURE HARMONY
+            const interEyeDist = dist(lm[133], lm[362]);
+            const mouthWidth = dist(lm[61], lm[291]);
+            const mouthEyeRatio = mouthWidth / (interEyeDist || 1);
+            const featureBalanceScore = Math.max(0, Math.round(100 - Math.abs(mouthEyeRatio - 1.42) * 55));
+
+            // 4. JAWLINE STRUCTURE
+            const jawWidth = dist(lm[172], lm[397]);
+            const jawToCheekRatio = jawWidth / (faceWidth || 1);
+            const jawScore = Math.max(0, Math.round(100 - Math.abs(jawToCheekRatio - 0.72) * 95));
+
+            // Weighted Total Score Computation
+            const totalScore = Math.min(99, Math.max(62, Math.round(
+                (symmetryScore * 0.3) +
+                (ratioScore * 0.25) +
+                (featureBalanceScore * 0.25) +
+                (jawScore * 0.2)
+            )));
+
+            updateResultsUI({
+                totalScore,
+                symmetryScore,
+                ratioScore,
+                featureBalanceScore,
+                jawScore,
+                actualRatio: actualRatio.toFixed(2),
+                thirdsVariance: (thirdsVariance * 100).toFixed(1) + "%",
+                eyeNoseDiff: (Math.abs(leftEyeNose - rightEyeNose) * 100).toFixed(2),
+                cheekJawRatio: jawToCheekRatio.toFixed(2)
+            });
+        }
+
+        // Render UI Results & Animate Counters
+        function updateResultsUI(data) {
+            animateCounter(scoreNumberEl, parseInt(scoreNumberEl.innerText) || 0, data.totalScore, 800);
+
+            // Progress Circle offset
+            const circumference = 2 * Math.PI * 38;
+            const offset = circumference - (data.totalScore / 100) * circumference;
+            scoreCircleEl.style.strokeDashoffset = offset;
+
+            // Rating Title & Vibe Tag
+            const titleObj = AESTHETIC_TITLES.find(item => data.totalScore >= item.min) || AESTHETIC_TITLES[AESTHETIC_TITLES.length - 1];
+            aestheticTitleEl.innerText = titleObj.title;
+            aestheticDescEl.innerText = titleObj.desc;
+            vibeTagEl.innerText = titleObj.tag;
+
+            // Metric Bars
+            metricSymmetry.innerText = `${data.symmetryScore}%`;
+            barSymmetry.style.width = `${data.symmetryScore}%`;
+
+            metricRatio.innerText = `${data.ratioScore}%`;
+            barRatio.style.width = `${data.ratioScore}%`;
+
+            metricFeatures.innerText = `${data.featureBalanceScore}%`;
+            barFeatures.style.width = `${data.featureBalanceScore}%`;
+
+            metricJaw.innerText = `${data.jawScore}%`;
+            barJaw.style.width = `${data.jawScore}%`;
+
+            // Detailed Parameters
+            detailEyeRatio.innerText = `1 : ${data.actualRatio}`;
+            detailThirds.innerText = `三庭离散度 ${data.thirdsVariance}`;
+            detailNoseChin.innerText = `对称偏差 ${data.eyeNoseDiff} pt`;
+            detailCheekOffset.innerText = `比例系数 ${data.cheekJawRatio}`;
+        }
+
+        // Number animation function
+        function animateCounter(element, start, end, duration) {
+            let startTimestamp = null;
+            const step = (timestamp) => {
+                if (!startTimestamp) startTimestamp = timestamp;
+                const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+                element.innerText = Math.floor(progress * (end - start) + start).toString().padStart(2, '0');
+                if (progress < 1) {
+                    window.requestAnimationFrame(step);
+                }
+            };
+            window.requestAnimationFrame(step);
+        }
+
+        // Camera Operations
+        async function startCamera() {
+            try {
+                loadingSpinner.classList.remove('hidden');
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" }
+                });
+                state.cameraStream = stream;
+                videoElement.srcObject = stream;
+                await videoElement.play();
+
+                state.webcamActive = true;
+                cameraBtnText.innerText = "关闭摄像头";
+                btnCameraToggle.classList.replace('bg-pink-500', 'bg-zinc-800');
+
+                async function processVideoFrame() {
+                    if (state.webcamActive) {
+                        await state.faceMeshEngine.send({ image: videoElement });
+                        state.animationFrameId = requestAnimationFrame(processVideoFrame);
+                    }
+                }
+                processVideoFrame();
+
+            } catch (err) {
+                loadingSpinner.classList.add('hidden');
+                alert("无法开启摄像头，请检查权限设置: " + err.message);
+            }
+        }
+
+        function stopCamera() {
+            state.webcamActive = false;
+            if (state.animationFrameId) cancelAnimationFrame(state.animationFrameId);
+            if (state.cameraStream) {
+                state.cameraStream.getTracks().forEach(track => track.stop());
+                state.cameraStream = null;
+            }
+            cameraBtnText.innerText = "开启摄像头";
+            btnCameraToggle.classList.replace('bg-zinc-800', 'bg-pink-500');
+            placeholderUi.classList.remove('hidden');
+            hudControls.classList.add('hidden');
+        }
+
+        // Event Listeners
+        btnCameraToggle.addEventListener('click', () => {
+            if (state.webcamActive) stopCamera();
+            else startCamera();
+        });
+
+        btnWebcamStart.addEventListener('click', () => {
+            if (!state.webcamActive) startCamera();
+        });
+
+        btnToggleMesh.addEventListener('click', () => {
+            state.showMesh = !state.showMesh;
+            meshBtnLabel.innerText = state.showMesh ? "网格: ON" : "网格: OFF";
+            if (!state.webcamActive && state.currentImage) {
+                state.faceMeshEngine.send({ image: state.currentImage });
+            }
+        });
+
+        // Image File Upload Handler
+        imageUploadInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            if (state.webcamActive) stopCamera();
+
+            loadingSpinner.classList.remove('hidden');
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const img = new Image();
+                img.onload = async () => {
+                    state.currentImage = img;
+                    canvasElement.width = img.width;
+                    canvasElement.height = img.height;
+                    await state.faceMeshEngine.send({ image: img });
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // Export Score Card Poster
+        btnExportCard.addEventListener('click', () => {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = 800;
+            tempCanvas.height = 1050;
+            const ctx = tempCanvas.getContext('2d');
+
+            // Canvas Dark Background
+            ctx.fillStyle = '#0b0914';
+            ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+            // Swiss Header Banner
+            ctx.fillStyle = '#ff2d75';
+            ctx.fillRect(40, 40, 150, 38);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 18px Inter, sans-serif';
+            ctx.fillText('FACE WOW', 55, 65);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 24px Inter, sans-serif';
+            ctx.fillText('AESTHETIC MATRIX REPORT', 210, 67);
+
+            // Render Processed Face
+            if (canvasElement.width > 0) {
+                ctx.drawImage(canvasElement, 40, 110, 720, 540);
+            }
+
+            // Glass Poster Box
+            ctx.fillStyle = 'rgba(255, 240, 246, 0.95)';
+            ctx.roundRect(40, 680, 720, 310, 20);
+            ctx.fill();
+
+            // Rating Texts
+            ctx.fillStyle = '#0f172a';
+            ctx.font = '900 64px Inter, sans-serif';
+            ctx.fillText(scoreNumberEl.innerText, 70, 770);
+
+            ctx.font = 'bold 18px Inter, sans-serif';
+            ctx.fillText('/ 100 POINTS', 160, 745);
+
+            ctx.fillStyle = '#ff2d75';
+            ctx.font = 'bold 26px Inter, sans-serif';
+            ctx.fillText(`${aestheticTitleEl.innerText} (${vibeTagEl.innerText})`, 70, 815);
+
+            ctx.fillStyle = '#334155';
+            ctx.font = '14px Inter, sans-serif';
+            ctx.fillText(`对称度: ${metricSymmetry.innerText}  |  黄金比例: ${metricRatio.innerText}  |  五官协调: ${metricFeatures.innerText}`, 70, 860);
+            ctx.fillText('Powered by MediaPipe 468-Point Facial Landmark Engine', 70, 920);
+
+            // Download Image Trigger
+            const link = document.createElement('a');
+            link.download = `FaceWOW-Facial-Report-${Date.now()}.png`;
+            link.href = tempCanvas.toDataURL('image/png');
+            link.click();
+        });
+
+        // Initialize on Window Load
+        window.addEventListener('load', () => {
+            initFaceMesh();
+        });
+    </script>
+</body>
+</html>
