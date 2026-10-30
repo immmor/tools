@@ -387,10 +387,12 @@
             #categoryBar .sort-label { display: none; }
             #categoryBar .sort-toggle { display: flex; }
             #categoryBar .sort-grid { display: none; flex: 0 0 auto; }
-            /* 展开后向下弹出，而不是在分类条里向右延伸 */
-            #categoryBar .sort-grid.open {
-                display: flex;
-                flex-direction: column;
+            #categoryBar .sort-btn { padding: 6px 10px; }
+            /* 小屏去掉 hover 凸显/抽卡效果 */
+            #categoryBar .tab-btn:hover { transform: none; box-shadow: none; border-color: #e5e5e5; }
+
+            /* 排序浮层：贴着「排序」按钮下方弹出 */
+            #sortPanel {
                 position: fixed;
                 z-index: 40;
                 min-width: 7rem;
@@ -399,11 +401,19 @@
                 border: 1px solid #e5e5e5;
                 box-shadow: 0 12px 30px -14px rgba(0,0,0,.35);
             }
-            #categoryBar .sort-grid.open .sort-btn { width: 100%; }
-            #categoryBar .sort-btn { padding: 6px 10px; }
-            /* 小屏去掉 hover 凸显/抽卡效果 */
-            #categoryBar .tab-btn:hover { transform: none; box-shadow: none; border-color: #e5e5e5; }
+            #sortPanel.open { display: flex; flex-direction: column; gap: 0.35rem; }
+            #sortPanel .sort-btn {
+                display: flex;
+                width: 100%;
+                justify-content: center;
+                align-items: center;
+                padding: 6px 0;
+            }
+            #sortPanel .sort-btn:hover { transform: none; box-shadow: none; }
         }
+
+        /* 小屏排序面板：桌面隐藏，小屏点「排序」后在分类条下方展开 */
+        #sortPanel { display: none; }
 
         /* 左侧通知走马灯（桌面竖向滚动，小屏转顶部横向） */
         #noticeBar {
@@ -631,6 +641,9 @@
     </aside>
 
     <aside id="categoryBar" class="flex flex-col gap-2"></aside>
+
+    <!-- 小屏排序下拉：放在分类条外，避免滚动容器内 fixed 定位失效 -->
+    <div id="sortPanel"></div>
 
     <main class="grid-broken pb-10">
         <div id="gridLoading" class="grid-loading">
@@ -1017,17 +1030,23 @@
             const ids = Object.keys(counts).map(Number).sort((a, b) => a - b);
             const cats = [{ id: 0, name: '全部' }]
                 .concat(ids.map(id => ({ id, name: CATEGORY_NAMES[id] || ('分类 ' + id) })));
+            const sortBtns = SORTS.map(s =>
+                `<button class="tab-btn sort-btn ${s.id === sortMode ? 'active' : ''}" data-sort="${s.id}">${s.name}</button>`
+            ).join('');
             bar.innerHTML = `
                 <div class="sort-label">排序</div>
                 <button class="tab-btn sort-toggle ${sortOpen ? 'open' : ''}" id="sortToggle">排序<span class="caret">▾</span></button>
-                <div class="sort-grid ${sortOpen ? 'open' : ''}">
-                    ${SORTS.map(s => `<button class="tab-btn sort-btn ${s.id === sortMode ? 'active' : ''}" data-sort="${s.id}">${s.name}</button>`).join('')}
-                </div>
+                <div class="sort-grid">${sortBtns}</div>
             ` + cats.map(c => `
                 <button class="tab-btn ${c.id === currentCategory ? 'active' : ''}" data-cat="${c.id}">
                     ${c.name} <span class="opacity-50">${c.id === 0 ? pool.length : counts[c.id]}</span>
                 </button>
             `).join('');
+
+            const panel = document.getElementById('sortPanel');
+            panel.innerHTML = sortBtns;
+            panel.classList.toggle('open', sortOpen);
+
             bar.querySelector('#sortToggle').addEventListener('click', () => setSortOpen(!sortOpen));
             bar.querySelectorAll('[data-cat]').forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -1037,7 +1056,7 @@
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                 });
             });
-            bar.querySelectorAll('[data-sort]').forEach(btn => {
+            panel.querySelectorAll('[data-sort]').forEach(btn => {
                 btn.addEventListener('click', () => {
                     sortMode = btn.dataset.sort;
                     sortOpen = false;
@@ -1045,27 +1064,27 @@
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                 });
             });
-            if (sortOpen) setSortOpen(true);   // 重建后重新定位下拉面板
+            if (sortOpen) setSortOpen(true);   // 重建后重新贴到按钮下方
         }
 
-        // 小屏排序下拉：fixed 定位到按钮下方，避免被分类条的横向滚动容器裁掉
+        // 小屏排序浮层：面板在分类条外，fixed 定位不会受滚动容器影响
         function setSortOpen(open) {
             sortOpen = open;
-            const bar = document.getElementById('categoryBar');
-            const toggle = bar.querySelector('#sortToggle');
-            const grid = bar.querySelector('.sort-grid');
-            if (!toggle || !grid) return;
+            const toggle = document.getElementById('sortToggle');
+            const panel = document.getElementById('sortPanel');
             toggle.classList.toggle('open', open);
-            grid.classList.toggle('open', open);
+            panel.classList.toggle('open', open);
             if (!open) return;
             const r = toggle.getBoundingClientRect();
             const below = r.bottom + 6;
-            grid.style.top = (below + grid.offsetHeight > window.innerHeight ? Math.max(8, r.top - grid.offsetHeight - 6) : below) + 'px';
-            grid.style.left = r.left + 'px';
+            panel.style.left = r.left + 'px';
+            panel.style.top = (below + panel.offsetHeight > window.innerHeight
+                ? Math.max(8, r.top - panel.offsetHeight - 6)
+                : below) + 'px';
         }
         window.addEventListener('scroll', () => { if (sortOpen) setSortOpen(false); }, { passive: true });
         document.addEventListener('click', (e) => {
-            if (sortOpen && !e.target.closest('#categoryBar')) setSortOpen(false);
+            if (sortOpen && !e.target.closest('#categoryBar') && !e.target.closest('#sortPanel')) setSortOpen(false);
         });
 
         document.getElementById('tabSell').addEventListener('click', () => {
