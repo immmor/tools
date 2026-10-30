@@ -242,6 +242,8 @@
             display: block;
             transition: transform 0.5s cubic-bezier(0.2,0.8,0.2,1);
         }
+        /* X 的图标自带留白，放大一点让视觉大小和其它分类一致 */
+        .card-thumb img[src*="x.webp"] { transform: scale(1.2); }
         .card-content {
             flex: 1;
             min-width: 0;
@@ -314,7 +316,7 @@
             padding-left: 1.5rem;    /* 留出抽卡左移空间 */
             z-index: 10;
         }
-        #categoryBar .tab-btn { display: flex; width: 100%; justify-content: space-between; gap: 0.4rem; }
+        #categoryBar .tab-btn { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 0.4rem; }
         /* 移动端：去掉双击缩放延迟，并阻止滚动容器吞掉点击 */
         #categoryBar .tab-btn { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
         /* 抽卡效果：hover 时分类条从右向左滑出并凸显 */
@@ -327,6 +329,32 @@
             border-color: #1a1a1a;
             box-shadow: -14px 6px 24px -8px rgba(0,0,0,.35);
         }
+
+        /* 分类侧栏顶部的排序区 */
+        #categoryBar .sort-label {
+            font-size: 10px;
+            letter-spacing: 0.1em;
+            color: #9ca3af;
+            padding-left: 2px;
+        }
+        #categoryBar .sort-toggle {
+            display: none;              /* 仅小屏显示，点击展开排序项 */
+            justify-content: center;
+            align-items: center;
+        }
+        #categoryBar .sort-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.35rem;
+        }
+        #categoryBar .sort-btn {
+            justify-content: center;
+            align-items: center;
+            padding: 6px 0;
+            letter-spacing: 0.04em;
+            line-height: 1.2;
+        }
+        #categoryBar .sort-btn:hover { transform: none; box-shadow: none; }
 
         /* 细滚动条：默认隐藏，hover 时才显出，避免一直挂着 */
         #categoryBar::-webkit-scrollbar { height: 6px; width: 6px; }
@@ -352,6 +380,24 @@
                 scrollbar-width: thin;
             }
             #categoryBar .tab-btn { width: auto; flex: 0 0 auto; }
+            /* 小屏：排序区默认折叠成一个按钮，点开再横向展开 */
+            #categoryBar .sort-label { display: none; }
+            #categoryBar .sort-toggle { display: flex; }
+            #categoryBar .sort-grid { display: none; flex: 0 0 auto; }
+            /* 展开后向下弹出，而不是在分类条里向右延伸 */
+            #categoryBar .sort-grid.open {
+                display: flex;
+                flex-direction: column;
+                position: fixed;
+                z-index: 40;
+                min-width: 7rem;
+                padding: 4px;
+                background: #fff;
+                border: 1px solid #e5e5e5;
+                box-shadow: 0 12px 30px -14px rgba(0,0,0,.35);
+            }
+            #categoryBar .sort-grid.open .sort-btn { width: 100%; }
+            #categoryBar .sort-btn { padding: 6px 10px; }
             /* 小屏去掉 hover 凸显/抽卡效果 */
             #categoryBar .tab-btn:hover { transform: none; box-shadow: none; border-color: #e5e5e5; }
         }
@@ -557,8 +603,9 @@
         <h2 class="text-4xl font-light leading-tight mb-6">
             卖各种<b>好用</b>的账号。
         </h2>
-        <div class="flex gap-2">
-            <button class="tab-btn active" id="tabSell">出售</button>
+        <!-- 出售/求购切换暂时隐藏（含占位），恢复时去掉外层和按钮上的 hidden 即可 -->
+        <div class="flex gap-2" style="display:none">
+            <button class="tab-btn active hidden" id="tabSell">出售</button>
             <button class="tab-btn hidden" id="tabBuy">求购</button>
         </div>
     </div>
@@ -603,9 +650,9 @@
             </form>
             <form id="registerForm" style="display:none;">
                 <input type="email" id="regEmail" placeholder="邮箱" class="w-full mb-4 px-4 py-2 border border-gray-200 text-sm focus:outline-none focus:border-black" required>
-                <div class="flex gap-2 mb-4">
-                    <input type="text" id="regCode" placeholder="验证码" maxlength="6" class="flex-1 px-4 py-2 border border-gray-200 text-sm focus:outline-none focus:border-black" required>
-                    <button type="button" id="sendCodeBtn" class="shrink-0 bg-black text-white px-3 text-sm font-bold hover:bg-gray-800 disabled:opacity-50">获取</button>
+                <div class="flex gap-2 mb-4 w-full">
+                    <input type="text" id="regCode" placeholder="验证码" maxlength="6" class="flex-1 min-w-0 px-4 py-2 border border-gray-200 text-sm focus:outline-none focus:border-black" required>
+                    <button type="button" id="sendCodeBtn" class="shrink-0 w-[3.25rem] px-0 py-2 border border-black bg-black text-white text-sm font-bold hover:bg-gray-800 disabled:opacity-50">获取</button>
                 </div>
                 <input type="password" id="regPassword" placeholder="密码" class="w-full mb-6 px-4 py-2 border border-gray-200 text-sm focus:outline-none focus:border-black" required>
                 <button type="submit" class="w-full bg-black text-white py-2 text-sm font-bold hover:bg-gray-800 transition-colors">注册</button>
@@ -682,6 +729,8 @@
         let allMarketAccounts = [];
         let currentTab = 'sell';
         let currentCategory = 0;   // 0 = 全部
+        let sortMode = 'default';  // 排序方式：default / priceAsc / priceDesc / stockDesc
+        let sortOpen = false;      // 小屏排序区是否展开
         let renderList = [];       // 当前筛选后的完整结果
         let visibleCount = 0;      // 已渲染条数
         let renderedCount = 0;     // 已追加到 DOM 的条数（用于动画延迟）
@@ -695,7 +744,7 @@
             5: 'Gmail',
             7: 'Others',
             9: 'Facebook',
-            11: 'Twitter/X',
+            11: 'X',
             12: 'Instagram',
             13: 'Linkedin',
             14: 'TikTok',
@@ -703,23 +752,44 @@
             19: 'Telegram',
             26: 'Discord',
             28: 'Outlook',
-            29: 'Twitter',
+            29: 'X',
             31: 'Amazon',
             32: '音视频',
             34: 'Threads'
         };
 
-        // 综合「出售/求购 + 搜索 + 分类」过滤后渲染
+        // 关键词命中判断（无关键词视为全部命中）
+        function matchKeyword(acc, keyword) {
+            if (!keyword) return true;
+            return (acc.name + ' ' + (acc.origName || '')).toLowerCase().includes(keyword)
+                || acc.description.toLowerCase().includes(keyword);
+        }
+
+        // 排序方式（默认保持接口顺序）
+        const SORTS = [
+            { id: 'default', name: '默认' },
+            { id: 'priceAsc', name: '价格 ↑' },
+            { id: 'priceDesc', name: '价格 ↓' },
+            { id: 'stockDesc', name: '库存 ↓' }
+        ];
+        const priceOf = acc => parseFloat(String(acc.price).replace('¥', '')) || 0;
+        const SORTERS = {
+            priceAsc: (a, b) => priceOf(a) - priceOf(b),
+            priceDesc: (a, b) => priceOf(b) - priceOf(a),
+            stockDesc: (a, b) => (Number(b.stock) || 0) - (Number(a.stock) || 0)
+        };
+
+        // 综合「出售/求购 + 搜索 + 分类」过滤后渲染（搜索与分类叠加）
         function applyFilter() {
             const rawKw = document.getElementById('searchInput').value.trim();
             const keyword = rawKw.toLowerCase();
-            // 有搜索词时全局检索（忽略当前分类）；无搜索词时按分类筛选
             const match = acc =>
-                (keyword === '' ? (currentCategory === 0 || acc.category === currentCategory) : true) &&
-                (acc.name.toLowerCase().includes(keyword) || acc.description.toLowerCase().includes(keyword));
+                (currentCategory === 0 || acc.category === currentCategory) && matchKeyword(acc, keyword);
             renderList = (currentTab === 'sell' ? allAccounts : allMarketAccounts).filter(match);
+            if (SORTERS[sortMode]) renderList.sort(SORTERS[sortMode]);
             visibleCount = RENDER_LIMIT;   // 每次筛选从头加载前 N 条
             renderFirst();
+            renderCategories();           // 分类栏数量跟随搜索结果
             // 输入框右侧显示结果数与关闭按钮
             const meta = document.getElementById('searchMeta');
             if (rawKw) {
@@ -755,7 +825,7 @@
                 const div = document.createElement('div');
                 const inner = currentTab === 'sell' ? `
                     <div class="item-card" style="animation: cardIn 0.5s cubic-bezier(0.2,0.8,0.2,1) both; animation-delay: ${j * 0.03}s;">
-                        <div class="card-thumb">${acc.cover ? '<img src="./logo-square.svg" alt="" loading="lazy" data-base="' + acc.cover.slice(0,-4) + '">' : '<img src="./logo-square.svg" alt="" loading="lazy">'}</div>
+                        <div class="card-thumb">${acc.cover ? '<img src="./logo-square.svg" alt="" loading="lazy" data-base="' + acc.cover + '">' : '<img src="./logo-square.svg" alt="" loading="lazy">'}</div>
                         <div class="card-content">
                             <h3 class="text-base font-bold mb-1 line-clamp-2">${acc.name}</h3>
                             <p class="text-xs text-gray-400 mb-2 leading-relaxed line-clamp-2">${acc.description}</p>
@@ -769,7 +839,7 @@
                         </div>
                     </div>` : `
                     <div class="market-card" style="animation: cardIn 0.5s cubic-bezier(0.2,0.8,0.2,1) both; animation-delay: ${j * 0.03}s;">
-                        <div class="card-thumb">${acc.cover ? '<img src="./logo-square.svg" alt="" loading="lazy" data-base="' + acc.cover.slice(0,-4) + '">' : '<img src="./logo-square.svg" alt="" loading="lazy">'}</div>
+                        <div class="card-thumb">${acc.cover ? '<img src="./logo-square.svg" alt="" loading="lazy" data-base="' + acc.cover + '">' : '<img src="./logo-square.svg" alt="" loading="lazy">'}</div>
                         <div class="card-content">
                             <h3 class="text-base font-bold mb-1 line-clamp-2">${acc.name}</h3>
                             <p class="text-xs text-gray-400 mb-2 leading-relaxed line-clamp-2">${acc.description}</p>
@@ -904,15 +974,17 @@
                     .filter(item => String(item.stock).trim() !== '0')   // 隐藏库存为 0 的商品
                     .map(item => ({
                         id: item.id,
-                        name: item.name,
+                        name: String(item.name || '').replace(/twitter/gi, 'X'),   // 标题里的 Twitter 统一显示为 X
+                        origName: item.name,      // 保留原始名用于搜索
                         category: item.category_id,
                         price: '¥' + markupPrice(item.price).toFixed(2),
-                        cover: 'talangya/static/category_' + item.category_id + '.png',
+                        cover: [11, 29].includes(Number(item.category_id))
+                            ? 'talangya/static/x.webp'
+                            : 'talangya/static/category_' + item.category_id + '.png',
                         description: '',        // 真实数据无描述字段，留空
                         stock: item.stock
                     }));
                 allAccounts = list;
-                renderCategories();
                 applyFilter();
                 dataReady = true;
                 tryHideLoader();
@@ -931,30 +1003,67 @@
         // 求购（市场）暂无真实数据源，保持为空
         allMarketAccounts = [];
 
-        // 分类筛选栏
+        // 分类筛选栏：数量按「当前搜索词」统计，分类内再筛选
         function renderCategories() {
             const bar = document.getElementById('categoryBar');
-            const kw = document.getElementById('searchInput').value.trim();
-            const activeCat = kw ? 0 : currentCategory;   // 搜索全局时高亮「全部」，选中分类状态保留
+            const keyword = document.getElementById('searchInput').value.trim().toLowerCase();
+            const source = currentTab === 'sell' ? allAccounts : allMarketAccounts;
+            const pool = source.filter(a => matchKeyword(a, keyword));
             const counts = {};
-            allAccounts.forEach(a => { counts[a.category] = (counts[a.category] || 0) + 1; });
+            pool.forEach(a => { counts[a.category] = (counts[a.category] || 0) + 1; });
             const ids = Object.keys(counts).map(Number).sort((a, b) => a - b);
             const cats = [{ id: 0, name: '全部' }]
                 .concat(ids.map(id => ({ id, name: CATEGORY_NAMES[id] || ('分类 ' + id) })));
-            bar.innerHTML = cats.map(c => `
-                <button class="tab-btn ${c.id === activeCat ? 'active' : ''}" data-cat="${c.id}">
-                    ${c.name} <span class="opacity-50">${c.id === 0 ? allAccounts.length : counts[c.id]}</span>
+            bar.innerHTML = `
+                <div class="sort-label">排序</div>
+                <button class="tab-btn sort-toggle" id="sortToggle">排序 ${sortOpen ? '▴' : '▾'}</button>
+                <div class="sort-grid ${sortOpen ? 'open' : ''}">
+                    ${SORTS.map(s => `<button class="tab-btn sort-btn ${s.id === sortMode ? 'active' : ''}" data-sort="${s.id}">${s.name}</button>`).join('')}
+                </div>
+            ` + cats.map(c => `
+                <button class="tab-btn ${c.id === currentCategory ? 'active' : ''}" data-cat="${c.id}">
+                    ${c.name} <span class="opacity-50">${c.id === 0 ? pool.length : counts[c.id]}</span>
                 </button>
             `).join('');
-            bar.querySelectorAll('.tab-btn').forEach(btn => {
+            bar.querySelector('#sortToggle').addEventListener('click', () => setSortOpen(!sortOpen));
+            bar.querySelectorAll('[data-cat]').forEach(btn => {
                 btn.addEventListener('click', () => {
                     currentCategory = Number(btn.dataset.cat);
-                    renderCategories();
+                    sortOpen = false;
                     applyFilter();
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                 });
             });
+            bar.querySelectorAll('[data-sort]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    sortMode = btn.dataset.sort;
+                    sortOpen = false;
+                    applyFilter();
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                });
+            });
+            if (sortOpen) setSortOpen(true);   // 重建后重新定位下拉面板
         }
+
+        // 小屏排序下拉：fixed 定位到按钮下方，避免被分类条的横向滚动容器裁掉
+        function setSortOpen(open) {
+            sortOpen = open;
+            const bar = document.getElementById('categoryBar');
+            const toggle = bar.querySelector('#sortToggle');
+            const grid = bar.querySelector('.sort-grid');
+            if (!toggle || !grid) return;
+            toggle.textContent = '排序 ' + (open ? '▴' : '▾');
+            grid.classList.toggle('open', open);
+            if (!open) return;
+            const r = toggle.getBoundingClientRect();
+            const below = r.bottom + 6;
+            grid.style.top = (below + grid.offsetHeight > window.innerHeight ? Math.max(8, r.top - grid.offsetHeight - 6) : below) + 'px';
+            grid.style.left = r.left + 'px';
+        }
+        window.addEventListener('scroll', () => { if (sortOpen) setSortOpen(false); }, { passive: true });
+        document.addEventListener('click', (e) => {
+            if (sortOpen && !e.target.closest('#categoryBar')) setSortOpen(false);
+        });
 
         document.getElementById('tabSell').addEventListener('click', () => {
             currentTab = 'sell';
@@ -977,7 +1086,7 @@
         document.getElementById('searchInput').addEventListener('input', () => {
             clearTimeout(searchTimer);
             searchTimer = setTimeout(() => {
-                renderCategories();   // 刷新分类栏高亮（搜索时显示「全部」）
+                currentCategory = 0;   // 输入新词时先全局搜索，可再点分类收窄
                 window.scrollTo({ top: 0, behavior: 'auto' });
                 applyFilter();
             }, 250);
@@ -987,19 +1096,20 @@
         document.getElementById('searchClear').addEventListener('click', () => {
             const input = document.getElementById('searchInput');
             input.value = '';
+            currentCategory = 0;
             document.getElementById('searchMeta').classList.add('hidden');
-            renderCategories();
             applyFilter();
             input.focus();
         });
 
         // 左侧通知走马灯：内容复制一份，配合 -50% 动画实现无缝循环
         const NOTICES = [
-            '新上架 <b>Netflix / Spotify</b>  Premium 账号，库存充足',
             '每日 <b>20:00</b> 准时补货，敬请关注',
             '支持批量采购，联系客服享专属折扣',
-            '<b>Disney+</b> 限时 9 折，售完即止',
-            '交易请走平台，谨防私下交易诈骗'
+            '交易请走平台，谨防私下交易诈骗',
+            '新到 <b>ChatGPT Plus / Claude Pro</b>，即买即用',
+            '<b>Telegram / Discord</b> 老号补货，支持改密',
+            '下单后自动发货，卡密在「购买记录」中查看',
         ];
         (function renderNotices() {
             const html = NOTICES.map(n => '<div class="notice-item">' + n + '</div>').join('');
@@ -1264,17 +1374,17 @@
 
         // 卡片封面：默认显示 logo（不露灰底），后台预加载对应分类图，成功才替换，失败保持 logo
         window.loadThumbReal = (img) => {
-            const base = img.dataset.base;
-            if (!base) return;
+            const src = img.dataset.base;
+            if (!src) return;
             const real = new Image();
             real.onload = () => { img.src = real.src; };
             real.onerror = () => {
                 const jpg = new Image();
                 jpg.onload = () => { img.src = jpg.src; };
                 jpg.onerror = () => { /* 保持 logo 默认 */ };
-                jpg.src = base + '.jpg';
+                jpg.src = src.replace(/\.[^.]+$/, '.jpg');
             };
-            real.src = base + '.png';
+            real.src = src;
         };
 
         // 购买功能
