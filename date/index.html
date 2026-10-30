@@ -1313,8 +1313,7 @@
             bars.forEach((b, i) => b.classList.toggle('active', i === pIdx));
 
             // 换图后旧评分与网格失效，自动收起
-            hideScorePanel();
-            card.querySelectorAll('.score-mesh').forEach(el => el.remove());
+            cancelScore();
         };
 
         // 核心：处理拖拽与点击冲突
@@ -1403,6 +1402,7 @@
             }
             
             stack = stack.filter(c => c !== card);
+            cancelScore();   // 换人后旧评分一并收起
             setTimeout(() => card.remove(), 600);
 
             if (dir === 'right' && stack.length > 0) {
@@ -2448,6 +2448,7 @@
         let scoreImg = null;      // 本次评分的原图
         let scoreLm = null;       // 本次评分的 468 点
         let meshVisible = true;   // 网格开关
+        let scoreAbort = false;   // 本次评分是否已作废
 
         window.toggleScoreMesh = function () {
             meshVisible = !meshVisible;
@@ -2531,10 +2532,20 @@
             document.querySelectorAll('.score-scan').forEach(el => el.remove());
         }
 
-        // 结果先攒着，等扫描动画播完一遍再展示
+        // 结果先攒着，等扫描动画播完一遍再展示（期间换了图就作废）
         function afterScan(fn) {
             const wait = Math.max(0, SCAN_MIN_MS - (Date.now() - scanStart));
-            setTimeout(fn, wait);
+            setTimeout(() => { if (!scoreAbort) fn(); }, wait);
+        }
+
+        // 换图 / 换人：中断本次评分，收起卡片与网格
+        function cancelScore() {
+            scoreAbort = true;
+            scorePending = false;
+            clearTimeout(scoreTimeout);
+            stopScanAnim();
+            hideScorePanel();
+            document.querySelectorAll('.score-mesh').forEach(el => el.remove());
         }
 
         // 把 468 点网格画在卡片照片上（照片是 object-cover，需要按 cover 的缩放/偏移换算）
@@ -2634,6 +2645,7 @@
                 scoreCardEl = card;
                 scoreImg = null;
                 scoreLm = null;
+                scoreAbort = false;
                 startScanAnim(card);
 
                 // 兜底：15 秒仍无结果就复位，避免按钮一直卡死
