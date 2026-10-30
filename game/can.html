@@ -118,9 +118,9 @@
         <p>支持原生点击、聚焦、动态打字闪烁及 CSS 伪类实时响应</p>
     </div>
 
-    <canvas id="app-canvas" width="800" height="550" layoutsubtree>
+    <canvas id="app-canvas" width="800" height="550" layoutsubtree content="drawable">
         
-        <div id="canvas-inner-ui" class="secure-terminal-card">
+        <div id="canvas-inner-ui" class="secure-terminal-card" drawable>
             <div class="terminal-header">// NODE_ACCESS_AUTH</div>
             
             <div class="input-wrapper">
@@ -149,28 +149,9 @@
         const uiX = (canvas.width - uiWidth) / 2;
         const uiY = (canvas.height - uiHeight) / 2;
 
-        // --- 核心修复：智能事件路由代理 (Event Route Proxy) ---
-        // 显式捕获 Canvas 的物理指针操作，并精准地“扔”给对应的内存 DOM
-        function proxyEventToDOM(e) {
-            const rect = canvas.getBoundingClientRect();
-            // 换算出相对于画布左上角的绝对像素坐标
-            const canvasX = e.clientX - rect.left;
-            const canvasY = e.clientY - rect.top;
-
-            // 1. 尝试使用 WICG 官方标准指针路由
-            if (typeof ctx.routePointerEvent === 'function') {
-                ctx.routePointerEvent(e, innerUI, uiX, uiY);
-            } 
-            // 2. 兼容部分 Blink 早期过渡版本的 API 
-            else if (typeof canvas.dispatchPointerEvent === 'function') {
-                canvas.dispatchPointerEvent(e);
-            }
-        }
-
-        // 绑定完整的指针生命周期，保证点击、抬起、拖拽、选中文本都能穿透
-        canvas.addEventListener('pointerdown', proxyEventToDOM);
-        canvas.addEventListener('pointerup', proxyEventToDOM);
-        canvas.addEventListener('pointermove', proxyEventToDOM);
+        // 2D 场景不需要手动路由指针事件：浏览器会把命中测试/无障碍位置对齐到元素的绘制位置
+        // （老版本才需要拿 drawElementImage 返回的矩阵去同步，现已是历史写法）
+        let snapshotReady = false;   // 第一帧快照就绪前调用 drawElementImage 会抛异常
 
         // --- 动画：Canvas 原生背景粒子流 ---
         const backgroundDots = [];
@@ -213,21 +194,25 @@
             drawBackground();
 
             // 检查 API 完整性并渲染 HTML 组件纹理
-            if (typeof ctx.drawElementImage === 'function') {
-                // 核心 API 绘制
-                ctx.drawElementImage(innerUI, uiX, uiY);
-            } else {
+            if (typeof ctx.drawElementImage !== 'function') {
                 // 运行环境未开 Flag 的兜底警报提示
                 ctx.fillStyle = 'rgba(255, 51, 51, 0.9)';
                 ctx.font = '15px monospace';
                 ctx.textAlign = 'center';
                 ctx.fillText('❌ 实验性特性的运行 Flag 未完全激活', canvas.width / 2, canvas.height / 2 - 20);
                 ctx.fillText('请前往 chrome://flags 启用 #canvas-draw-element', canvas.width / 2, canvas.height / 2 + 10);
+                return;
             }
+
+            // 只在快照就绪后绘制（paint 事件里画的是当前帧，事件外画的是上一帧）
+            if (snapshotReady) ctx.drawElementImage(innerUI, uiX, uiY);
         }
 
         // 监听规范中的标准事件：当内部 HTML 发生交互导致不得不“重绘”时，它会自动触发并刷新
-        canvas.addEventListener('paint', render);
+        canvas.addEventListener('paint', () => {
+            snapshotReady = true;
+            render();
+        });
 
         // 使用 requestAnimationFrame 维持 60 FPS 动画，同时确保持续捕获打字时的光标闪烁
         function animationLoop() {
