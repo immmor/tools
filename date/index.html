@@ -1147,8 +1147,13 @@
                     ti = (ti + 1) % LOADING_TEXTS.length;
                     if (tEl) tEl.textContent = LOADING_TEXTS[ti];
                 }, 1000);
-                const response = await fetch('zhenai/users.json');
-                userData = await response.json();
+                // 数据已按地区拆分：先读清单，再并发拉取各分片合并
+                const indexRes = await fetch('zhenai/data/index.json');
+                const index = await indexRes.json();
+                const parts = await Promise.all(
+                    index.chunks.map(c => fetch('zhenai/data/' + c.file).then(r => r.json()))
+                );
+                userData = parts.flat();
                 displayData = userData;
                 init();
                 hideLoading();
