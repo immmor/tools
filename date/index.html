@@ -165,16 +165,56 @@
             position: absolute; inset: 0; width: 100%; height: 100%;
             z-index: 65; pointer-events: none;
         }
+        /* 扫描线：白芯 + 粉色光晕，从上往下扫一次（缓入缓出，像镜头在扫） */
         .score-scan::before {
-            content: ''; position: absolute; left: 0; right: 0; height: 30%;
-            background: linear-gradient(to bottom, rgba(236,72,153,0) 0%, rgba(236,72,153,0.3) 65%, rgba(236,72,153,0.75) 100%);
-            border-bottom: 2px solid rgba(255,255,255,0.9);
-            box-shadow: 0 0 30px rgba(236,72,153,0.7);
-            animation: scoreScanY 1.6s ease-in-out infinite;
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+            z-index: 1;
+            background: linear-gradient(90deg,
+                rgba(255,255,255,0) 0%, rgba(255,255,255,0.6) 10%, #ffffff 50%,
+                rgba(255,255,255,0.6) 90%, rgba(255,255,255,0) 100%);
+            background-size: 200% 100%;
+            box-shadow: 0 0 6px 1px rgba(255,255,255,0.9),
+                        0 0 22px 6px rgba(236,72,153,0.7),
+                        0 0 44px 14px rgba(236,72,153,0.3);
+            /* 1.6s 扫完 + 0.5s 收尾，总时长压在 SCAN_MIN_MS(2.1s) 内，
+               否则结果一回来元素被移除，动画会被硬切 */
+            animation: scoreScanY 1.6s cubic-bezier(0.4, 0, 0.3, 1) forwards,
+                       scoreLineShine 1.6s linear infinite;
         }
         @keyframes scoreScanY {
-            0% { transform: translateY(-100%); }
-            100% { transform: translateY(340%); }
+            0%   { top: -2px; opacity: 0; }
+            8%   { opacity: 1; }
+            92%  { opacity: 1; }
+            100% { top: 100%; opacity: 0; }
+        }
+        /* 扫过的区域：细线，前沿柔和渐显、越往上越淡（余晖感），扫完整片渐失 */
+        .score-scan::after {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 0;
+            background: repeating-linear-gradient(to bottom,
+                rgba(236,72,153,0.38) 0 1px,
+                rgba(255,255,255,0.09) 1px 2px,
+                rgba(236,72,153,0) 2px 8px);
+            /* 顶部淡入段用固定 px，不随高度变化，避免整片亮度随生长漂移；
+               底部前沿跟着扫描线走（60px 软边） */
+            -webkit-mask-image: linear-gradient(to bottom,
+                rgba(0,0,0,0.4) 0px, #000 120px, #000 calc(100% - 60px), transparent 100%);
+            mask-image: linear-gradient(to bottom,
+                rgba(0,0,0,0.4) 0px, #000 120px, #000 calc(100% - 60px), transparent 100%);
+            /* 淡出与扫描线收尾重叠一点，整体一起溶解，不是先停住再消失 */
+            animation: scoreTrail 1.6s cubic-bezier(0.4, 0, 0.3, 1) forwards,
+                       scoreTrailFade 0.55s ease-in-out 1.55s forwards;
+        }
+        @keyframes scoreTrail {
+            0%   { height: 0; }
+            100% { height: 100%; }
+        }
+        @keyframes scoreTrailFade {
+            0%   { opacity: 1; }
+            100% { opacity: 0; }
+        }
+        @keyframes scoreLineShine {
+            0%   { background-position:   0% 0; }
+            100% { background-position: 200% 0; }
         }
         .score-scan .scan-tip {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
@@ -1392,9 +1432,9 @@
                 <div class="card-view">
                     <div class="label-like card-label">LIKE</div>
                     <div class="label-nope card-label">NOPE</div>
-                    <div class="progress-container">
+                    ${user.photos.length > 1 ? `<div class="progress-container">
                         ${user.photos.map((_, i) => `<div class="progress-bar ${i===0?'active':''}"></div>`).join('')}
-                    </div>
+                    </div>` : ''}
                     <div class="tap-overlay">
                         <div class="tap-left" onclick="changePhoto(event, -1)"></div>
                         <div class="tap-right" onclick="changePhoto(event, 1)"></div>
@@ -2588,7 +2628,7 @@
             document.querySelectorAll('.score-mesh').forEach(c => c.style.display = meshVisible ? 'block' : 'none');
             document.getElementById('mesh_toggle').textContent = meshVisible ? '网格 ON' : '网格 OFF';
         };
-        const SCAN_MIN_MS = 1600;   // 扫描动画至少完整跑一遍
+        const SCAN_MIN_MS = 2100;   // 扫描动画至少完整跑一遍（1.6s 扫 + 0.5s 收尾）
 
         function getTopCard() {
             if (typeof stack === 'undefined' || !stack.length) return null;
