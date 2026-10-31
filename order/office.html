@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="h-full bg-slate-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>企业办公用品采购下单系统</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#fffbea',
+                            100: '#fff3c4',
+                            500: '#f59e0b',
+                            600: '#d97706',
+                            700: '#b45309',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom Scrollbar for sleek appearance */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        /* Smooth transitions */
+        .modal-backdrop {
+            background-color: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+        }
+        /* Hide scrollbar for category tabs on mobile */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col font-sans antialiased text-slate-800 select-none">
+
+    <!-- Top Navigation Header -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-sm flex-shrink-0">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <!-- Store Branding & Delivery Info -->
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center shadow-md shadow-emerald-200 font-bold text-xl">
+                    <i data-lucide="briefcase-business" class="w-6 h-6"></i>
+                </div>
+                <div class="flex items-center">
+                    <div>
+                        <h1 class="font-bold text-slate-900 text-base sm:text-lg leading-tight">企业办公用品商城</h1>
+                        <p class="text-xs text-slate-500 mt-0.5">
+                            收货点: <span class="font-semibold text-slate-700 ml-1">行政部 A栋3F</span>
+                        </p>
+                    </div>
+                    <span class="ml-2 bg-emerald-100 text-emerald-800 text-xs font-semibold px-2 py-0.5 rounded-full border border-emerald-200">配送中</span>
+                </div>
+            </div>
+
+            <!-- Actions / Status -->
+            <div class="flex items-center space-x-2 sm:space-x-4">
+                <button onclick="toggleQRModal(true)" title="签收码" aria-label="签收码" class="w-9 h-9 flex items-center justify-center text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition shrink-0">
+                    <i data-lucide="qr-code" class="w-4 h-4 text-slate-500"></i>
+                </button>
+                <button onclick="showToast('已通知采购专员，请稍候')" class="h-9 flex items-center space-x-1 text-xs text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 rounded-lg transition font-medium">
+                    <i data-lucide="headset" class="w-4 h-4 text-emerald-600"></i>
+                    <span>客服</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Container (Desktop & Mobile Adaptive Grid) -->
+    <div class="flex-1 max-w-7xl w-full mx-auto flex overflow-hidden relative">
+
+        <!-- 1. Category Navigation -->
+        <aside class="w-24 sm:w-32 md:w-56 bg-white border-r border-slate-200 flex-shrink-0 flex flex-col overflow-y-auto">
+            <div class="p-3 text-xs font-bold text-slate-400 uppercase tracking-wider hidden md:block">
+                用品分类
+            </div>
+            <nav class="space-y-1 p-2" id="categoryNav">
+                <!-- Categories rendered dynamically -->
+            </nav>
+        </aside>
+
+        <!-- 2. Product List Grid View -->
+        <main class="flex-1 bg-slate-50 overflow-y-auto p-3 sm:p-5 pb-24 md:pb-6" id="productContainer">
+            <!-- Category Title & Banner -->
+            <div class="mb-4 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl p-4 text-white shadow-md flex justify-between items-center">
+                <div>
+                    <h2 class="text-xl font-bold" id="currentCategoryTitle">企业精选</h2>
+                    <p class="text-xs text-emerald-100 mt-1">企业集中采购价，满 99 元免运费</p>
+                </div>
+                <i data-lucide="package" class="w-8 h-8 text-emerald-200 opacity-80"></i>
+            </div>
+
+            <!-- Products Grid -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-4" id="productList">
+                <!-- Products rendered dynamically -->
+            </div>
+        </main>
+
+        <!-- 3. Desktop Permanent Cart Drawer -->
+        <aside class="hidden md:flex flex-col w-80 lg:w-96 bg-white border-l border-slate-200 flex-shrink-0 shadow-lg z-10">
+            <!-- Cart Header -->
+            <div class="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                <div class="flex items-center space-x-2">
+                    <i data-lucide="shopping-bag" class="w-5 h-5 text-emerald-500"></i>
+                    <h2 class="font-bold text-slate-800 text-base">采购清单</h2>
+                    <span id="desktopCartBadge" class="bg-emerald-100 text-emerald-800 text-xs font-bold px-2 py-0.5 rounded-full">0</span>
+                </div>
+                <button onclick="clearCart()" class="text-xs text-slate-400 hover:text-red-500 flex items-center space-x-1 transition">
+                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                    <span>清空</span>
+                </button>
+            </div>
+
+            <!-- Cart Item List -->
+            <div class="flex-1 overflow-y-auto p-4 space-y-3 divide-y divide-slate-100" id="desktopCartList">
+                <!-- Desktop Cart Items Inserted Here -->
+            </div>
+
+            <!-- Desktop Cart Summary & Footer -->
+            <div class="p-4 border-t border-slate-200 bg-white space-y-3">
+                <div class="space-y-1 text-xs text-slate-500">
+                    <div class="flex justify-between">
+                        <span>小计</span>
+                        <span id="desktopSubtotal">¥0.00</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span>运费（满 99 元免运费）</span>
+                        <span id="desktopShipping">¥0.00</span>
+                    </div>
+                    <div class="flex justify-between font-bold text-slate-800 text-sm pt-2 border-t border-slate-100">
+                        <span>应付总计</span>
+                        <span class="text-emerald-600 text-xl font-black" id="desktopTotal">¥0.00</span>
+                    </div>
+                </div>
+
+                <!-- Remark Option -->
+                <div class="mt-2">
+                    <input type="text" id="orderRemarkDesktop" placeholder="添加备注 (如：送到前台、需附采购单...)"
+                        class="w-full text-xs px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 bg-slate-50">
+                </div>
+
+                <button onclick="openCheckoutModal()" id="desktopCheckoutBtn" disabled
+                    class="w-full py-3 bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold rounded-xl shadow-md transition flex items-center justify-center space-x-2">
+                    <span>立即提交订单</span>
+                    <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </aside>
+
+    </div>
+
+    <!-- 4. Mobile Bottom Floating Cart Bar -->
+    <div class="md:hidden fixed bottom-0 left-0 right-0 z-30 p-3 bg-gradient-to-t from-slate-900/60 via-slate-900/20 to-transparent pointer-events-none">
+        <div class="bg-slate-900/90 backdrop-blur-md text-white rounded-2xl p-2.5 shadow-2xl flex items-center justify-between pointer-events-auto border border-slate-700/50 max-w-lg mx-auto">
+            <!-- Clickable Info Area to Expand Bottom Sheet -->
+            <div class="flex items-center space-x-3 flex-1 pl-2 cursor-pointer" onclick="toggleMobileCartSheet(true)">
+                <div class="relative">
+                    <div class="w-12 h-12 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg text-white">
+                        <i data-lucide="shopping-bag" class="w-6 h-6"></i>
+                    </div>
+                    <span id="mobileCartCount" class="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-slate-900">0</span>
+                </div>
+                <div>
+                    <div class="text-lg font-black text-white leading-none" id="mobileTotal">¥0.00</div>
+                    <div class="text-[10px] text-slate-400 mt-1">点击查看已选商品明细</div>
+                </div>
+            </div>
+
+            <!-- Checkout Button -->
+            <button id="mobileCheckoutBtn" onclick="openCheckoutModal()" disabled
+                class="bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-700 disabled:text-slate-500 text-white font-bold px-5 py-3 rounded-xl transition text-sm flex items-center space-x-1 shadow-md">
+                <span>去结算</span>
+                <i data-lucide="chevron-right" class="w-4 h-4"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- 5. Mobile Bottom-Sheet Cart Modal -->
+    <div id="mobileCartModal" class="fixed inset-0 z-40 hidden">
+        <div class="modal-backdrop absolute inset-0" onclick="toggleMobileCartSheet(false)"></div>
+        <div class="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl max-h-[80vh] flex flex-col shadow-2xl transition-transform transform duration-300">
+            <!-- Modal Bar Indicator -->
+            <div class="w-12 h-1.5 bg-slate-300 rounded-full mx-auto my-2.5"></div>
+
+            <div class="px-4 py-2 border-b border-slate-100 flex justify-between items-center">
+                <span class="font-bold text-slate-800 text-sm flex items-center">
+                    <i data-lucide="shopping-bag" class="w-4 h-4 mr-1.5 text-emerald-500"></i>已选商品
+                </span>
+                <button onclick="clearCart()" class="text-xs text-slate-400 hover:text-red-500 flex items-center space-x-1">
+                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                    <span>清空清单</span>
+                </button>
+            </div>
+
+            <div class="overflow-y-auto p-4 space-y-3 max-h-[50vh] divide-y divide-slate-100" id="mobileCartList">
+                <!-- Mobile Cart Items dynamically rendered -->
+            </div>
+
+            <div class="p-4 border-t border-slate-100 bg-slate-50 space-y-3">
+                <input type="text" id="orderRemarkMobile" placeholder="备注：收货时间、放置位置等"
+                    class="w-full text-xs px-3 py-2 rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                <div class="flex justify-between items-center">
+                    <span class="text-xs text-slate-500">合计:</span>
+                    <span class="text-xl font-black text-emerald-600" id="mobileSheetTotal">¥0.00</span>
+                </div>
+                <button onclick="openCheckoutModal()" id="mobileSheetCheckoutBtn"
+                    class="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl shadow-md transition text-center">
+                    确认并提交订单
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 6. Item Specification / Customization Modal -->
+    <div id="specModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+        <div class="modal-backdrop absolute inset-0" onclick="closeSpecModal()"></div>
+        <div class="bg-white rounded-2xl max-w-md w-full z-10 overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+            <!-- Header Image / Info -->
+            <div class="relative h-48 bg-slate-100 flex-shrink-0">
+                <img id="specModalImg" src="" alt="" class="w-full h-full object-cover">
+                <button onclick="closeSpecModal()" class="absolute top-3 right-3 bg-slate-900/60 text-white rounded-full p-1.5 hover:bg-slate-900 transition">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <!-- Content -->
+            <div class="p-4 overflow-y-auto space-y-4 flex-1">
+                <div>
+                    <h3 class="text-lg font-bold text-slate-800" id="specModalTitle">商品名称</h3>
+                    <p class="text-xs text-slate-500 mt-1" id="specModalDesc">详细描述</p>
+                </div>
+
+                <!-- Spec Group: Color / Model -->
+                <div class="space-y-2">
+                    <label class="text-xs font-bold text-slate-700">颜色 / 型号</label>
+                    <div class="grid grid-cols-4 gap-2" id="colorOptions">
+                        <button onclick="selectSpecOption('color', '黑色', this)" class="spec-btn-color px-3 py-1.5 text-xs rounded-lg border border-slate-200 text-slate-700 hover:border-emerald-500">黑色</button>
+                        <button onclick="selectSpecOption('color', '蓝色', this)" class="spec-btn-color px-3 py-1.5 text-xs rounded-lg border border-slate-200 text-slate-700 hover:border-emerald-500">蓝色</button>
+                        <button onclick="selectSpecOption('color', '红色', this)" class="spec-btn-color px-3 py-1.5 text-xs rounded-lg border border-slate-200 text-slate-700 hover:border-emerald-500">红色</button>
+                        <button onclick="selectSpecOption('color', '混色', this)" class="spec-btn-color px-3 py-1.5 text-xs rounded-lg border border-slate-200 text-slate-700 hover:border-emerald-500">混色</button>
+                    </div>
+                </div>
+
+                <!-- Spec Group: Package -->
+                <div class="space-y-2">
+                    <label class="text-xs font-bold text-slate-700">包装规格</label>
+                    <div class="grid grid-cols-3 gap-2" id="packOptions">
+                        <button onclick="selectSpecOption('pack', '标准装', this)" class="spec-btn-pack px-3 py-1.5 text-xs rounded-lg border border-slate-200 text-slate-700 hover:border-emerald-500">标准装</button>
+                        <button onclick="selectSpecOption('pack', '整箱装(+¥12)', this)" class="spec-btn-pack px-3 py-1.5 text-xs rounded-lg border border-slate-200 text-slate-700 hover:border-emerald-500">整箱装 (+12元)</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer Price & Add -->
+            <div class="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between flex-shrink-0">
+                <div>
+                    <span class="text-xs text-slate-400">选择后价格</span>
+                    <div class="text-xl font-black text-emerald-600" id="specModalPrice">¥0.00</div>
+                </div>
+                <button onclick="confirmSpecAddToCart()" class="bg-emerald-500 hover:bg-emerald-600 text-white font-bold px-6 py-2.5 rounded-xl shadow-md transition flex items-center space-x-1">
+                    <i data-lucide="plus" class="w-4 h-4"></i>
+                    <span>加入清单</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 7. Checkout / Payment Modal -->
+    <div id="checkoutModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+        <div class="modal-backdrop absolute inset-0" onclick="closeCheckoutModal()"></div>
+        <div class="bg-white rounded-2xl max-w-md w-full z-10 overflow-hidden shadow-2xl p-5 space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="text-lg font-bold text-slate-800">确认订单与支付</h3>
+                <button onclick="closeCheckoutModal()" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <!-- Order Summary Info -->
+            <div class="bg-slate-50 rounded-xl p-3 space-y-2 text-xs">
+                <div class="flex justify-between text-slate-600">
+                    <span>配送方式</span>
+                    <span class="font-bold text-slate-800">企业配送 (A栋3F 行政部)</span>
+                </div>
+                <div class="flex justify-between text-slate-600">
+                    <span>订单商品</span>
+                    <span id="checkoutItemSummary" class="text-slate-800">共 0 件商品</span>
+                </div>
+                <div class="flex justify-between text-slate-600">
+                    <span>备注要求</span>
+                    <span id="checkoutRemarkSummary" class="text-slate-800">无</span>
+                </div>
+                <div class="pt-2 border-t border-slate-200 flex justify-between text-sm font-bold">
+                    <span>支付金额</span>
+                    <span id="checkoutPayAmount" class="text-emerald-600 text-lg">¥0.00</span>
+                </div>
+            </div>
+
+            <!-- Payment Method Selection -->
+            <div class="space-y-2">
+                <label class="text-xs font-bold text-slate-700">选择支付方式</label>
+                <div class="space-y-2">
+                    <label class="flex items-center justify-between p-3 border border-slate-200 rounded-xl cursor-pointer transition has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-50/30 hover:border-slate-300">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-7 h-7 rounded-full bg-emerald-500 text-white flex items-center justify-center">
+                                <i data-lucide="building-2" class="w-4 h-4"></i>
+                            </div>
+                            <span class="text-sm font-medium text-slate-800">企业对公转账</span>
+                        </div>
+                        <input type="radio" name="payMethod" checked class="accent-emerald-500">
+                    </label>
+                    <label class="flex items-center justify-between p-3 border border-slate-200 rounded-xl cursor-pointer transition has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-50/30 hover:border-slate-300">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-7 h-7 rounded-full bg-sky-500 text-white flex items-center justify-center">
+                                <i data-lucide="wallet" class="w-4 h-4"></i>
+                            </div>
+                            <span class="text-sm font-medium text-slate-800">微信支付 / 支付宝</span>
+                        </div>
+                        <input type="radio" name="payMethod" class="accent-emerald-500">
+                    </label>
+                </div>
+            </div>
+
+            <!-- Pay Action Button -->
+            <button onclick="processPayment()" id="payBtn"
+                class="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl shadow-lg transition flex items-center justify-center space-x-2">
+                <i data-lucide="lock" class="w-4 h-4"></i>
+                <span>确认支付</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- 8. Payment Success Simulation Screen -->
+    <div id="successModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+        <div class="modal-backdrop absolute inset-0"></div>
+        <div class="bg-white rounded-2xl max-w-sm w-full z-10 overflow-hidden shadow-2xl p-6 text-center space-y-4">
+            <div class="w-16 h-16 bg-emerald-100 text-emerald-500 rounded-full flex items-center justify-center mx-auto shadow-inner">
+                <i data-lucide="check" class="w-10 h-10"></i>
+            </div>
+            <div>
+                <h3 class="text-xl font-bold text-slate-900">下单成功！</h3>
+                <p class="text-xs text-slate-500 mt-1">订单已提交至采购中心，预计 2 小时内送达</p>
+            </div>
+            <div class="bg-slate-50 p-3 rounded-xl text-left space-y-1 text-xs text-slate-600">
+                <div class="flex justify-between gap-4"><span>订单号:</span><span class="font-mono text-slate-800">PO-20261030-088</span></div>
+                <div class="flex justify-between gap-4"><span>收货点:</span><span class="font-semibold text-slate-800">A栋3F 行政部</span></div>
+                <div class="flex justify-between gap-4"><span>时间:</span><span id="successTime" class="text-slate-800">--:--</span></div>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="openInvoiceModal()" class="flex-1 py-2.5 bg-white border border-emerald-500 text-emerald-600 font-bold rounded-xl transition flex items-center justify-center space-x-1">
+                    <i data-lucide="receipt" class="w-4 h-4"></i>
+                    <span>开发票</span>
+                </button>
+                <button onclick="resetOrder()" class="flex-1 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl transition">
+                    继续采购
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 9. Invoice Application Modal -->
+    <div id="invoiceModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+        <div class="modal-backdrop absolute inset-0" onclick="toggleInvoiceModal(false)"></div>
+        <div class="bg-white rounded-2xl max-w-sm w-full z-10 p-5 space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="text-base font-bold text-slate-800">申请开具电子发票</h3>
+                <button onclick="toggleInvoiceModal(false)" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="bg-slate-50 rounded-xl p-3 text-xs flex justify-between">
+                <span class="text-slate-500">可开票金额</span>
+                <span id="invoiceAmount" class="font-bold text-emerald-600">¥0.00</span>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+                <label class="flex items-center justify-center p-2.5 border border-slate-200 rounded-xl cursor-pointer text-sm text-slate-700 has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-50/40 has-[:checked]:text-emerald-700">
+                    <input type="radio" name="invoiceType" value="personal" checked onchange="toggleTaxIdField()" class="mr-2 accent-emerald-500">个人
+                </label>
+                <label class="flex items-center justify-center p-2.5 border border-slate-200 rounded-xl cursor-pointer text-sm text-slate-700 has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-50/40 has-[:checked]:text-emerald-700">
+                    <input type="radio" name="invoiceType" value="company" onchange="toggleTaxIdField()" class="mr-2 accent-emerald-500">企业
+                </label>
+            </div>
+            <input type="text" id="invoiceTitle" placeholder="发票抬头（个人姓名 / 企业名称）" class="w-full text-xs px-3 py-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 bg-slate-50">
+            <input type="text" id="invoiceTaxId" placeholder="企业税号（15-20 位字母数字）" class="hidden w-full text-xs px-3 py-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 bg-slate-50 uppercase">
+            <input type="email" id="invoiceEmail" placeholder="接收邮箱（选填）" class="w-full text-xs px-3 py-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 bg-slate-50">
+            <button onclick="submitInvoice()" class="w-full py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl transition">
+                提交开票申请
+            </button>
+        </div>
+    </div>
+
+    <!-- 10. Delivery QR Code Modal -->
+    <div id="qrModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+        <div class="modal-backdrop absolute inset-0" onclick="toggleQRModal(false)"></div>
+        <div class="bg-white rounded-2xl max-w-xs w-full z-10 p-5 text-center space-y-3">
+            <h3 class="text-base font-bold text-slate-800">签收码</h3>
+            <p class="text-xs text-slate-500">同事扫码即可查看本次采购清单</p>
+            <div class="bg-slate-100 p-4 rounded-xl inline-block">
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=https://order.restaurant.com/office/A3F"
+                     alt="Delivery QR Code" class="w-44 h-44 mx-auto rounded-lg shadow-sm"
+                     onerror="this.src='https://placehold.co/180x180/f1f5f9/475569?text=QR+Code+Error'">
+            </div>
+            <div class="text-xs text-emerald-600 font-bold">收货点: A栋3F 行政部</div>
+            <button onclick="toggleQRModal(false)" class="w-full py-2 bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold">关闭</button>
+        </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toast" class="fixed top-20 left-1/2 transform -translate-x-1/2 bg-slate-900/90 text-white text-xs px-4 py-2.5 rounded-full shadow-xl z-50 opacity-0 pointer-events-none transition-opacity duration-300 flex items-center space-x-2">
+        <i data-lucide="info" class="w-4 h-4 text-emerald-400"></i>
+        <span id="toastMsg">消息提示</span>
+    </div>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        // Sample Office Supplies Data Structure
+        const categories = [
+            { id: 'c1', name: '办公精选', icon: 'star' },
+            { id: 'c2', name: '纸品耗材', icon: 'file-text' },
+            { id: 'c3', name: '书写工具', icon: 'pen-tool' },
+            { id: 'c4', name: '桌面文具', icon: 'clipboard-list' },
+            { id: 'c5', name: '办公设备', icon: 'printer' }
+        ];
+
+        const products = [
+            {
+                id: 'p1',
+                categoryId: 'c1',
+                name: 'A4 复印纸 70g 整箱装',
+                price: 139.0,
+                rating: '4.9',
+                sales: 3280,
+                tag: '采购爆款',
+                image: 'https://images.unsplash.com/photo-1568667256549-094345857637?auto=format&fit=crop&w=500&q=80',
+                desc: '高白度不卡纸，5 包/箱，适配主流激光与喷墨打印机。',
+                hasSpecs: true
+            },
+            {
+                id: 'p2',
+                categoryId: 'c1',
+                name: '中性笔 0.5mm 黑色 12支装',
+                price: 19.9,
+                rating: '4.8',
+                sales: 5120,
+                tag: '热销',
+                image: 'https://images.unsplash.com/photo-1583485088034-697b5bc54ccd?auto=format&fit=crop&w=500&q=80',
+                desc: '速干墨水书写顺滑，笔握防滑，签字记录皆宜。',
+                hasSpecs: true
+            },
+            {
+                id: 'p3',
+                categoryId: 'c2',
+                name: '空白打印标签纸 100张/包',
+                price: 26.0,
+                rating: '4.7',
+                sales: 860,
+                tag: '补货',
+                image: 'https://images.unsplash.com/photo-1524578271613-d550eacf6090?auto=format&fit=crop&w=500&q=80',
+                desc: '不干胶材质易撕贴，适用于档案编号与物品标识。',
+                hasSpecs: false
+            },
+            {
+                id: 'p4',
+                categoryId: 'c2',
+                name: '档案盒 A4 加厚 10个装',
+                price: 45.0,
+                rating: '4.6',
+                sales: 640,
+                tag: '',
+                image: 'https://images.unsplash.com/photo-1568205612837-017257d2310a?auto=format&fit=crop&w=500&q=80',
+                desc: 'PP 材质防潮耐压，脊背可书写，按年份归档整齐不散。',
+                hasSpecs: false
+            },
+            {
+                id: 'p5',
+                categoryId: 'c3',
+                name: '荧光标记笔 6色套装',
+                price: 15.0,
+                rating: '4.9',
+                sales: 1980,
+                tag: '人气文具',
+                image: 'https://images.unsplash.com/photo-1512295767273-ac109ac3acfa?auto=format&fit=crop&w=500&q=80',
+                desc: '斜头双线宽窄兼用，快干不透纸，重点标注清晰醒目。',
+                hasSpecs: true
+            },
+            {
+                id: 'p6',
+                categoryId: 'c3',
+                name: '白板笔 细头 可擦 10支',
+                price: 22.0,
+                rating: '4.8',
+                sales: 1120,
+                tag: '会议必备',
+                image: 'https://images.unsplash.com/photo-1456735190827-d1262f71b8a3?auto=format&fit=crop&w=500&q=80',
+                desc: '低气味易擦除，会议室白板长期书写不留痕。',
+                hasSpecs: false
+            },
+            {
+                id: 'p7',
+                categoryId: 'c4',
+                name: '桌面收纳笔筒 金属网格',
+                price: 29.0,
+                rating: '4.7',
+                sales: 480,
+                tag: '桌面',
+                image: 'https://images.unsplash.com/photo-1497032628192-86f99bcd76bc?auto=format&fit=crop&w=500&q=80',
+                desc: '多格分区收纳笔具与便签，金属网格透气不积灰。',
+                hasSpecs: false
+            },
+            {
+                id: 'p8',
+                categoryId: 'c5',
+                name: '无线键鼠套装 办公款',
+                price: 129.0,
+                rating: '4.8',
+                sales: 760,
+                tag: '设备',
+                image: 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?auto=format&fit=crop&w=500&q=80',
+                desc: '2.4G 无线连接，静音按键，简洁桌面办公首选。',
+                hasSpecs: true
+            }
+        ];
+
+        // State Management
+        let currentCategoryId = 'c1';
+        let cart = []; // Array of cart items { id, productId, name, price, qty, specs }
+        let selectedProductForSpec = null;
+        let selectedSpecs = { color: '黑色', pack: '标准装' };
+        let lastPaidAmount = 0; // 已支付金额，开票可开额度
+
+        // Initialize App
+        window.addEventListener('DOMContentLoaded', () => {
+            renderCategories();
+            renderProducts();
+            updateCartUI();
+            lucide.createIcons();
+        });
+
+        // Render Category Navigation
+        function renderCategories() {
+            const nav = document.getElementById('categoryNav');
+            nav.innerHTML = categories.map(cat => {
+                const isActive = cat.id === currentCategoryId;
+                return `
+                    <button onclick="switchCategory('${cat.id}')"
+                        class="w-full flex flex-col md:flex-row items-center space-y-1 md:space-y-0 md:space-x-3 px-3 py-3 rounded-xl transition text-xs sm:text-sm font-medium ${
+                            isActive
+                            ? 'bg-emerald-500 text-white shadow-md shadow-emerald-200'
+                            : 'text-slate-600 hover:bg-slate-100'
+                        }">
+                        <i data-lucide="${cat.icon}" class="w-5 h-5"></i>
+                        <span class="truncate">${cat.name}</span>
+                    </button>
+                `;
+            }).join('');
+            lucide.createIcons();
+        }
+
+        // Switch Active Category
+        function switchCategory(catId) {
+            currentCategoryId = catId;
+            const categoryObj = categories.find(c => c.id === catId);
+            document.getElementById('currentCategoryTitle').innerText = categoryObj ? categoryObj.name : '商品列表';
+            renderCategories();
+            renderProducts();
+        }
+
+        // Render Product Items
+        function renderProducts() {
+            const container = document.getElementById('productList');
+            const filteredProducts = products.filter(p => p.categoryId === currentCategoryId);
+
+            if (filteredProducts.length === 0) {
+                container.innerHTML = `<div class="col-span-full py-12 text-center text-slate-400 text-xs">暂无相关商品</div>`;
+                return;
+            }
+
+            container.innerHTML = filteredProducts.map(p => {
+                const qtyInCart = getCartProductQty(p.id);
+                return `
+                    <div class="bg-white rounded-2xl p-3 shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition">
+                        <div class="relative">
+                            <img src="${p.image}" alt="${p.name}" class="w-full h-36 sm:h-40 object-cover rounded-xl bg-slate-100" onerror="this.src='https://placehold.co/400x300/f1f5f9/94a3b8?text=Office+Supply'">
+                            ${p.tag ? `<span class="absolute top-2 left-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow">${p.tag}</span>` : ''}
+                        </div>
+                        <div class="mt-3 flex-1 flex flex-col justify-between">
+                            <div>
+                                <h3 class="font-bold text-slate-800 text-sm sm:text-base leading-snug line-clamp-1">${p.name}</h3>
+                                <p class="text-slate-400 text-xs mt-1 line-clamp-2">${p.desc}</p>
+                            </div>
+                            <div class="mt-3 flex items-center justify-between">
+                                <div>
+                                    <span class="text-xs text-emerald-600 font-bold">¥</span>
+                                    <span class="text-lg font-black text-emerald-600">${p.price.toFixed(2)}</span>
+                                </div>
+                                ${p.hasSpecs ? `
+                                    <button onclick="openSpecModal('${p.id}')" class="bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow transition flex items-center space-x-1">
+                                        <span>选规格</span>
+                                        ${qtyInCart > 0 ? `<span class="bg-white text-emerald-600 font-bold w-4 h-4 rounded-full text-[10px] flex items-center justify-center ml-1">${qtyInCart}</span>` : ''}
+                                    </button>
+                                ` : `
+                                    <div class="flex items-center space-x-2">
+                                        ${qtyInCart > 0 ? `
+                                            <button onclick="updateCartItemQty('${p.id}', -1)" class="w-7 h-7 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-sm transition">-</button>
+                                            <span class="text-xs font-bold text-slate-800">${qtyInCart}</span>
+                                        ` : ''}
+                                        <button onclick="addToCartDirect('${p.id}')" class="w-7 h-7 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shadow transition">+</button>
+                                    </div>
+                                `}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Get total count for product in cart
+        function getCartProductQty(productId) {
+            return cart.filter(item => item.productId === productId).reduce((sum, item) => sum + item.qty, 0);
+        }
+
+        // Direct Add to Cart (Without Specs)
+        function addToCartDirect(productId) {
+            const product = products.find(p => p.id === productId);
+            if (!product) return;
+
+            const existingIndex = cart.findIndex(item => item.productId === productId && !item.specs);
+            if (existingIndex > -1) {
+                cart[existingIndex].qty += 1;
+            } else {
+                cart.push({
+                    id: Date.now().toString(),
+                    productId: product.id,
+                    name: product.name,
+                    price: product.price,
+                    qty: 1,
+                    specs: null
+                });
+            }
+            updateCartUI();
+            showToast(`已添加 ${product.name} 到采购清单`);
+        }
+
+        // Open Specification Picker Modal
+        function openSpecModal(productId) {
+            selectedProductForSpec = products.find(p => p.id === productId);
+            if (!selectedProductForSpec) return;
+
+            document.getElementById('specModalImg').src = selectedProductForSpec.image;
+            document.getElementById('specModalTitle').innerText = selectedProductForSpec.name;
+            document.getElementById('specModalDesc').innerText = selectedProductForSpec.desc;
+            document.getElementById('specModalPrice').innerText = `¥${selectedProductForSpec.price.toFixed(2)}`;
+
+            // Reset active buttons
+            selectedSpecs = { color: '黑色', pack: '标准装' };
+            resetSpecButtons();
+
+            document.getElementById('specModal').classList.remove('hidden');
+        }
+
+        function closeSpecModal() {
+            document.getElementById('specModal').classList.add('hidden');
+        }
+
+        function resetSpecButtons() {
+            document.querySelectorAll('.spec-btn-color').forEach(btn => {
+                btn.classList.toggle('border-emerald-500', btn.innerText === selectedSpecs.color);
+                btn.classList.toggle('bg-emerald-50', btn.innerText === selectedSpecs.color);
+                btn.classList.toggle('text-emerald-700', btn.innerText === selectedSpecs.color);
+            });
+            document.querySelectorAll('.spec-btn-pack').forEach(btn => {
+                const isMatch = btn.innerText.includes(selectedSpecs.pack);
+                btn.classList.toggle('border-emerald-500', isMatch);
+                btn.classList.toggle('bg-emerald-50', isMatch);
+                btn.classList.toggle('text-emerald-700', isMatch);
+            });
+        }
+
+        function selectSpecOption(type, value, btnElement) {
+            selectedSpecs[type] = value;
+            let currentPrice = selectedProductForSpec.price;
+            if (selectedSpecs.pack.includes('整箱')) {
+                currentPrice += 12;
+            }
+            document.getElementById('specModalPrice').innerText = `¥${currentPrice.toFixed(2)}`;
+
+            // Highlight styling
+            const parent = btnElement.parentElement;
+            parent.querySelectorAll('button').forEach(b => {
+                b.classList.remove('border-emerald-500', 'bg-emerald-50', 'text-emerald-700');
+            });
+            btnElement.classList.add('border-emerald-500', 'bg-emerald-50', 'text-emerald-700');
+        }
+
+        function confirmSpecAddToCart() {
+            if (!selectedProductForSpec) return;
+
+            let finalPrice = selectedProductForSpec.price;
+            if (selectedSpecs.pack.includes('整箱')) {
+                finalPrice += 12;
+            }
+
+            const specString = `${selectedSpecs.color} / ${selectedSpecs.pack}`;
+
+            const existingIndex = cart.findIndex(item => item.productId === selectedProductForSpec.id && item.specs === specString);
+            if (existingIndex > -1) {
+                cart[existingIndex].qty += 1;
+            } else {
+                cart.push({
+                    id: Date.now().toString(),
+                    productId: selectedProductForSpec.id,
+                    name: selectedProductForSpec.name,
+                    price: finalPrice,
+                    qty: 1,
+                    specs: specString
+                });
+            }
+
+            closeSpecModal();
+            updateCartUI();
+            showToast(`已添加 ${selectedProductForSpec.name} (${specString})`);
+        }
+
+        // Update Cart Quantities
+        function updateCartItemQty(cartItemIdOrProductId, delta) {
+            // Check if it's a cart item ID or direct product ID
+            let itemIndex = cart.findIndex(i => i.id === cartItemIdOrProductId);
+            if (itemIndex === -1) {
+                // If not found, try finding direct item without specs
+                itemIndex = cart.findIndex(i => i.productId === cartItemIdOrProductId && !i.specs);
+            }
+
+            if (itemIndex > -1) {
+                cart[itemIndex].qty += delta;
+                if (cart[itemIndex].qty <= 0) {
+                    cart.splice(itemIndex, 1);
+                }
+            }
+            updateCartUI();
+        }
+
+        function clearCart() {
+            if (cart.length === 0) return;
+            cart = [];
+            updateCartUI();
+            showToast('采购清单已清空');
+        }
+
+        // Subtotal / shipping / total
+        function getSubtotal() {
+            return cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+        }
+
+        // ponytail: 满 99 免运费，否则 10 元，规则变了改这里
+        function getShipping(subtotal) {
+            return subtotal === 0 || subtotal >= 99 ? 0 : 10;
+        }
+
+        // Render & Update UI for both Desktop and Mobile Cart Components
+        function updateCartUI() {
+            const totalCount = cart.reduce((sum, item) => sum + item.qty, 0);
+            const subtotal = getSubtotal();
+            const totalPrice = subtotal + getShipping(subtotal);
+
+            // Desktop Elements
+            document.getElementById('desktopCartBadge').innerText = totalCount;
+            document.getElementById('desktopSubtotal').innerText = `¥${subtotal.toFixed(2)}`;
+            document.getElementById('desktopShipping').innerText = `¥${getShipping(subtotal).toFixed(2)}`;
+            document.getElementById('desktopTotal').innerText = `¥${totalPrice.toFixed(2)}`;
+            document.getElementById('desktopCheckoutBtn').disabled = totalCount === 0;
+
+            // Mobile Elements
+            document.getElementById('mobileCartCount').innerText = totalCount;
+            document.getElementById('mobileTotal').innerText = `¥${totalPrice.toFixed(2)}`;
+            document.getElementById('mobileSheetTotal').innerText = `¥${totalPrice.toFixed(2)}`;
+            document.getElementById('mobileCheckoutBtn').disabled = totalCount === 0;
+
+            // Render Cart Lists HTML
+            const cartItemsHTML = cart.length === 0 ? `
+                <div class="py-12 text-center text-slate-400 text-xs flex flex-col items-center justify-center space-y-2">
+                    <i data-lucide="shopping-cart" class="w-8 h-8 text-slate-300"></i>
+                    <span>清单空空如也，快去选办公用品吧</span>
+                </div>
+            ` : cart.map(item => `
+                <div class="flex items-center justify-between pt-2">
+                    <div class="flex-1 pr-2">
+                        <div class="text-xs font-bold text-slate-800 leading-snug">${item.name}</div>
+                        ${item.specs ? `<div class="text-[10px] text-slate-400 mt-0.5">${item.specs}</div>` : ''}
+                        <div class="text-xs font-bold text-emerald-600 mt-1">¥${item.price.toFixed(2)}</div>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button onclick="updateCartItemQty('${item.id}', -1)" class="w-6 h-6 rounded bg-slate-100 text-slate-700 flex items-center justify-center text-xs font-bold hover:bg-slate-200 transition">-</button>
+                        <span class="text-xs font-bold text-slate-800">${item.qty}</span>
+                        <button onclick="updateCartItemQty('${item.id}', 1)" class="w-6 h-6 rounded bg-emerald-500 text-white flex items-center justify-center text-xs font-bold hover:bg-emerald-600 transition">+</button>
+                    </div>
+                </div>
+            `).join('');
+
+            document.getElementById('desktopCartList').innerHTML = cartItemsHTML;
+            document.getElementById('mobileCartList').innerHTML = cartItemsHTML;
+
+            // Re-render product grid buttons to reflect quantities
+            renderProducts();
+            lucide.createIcons();
+        }
+
+        // Toggle Mobile Bottom Sheet Modal
+        function toggleMobileCartSheet(show) {
+            const modal = document.getElementById('mobileCartModal');
+            if (show) {
+                modal.classList.remove('hidden');
+            } else {
+                modal.classList.add('hidden');
+            }
+        }
+
+        // QR Modal Toggle
+        function toggleQRModal(show) {
+            document.getElementById('qrModal').classList.toggle('hidden', !show);
+        }
+
+        // Checkout Process
+        function openCheckoutModal() {
+            if (cart.length === 0) return;
+
+            const totalCount = cart.reduce((sum, item) => sum + item.qty, 0);
+            const subtotal = getSubtotal();
+            const totalPrice = subtotal + getShipping(subtotal);
+
+            const remarkDesktop = document.getElementById('orderRemarkDesktop').value;
+            const remarkMobile = document.getElementById('orderRemarkMobile').value;
+            const remark = remarkDesktop || remarkMobile || '无';
+
+            document.getElementById('checkoutItemSummary').innerText = `共 ${totalCount} 件商品`;
+            document.getElementById('checkoutRemarkSummary').innerText = remark;
+            document.getElementById('checkoutPayAmount').innerText = `¥${totalPrice.toFixed(2)}`;
+
+            toggleMobileCartSheet(false);
+            document.getElementById('checkoutModal').classList.remove('hidden');
+        }
+
+        function closeCheckoutModal() {
+            document.getElementById('checkoutModal').classList.add('hidden');
+        }
+
+        function processPayment() {
+            const payBtn = document.getElementById('payBtn');
+            payBtn.disabled = true;
+            payBtn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>处理支付中...</span>`;
+            lucide.createIcons();
+
+            const subtotal = getSubtotal();
+            lastPaidAmount = subtotal + getShipping(subtotal);
+
+            setTimeout(() => {
+                payBtn.disabled = false;
+                payBtn.innerHTML = `<i data-lucide="lock" class="w-4 h-4"></i><span>确认支付</span>`;
+                closeCheckoutModal();
+
+                // Set currentTime
+                const now = new Date();
+                document.getElementById('successTime').innerText = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+                document.getElementById('successModal').classList.remove('hidden');
+            }, 1200);
+        }
+
+        function resetOrder() {
+            cart = [];
+            document.getElementById('orderRemarkDesktop').value = '';
+            document.getElementById('orderRemarkMobile').value = '';
+            updateCartUI();
+            document.getElementById('successModal').classList.add('hidden');
+            showToast('已完成下单，可继续采购');
+        }
+
+        // Invoice (开发票)
+        function openInvoiceModal() {
+            if (lastPaidAmount <= 0) {
+                showToast('请先完成支付后再申请开票');
+                return;
+            }
+            document.getElementById('invoiceAmount').innerText = `¥${lastPaidAmount.toFixed(2)}`;
+            document.getElementById('successModal').classList.add('hidden');
+            toggleInvoiceModal(true);
+        }
+
+        function toggleInvoiceModal(show) {
+            document.getElementById('invoiceModal').classList.toggle('hidden', !show);
+            if (show) lucide.createIcons();
+        }
+
+        function toggleTaxIdField() {
+            const isCompany = document.querySelector('input[name="invoiceType"]:checked').value === 'company';
+            document.getElementById('invoiceTaxId').classList.toggle('hidden', !isCompany);
+        }
+
+        function submitInvoice() {
+            const title = document.getElementById('invoiceTitle').value.trim();
+            const taxId = document.getElementById('invoiceTaxId').value.trim().toUpperCase();
+            const email = document.getElementById('invoiceEmail').value.trim();
+            const isCompany = document.querySelector('input[name="invoiceType"]:checked').value === 'company';
+
+            if (!title) return showToast('请填写发票抬头');
+            if (isCompany && !/^[0-9A-Z]{15,20}$/.test(taxId)) return showToast('请填写正确的企业税号');
+            if (email && !/^\S+@\S+\.\S+$/.test(email)) return showToast('邮箱格式不正确');
+
+            toggleInvoiceModal(false);
+            showToast(`开票申请已提交，${email ? '电子发票将发送至邮箱' : '可在订单页查看'}`);
+            // ponytail: 仅前端演示，真实开票需接后端发票接口
+            console.assert(title.length > 0 && (!isCompany || taxId.length >= 15), 'invoice payload invalid');
+        }
+
+        // Toast Helper
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMsg').innerText = message;
+            toast.classList.remove('opacity-0', 'pointer-events-none');
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'pointer-events-none');
+            }, 2000);
+        }
+    </script>
+</body>
+</html>

@@ -370,13 +370,50 @@
                 <div class="flex justify-between gap-4"><span>桌号:</span><span class="font-semibold text-slate-800">A-08 桌</span></div>
                 <div class="flex justify-between gap-4"><span>时间:</span><span id="successTime" class="text-slate-800">--:--</span></div>
             </div>
-            <button onclick="resetOrder()" class="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition">
-                返回菜单 / 继续加菜
+            <div class="flex gap-2">
+                <button onclick="openInvoiceModal()" class="flex-1 py-2.5 bg-white border border-amber-500 text-amber-600 font-bold rounded-xl transition flex items-center justify-center space-x-1">
+                    <i data-lucide="receipt" class="w-4 h-4"></i>
+                    <span>开发票</span>
+                </button>
+                <button onclick="resetOrder()" class="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition">
+                    继续加菜
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 9. Invoice Application Modal -->
+    <div id="invoiceModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+        <div class="modal-backdrop absolute inset-0" onclick="toggleInvoiceModal(false)"></div>
+        <div class="bg-white rounded-2xl max-w-sm w-full z-10 p-5 space-y-4">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+                <h3 class="text-base font-bold text-slate-800">申请开具电子发票</h3>
+                <button onclick="toggleInvoiceModal(false)" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="bg-slate-50 rounded-xl p-3 text-xs flex justify-between">
+                <span class="text-slate-500">可开票金额</span>
+                <span id="invoiceAmount" class="font-bold text-amber-600">¥0.00</span>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+                <label class="flex items-center justify-center p-2.5 border border-slate-200 rounded-xl cursor-pointer text-sm text-slate-700 has-[:checked]:border-amber-500 has-[:checked]:bg-amber-50/40 has-[:checked]:text-amber-700">
+                    <input type="radio" name="invoiceType" value="personal" checked onchange="toggleTaxIdField()" class="mr-2 accent-amber-500">个人
+                </label>
+                <label class="flex items-center justify-center p-2.5 border border-slate-200 rounded-xl cursor-pointer text-sm text-slate-700 has-[:checked]:border-amber-500 has-[:checked]:bg-amber-50/40 has-[:checked]:text-amber-700">
+                    <input type="radio" name="invoiceType" value="company" onchange="toggleTaxIdField()" class="mr-2 accent-amber-500">企业
+                </label>
+            </div>
+            <input type="text" id="invoiceTitle" placeholder="发票抬头（个人姓名 / 企业名称）" class="w-full text-xs px-3 py-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500/50 bg-slate-50">
+            <input type="text" id="invoiceTaxId" placeholder="企业税号（15-20 位字母数字）" class="hidden w-full text-xs px-3 py-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500/50 bg-slate-50 uppercase">
+            <input type="email" id="invoiceEmail" placeholder="接收邮箱（选填）" class="w-full text-xs px-3 py-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500/50 bg-slate-50">
+            <button onclick="submitInvoice()" class="w-full py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition">
+                提交开票申请
             </button>
         </div>
     </div>
 
-    <!-- 9. QR Code Modal -->
+    <!-- 10. QR Code Modal -->
     <div id="qrModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
         <div class="modal-backdrop absolute inset-0" onclick="toggleQRModal(false)"></div>
         <div class="bg-white rounded-2xl max-w-xs w-full z-10 p-5 text-center space-y-3">
@@ -513,6 +550,7 @@
         let cart = []; // Array of cart items { id, productId, name, price, qty, specs }
         let selectedProductForSpec = null;
         let selectedSpecs = { spicy: '不辣', portion: '标准份' };
+        let lastPaidAmount = 0; // 已支付金额，开票可开额度
 
         // Initialize App
         window.addEventListener('DOMContentLoaded', () => {
@@ -822,6 +860,8 @@
             payBtn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>处理支付中...</span>`;
             lucide.createIcons();
 
+            lastPaidAmount = cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+
             setTimeout(() => {
                 payBtn.disabled = false;
                 payBtn.innerHTML = `<i data-lucide="lock" class="w-4 h-4"></i><span>确认支付</span>`;
@@ -841,6 +881,43 @@
             updateCartUI();
             document.getElementById('successModal').classList.add('hidden');
             showToast('已完成下单，可继续加菜');
+        }
+
+        // Invoice (开发票)
+        function openInvoiceModal() {
+            if (lastPaidAmount <= 0) {
+                showToast('请先完成支付后再申请开票');
+                return;
+            }
+            document.getElementById('invoiceAmount').innerText = `¥${lastPaidAmount.toFixed(2)}`;
+            document.getElementById('successModal').classList.add('hidden');
+            toggleInvoiceModal(true);
+        }
+
+        function toggleInvoiceModal(show) {
+            document.getElementById('invoiceModal').classList.toggle('hidden', !show);
+            if (show) lucide.createIcons();
+        }
+
+        function toggleTaxIdField() {
+            const isCompany = document.querySelector('input[name="invoiceType"]:checked').value === 'company';
+            document.getElementById('invoiceTaxId').classList.toggle('hidden', !isCompany);
+        }
+
+        function submitInvoice() {
+            const title = document.getElementById('invoiceTitle').value.trim();
+            const taxId = document.getElementById('invoiceTaxId').value.trim().toUpperCase();
+            const email = document.getElementById('invoiceEmail').value.trim();
+            const isCompany = document.querySelector('input[name="invoiceType"]:checked').value === 'company';
+
+            if (!title) return showToast('请填写发票抬头');
+            if (isCompany && !/^[0-9A-Z]{15,20}$/.test(taxId)) return showToast('请填写正确的企业税号');
+            if (email && !/^\S+@\S+\.\S+$/.test(email)) return showToast('邮箱格式不正确');
+
+            toggleInvoiceModal(false);
+            showToast(`开票申请已提交，${email ? '电子发票将发送至邮箱' : '可在订单页查看'}`);
+            // ponytail: 仅前端演示，真实开票需接后端发票接口
+            console.assert(title.length > 0 && (!isCompany || taxId.length >= 15), 'invoice payload invalid');
         }
 
         // Toast Helper

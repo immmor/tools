@@ -93,6 +93,46 @@
             color: white; pointer-events: none; z-index: 45;
         }
 
+        /* 1:1 图片：放大后左上对齐，把右下角的"珍爱"水印挤出画面（1/0.85≈1.18 是下限） */
+        .wm-crop {
+            transform: scale(1.18);
+            transform-origin: 0 0;
+        }
+
+        /* 卡片右下角水印：自绘一份对齐的模糊拷贝，只露出角落 + 轻微压暗。
+           不用 backdrop-filter，切换/动画时不会有重采样造成的闪烁 */
+        .wm-cover {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 44;                 /* 压在 info-scrim 之下，好跟底部暗角融为一体 */
+            background: radial-gradient(ellipse 26% 26% at 100% 100%, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0) 70%);
+            -webkit-mask-image: radial-gradient(ellipse 26% 26% at 100% 100%, #000 55%, transparent 100%);
+            mask-image: radial-gradient(ellipse 26% 26% at 100% 100%, #000 55%, transparent 100%);
+        }
+        /* 拷贝与主图同尺寸同位置（右侧多留 60px 出血，避免模糊在卡片边缘透出原图），
+           object-cover 是高度主导，加宽不改变缩放，只需把居中位置补回 30px */
+        .wm-cover::before {
+            content: '';
+            position: absolute;
+            top: 0; bottom: 0; left: 0; right: -60px;
+            background-image: var(--photo);
+            background-size: cover;
+            background-position: calc(50% - 30px) 50%;
+            filter: blur(14px);
+        }
+
+        /* 筛选面板的下拉框：去掉原生箭头，自绘一个离右边有点距离的 */
+        #filter-modal select {
+            -webkit-appearance: none;
+            appearance: none;
+            padding-right: 34px;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8' fill='none' stroke='%239ca3af' stroke-width='1.8' stroke-linecap='round'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 14px center;
+            background-size: 11px 8px;
+        }
+
         /* 侧边标签 */
         .card-label {
             position: absolute;
@@ -280,11 +320,11 @@
         <button onclick="toggleCardInfo()" class="w-12 h-12 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full shadow-lg shadow-blue-500/40 text-white text-xl active:scale-90 transition hover:shadow-[0_0_40px_rgba(96,165,250,1)] hover:scale-105 hover:shadow-blue-500/90 border-2 border-blue-300/50">
             <i class="fas fa-info-circle"></i>
         </button>
-        <button onclick="handleBtnSwipe('right')" class="w-12 h-12 bg-gradient-to-br from-pink-400 to-pink-600 rounded-full shadow-lg shadow-pink-500/40 text-white text-xl active:scale-90 transition hover:shadow-[0_0_40px_rgba(236,72,153,1)] hover:scale-105 hover:shadow-pink-500/90 border-2 border-pink-300/50">
-            <i class="fas fa-heart"></i>
-        </button>
         <button id="btn_score_photo" onclick="scoreCurrentPhoto()" title="给当前照片打分" class="w-12 h-12 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full shadow-lg shadow-orange-500/40 text-white text-xl active:scale-90 transition hover:shadow-[0_0_40px_rgba(251,146,60,1)] hover:scale-105 border-2 border-amber-300/50">
             <i class="fas fa-wand-magic-sparkles"></i>
+        </button>
+        <button onclick="handleBtnSwipe('right')" class="w-12 h-12 bg-gradient-to-br from-pink-400 to-pink-600 rounded-full shadow-lg shadow-pink-500/40 text-white text-xl active:scale-90 transition hover:shadow-[0_0_40px_rgba(236,72,153,1)] hover:scale-105 hover:shadow-pink-500/90 border-2 border-pink-300/50">
+            <i class="fas fa-heart"></i>
         </button>
     </footer>
 
@@ -301,7 +341,7 @@
                     <button id="mesh_toggle" onclick="toggleScoreMesh()" class="ml-auto text-[10px] font-bold px-2 py-0.5 rounded border border-pink-200 text-pink-600 hover:bg-pink-50">网格 ON</button>
                     <button onclick="hideScorePanel()" class="ml-1 w-6 h-6 text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
                 </div>
-                <p id="score-panel-title" class="text-sm font-bold text-gray-800 mt-1">点击右下角按钮给当前照片打分</p>
+                <p id="score-panel-title" class="text-sm font-bold text-gray-800 mt-1">点击橙色按钮给当前照片打分</p>
                 <p id="score-panel-desc" class="text-[11px] text-gray-500 leading-relaxed mt-0.5"></p>
             </div>
         </div>
@@ -1173,10 +1213,10 @@
                 <h3 class="font-bold text-gray-800 mb-3">相册</h3>
                 <div class="grid grid-cols-3 gap-2">
                     <div class="aspect-square rounded-xl bg-pink-200 overflow-hidden">
-                        <img id="user-detail-photo1" src="https://images.unsplash.com/photo-1517841905240-472988babdf9?w=300" class="w-full h-full object-cover">
+                        <img id="user-detail-photo1" src="https://images.unsplash.com/photo-1517841905240-472988babdf9?w=300" class="w-full h-full object-cover wm-crop">
                     </div>
                     <div class="aspect-square rounded-xl bg-pink-200 overflow-hidden">
-                        <img id="user-detail-photo2" src="https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=300" class="w-full h-full object-cover">
+                        <img id="user-detail-photo2" src="https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=300" class="w-full h-full object-cover wm-crop">
                     </div>
                 </div>
             </div>
@@ -1240,8 +1280,67 @@
             }
         }
 
-        function init() {
+        // 筛选条件持久化：刷新后继续生效，不重置
+        const FILTER_KEY = 'date.filter';
+        const FILTER_FIELDS = ['age-min', 'age-max', 'height-min', 'height-max', 'edu-min', 'edu-max', 'income', 'marital', 'residence', 'gender'];
+        const EDU_LEVELS = ['高中及以下', '中专', '大专', '大学本科', '硕士', '博士'];
+
+        function loadFilterState() {
+            try {
+                return JSON.parse(localStorage.getItem(FILTER_KEY)) || null;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function filterUsers(f) {
+            const val = (k, d) => (f && f[k] !== undefined && f[k] !== '') ? f[k] : d;
+            const ageMin = parseInt(val('age-min', 18)) || 18;
+            const ageMax = parseInt(val('age-max', 99)) || 99;
+            const heightMin = parseInt(val('height-min', 140)) || 140;
+            const heightMax = parseInt(val('height-max', 220)) || 220;
+            const eduMin = val('edu-min', 'all');
+            const eduMax = val('edu-max', 'all');
+            const eduAll = eduMin === 'all' && eduMax === 'all';
+            const eduLo = eduMin === 'all' ? 0 : EDU_LEVELS.indexOf(eduMin);
+            const eduHi = eduMax === 'all' ? EDU_LEVELS.length - 1 : EDU_LEVELS.indexOf(eduMax);
+            const income = val('income', 'all');
+            const marital = val('marital', 'all');
+            const residence = String(val('residence', '')).trim();
+            const gender = val('gender', 'all');
+
+            return userData.filter(u => {
+                const height = u.height;
+                const matchAge = u.age >= ageMin && u.age <= ageMax;
+                const matchHeight = !(height > 0) || (height >= heightMin && height <= heightMax);   // -1/0 是未填
+                const eduIdx = EDU_LEVELS.indexOf(u.education);   // -1 = 未填写
+                const matchEducation = eduAll || (eduIdx >= eduLo && eduIdx <= eduHi);
+                const matchIncome = income === 'all' || u.income === income;
+                const matchMarital = marital === 'all' || u.marital === marital;
+                const matchResidence = !residence || (u.residence || '').includes(residence);
+                const matchGender = gender === 'all' || u.gender === gender;
+                return matchAge && matchHeight && matchEducation && matchIncome && matchMarital && matchResidence && matchGender;
+            });
+        }
+
+        // 用一份筛选结果重铺卡组
+        function showDeck(list) {
+            displayData = list;
+            loadedUsers = 0;
+            document.getElementById('deck').innerHTML = '';
+            stack = [];
+            document.getElementById('deck').style.display = '';
+            const emptyState = document.getElementById('empty-state');
+            if (emptyState) {
+                emptyState.classList.add('hidden');
+                emptyState.classList.remove('flex');
+            }
             loadMoreUsers();
+            syncTopInfo();
+        }
+
+        function init() {
+            showDeck(filterUsers(loadFilterState()));
         }
 
         function loadMoreUsers() {
@@ -1276,6 +1375,7 @@
             card.style.zIndex = displayData.length - idx;
             card.dataset.userId = user.id;
             card.dataset.photoIdx = 0;
+            card.style.setProperty('--photo', `url("${user.photos[0]}")`);
 
             card.innerHTML = `
                 <div class="label-like card-label">LIKE</div>
@@ -1288,10 +1388,8 @@
                     <div class="tap-right" onclick="changePhoto(event, 1)"></div>
                 </div>
                 <img src="${user.photos[0]}" class="w-full h-full object-cover main-img">
-                <div class="info-scrim">
-                    <h2 class="text-2xl font-bold">${user.name}, ${user.age}</h2>
-                    <p class="text-sm opacity-80">${[user.residence, user.marital, user.income].filter(Boolean).join(' · ') || user.bio}</p>
-                </div>
+                <div class="wm-cover"></div>
+                <div class="info-scrim">${infoHtml(user, false)}</div>
             `;
 
             setupDrag(card);
@@ -1309,6 +1407,7 @@
             card.dataset.photoIdx = pIdx;
             
             card.querySelector('.main-img').src = user.photos[pIdx];
+            card.style.setProperty('--photo', `url("${user.photos[pIdx]}")`);   // 水印遮罩的模糊拷贝跟着换
             const bars = card.querySelectorAll('.progress-bar');
             bars.forEach((b, i) => b.classList.toggle('active', i === pIdx));
 
@@ -1389,32 +1488,46 @@
         let currentMatchUser = null;
 
         function completeSwipe(card, dir) {
+            const user = displayData.find(u => u.id == card.dataset.userId);
+            swipeHistory.push({ user, dir });
+
+            if (dir === 'right') {
+                currentMatchUser = user;
+            }
+
+            cancelScore();   // 换人后旧评分一并收起
+
+            const matched = dir === 'right' && stack.length > 1 && Math.random() < 0.3;
+
+            if (matched) {
+                // 匹配时卡片先留在原位当背景，等匹配界面完整显示后再抽走，露出下一张
+                card.style.transition = 'transform 0.4s ease';
+                card.style.transform = '';
+                card.querySelectorAll('.card-label').forEach(l => l.style.opacity = 0);
+                showMatchEffect(() => {
+                    stack = stack.filter(c => c !== card);
+                    card.remove();
+                    if (stack.length === 0) loadMoreUsers();
+                    syncTopInfo();
+                });
+                return;
+            }
+
             const x = dir === 'right' ? 1000 : -1000;
             card.style.transition = 'all 0.6s ease-in';
             card.style.transform = `translate(${x}px, 0) rotate(${dir === 'right' ? 45 : -45}deg)`;
             card.style.opacity = '0';
-            
-            const user = displayData.find(u => u.id == card.dataset.userId);
-            swipeHistory.push({ user, dir });
-            
-            if (dir === 'right') {
-                currentMatchUser = user;
-            }
-            
+
             stack = stack.filter(c => c !== card);
-            cancelScore();   // 换人后旧评分一并收起
             setTimeout(() => card.remove(), 600);
 
-            if (dir === 'right' && stack.length > 0) {
-                if (Math.random() < 0.3) {
-                    showMatchEffect();
-                }
-            } else if (stack.length === 0) {
+            if (stack.length === 0) {
                 loadMoreUsers();
             }
+            syncTopInfo();   // 新卡顶上来时沿用当前的详情展开状态
         }
 
-        function showMatchEffect() {
+        function showMatchEffect(onShown) {
             playMatchSound();
             const matchDiv = document.createElement('div');
             matchDiv.style.cssText = `
@@ -1485,6 +1598,7 @@
                         </div>
                     `;
                 }
+                if (onShown) onShown();
             }, 2200);
         }
 
@@ -2199,9 +2313,9 @@
                         <span class="text-sm text-gray-600">年龄</span>
                     </div>
                     <div class="flex gap-2 items-center">
-                        <input type="number" id="filter-age-min" min="18" max="100" value="18" class="w-16 px-3 py-2 rounded-xl bg-gray-100 text-center text-sm" oninput="updateAgeRange()">
+                        <input type="number" id="filter-age-min" min="18" max="99" value="18" class="w-16 px-3 py-2 rounded-xl bg-gray-100 text-center text-sm">
                         <span class="text-gray-400">-</span>
-                        <input type="number" id="filter-age-max" min="18" max="100" value="40" class="w-16 px-3 py-2 rounded-xl bg-gray-100 text-center text-sm" oninput="updateAgeRange()">
+                        <input type="number" id="filter-age-max" min="18" max="99" value="99" class="w-16 px-3 py-2 rounded-xl bg-gray-100 text-center text-sm">
                     </div>
                 </div>
                 <div class="mb-4">
@@ -2209,55 +2323,68 @@
                         <span class="text-sm text-gray-600">身高</span>
                     </div>
                     <div class="flex gap-2 items-center">
-                        <input type="number" id="filter-height-min" min="140" max="220" value="150" class="w-16 px-3 py-2 rounded-xl bg-gray-100 text-center text-sm">
+                        <input type="number" id="filter-height-min" min="140" max="220" value="140" class="w-16 px-3 py-2 rounded-xl bg-gray-100 text-center text-sm">
                         <span class="text-gray-400">-</span>
-                        <input type="number" id="filter-height-max" min="140" max="220" value="180" class="w-16 px-3 py-2 rounded-xl bg-gray-100 text-center text-sm">
+                        <input type="number" id="filter-height-max" min="140" max="220" value="220" class="w-16 px-3 py-2 rounded-xl bg-gray-100 text-center text-sm">
                     </div>
                 </div>
                 <div class="mb-4">
                     <div class="flex justify-between mb-2">
-                        <span class="text-sm text-gray-600">教育程度</span>
+                        <span class="text-sm text-gray-600">学历</span>
                     </div>
-                    <select id="filter-education" class="w-full px-3 py-2 rounded-xl bg-gray-100 text-sm">
-                        <option value="all">全部学历</option>
-                        <option value="高中">高中</option>
-                        <option value="大专">大专</option>
-                        <option value="本科">本科</option>
-                        <option value="硕士">硕士</option>
-                        <option value="博士">博士</option>
-                    </select>
+                    <div class="flex gap-2 items-center">
+                        <select id="filter-edu-min" class="flex-1 min-w-0 px-3 py-2 rounded-xl bg-gray-100 text-sm">
+                            <option value="all">不限</option>
+                            <option value="高中及以下">高中及以下</option>
+                            <option value="中专">中专</option>
+                            <option value="大专">大专</option>
+                            <option value="大学本科">大学本科</option>
+                            <option value="硕士">硕士</option>
+                            <option value="博士">博士</option>
+                        </select>
+                        <span class="text-gray-400">-</span>
+                        <select id="filter-edu-max" class="flex-1 min-w-0 px-3 py-2 rounded-xl bg-gray-100 text-sm">
+                            <option value="all">不限</option>
+                            <option value="高中及以下">高中及以下</option>
+                            <option value="中专">中专</option>
+                            <option value="大专">大专</option>
+                            <option value="大学本科">大学本科</option>
+                            <option value="硕士">硕士</option>
+                            <option value="博士">博士</option>
+                        </select>
+                    </div>
                 </div>
                 <div class="mb-4">
                     <div class="flex justify-between mb-2">
-                        <span class="text-sm text-gray-600">收入</span>
+                        <span class="text-sm text-gray-600">薪水</span>
                     </div>
                     <select id="filter-income" class="w-full px-3 py-2 rounded-xl bg-gray-100 text-sm">
-                        <option value="all">全部收入</option>
-                        <option value="5万以下">5万以下</option>
-                        <option value="5-10万">5-10万</option>
-                        <option value="10-20万">10-20万</option>
-                        <option value="20-30万">20-30万</option>
-                        <option value="30-50万">30-50万</option>
-                        <option value="50万以上">50万以上</option>
+                        <option value="all">全部薪水</option>
+                        <option value="3000元以下">3000元以下</option>
+                        <option value="3001-5000元">3001-5000元</option>
+                        <option value="5001-8000元">5001-8000元</option>
+                        <option value="8001-12000元">8001-12000元</option>
+                        <option value="12001-20000元">12001-20000元</option>
+                        <option value="20001-50000元">20001-50000元</option>
+                        <option value="50000元以上">50000元以上</option>
                     </select>
                 </div>
                 <div class="mb-4">
                     <div class="flex justify-between mb-2">
-                        <span class="text-sm text-gray-600">家乡</span>
+                        <span class="text-sm text-gray-600">婚姻</span>
                     </div>
-                    <select id="filter-hometown" class="w-full px-3 py-2 rounded-xl bg-gray-100 text-sm">
-                        <option value="all">全部地区</option>
-                        <option value="北京">北京</option>
-                        <option value="上海">上海</option>
-                        <option value="广州">广州</option>
-                        <option value="深圳">深圳</option>
-                        <option value="成都">成都</option>
-                        <option value="杭州">杭州</option>
-                        <option value="武汉">武汉</option>
-                        <option value="南京">南京</option>
-                        <option value="西安">西安</option>
-                        <option value="重庆">重庆</option>
+                    <select id="filter-marital" class="w-full px-3 py-2 rounded-xl bg-gray-100 text-sm">
+                        <option value="all">全部</option>
+                        <option value="未婚">未婚</option>
+                        <option value="离异">离异</option>
+                        <option value="丧偶">丧偶</option>
                     </select>
+                </div>
+                <div class="mb-4">
+                    <div class="flex justify-between mb-2">
+                        <span class="text-sm text-gray-600">居住地</span>
+                    </div>
+                    <input id="filter-residence" type="text" placeholder="如：杭州 / 北京，留空为不限" class="w-full px-3 py-2 rounded-xl bg-gray-100 text-sm">
                 </div>
                 <div class="mb-4">
                     <div class="flex justify-between mb-2">
@@ -2269,10 +2396,22 @@
                         <option value="女">女</option>
                     </select>
                 </div>
-                <button onclick="applyFilter(); document.getElementById('filter-modal').remove();" class="w-full py-3 bg-pink-500 text-white rounded-full font-bold text-sm">应用</button>
+                <div class="flex gap-2">
+                    <button onclick="resetFilter()" class="w-24 py-3 bg-gray-100 text-gray-600 rounded-full font-bold text-sm">重置</button>
+                    <button onclick="applyFilter(); document.getElementById('filter-modal').remove();" class="flex-1 py-3 bg-pink-500 text-white rounded-full font-bold text-sm">应用</button>
+                </div>
             `;
             
             document.body.appendChild(filterDiv);
+
+            // 回填上次保存的条件
+            const saved = loadFilterState();
+            if (saved) {
+                FILTER_FIELDS.forEach(k => {
+                    const el = document.getElementById('filter-' + k);
+                    if (el && saved[k] !== undefined) el.value = saved[k];
+                });
+            }
         };
 
         window.setFilter = function(type, value) {
@@ -2286,80 +2425,63 @@
         };
 
         window.applyFilter = function() {
-            const ageMin = parseInt(document.getElementById('filter-age-min').value) || 18;
-            const ageMax = parseInt(document.getElementById('filter-age-max').value) || 40;
-            const heightMin = parseInt(document.getElementById('filter-height-min').value) || 150;
-            const heightMax = parseInt(document.getElementById('filter-height-max').value) || 180;
-            const education = document.getElementById('filter-education').value;
-            const income = document.getElementById('filter-income').value;
-            const hometown = document.getElementById('filter-hometown').value;
-            const gender = document.getElementById('filter-gender').value;
+            const state = {};
+            FILTER_FIELDS.forEach(k => state[k] = document.getElementById('filter-' + k).value);
+            localStorage.setItem(FILTER_KEY, JSON.stringify(state));
+            showDeck(filterUsers(state));
+        };
 
-            const filteredData = userData.filter(u => {
-                const age = u.age;
-                const height = u.height;
-                const matchAge = age >= ageMin && age <= ageMax;
-                const matchHeight = height >= heightMin && height <= heightMax;
-                const matchEducation = education === 'all' || u.education.includes(education);
-                const matchIncome = income === 'all' || u.income === income;
-                const matchHometown = hometown === 'all' || u.hometown === hometown;
-                const matchGender = gender === 'all' || u.gender === gender;
-                return matchAge && matchHeight && matchEducation && matchIncome && matchHometown && matchGender;
-            });
-            
-            // 切换展示数据为筛选结果，按批次加载（不再一次性全渲染）
-            displayData = filteredData;
-            loadedUsers = 0;
-            document.getElementById('deck').innerHTML = '';
-            stack = [];
-            const deck = document.getElementById('deck');
-            deck.style.display = '';
-            const emptyState = document.getElementById('empty-state');
-            if (emptyState) {
-                emptyState.classList.add('hidden');
-                emptyState.classList.remove('flex');
+        window.resetFilter = function() {
+            localStorage.removeItem(FILTER_KEY);
+            const modal = document.getElementById('filter-modal');
+            if (modal) modal.remove();
+            showDeck(filterUsers(null));   // 条件清空 = 全量
+        };
+
+
+
+        // 卡片底部信息的两套内容（详情展开后一直沿用，直到再点一次信息按钮）
+        function infoHtml(user, expanded) {
+            const head = `<h2 class="text-2xl font-bold">${user.name}, ${user.age}</h2>`;
+            if (!expanded) {
+                return head + `<p class="text-sm opacity-80">${[user.residence, user.marital, user.income].filter(Boolean).join(' · ') || user.bio}</p>`;
             }
-            loadMoreUsers();
-        };
+            const lines = [];
+            if (user.height > 0) lines.push(`<p class="text-xs mb-1">身高: ${user.height}cm</p>`);
+            if (user.education) lines.push(`<p class="text-xs mb-1">学历: ${user.education}</p>`);
+            if (user.income) lines.push(`<p class="text-xs mb-1">收入: ${user.income}</p>`);
+            if (user.residence) lines.push(`<p class="text-xs mb-1">居住地: ${user.residence}</p>`);
+            if (user.marital) lines.push(`<p class="text-xs mb-1">婚况: ${user.marital}</p>`);
+            if (user.bio) lines.push(`<p class="text-xs mt-2 leading-relaxed">${user.bio}</p>`);
+            return head + lines.join('');
+        }
 
-        window.updateAgeRange = function() {
-            const min = parseInt(document.getElementById('filter-age-min').value);
-            const max = parseInt(document.getElementById('filter-age-max').value);
-            document.getElementById('filter-age-range').textContent = `${min}-${max}`;
-        };
+        let infoExpanded = false;
 
-        window.updateHeightRange = function() {
-            const min = parseInt(document.getElementById('filter-height-min').value);
-            const max = parseInt(document.getElementById('filter-height-max').value);
-            document.getElementById('filter-height-range').textContent = `${min}-${max}`;
-        };
+        function topCard() {
+            return stack.reduce((max, card) => parseInt(card.style.zIndex) > parseInt(max.style.zIndex) ? card : max, stack[0]);
+        }
+
+        function renderCardInfo(card, expanded) {
+            const user = card && displayData.find(u => u.id == card.dataset.userId);
+            if (!user) return;
+            card.querySelector('.info-scrim').innerHTML = infoHtml(user, expanded);
+            card.dataset.expanded = expanded ? '1' : '0';
+        }
+
+        // 换人后新卡顶上来：跟着当前的展开状态走
+        function syncTopInfo() {
+            const card = topCard();
+            if (!card) return;
+            if ((card.dataset.expanded === '1') === infoExpanded) return;
+            renderCardInfo(card, infoExpanded);
+        }
 
         window.toggleCardInfo = function() {
-            const topCard = stack.reduce((max, card) => {
-                return parseInt(card.style.zIndex) > parseInt(max.style.zIndex) ? card : max;
-            }, stack[0]);
-            if (!topCard) return;
-
-            const user = displayData.find(u => u.id == topCard.dataset.userId);
-            const infoScrim = topCard.querySelector('.info-scrim');
-            const expanded = topCard.dataset.expanded === '1';
-
-            if (expanded) {
-                // 收起：恢复简短信息
-                infoScrim.innerHTML = `<h2 class="text-2xl font-bold">${user.name}, ${user.age}</h2><p class="text-sm opacity-80">${[user.residence, user.marital, user.income].filter(Boolean).join(' · ') || user.bio}</p>`;
-                topCard.dataset.expanded = '0';
-            } else {
-                // 展开：详细信息（只显示有值的字段）
-                const lines = [];
-                if (user.height) lines.push(`<p class="text-xs mb-1">身高: ${user.height}cm</p>`);
-                if (user.education) lines.push(`<p class="text-xs mb-1">学历: ${user.education}</p>`);
-                if (user.income) lines.push(`<p class="text-xs mb-1">收入: ${user.income}</p>`);
-                if (user.residence) lines.push(`<p class="text-xs mb-1">居住地: ${user.residence}</p>`);
-                if (user.marital) lines.push(`<p class="text-xs mb-1">婚况: ${user.marital}</p>`);
-                if (user.bio) lines.push(`<p class="text-xs mt-2 leading-relaxed">${user.bio}</p>`);
-                infoScrim.innerHTML = `<h2 class="text-2xl font-bold">${user.name}, ${user.age}</h2>${lines.join('')}`;
-                topCard.dataset.expanded = '1';
-            }
+            const card = topCard();
+            if (!card) return;
+            infoExpanded = !infoExpanded;
+            renderCardInfo(card, infoExpanded);
         };
 
         const style = document.createElement('style');
@@ -2369,12 +2491,10 @@
         document.head.appendChild(style);
 
         function handleBtnSwipe(dir) {
-            const topCard = stack.reduce((max, card) => {
-                return parseInt(card.style.zIndex) > parseInt(max.style.zIndex) ? card : max;
-            }, stack[0]);
-            if (topCard) {
-                topCard.querySelector(`.label-${dir === 'right' ? 'like' : 'nope'}`).style.opacity = 1;
-                completeSwipe(topCard, dir);
+            const card = topCard();
+            if (card) {
+                card.querySelector(`.label-${dir === 'right' ? 'like' : 'nope'}`).style.opacity = 1;
+                completeSwipe(card, dir);
             }
         }
 
