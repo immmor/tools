@@ -58,13 +58,23 @@
         .card {
             position: absolute;
             inset: 0;
-            background: white;
             border-radius: 24px;
+            /* 阴影留在这一层（不被裁剪），裁剪交给里面的 .card-view */
             box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-            overflow: hidden;
             user-select: none;
             touch-action: none;
             transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.3s;
+        }
+        /* 内容层：圆角裁剪。移动端 overflow+border-radius 常裁不住带 filter/mask 的合成子层，
+           会漏出直角，所以再叠一层 clip-path */
+        .card-view {
+            position: absolute;
+            inset: 0;
+            background: white;
+            border-radius: 24px;
+            overflow: hidden;
+            -webkit-clip-path: inset(0 round 24px);
+            clip-path: inset(0 round 24px);
         }
 
         /* 顶部照片进度条 */
@@ -104,25 +114,23 @@
         .wm-cover {
             position: absolute;
             inset: 0;
-            overflow: hidden;            /* 把模糊子层关在卡片内，移动端也不会漏出直角 */
-            border-radius: inherit;
             pointer-events: none;
             z-index: 44;                 /* 压在 info-scrim 之下，好跟底部暗角融为一体 */
             background: radial-gradient(ellipse 26% 26% at 100% 100%, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0) 70%);
             -webkit-mask-image: radial-gradient(ellipse 26% 26% at 100% 100%, #000 55%, transparent 100%);
             mask-image: radial-gradient(ellipse 26% 26% at 100% 100%, #000 55%, transparent 100%);
             -webkit-mask-repeat: no-repeat;
-            mask-repeat: no-repeat;
+            mask-repeat: no-repeat;    /* 别把遮罩平铺到右侧出血区，那里会露出直角 */
         }
-        /* 拷贝与主图同尺寸同位置，圆角自带一份，避免依赖祖先裁剪 */
+        /* 拷贝与主图同尺寸同位置（右侧多留 60px 出血，避免模糊在卡片边缘透出原图），
+           object-cover 是高度主导，加宽不改变缩放，只需把居中位置补回 30px */
         .wm-cover::before {
             content: '';
             position: absolute;
-            inset: 0;
-            border-radius: inherit;
+            top: 0; bottom: 0; left: 0; right: -60px;
             background-image: var(--photo);
             background-size: cover;
-            background-position: center;
+            background-position: calc(50% - 30px) 50%;
             filter: blur(14px);
         }
 
@@ -1382,18 +1390,20 @@
             card.style.setProperty('--photo', `url("${user.photos[0]}")`);
 
             card.innerHTML = `
-                <div class="label-like card-label">LIKE</div>
-                <div class="label-nope card-label">NOPE</div>
-                <div class="progress-container">
-                    ${user.photos.map((_, i) => `<div class="progress-bar ${i===0?'active':''}"></div>`).join('')}
+                <div class="card-view">
+                    <div class="label-like card-label">LIKE</div>
+                    <div class="label-nope card-label">NOPE</div>
+                    <div class="progress-container">
+                        ${user.photos.map((_, i) => `<div class="progress-bar ${i===0?'active':''}"></div>`).join('')}
+                    </div>
+                    <div class="tap-overlay">
+                        <div class="tap-left" onclick="changePhoto(event, -1)"></div>
+                        <div class="tap-right" onclick="changePhoto(event, 1)"></div>
+                    </div>
+                    <img src="${user.photos[0]}" class="w-full h-full object-cover main-img">
+                    <div class="wm-cover"></div>
+                    <div class="info-scrim">${infoHtml(user, false)}</div>
                 </div>
-                <div class="tap-overlay">
-                    <div class="tap-left" onclick="changePhoto(event, -1)"></div>
-                    <div class="tap-right" onclick="changePhoto(event, 1)"></div>
-                </div>
-                <img src="${user.photos[0]}" class="w-full h-full object-cover main-img">
-                <div class="wm-cover"></div>
-                <div class="info-scrim">${infoHtml(user, false)}</div>
             `;
 
             setupDrag(card);
@@ -2649,7 +2659,7 @@
             const scan = document.createElement('div');
             scan.className = 'score-scan';
             scan.innerHTML = '<div class="scan-tip"><i class="fas fa-wand-magic-sparkles mr-1"></i>正在分析颜值…</div>';
-            card.appendChild(scan);
+            (card.querySelector('.card-view') || card).appendChild(scan);
         }
 
         function stopScanAnim() {
@@ -2683,7 +2693,7 @@
             if (!canvas) {
                 canvas = document.createElement('canvas');
                 canvas.className = 'score-mesh';
-                card.appendChild(canvas);
+                (card.querySelector('.card-view') || card).appendChild(canvas);
             }
             canvas.width = Math.round(cw * dpr);
             canvas.height = Math.round(ch * dpr);
