@@ -794,6 +794,19 @@
             34: 'Threads'
         };
 
+        // 分类展示顺序：AI 在最前，X/Telegram 紧跟邮箱，Outlook 紧跟 Gmail，Others 垫底
+        // 未列出的分类按 id 升序排在中间
+        const CATEGORY_ORDER = [16, 1, 11, 19, 2, 3, 5, 28, 9, 12, 13, 14, 31, 32, 34];
+
+        // 同一品牌的多个 category_id 合并展示（29 并入 11，都叫 X）
+        const CATEGORY_ALIAS = { 29: 11 };
+        const normCat = id => CATEGORY_ALIAS[id] || id;
+        const catRank = id => {
+            if (id === 7) return 9999;
+            const i = CATEGORY_ORDER.indexOf(id);
+            return i === -1 ? 500 + id : i;
+        };
+
         // 关键词命中判断（无关键词视为全部命中）
         function matchKeyword(acc, keyword) {
             if (!keyword) return true;
@@ -820,7 +833,7 @@
             const rawKw = document.getElementById('searchInput').value.trim();
             const keyword = rawKw.toLowerCase();
             const match = acc =>
-                (currentCategory === 0 || acc.category === currentCategory) && matchKeyword(acc, keyword);
+                (currentCategory === 0 || normCat(acc.category) === currentCategory) && matchKeyword(acc, keyword);
             renderList = (currentTab === 'sell' ? allAccounts : allMarketAccounts).filter(match);
             if (SORTERS[sortMode]) renderList.sort(SORTERS[sortMode]);
             visibleCount = RENDER_LIMIT;   // 每次筛选从头加载前 N 条
@@ -1045,8 +1058,8 @@
             const source = currentTab === 'sell' ? allAccounts : allMarketAccounts;
             const pool = source.filter(a => matchKeyword(a, keyword));
             const counts = {};
-            pool.forEach(a => { counts[a.category] = (counts[a.category] || 0) + 1; });
-            const ids = Object.keys(counts).map(Number).sort((a, b) => a - b);
+            pool.forEach(a => { const c = normCat(a.category); counts[c] = (counts[c] || 0) + 1; });
+            const ids = Object.keys(counts).map(Number).sort((a, b) => catRank(a) - catRank(b));
             const cats = [{ id: 0, name: '全部' }]
                 .concat(ids.map(id => ({ id, name: CATEGORY_NAMES[id] || ('分类 ' + id) })));
             const sortBtns = SORTS.map(s =>
