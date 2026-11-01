@@ -24,7 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const getAnonId = () => {
             let id = localStorage.getItem('anonSupportId');
             if (!id) {
-                const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+                const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
                 let s = '';
                 for (let i = 0; i < 5; i++) s += chars[Math.floor(Math.random() * chars.length)];
                 id = '匿名用户' + s;
