@@ -18,6 +18,20 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             return supabaseClient;
         };
+
+        // 匿名用户（未登录）分配一个稳定的会话 ID，存入 localStorage：
+        // 1) 接收端不再因 username 为空而跳过订阅；2) 每个匿名访客独立线程，不会串号
+        const getAnonId = () => {
+            let id = localStorage.getItem('anonSupportId');
+            if (!id) {
+                const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+                let s = '';
+                for (let i = 0; i < 5; i++) s += chars[Math.floor(Math.random() * chars.length)];
+                id = '匿名用户' + s;
+                localStorage.setItem('anonSupportId', id);
+            }
+            return id;
+        };
         // 回复期间仅禁用发送按钮（变橙色，禁止重复发送）；输入框保持可聚焦/可输入（不禁用，避免失焦）
         const setInputEnabled = (enabled) => {
             if (sendBtn) sendBtn.disabled = !enabled;
@@ -523,7 +537,7 @@ document.addEventListener('DOMContentLoaded', () => {
         let leaveSubmittedAt = null;
         const pollSupportReplies = async () => {
             const userInfo = window.userInfo || JSON.parse(localStorage.getItem('userInfo') || '{}');
-            const username = userInfo.username;
+            const username = userInfo.username || getAnonId();
             if (!username || !leaveSubmittedAt) return; // 未登录 / 未留言不拉取
             replyPollCount++;
             try {
@@ -568,7 +582,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // 实时接收客服回复：优先 Supabase Realtime，未配置则回落到原 15s 轮询
         const startReplyListening = async () => {
             const userInfo = window.userInfo || JSON.parse(localStorage.getItem('userInfo') || '{}');
-            const username = userInfo.username;
+            const username = userInfo.username || getAnonId();
             if (!username || !leaveSubmittedAt) return;
             const sb = await getSupabase();
             if (sb) {
@@ -881,7 +895,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (isLeaveMessageMode) {
                 const userInfo = window.userInfo || JSON.parse(localStorage.getItem('userInfo') || '{}');
-                const username = userInfo.username || '匿名用户';
+                const username = userInfo.username || getAnonId();
                 const msg = `[投诉] 用户: ${username}\n内容: ${text}`;
                 const API = 'https://api.funbua.uk';
                 const firstTime = !leaveSubmittedAt;
