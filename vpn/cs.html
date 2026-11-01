@@ -30,6 +30,9 @@
   #app { display: flex; height: 100vh; }
   #sidebar { width: 260px; background: #0e1420; border-right: 1px solid #1f2937; display: flex; flex-direction: column; }
   .side-head { padding: 12px 16px; border-bottom: 1px solid #1f2937; font-weight: 600; font-size: 16px; line-height: 1.5; color: #9ca3af; }
+  .tab-bar { display: flex; border-bottom: 1px solid #1f2937; }
+  .tab-bar .tab { flex: 1; padding: 9px 0; background: transparent; border: 0; color: #9ca3af; font-size: 13px; font-family: inherit; cursor: pointer; border-bottom: 2px solid transparent; }
+  .tab-bar .tab.active { color: #22c55e; border-bottom-color: #22c55e; }
   #userList { flex: 1; overflow-y: auto; }
   .user-item { padding: 10px 12px; border-bottom: 1px solid #161e2c; cursor: pointer; }
   .user-item:hover { background: #111827; }
@@ -73,6 +76,10 @@
 <div id="app" class="hidden">
   <aside id="sidebar">
     <div class="side-head">用户会话</div>
+    <div class="tab-bar">
+      <button class="tab active" data-tab="supabase">Supabase</button>
+      <button class="tab" data-tab="inbox">收件箱</button>
+    </div>
     <div id="userList"></div>
   </aside>
   <main id="main">
@@ -97,22 +104,34 @@ const API_BASE = 'https://api.funbua.uk';   // Worker 域名，登录走 /api/lo
 const $ = (id) => document.getElementById(id);
 const users = new Map();          // username -> { last, time }
 const rendered = new Set();
-let sb = null, channel = null, currentUser = '';
+let sb = null, channel = null, currentUser = '', currentTab = 'supabase';
 
 const fmt = (d) => new Date(d).toLocaleString();
 
-function render(row) {
-  if (rendered.has(row.id)) return;
-  rendered.add(row.id);
+// 从投诉内容解析发送者（格式：[投诉] 用户: NAME\n内容: ...）
+function parseSender(content) {
+  const m = (content || '').match(/用户:\s*([^\n]+)/);
+  return m ? m[1].trim() : null;
+}
+// 去掉 [投诉] 用户: ...\n内容: 前缀，便于阅读
+function stripPrefix(content) {
+  const m = (content || '').match(/^\[投诉\][\s\S]*?内容:\s*/);
+  return m ? content.slice(m[0].length) : content;
+}
+
+// 渲染一条消息；dir: 'user'=用户(左) / 'agent'=客服(右)
+function renderMsg(row, dir) {
+  if (row.id && rendered.has(row.id)) return;
+  if (row.id) rendered.add(row.id);
   const div = document.createElement('div');
-  div.className = 'row ' + (row.from_role === 'agent' ? 'agent' : 'user');
-  div.innerHTML = `<div></div><div class="meta">${row.from_role === 'agent' ? '客服' : '用户'} · ${fmt(row.created_at)}</div>`;
-  div.firstChild.textContent = row.content;
+  div.className = 'row ' + (dir === 'agent' ? 'agent' : 'user');
+  div.innerHTML = `<div></div><div class="meta">${dir === 'agent' ? '客服' : '用户'} · ${fmt(row.created_at)}</div>`;
+  div.firstChild.textContent = stripPrefix(row.content);
   $('thread').appendChild(div);
   $('thread').scrollTop = $('thread').scrollHeight;
 }
 
-// 更新左侧用户列表（含新增用户、刷新最近消息预览）
+// 左侧用户列表（发送者 -> 最近消息预览）
 function upsertUser(name, preview, time) {
   const prev = users.get(name);
   if (!prev || new Date(time) >= new Date(prev.time)) users.set(name, { last: preview, time });
@@ -134,36 +153,95 @@ function renderUserList() {
     });
 }
 
+// 用户列表：按当前 Tab 取数据
+//  - supabase：Supabase support_messages（默认），按真实用户名聚合
+//  - inbox：D1 immmor 收件箱（用户发给 immmor 的投诉，排除系统通知）
 async function loadUsers() {
-  const { data, error } = await sb.from('support_messages').select('username, content, created_at').order('created_at', { ascending: false });
-  if (error) { console.error(error); return; }
   users.clear();
-  (data || []).forEach((r) => upsertUser(r.username, r.content, r.created_at));
+  if (currentTab === 'supabase') {
+    if (!sb) { $('convTitle').textContent = '未配置 Supabase'; return; }
+    const { data, error } = await sb.from('support_messages').select('username, content, created_at').order('created_at', { ascending: false });
+    if (error) { console.error(error); return; }
+    (data || []).forEach((r) => upsertUser(r.username, r.content, r.created_at));
+  } else {
+    try {
+      const res = await fetch(`${API_BASE}/api/messages?username=immmor`);
+      const data = await res.json();
+      const list = (data && data.data && data.data.messages) || [];
+      list.forEach((m) => {
+        const sender = parseSender(m.content);
+        if (!sender) return; // 跳过系统通知等非用户投诉消息
+        const text = stripPrefix(m.content);
+        const prev = users.get(sender);
+        if (!prev || new Date(m.created_at) >= new Date(prev.time)) {
+          users.set(sender, { last: text, time: m.created_at });
+        }
+      });
+      renderUserList();
+    } catch (e) { console.error(e); }
+  }
 }
 
+// 打开某用户会话：按当前 Tab 取对应数据源
 async function selectUser(name) {
   currentUser = name;
   $('convTitle').textContent = '与 ' + name + ' 的会话';
   $('send').disabled = false;
   $('thread').innerHTML = ''; rendered.clear();
-  const { data, error } = await sb.from('support_messages').select('*').eq('username', name).order('created_at');
-  if (!error) (data || []).forEach(render);
+  if (currentTab === 'supabase') {
+    if (!sb) return;
+    const { data, error } = await sb.from('support_messages').select('*').eq('username', name).order('created_at');
+    if (!error) (data || []).forEach((r) => renderMsg(r, r.from_role === 'agent' ? 'agent' : 'user'));
+  } else {
+    // inbox：immmor 收件箱(用户发的) + 该用户收件箱(immmor 回复的) 合并
+    try {
+      const inbox = await (await fetch(`${API_BASE}/api/messages?username=immmor`)).json();
+      const complaints = ((inbox.data && inbox.data.messages) || [])
+        .filter((m) => parseSender(m.content) === name)
+        .map((m) => ({ ...m, dir: 'user' }));
+      const out = await (await fetch(`${API_BASE}/api/messages?username=${encodeURIComponent(name)}`)).json();
+      const replies = ((out.data && out.data.messages) || []).map((m) => ({ ...m, dir: 'agent' }));
+      complaints.concat(replies)
+        .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+        .forEach((m) => renderMsg(m, m.dir));
+    } catch (e) { console.error(e); }
+  }
 }
 
+// 回复：写回 D1 用户收件箱（Worker 会同步镜像到 Supabase，用户端实时收到）
 async function send() {
   const text = $('msg').value.trim();
-  if (!text || !sb || !currentUser) return;
-  $('msg').value = '';
-  const { error } = await sb.from('support_messages').insert({ username: currentUser, from_role: 'agent', content: text });
-  if (error) console.error(error);
+  if (!text || !currentUser) return;
+  $('send').disabled = true;
+  try {
+    const res = await fetch(`${API_BASE}/api/send-message`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: text, target: 'single', username: currentUser })
+    });
+    const data = await res.json();
+    if (data.code === 200) {
+      $('msg').value = '';
+      selectUser(currentUser); // 重新拉取，确保回复出现在会话里
+    } else {
+      alert(data.msg || '发送失败');
+    }
+  } catch (e) {
+    alert('网络错误，请重试');
+  } finally {
+    $('send').disabled = false;
+  }
 }
 
+// 数据源 B：保留 Supabase 订阅，仅用于感知「用户新消息」并刷新（客服回复由本地/接口保证，不重复渲染）
 function setupRealtime() {
+  if (!sb) return;
   channel = sb.channel('cs-global')
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'support_messages' }, (p) => {
       const r = p.new;
-      upsertUser(r.username, r.content, r.created_at); // 新用户自动进列表
-      if (r.username === currentUser) render(r);        // 当前会话实时渲染
+      if (r.from_role !== 'user') return; // 只看用户发来的
+      loadUsers();
+      if (r.username === currentUser) renderMsg({ ...r, id: r.id }, 'user');
     })
     .subscribe();
 }
@@ -179,11 +257,14 @@ function getCookie(name) {
 
 // 进入主界面（cookie 的过期由浏览器按 expires 判断，无需手动校验）
 function enterApp() {
-  if (SUPABASE_URL && SUPABASE_ANON_KEY) sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+    sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    setupRealtime(); // 保留 Supabase 实时：感知用户新消息
+  }
   $('login').classList.add('hidden');
   $('app').classList.remove('hidden');
-  if (sb) { loadUsers(); setupRealtime(); }
-  else $('convTitle').textContent = '未配置 Supabase';
+  loadUsers(); // 默认加载 Supabase Tab 的用户列表（收件箱 Tab 在切换时加载）
+  setInterval(loadUsers, 15000); // 兜底刷新，即使实时未触发也能看到新消息
 }
 
 async function doLogin() {
@@ -212,6 +293,22 @@ async function doLogin() {
 
 window.addEventListener('DOMContentLoaded', () => {
   if (getCookie('cs_auth')) enterApp();   // 已有有效登录 cookie，直接进入，无需重复登录
+
+  // 用户列表两个 Tab：Supabase（默认） / 收件箱（D1 immmor）
+  document.querySelectorAll('.tab-bar .tab').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (btn.classList.contains('active')) return;
+      document.querySelectorAll('.tab-bar .tab').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentTab = btn.dataset.tab;
+      currentUser = '';
+      $('thread').innerHTML = '';
+      $('send').disabled = true;
+      $('convTitle').textContent = '未选择会话';
+      loadUsers();
+    });
+  });
+
   $('loginBtn').addEventListener('click', doLogin);
   $('pwd').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
   $('toggleSide').addEventListener('click', () => $('sidebar').classList.toggle('collapsed'));
