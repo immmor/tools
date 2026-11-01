@@ -5,6 +5,19 @@ document.addEventListener('DOMContentLoaded', () => {
         let idleTimer = null;
         let isLeaveMessageMode = false;
         let isBotReplying = false;
+        // ===== Supabase 实时对话配置（留空则自动回落到原 15s 轮询）=====
+        const SUPABASE_URL = 'https://imuopmivywtlzzlwgtmi.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImltdW9wbWl2eXd0bHp6bHdndG1pIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkxNzM0MjMsImV4cCI6MjA3NDc0OTQyM30.ItR-A59_dHmfM2eECU3ENeJxGpATPz_hnQaTwAoKQaM';
+        let supabaseClient = null;
+        let replyChannel = null;
+        const getSupabase = async () => {
+            if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
+            if (!supabaseClient) {
+                const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
+                supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            }
+            return supabaseClient;
+        };
         // 回复期间仅禁用发送按钮（变橙色，禁止重复发送）；输入框保持可聚焦/可输入（不禁用，避免失焦）
         const setInputEnabled = (enabled) => {
             if (sendBtn) sendBtn.disabled = !enabled;
@@ -552,6 +565,31 @@ document.addEventListener('DOMContentLoaded', () => {
             if (replyPollTimer) { clearInterval(replyPollTimer); replyPollTimer = null; }
         };
 
+        // 实时接收客服回复：优先 Supabase Realtime，未配置则回落到原 15s 轮询
+        const startReplyListening = async () => {
+            const userInfo = window.userInfo || JSON.parse(localStorage.getItem('userInfo') || '{}');
+            const username = userInfo.username;
+            if (!username || !leaveSubmittedAt) return;
+            const sb = await getSupabase();
+            if (sb) {
+                replyChannel = sb.channel(`support-${username}`)
+                    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'support_messages' }, (payload) => {
+                        const row = payload.new;
+                        if (row.username !== username || row.from_role !== 'agent' || shownReplyIds.has(row.id)) return;
+                        shownReplyIds.add(row.id);
+                        addMessage('support', row.content, new Date());
+                        fetch(`${API_BASE}/api/messages/read`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, messageId: row.id }) }).catch(() => {});
+                    })
+                    .subscribe();
+            } else {
+                startReplyPolling();
+            }
+        };
+        const stopReplyListening = () => {
+            stopReplyPolling();
+            if (replyChannel) { replyChannel.unsubscribe?.(); replyChannel = null; }
+        };
+
         const addMessage = (type, text, time) => {
             const date = (time instanceof Date) ? time : new Date();
             const isSupport = type === 'support';
@@ -846,6 +884,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const username = userInfo.username || '匿名用户';
                 const msg = `[投诉] 用户: ${username}\n内容: ${text}`;
                 const API = 'https://api.funbua.uk';
+                const firstTime = !leaveSubmittedAt;
                 try {
                     await Promise.all([
                         fetch(`${API}/api/send-message`, {
@@ -859,18 +898,20 @@ document.addEventListener('DOMContentLoaded', () => {
                             body: JSON.stringify({ content: msg, target: 'single', username: 'immmor' })
                         })
                     ]);
-                    const successMsg = (window.translations && window.translations[window.currentLang]?.support_leave_success) || '您的留言已提交，我们会尽快回复您！';
-                    await addBotMessageStream(successMsg);
-                    // 留言提交成功后，才开始监听客服回复（只显示此后的消息）
+                    const sb = await getSupabase();
+                    if (sb) await sb.from('support_messages').insert({ username, from_role: 'user', content: text });
+                    // 提交成功后开始监听客服回复（只显示此后的消息）；保持人工模式，后续每条都转发客服
                     leaveSubmittedAt = new Date();
                     replyPollCount = 0;
-                    startReplyPolling();
+                    startReplyListening();
+                    if (firstTime) {
+                        const successMsg = (window.translations && window.translations[window.currentLang]?.support_leave_success) || '您的留言已提交，我们会尽快回复您！';
+                        await addBotMessageStream(successMsg);
+                    }
                 } catch (e) {
                     const failMsg = (window.translations && window.translations[window.currentLang]?.support_leave_fail) || '留言提交失败，请稍后重试。';
                     await addBotMessageStream(failMsg);
                 }
-                isLeaveMessageMode = false;
-                input.placeholder = '';
                 return;
             }
             
@@ -965,8 +1006,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 showWelcome();
             }
             resetIdleTimer();
-            // 若今天已留言过，重新打开时继续监听客服回复；否则不主动拉取历史消息
-            if (leaveSubmittedAt) startReplyPolling();
+            // 若已有人工会话，重新打开时继续监听并保持在人工模式（每条消息都转发客服）
+            if (leaveSubmittedAt) { startReplyListening(); isLeaveMessageMode = true; }
         };
 
         // 空闲计时：用户最后一次输入或发消息后 2 分钟无活动，自动转入留言模式
@@ -988,7 +1029,7 @@ document.addEventListener('DOMContentLoaded', () => {
             setInputEnabled(true);
             setTyping(false);
             input.placeholder = '';
-            stopReplyPolling();
+            stopReplyListening();
             if (!modal.classList.contains('hidden')) {
                 // 缩小飞向右边悬浮窗，动画结束后再隐藏弹窗
                 modal.classList.add('shrunk');

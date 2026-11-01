@@ -22,6 +22,19 @@ const notifyAdmin = async (title, body) => {
   } catch (e) {}
 };
 
+// Supabase 实时消息桥接：把「客服→用户」的回复镜像进 Supabase，前端用 Realtime 接收（无配置则跳过）
+async function supabaseInsert(env, table, row) {
+  const url = env.SUPABASE_URL, key = env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return;
+  try {
+    await fetch(`${url}/rest/v1/${table}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': key, 'Authorization': `Bearer ${key}`, 'Prefer': 'return=minimal' },
+      body: JSON.stringify(row),
+    });
+  } catch (_) {}
+}
+
 function fbChoiceLabel(_match, choice) {
   const map = { a: '主胜', draw: '平局', b: '客胜' };
   return map[choice] || choice;
@@ -460,6 +473,73 @@ export default {
         return new Response(data, {
           headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json; charset=utf-8' }
         });
+      }
+
+      // ========== talangya 下单代理（绕过CORS，原样下单并把 secret 返回前端） ==========
+      if (path === '/api/talangya/order' && request.method === 'POST') {
+        try {
+          const p = await request.json();
+          const itemId = p.item_id || p.commodity_id || p.id;
+          if (!itemId) {
+            return resJson({ code: 400, msg: '缺少 item_id 参数' }, 400);
+          }
+          const body = new URLSearchParams({
+            item_id: String(itemId),
+            commodity_id: String(itemId),
+            pay_id: p.pay_id || '1',
+            race: p.race || '',
+            card_id: p.card_id || '0',
+            device: p.device || '0',
+            from: p.from || '0',
+            num: p.num || '1',
+            contact: p.contact || '',
+            coupon: p.coupon || '',
+            password: p.password || '',
+            captcha: p.captcha || ''
+          }).toString();
+          const r = await fetch('https://talangya.com/user/api/order/trade', {
+            method: 'POST',
+            headers: {
+              'accept': '*/*',
+              'accept-language': 'zh-CN,zh;q=0.9',
+              'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
+              'origin': 'https://talangya.com',
+              'referer': 'https://talangya.com/',
+              'sec-ch-ua': '"Chromium";v="154", "Google Chrome";v="154", "Not A(Brand";v="99"',
+              'sec-ch-ua-mobile': '?0',
+              'sec-ch-ua-platform': '"macOS"',
+              'sec-fetch-dest': 'empty',
+              'sec-fetch-mode': 'cors',
+              'sec-fetch-site': 'same-origin',
+              'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36',
+              'x-requested-with': 'XMLHttpRequest',
+              'cookie': 'ACG-SHOP=l9hhhl05jctiudp28lqm8ae4is; USER_SESSION=ZXlKMGVYQWlPaUpLVjFRaUxDSjFhV1FpT2pNNU16QXdMQ0poYkdjaU9pSklVekkxTmlKOS5leUpsZUhCcGNtVWlPakU0TWpNek1EVTJNelFzSW14dloybHVWR2x0WlNJNklqSXdNall0TVRBdE1USWdNRGs2TkRjNk1UUWlmUS5xMjAzbHN2VTZ1Q0JFVnpQbWJUYjAxX0ZZMUYweFVXQnJyRDZ6ZllOU1d3'
+            },
+            body
+          });
+          const text = await r.text();
+          let json;
+          try {
+            json = JSON.parse(text);
+          } catch {
+            return new Response(text, { headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json; charset=utf-8' } });
+          }
+          // 下单成功：把 secret（账号:密码）透传给前端
+          if (json && json.code === 200 && json.data) {
+            return resJson({
+              code: 200,
+              msg: json.msg || '下单成功',
+              secret: json.data.secret,
+              tradeNo: json.data.tradeNo,
+              amount: json.data.amount,
+              data: json.data
+            });
+          }
+          return resJson(json);
+        } catch (err) {
+          console.error('Talangya order error:', err);
+          return resJson({ code: 500, msg: '下单失败', error: err.message }, 500);
+        }
       }
 
       // ========== 无头浏览器抓取页面文字接口（Browser Run Quick Actions，无需 npm 依赖） ==========
@@ -1176,17 +1256,19 @@ export default {
       }
 
       // 校验请求来源域名是否在白名单内（优先取 Origin，兜底取 Referer 的 host）
-      const ALLOWED_ORIGINS = ['phantom.immmor.com', 'phantom.funbua.uk'];
+      const ALLOWED_ORIGINS = ['phantom.immmor.com', 'phantom.funbua.uk', 'tools.immmor.com', '127.0.0.1'];
       const isAllowedOrigin = (request) => {
-        const origin = request.headers.get('Origin');
-        if (origin) {
-          try { return ALLOWED_ORIGINS.includes(new URL(origin).host); } catch (e) {}
-        }
-        const referer = request.headers.get('Referer');
-        if (referer) {
-          try { return ALLOWED_ORIGINS.includes(new URL(referer).host); } catch (e) {}
-        }
-        return false;
+        const check = (raw) => {
+          if (!raw) return false;
+          try {
+            const host = new URL(raw).host;
+            if (ALLOWED_ORIGINS.includes(host)) return true;
+            // 本地开发：127.0.0.1 任意端口（如 127.0.0.1:8123）均放行
+            if (host === '127.0.0.1' || host.startsWith('127.0.0.1:')) return true;
+            return false;
+          } catch (e) { return false; }
+        };
+        return check(request.headers.get('Origin')) || check(request.headers.get('Referer'));
       };
 
       // ========== 生成一次性免密授权码（Authorization Code） ==========
@@ -2225,6 +2307,44 @@ export default {
         }
       }
 
+      // ========== 账号订单：account_order 表（POST 落库 / GET 查记录，购买记录面板从此加载） ==========
+      if (path === '/api/account/orders') {
+        try {
+          if (request.method === 'POST') {
+            const p = await request.json();
+            const { username, order_id, item_id, item_name, price, secret, balance_before, balance_after, status } = p;
+            if (!username || !order_id) {
+              return resJson({ code: 400, msg: '缺少 username 或 order_id 参数' }, 400);
+            }
+            await DB.prepare('INSERT INTO account_order (order_id, username, item_id, item_name, price, secret, balance_before, balance_after, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+              .bind(order_id, username, item_id || '', item_name || '', price || 0, secret || '', (balance_before === undefined ? null : balance_before), (balance_after === undefined ? null : balance_after), status || 'paid', p.created_at || new Date().toLocaleString('zh-CN'))
+              .run();
+            return resJson({ code: 200, msg: '订单已保存' });
+          }
+          if (request.method === 'GET') {
+            const username = url.searchParams.get('username');
+            if (!username) return resJson({ code: 400, msg: '缺少username参数' }, 400);
+            const rows = await DB.prepare('SELECT * FROM account_order WHERE username = ? ORDER BY created_at DESC, id DESC LIMIT 50').bind(username).all();
+            const orders = (rows.results || []).map(o => ({
+              orderId: o.order_id,
+              name: o.item_name,
+              itemId: o.item_id,
+              price: o.price,
+              secret: o.secret,
+              balanceBefore: o.balance_before,
+              balanceAfter: o.balance_after,
+              status: o.status,
+              date: o.created_at
+            }));
+            return resJson({ code: 200, orders });
+          }
+          return resJson({ code: 405, msg: '方法不允许' }, 405);
+        } catch (err) {
+          console.error('Account order error:', err);
+          return resJson({ code: 500, msg: '操作失败', error: err.message }, 500);
+        }
+      }
+
       // ========== 理财：定期存款（1年期 · 年化4% · 到期手动赎回 · 支持多笔） ==========
       // 查询理财状态（返回存款列表）
       if (path === '/api/finance/status' && request.method === 'GET') {
@@ -3214,6 +3334,10 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
             
             if (result.success) {
               await notifyAdmin('用户私信', `有用户向 ${username} 发送了私信：${content}`);
+              // 仅「客服→用户」的回复镜像到 Supabase（用户→客服由前端直接写，thread 用真实用户名）
+              if (!['admin', 'immmor'].includes(username)) {
+                await supabaseInsert(env, 'support_messages', { username, from_role: 'agent', content, is_read: false });
+              }
               return resJson({
                 code: 200,
                 msg: '发送成功',
@@ -4283,6 +4407,114 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
 
           const result = await DB.prepare('SELECT * FROM withdraw WHERE username = ? ORDER BY id DESC LIMIT 50').bind(username).all();
           return resJson({ success: true, history: result.results || [] });
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
+        }
+      }
+
+      // ========== 实名认证：提交（姓名 + 身份证号 + 正反面图片）==========
+      // 图片以 base64 存进 link 表（复用提现二维码的存储模式），user 表保持精简，避免拖慢登录/余额等高频查询。
+      // 注意：D1 单行上限约 1MB，正反面图片需客户端压缩到单张 base64 < 1MB 再传。
+      if (path === '/api/realname' && request.method === 'POST') {
+        try {
+          const { username, name, idNumber, idFront, idBack } = await request.json();
+          if (!username) return resJson({ success: false, message: '请先登录' }, 401);
+          if (!name || !String(name).trim()) return resJson({ success: false, message: '请输入真实姓名' }, 400);
+          if (!/^\d{17}[\dXx]$/.test(idNumber || '')) return resJson({ success: false, message: '请输入有效的身份证号' }, 400);
+          if (!idFront || !String(idFront).startsWith('data:image')) return resJson({ success: false, message: '请上传身份证正面' }, 400);
+          if (!idBack || !String(idBack).startsWith('data:image')) return resJson({ success: false, message: '请上传身份证反面' }, 400);
+          // D1 单行约 1MB 上限，base64 体积约为原图 1.37 倍，单张超过 ~730KB 直接拒绝
+          if (idFront.length > 1000000 || idBack.length > 1000000) {
+            return resJson({ success: false, message: '身份证图片过大，请压缩到 1MB 以内后重试' }, 400);
+          }
+          const user = await DB.prepare('SELECT 1 AS ok FROM user WHERE username = ?').bind(username).first();
+          if (!user) return resJson({ success: false, message: '用户不存在' }, 404);
+
+          const payload = JSON.stringify({
+            name: String(name).trim(),
+            idNumber: String(idNumber).trim(),
+            idFront,
+            idBack,
+            status: 'pending',
+            submittedAt: new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ')
+          });
+          await DB.prepare('INSERT OR REPLACE INTO link (key, value) VALUES (?, ?)').bind(`realname_${username}`, payload).run();
+          return resJson({ success: true, message: '实名认证已提交，等待审核' });
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
+        }
+      }
+
+      // ========== 实名认证：查询本人状态 ==========
+      if (path === '/api/realname' && request.method === 'GET') {
+        try {
+          const username = url.searchParams.get('username');
+          if (!username) return resJson({ success: false, message: '请先登录' }, 401);
+          const row = await DB.prepare('SELECT value FROM link WHERE key = ?').bind(`realname_${username}`).first();
+          if (!row || !row.value) return resJson({ success: true, verified: false, status: 'none' });
+          let data = {};
+          try { data = JSON.parse(row.value || '{}'); } catch {}
+          return resJson({ success: true, verified: data.status === 'approved', status: data.status || 'pending', name: data.name, idNumber: data.idNumber, idFront: data.idFront, idBack: data.idBack });
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
+        }
+      }
+
+      // ========== 实名认证：后台列表 ==========
+      if (path === '/api/realname/list' && request.method === 'GET') {
+        try {
+          const status = url.searchParams.get('status') || '';
+          const rows = await DB.prepare("SELECT key, value FROM link WHERE key LIKE 'realname_%' ORDER BY rowid DESC LIMIT 500").all();
+          const list = [];
+          for (const row of (rows.results || [])) {
+            let data = {};
+            try { data = JSON.parse(row.value || '{}'); } catch (e) {}
+            if (status && (data.status || 'pending') !== status) continue;
+            list.push({
+              username: String(row.key).replace('realname_', ''),
+              name: data.name || '',
+              idNumber: data.idNumber || '',
+              idFront: data.idFront || '',
+              idBack: data.idBack || '',
+              status: data.status || 'pending',
+              submittedAt: data.submittedAt || ''
+            });
+          }
+          return resJson({ success: true, data: list });
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
+        }
+      }
+
+      // ========== 实名认证：后台审核（通过/拒绝） ==========
+      if (path === '/api/realname/review' && request.method === 'POST') {
+        try {
+          const { username, action, operator, reject_reason } = await request.json();
+          if (!username || !['approve', 'reject'].includes(action)) return resJson({ success: false, message: '参数错误' }, 400);
+          const key = `realname_${username}`;
+          const row = await DB.prepare('SELECT value FROM link WHERE key = ?').bind(key).first();
+          if (!row || !row.value) return resJson({ success: false, message: '无实名记录' }, 404);
+          let data = {};
+          try { data = JSON.parse(row.value || '{}'); } catch (e) {}
+          if (data.status && data.status !== 'pending') return resJson({ success: false, message: '该申请已处理' }, 400);
+
+          const now = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+          const msgNow = new Date().toISOString().slice(0, 19).replace('T', ' ');
+          data.status = action === 'approve' ? 'approved' : 'rejected';
+          data.reviewed_at = now;
+          data.reviewer = operator || 'admin';
+          if (action === 'reject') data.reject_reason = (reject_reason || '').toString().trim();
+          await DB.prepare('INSERT OR REPLACE INTO link (key, value) VALUES (?, ?)').bind(key, JSON.stringify(data)).run();
+
+          if (action === 'approve') {
+            await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
+              .bind(username, '✅ 您的实名认证已通过审核', msgNow).run();
+          } else {
+            const reasonLine = data.reject_reason ? `（原因：${data.reject_reason}）` : '';
+            await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
+              .bind(username, `❌ 您的实名认证未通过${reasonLine}`, msgNow).run();
+          }
+          return resJson({ success: true, message: action === 'approve' ? '已通过' : '已拒绝' });
         } catch (err) {
           return resJson({ success: false, message: err.message }, 500);
         }
