@@ -221,7 +221,7 @@
   function runOCR(fileOrBlob, inputEl, btn, onSelect) {
     if (!fileOrBlob || !inputEl) return;
     const oldTitle = btn ? btn.title : '';
-    if (btn) { btn.style.opacity = '0.5'; btn.title = '识别中…'; }
+    if (btn) { btn.style.opacity = '0.5'; btn.title = '识别中…'; btn.classList.add('ocr-busy'); }
     recognize(fileOrBlob).then(({ emails }) => {
       if (emails.length > 1) {
         showEmailPicker(emails, inputEl, onSelect, btn);
@@ -233,7 +233,7 @@
     }).catch(() => {
       if (btn) btn.title = '识别失败，请重试';
     }).finally(() => {
-      if (btn) { btn.style.opacity = ''; setTimeout(() => { if (btn) btn.title = oldTitle; }, 2500); }
+      if (btn) { btn.style.opacity = ''; btn.classList.remove('ocr-busy'); setTimeout(() => { if (btn) btn.title = oldTitle; }, 2500); }
     });
   }
 
