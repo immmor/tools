@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>问卷构建器</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'Noto Sans SC', 'sans-serif'] },
+          colors: {
+            brand: { 50:'#eff6ff',100:'#dbeafe',500:'#3b82f6',600:'#2563eb',700:'#1d4ed8' }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+    .custom-option { transition: all 0.2s ease; }
+    .custom-option.selected { border-color:#2563eb; background-color:#eff6ff; }
+    .star-btn { transition: transform 0.15s ease, color 0.15s ease; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col">
+
+  <!-- HEADER -->
+  <header class="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-30">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-2 text-brand-600">
+        <i data-lucide="settings-2" class="w-6 h-6"></i>
+        <h1 class="text-base font-bold text-slate-900">问卷构建器</h1>
+      </div>
+      <div class="flex items-center gap-2">
+        <a href="index.html" class="px-3.5 py-2 text-xs font-semibold text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 hover:text-slate-900 rounded-lg transition-colors flex items-center gap-1.5 shadow-xs">
+          <i data-lucide="layout-template" class="w-3.5 h-3.5"></i> 查看示例
+        </a>
+        <button id="save-fill-btn" class="px-4 py-2 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg shadow-sm shadow-brand-500/20 transition-colors flex items-center gap-1.5">
+          <i data-lucide="eye" class="w-3.5 h-3.5"></i> 保存并填写
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN -->
+  <main class="max-w-6xl mx-auto w-full px-4 py-6 flex-grow flex flex-col lg:flex-row gap-6 items-start">
+
+    <!-- EDITOR -->
+    <section class="w-full lg:w-3/5 space-y-4">
+      <!-- META -->
+      <div class="bg-white rounded-2xl p-5 shadow-xs border border-slate-200/80">
+        <input id="survey-title" type="text" placeholder="问卷标题" class="w-full text-lg font-bold text-slate-900 placeholder-slate-400 border border-slate-200 rounded-xl px-3.5 py-3 focus:outline-hidden focus:ring-2 focus:ring-brand-500 bg-white transition-shadow">
+        <textarea id="survey-desc" rows="2" placeholder="问卷简介（选填）" class="w-full mt-3 text-sm text-slate-500 placeholder-slate-400 border border-slate-200 rounded-xl px-3.5 py-2.5 focus:outline-hidden focus:ring-2 focus:ring-brand-500 resize-none bg-white transition-shadow"></textarea>
+      </div>
+
+      <!-- QUESTIONS -->
+      <div id="questions" class="space-y-4"></div>
+
+      <!-- ADD QUESTION -->
+      <button id="add-q-btn" class="group w-full py-3.5 border-2 border-dashed border-slate-300 rounded-2xl text-sm font-semibold text-slate-500 hover:border-brand-400 hover:text-brand-600 hover:bg-brand-50/50 transition-all bg-white/60 flex items-center justify-center gap-2">
+        <span class="flex items-center justify-center w-5 h-5 rounded-full bg-slate-100 text-slate-500 group-hover:bg-brand-100 group-hover:text-brand-600 transition-colors"><i data-lucide="plus" class="w-3.5 h-3.5"></i></span>
+        添加题目
+      </button>
+    </section>
+
+    <!-- PREVIEW -->
+    <aside class="w-full lg:w-2/5 lg:sticky lg:top-20">
+      <div class="bg-white rounded-2xl shadow-xs border border-slate-200/80 p-5">
+        <div class="flex items-center gap-2 mb-4">
+          <span class="flex items-center justify-center w-6 h-6 rounded-lg bg-brand-50 text-brand-600"><i data-lucide="monitor" class="w-3.5 h-3.5"></i></span>
+          <p class="text-xs font-semibold uppercase tracking-wider text-brand-600">实时预览</p>
+        </div>
+        <div id="preview" class="space-y-4"></div>
+      </div>
+    </aside>
+  </main>
+
+  <script>
+    const STORAGE_KEY = 'survey_builder_draft';
+    const TYPES = {
+      single:  '单选',
+      multi:   '多选',
+      text:    '单行文本',
+      textarea:'多行文本',
+      rating:  '星级评分',
+      nps:     'NPS 0-10'
+    };
+    let seq = 0;
+    const uid = () => 'q' + (++seq);
+    const ouid = () => 'o' + (++seq);
+
+    let survey = load() || { title:'', description:'', questions:[] };
+
+    function load(){
+      try { return JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch(e){ return null; }
+    }
+    function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(survey)); }
+
+    // ---------- EDITOR ----------
+    const questionsEl = document.getElementById('questions');
+    const previewEl = document.getElementById('preview');
+    const titleEl = document.getElementById('survey-title');
+    const descEl = document.getElementById('survey-desc');
+
+    titleEl.value = survey.title || '';
+    descEl.value = survey.description || '';
+    titleEl.addEventListener('input', e => { survey.title = e.target.value; save(); renderPreview(); });
+    descEl.addEventListener('input', e => { survey.description = e.target.value; save(); renderPreview(); });
+
+    function addQuestion(type='single'){
+      survey.questions.push({
+        id: uid(), type,
+        title:'', required:false,
+        options: (type==='single'||type==='multi') ? [{id:ouid(),text:''},{id:ouid(),text:''}] : []
+      });
+      save(); renderEditor(); renderPreview();
+    }
+
+    function removeQuestion(qid){
+      survey.questions = survey.questions.filter(q => q.id !== qid);
+      save(); renderEditor(); renderPreview();
+    }
+    function addOption(qid){
+      const q = survey.questions.find(q=>q.id===qid);
+      q.options.push({id:ouid(), text:''});
+      save(); renderEditor(); renderPreview();
+    }
+    function removeOption(qid, oid){
+      const q = survey.questions.find(q=>q.id===qid);
+      q.options = q.options.filter(o=>o.id!==oid);
+      save(); renderEditor(); renderPreview();
+    }
+
+    function renderEditor(){
+      questionsEl.innerHTML = '';
+      survey.questions.forEach((q, i) => {
+        const card = document.createElement('div');
+        card.className = 'bg-white rounded-2xl p-5 shadow-xs border border-slate-200/80 space-y-3 hover:shadow-sm transition-shadow';
+        const isChoice = (q.type==='single'||q.type==='multi');
+        card.innerHTML = `
+          <div class="flex items-center justify-between">
+            <span class="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-brand-50 text-brand-600 text-xs font-bold">${i+1}</span>
+            <div class="flex items-center gap-1.5">
+              <label class="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer select-none px-2 py-1 rounded-lg hover:bg-slate-50 transition-colors">
+                <input type="checkbox" ${q.required?'checked':''} class="req-chk w-3.5 h-3.5 rounded border-slate-300 text-brand-600"> 必填
+              </label>
+              <button class="del-q text-slate-400 hover:text-rose-500 hover:bg-rose-50 p-1.5 rounded-lg transition-colors" title="删除题目">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+          <input type="text" placeholder="请输入题干预设内容…" value="${escapeAttr(q.title)}" class="q-title w-full text-sm font-medium text-slate-800 border border-slate-200 rounded-lg px-3 py-2 focus:outline-hidden focus:ring-2 focus:ring-brand-500">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="text-xs text-slate-400">题型</span>
+            <div class="relative">
+              <select class="q-type appearance-none cursor-pointer text-xs border border-slate-200 rounded-lg pl-2.5 pr-8 py-1.5 focus:outline-hidden focus:ring-2 focus:ring-brand-500 text-slate-700 bg-white hover:border-slate-300 transition-colors">
+                ${Object.entries(TYPES).map(([k,v])=>`<option value="${k}" ${q.type===k?'selected':''}>${v}</option>`).join('')}
+              </select>
+              <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+            </div>
+          </div>
+          <div class="q-options space-y-2"></div>
+        `;
+        // listeners
+        card.querySelector('.del-q').addEventListener('click', ()=>removeQuestion(q.id));
+        card.querySelector('.req-chk').addEventListener('change', e=>{ q.required=e.target.checked; save(); });
+        card.querySelector('.q-title').addEventListener('input', e=>{ q.title=e.target.value; save(); renderPreview(); });
+        card.querySelector('.q-type').addEventListener('change', e=>{
+          q.type=e.target.value;
+          if((q.type==='single'||q.type==='multi') && q.options.length===0){
+            q.options=[{id:ouid(),text:''},{id:ouid(),text:''}];
+          }
+          save(); renderEditor(); renderPreview();
+        });
+        const optBox = card.querySelector('.q-options');
+        if(isChoice){
+          q.options.forEach(o=>{
+            const row=document.createElement('div');
+            row.className='flex items-center gap-2';
+            row.innerHTML=`
+              <input type="text" value="${escapeAttr(o.text)}" placeholder="选项内容" class="opt-text flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5 focus:outline-hidden focus:ring-2 focus:ring-brand-500 bg-white">
+              <button class="del-opt text-slate-400 hover:text-rose-500 hover:bg-rose-50 p-1.5 rounded-lg transition-colors"><i data-lucide="x" class="w-4 h-4"></i></button>
+            `;
+            row.querySelector('.opt-text').addEventListener('input', e=>{ o.text=e.target.value; save(); renderPreview(); });
+            row.querySelector('.del-opt').addEventListener('click', ()=>removeOption(q.id,o.id));
+            optBox.appendChild(row);
+          });
+          const addBtn=document.createElement('button');
+          addBtn.className='mt-1 text-xs font-semibold text-brand-600 hover:text-brand-700 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg hover:bg-brand-50 transition-colors';
+          addBtn.innerHTML='<i data-lucide="plus" class="w-3.5 h-3.5"></i> 添加选项';
+          addBtn.addEventListener('click', ()=>addOption(q.id));
+          optBox.appendChild(addBtn);
+        }
+        questionsEl.appendChild(card);
+      });
+      lucide.createIcons();
+    }
+
+    function escapeAttr(s){ return (s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+    // ---------- PREVIEW ----------
+    function renderPreview(){
+      const title = survey.title || '未命名问卷';
+      const desc = survey.description || '';
+      let html = `<h2 class="text-lg font-bold text-slate-900">${escapeHtml(title)}</h2>`;
+      if(desc) html += `<p class="text-xs text-slate-500 mt-1">${escapeHtml(desc)}</p>`;
+      if(survey.questions.length===0){
+        html += `<div class="flex flex-col items-center justify-center text-center py-10 text-slate-400 border border-dashed border-slate-200 rounded-xl">
+          <i data-lucide="inbox" class="w-8 h-8 mb-2"></i>
+          <p class="text-sm">还没有题目</p>
+          <p class="text-xs mt-0.5">点击左侧「添加题目」开始构建</p>
+        </div>`;
+      }
+      survey.questions.forEach((q,i)=>{
+        html += `<div class="question-card bg-slate-50/60 rounded-xl p-4 border border-slate-100">
+          <p class="text-sm font-semibold text-slate-800 mb-2">${i+1}. ${escapeHtml(q.title||'（未设题干）')} ${q.required?'<span class="text-rose-500">*</span>':''}</p>
+          ${previewBody(q)}
+        </div>`;
+      });
+      previewEl.innerHTML = html;
+      lucide.createIcons();
+    }
+
+    function previewBody(q){
+      if(q.type==='single'||q.type==='multi'){
+        const cls = q.type==='single' ? 'rounded-full' : 'rounded';
+        return (q.options||[]).map(o=>`<div class="custom-option flex items-center p-2.5 border border-slate-200 rounded-xl mb-2 bg-white">
+          <div class="w-4 h-4 ${cls} border border-slate-300 mr-2.5"></div>
+          <span class="text-sm text-slate-700">${escapeHtml(o.text||'选项')}</span></div>`).join('') || '<p class="text-xs text-slate-400">（暂无选项）</p>';
+      }
+      if(q.type==='text') return `<input type="text" disabled placeholder="单行文本回答" class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white/60">`;
+      if(q.type==='textarea') return `<textarea disabled rows="3" placeholder="多行文本回答" class="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white/60"></textarea>`;
+      if(q.type==='rating') return `<div class="flex gap-1 text-slate-300"><i data-lucide="star" class="w-7 h-7"></i><i data-lucide="star" class="w-7 h-7"></i><i data-lucide="star" class="w-7 h-7"></i><i data-lucide="star" class="w-7 h-7"></i><i data-lucide="star" class="w-7 h-7"></i></div>`;
+      if(q.type==='nps'){
+        let b='';
+        for(let n=0;n<=10;n++) b+=`<div class="w-7 h-7 rounded-lg border border-slate-200 text-xs flex items-center justify-center text-slate-600">${n}</div>`;
+        return `<div class="flex gap-1 flex-wrap">${b}</div>`;
+      }
+      return '';
+    }
+
+    function escapeHtml(s){ return (s||'').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+    // ---------- FILL VIEW ----------
+    const saveFillBtn = document.getElementById('save-fill-btn');
+    saveFillBtn.addEventListener('click', ()=>{
+      if(survey.questions.length===0){ alert('请先添加至少一道题目'); return; }
+      if(!survey.title.trim()){ if(!confirm('问卷标题为空，仍要继续？')) return; }
+      save();
+      window.location.href = 'index.html?custom=1';
+    });
+
+    document.getElementById('add-q-btn').addEventListener('click', ()=>addQuestion('single'));
+
+    // init
+    renderEditor();
+    renderPreview();
+    lucide.createIcons();
+  </script>
+</body>
+</html>
