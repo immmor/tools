@@ -56,6 +56,12 @@
   .agent { align-self: flex-end; background: #14532d; }
   .meta { font-size: 11px; opacity: .6; margin-top: 2px; }
   footer { padding: 12px 16px; border-top: 1px solid #1f2937; display: flex; gap: 8px; }
+  .new-conv { border-bottom: 1px solid #1f2937; padding: 8px; display: flex; flex-direction: column; gap: 6px; background: #0e1420; }
+  .new-conv.hidden { display: none; }
+  .new-conv input { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #374151; background: #111827; color: #e5e7eb; border-radius: 8px; font-size: 13px; font-family: inherit; }
+  .new-conv button { background: #22c55e; color: #04210f; border: 0; padding: 8px; border-radius: 8px; font-weight: 700; cursor: pointer; font-family: inherit; }
+  body.theme-light .new-conv { background: #ffffff; border-bottom-color: #e2dfd6; }
+  body.theme-light .new-conv input { background: #ffffff; border-color: #d1d5db; color: #2b2823; }
   footer textarea { flex: 1; resize: none; height: 44px; background: #111827; border: 1px solid #374151; color: #fff; padding: 10px 12px; border-radius: 8px; font-size: 14px; line-height: 22px; }
   footer textarea::placeholder { font-size: 14px; color: #6b7280; }
   footer button { background: #22c55e; color: #04210f; border: 0; padding: 0 16px; border-radius: 8px; font-weight: 700; font-size: 14px; font-family: inherit; cursor: pointer; }
@@ -89,8 +95,8 @@
   /* 小屏幕：侧边栏展开时占满宽度（覆盖在对话区之上），对话区始终铺满在下方 */
   @media (max-width: 768px) {
     #app { position: relative; }
-    #sidebar { position: absolute; top: 0; bottom: 0; left: 0; width: 100%; z-index: 5; transition: transform .2s ease; }
-    #sidebar.collapsed { transform: translateX(-100%); width: 100%; border-right: 0; }
+    #sidebar { position: absolute; top: 0; bottom: 0; left: 0; width: 260px; z-index: 5; transition: transform .2s ease; }
+    #sidebar.collapsed { transform: translateX(-100%); width: 260px; border-right: 0; }
     #main { width: 100%; }
   }
 
@@ -125,6 +131,10 @@
     <div class="tab-bar">
       <button class="tab active" data-tab="supabase">实时</button>
       <button class="tab" data-tab="inbox">消息</button>
+    </div>
+    <div id="newConv" class="new-conv hidden">
+      <input id="ncUser" placeholder="收件人用户名">
+      <button id="ncSend">新建对话</button>
     </div>
     <div id="userList"></div>
   </aside>
@@ -202,7 +212,7 @@ function renderUserList() {
 
 // 用户列表：按当前 Tab 取数据
 //  - supabase：Supabase support_messages（默认），按真实用户名聚合
-//  - inbox：D1 immmor 收件箱（用户发给 immmor 的投诉，排除系统通知）
+//  - inbox：D1 全量消息（双向聚合：用户→immmor 投诉 + immmor 主动发起的对话）
 async function loadUsers() {
   users.clear();
   if (currentTab === 'supabase') {
@@ -212,16 +222,23 @@ async function loadUsers() {
     (data || []).forEach((r) => upsertUser(r.username, r.content, r.created_at));
   } else {
     try {
-      const res = await fetch(`${API_BASE}/api/messages?username=immmor`);
+      // 拉取全部消息（双向）：immmor 收件箱(用户→客服) + 各用户收件箱(客服→用户，含主动发起)
+      const res = await fetch(`${API_BASE}/api/messages?all=true&username=immmor`);
       const data = await res.json();
       const list = (data && data.data && data.data.messages) || [];
       list.forEach((m) => {
-        const sender = parseSender(m.content);
-        if (!sender) return; // 跳过系统通知等非用户投诉消息
+        let partner;
+        if (m.username === 'immmor') {
+          partner = parseSender(m.content); // 用户→immmor 投诉：发件人即对方
+          if (!partner) return; // 系统通知等无发件人的跳过
+        } else {
+          partner = m.username; // immmor→用户（含主动发起）：收件人即对方
+        }
+        if (partner === 'admin' || partner === 'immmor') return;
         const text = stripPrefix(m.content);
-        const prev = users.get(sender);
+        const prev = users.get(partner);
         if (!prev || new Date(m.created_at) >= new Date(prev.time)) {
-          users.set(sender, { last: text, time: m.created_at });
+          users.set(partner, { last: text, time: m.created_at });
         }
       });
       renderUserList();
@@ -284,7 +301,7 @@ async function send() {
     const data = await res.json();
     if (data.code === 200) {
       $('msg').value = '';
-      selectUser(currentUser); // 重新拉取，确保回复出现在会话里
+      renderMsg({ content: text, created_at: new Date().toISOString() }, 'agent'); // 本地追加，不重新拉取整段历史
     } else {
       alert(data.msg || '发送失败');
     }
@@ -293,6 +310,14 @@ async function send() {
   } finally {
     $('send').disabled = false;
   }
+}
+
+// 消息 tab：侧边栏底部「新建对话」——按用户名打开指定用户的会话
+function openNewConv() {
+  const user = $('ncUser').value.trim();
+  if (!user) { alert('请填写用户名'); return; }
+  selectUser(user); // 打开该用户的会话，在对话区继续回复
+  $('ncUser').value = '';
 }
 
 // 数据源 B：保留 Supabase 订阅，仅用于感知「用户新消息」并刷新（客服回复由本地/接口保证，不重复渲染）
@@ -383,6 +408,7 @@ window.addEventListener('DOMContentLoaded', () => {
       showWelcome();
       $('send').disabled = true;
       $('convTitle').textContent = '未选择会话';
+      $('newConv').classList.toggle('hidden', currentTab !== 'inbox'); // 仅消息 tab 显示「新建对话」
       loadUsers();
     });
   });
@@ -393,6 +419,8 @@ window.addEventListener('DOMContentLoaded', () => {
   $('sideClose').addEventListener('click', () => $('sidebar').classList.toggle('collapsed'));
   $('send').addEventListener('click', send);
   $('msg').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+  $('ncSend').addEventListener('click', openNewConv);
+  $('ncUser').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); openNewConv(); } });
 });
 </script>
 </body>
