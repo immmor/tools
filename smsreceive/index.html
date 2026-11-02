@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VERIFY.SWISS — Next-Gen Virtual SMS & Verification Platform</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            swiss: {
+              red: '#FF2B2B',
+              darkRed: '#CC0000',
+              hoverRed: '#E62424',
+            },
+            glass: {
+              bg: 'rgba(18, 18, 26, 0.65)',
+              card: 'rgba(255, 255, 255, 0.04)',
+              cardHover: 'rgba(255, 255, 255, 0.08)',
+              border: 'rgba(255, 255, 255, 0.12)',
+              input: 'rgba(0, 0, 0, 0.3)',
+            }
+          },
+          animation: {
+            'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            'glow-pulse': 'glow 2s ease-in-out infinite alternate',
+          },
+          keyframes: {
+            glow: {
+              '0%': { boxShadow: '0 0 15px rgba(255, 43, 43, 0.2)' },
+              '100%': { boxShadow: '0 0 30px rgba(255, 43, 43, 0.6)' },
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Swiss Custom Glassmorphism Styles */
+    body {
+      background: #09090E;
+      background-image: 
+        radial-gradient(circle at 15% 15%, rgba(255, 43, 43, 0.08) 0%, transparent 40%),
+        radial-gradient(circle at 85% 75%, rgba(60, 100, 255, 0.05) 0%, transparent 45%),
+        radial-gradient(circle at 50% 50%, rgba(20, 20, 30, 1) 0%, rgba(9, 9, 14, 1) 100%);
+      background-attachment: fixed;
+      color: #E2E8F0;
+    }
+
+    /* Custom Glass Panel */
+    .glass-panel {
+      background: rgba(18, 20, 29, 0.6);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+    }
+
+    .glass-card {
+      background: rgba(255, 255, 255, 0.03);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .glass-card:hover {
+      background: rgba(255, 255, 255, 0.07);
+      border-color: rgba(255, 255, 255, 0.18);
+      transform: translateY(-2px);
+    }
+
+    .glass-card-active {
+      background: rgba(255, 43, 43, 0.08) !important;
+      border-color: rgba(255, 43, 43, 0.4) !important;
+      box-shadow: 0 0 20px rgba(255, 43, 43, 0.15);
+    }
+
+    .glass-input {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #FFF;
+      backdrop-filter: blur(8px);
+    }
+
+    .glass-input:focus {
+      border-color: #FF2B2B;
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(255, 43, 43, 0.2);
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(10, 10, 15, 0.5);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 43, 43, 0.5);
+    }
+
+    /* Scanline effect for live log terminal look */
+    .scanline {
+      position: relative;
+      overflow: hidden;
+    }
+    .scanline::before {
+      content: " ";
+      display: block;
+      position: absolute;
+      top: 0; left: 0; bottom: 0; right: 0;
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
+      background-size: 100% 4px;
+      z-index: 2;
+      pointer-events: none;
+      opacity: 0.3;
+    }
+
+    /* Toast Notification */
+    #toast {
+      transform: translateY(100px);
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    }
+    #toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  </style>
+</head>
+<body class="font-sans min-h-screen text-slate-200 antialiased selection:bg-swiss-red selection:text-white pb-12">
+
+  <!-- TOP STATS BAR (Swiss Clean Grid Ticker) -->
+  <div class="border-b border-white/10 bg-black/40 backdrop-blur-md py-2 px-4 text-xs font-mono text-slate-400">
+    <div class="max-w-7xl mx-auto flex flex-wrap justify-between items-center gap-4">
+      <div class="flex items-center space-x-6">
+        <span class="flex items-center space-x-2">
+          <span class="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span class="text-slate-300">SYSTEM STATUS: <strong class="text-white">OPERATIONAL</strong></span>
+        </span>
+        <span class="hidden md:inline-block text-white/20">|</span>
+        <span class="hidden md:inline flex items-center gap-1.5">
+          <i class="fa-solid fa-server text-swiss-red text-[10px]"></i>
+          <span>POOL CAPACITY: <strong class="text-slate-200">148,920 NUMBERS</strong></span>
+        </span>
+        <span class="hidden md:inline-block text-white/20">|</span>
+        <span class="hidden lg:inline flex items-center gap-1.5">
+          <i class="fa-solid fa-bolt text-amber-400 text-[10px]"></i>
+          <span>AVG OTP SPEED: <strong class="text-emerald-400">3.2s</strong></span>
+        </span>
+      </div>
+      <div class="flex items-center space-x-4">
+        <span class="text-slate-400">SUCCESS RATE: <span class="text-emerald-400 font-bold">99.42%</span></span>
+        <span class="text-white/20">|</span>
+        <span class="text-xs uppercase tracking-wider text-slate-400">SERVER: <span class="text-white">ZÜRICH-01</span></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN HEADER -->
+  <header class="sticky top-0 z-40 border-b border-white/10 glass-panel bg-black/50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
+      
+      <!-- LOGO & SWISS ACCENT -->
+      <div class="flex items-center space-x-4">
+        <div class="w-10 h-10 bg-swiss-red flex items-center justify-center rounded-sm font-black text-white text-xl shadow-lg shadow-swiss-red/30 tracking-tighter">
+          <i class="fa-solid fa-plus text-2xl"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="font-extrabold text-xl tracking-tight text-white font-mono">VERIFY<span class="text-swiss-red">.SWISS</span></span>
+            <span class="px-1.5 py-0.5 text-[9px] font-mono tracking-widest bg-white/10 text-white/80 rounded border border-white/10 uppercase">PRO</span>
+          </div>
+          <p class="text-[10px] text-slate-400 font-mono tracking-wider uppercase">Swiss Protocol SMS Intercept Platform</p>
+        </div>
+      </div>
+
+      <!-- MAIN NAVIGATION / USER ACTIONS -->
+      <div class="flex items-center space-x-4 sm:space-x-6">
+        
+        <!-- QUICK TEST SMS BUTTON -->
+        <button id="triggerTestSmsBtn" onclick="triggerSimulatedSms()" class="hidden sm:flex items-center gap-2 px-3 py-1.5 text-xs font-mono bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 rounded-md transition-all active:scale-95">
+          <i class="fa-solid fa-vial text-swiss-red"></i>
+          <span>Simulate Incoming SMS</span>
+        </button>
+
+        <!-- BALANCE WIDGET -->
+        <div class="flex items-center bg-white/5 border border-white/10 rounded-md p-1 pl-3 space-x-3">
+          <div class="flex flex-col">
+            <span class="text-[9px] font-mono text-slate-400 uppercase tracking-wider">Balance</span>
+            <span class="font-mono text-sm font-bold text-emerald-400" id="userBalance">$18.50</span>
+          </div>
+          <button onclick="openTopUpModal()" class="bg-swiss-red hover:bg-swiss-hoverRed text-white px-3 py-1.5 rounded text-xs font-semibold tracking-wide transition-all shadow-md shadow-swiss-red/20 flex items-center gap-1.5 active:scale-95">
+            <i class="fa-solid fa-wallet text-[11px]"></i>
+            <span>Top Up</span>
+          </button>
+        </div>
+
+        <!-- PROFILE / NOTIFICATIONS -->
+        <div class="flex items-center space-x-2 border-l border-white/10 pl-4">
+          <button onclick="toggleHistoryModal()" class="w-9 h-9 rounded-md bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-slate-300 hover:text-white transition" title="Activation History">
+            <i class="fa-solid fa-clock-rotate-left text-sm"></i>
+          </button>
+          <div class="w-9 h-9 rounded-md bg-gradient-to-tr from-slate-700 to-slate-900 border border-white/20 flex items-center justify-center text-white font-mono font-bold text-xs shadow-inner">
+            CH
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN DASHBOARD CONTENT CONTAINER -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
+
+    <!-- LEFT COLUMN: SELECTION PANELS (5 Cols) -->
+    <section class="lg:col-span-5 flex flex-col space-y-6">
+      
+      <!-- STEP 1 & 2 SELECTION BOARD -->
+      <div class="glass-panel rounded-xl p-6 relative overflow-hidden">
+        
+        <!-- Header Ribbon -->
+        <div class="flex items-center justify-between pb-4 mb-4 border-b border-white/10">
+          <div class="flex items-center gap-2">
+            <span class="w-6 h-6 rounded bg-swiss-red/20 text-swiss-red text-xs font-bold font-mono flex items-center justify-center border border-swiss-red/30">01</span>
+            <h2 class="font-bold text-base text-white tracking-wide uppercase font-mono">Select Target Service</h2>
+          </div>
+          <span class="text-xs text-slate-400 font-mono" id="serviceCountLabel">12 Services</span>
+        </div>
+
+        <!-- SERVICE SEARCH & FILTER -->
+        <div class="relative mb-4">
+          <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-3 text-slate-400 text-xs"></i>
+          <input type="text" id="serviceSearchInput" onkeyup="filterServices()" placeholder="Search platform (e.g. Telegram, ChatGPT)..." class="w-full glass-input rounded-lg pl-9 pr-4 py-2 text-xs font-mono transition">
+        </div>
+
+        <!-- SERVICE CARDS GRID -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-[220px] overflow-y-auto pr-1 mb-6" id="servicesGrid">
+          <!-- Dynamic Service Cards Inserted via JS -->
+        </div>
+
+        <!-- STEP 2: COUNTRY SELECTOR -->
+        <div class="flex items-center justify-between pb-3 mb-4 border-b border-white/10 pt-2">
+          <div class="flex items-center gap-2">
+            <span class="w-6 h-6 rounded bg-swiss-red/20 text-swiss-red text-xs font-bold font-mono flex items-center justify-center border border-swiss-red/30">02</span>
+            <h2 class="font-bold text-base text-white tracking-wide uppercase font-mono">Select Country</h2>
+          </div>
+          <span class="text-xs text-slate-400 font-mono" id="countryCountLabel">10 Regions</span>
+        </div>
+
+        <!-- COUNTRY SEARCH -->
+        <div class="relative mb-3">
+          <i class="fa-solid fa-globe absolute left-3.5 top-3 text-slate-400 text-xs"></i>
+          <input type="text" id="countrySearchInput" onkeyup="filterCountries()" placeholder="Search country name or prefix..." class="w-full glass-input rounded-lg pl-9 pr-4 py-2 text-xs font-mono transition">
+        </div>
+
+        <!-- COUNTRY LIST -->
+        <div class="space-y-2 max-h-[200px] overflow-y-auto pr-1" id="countriesList">
+          <!-- Dynamic Country List Inserted via JS -->
+        </div>
+
+        <!-- SELECTION SUMMARY & ORDER BUTTON -->
+        <div class="mt-6 pt-5 border-t border-white/10 flex flex-col space-y-3">
+          <div class="flex items-center justify-between text-xs font-mono">
+            <span class="text-slate-400">Total Activation Cost:</span>
+            <span class="text-base font-bold text-emerald-400" id="calculatedPrice">$0.35</span>
+          </div>
+
+          <button id="getTempNumBtn" onclick="requestNewVirtualNumber()" class="w-full bg-swiss-red hover:bg-swiss-hoverRed text-white font-bold font-mono text-sm py-3 px-4 rounded-lg shadow-lg shadow-swiss-red/25 transition-all flex items-center justify-center space-x-2 active:scale-[0.99]">
+            <i class="fa-solid fa-sim-card"></i>
+            <span>GET TEMPORARY NUMBER</span>
+          </button>
+        </div>
+
+      </div>
+
+      <!-- SYSTEM RULES & TIPS -->
+      <div class="glass-panel rounded-xl p-5 text-xs text-slate-400 space-y-2">
+        <div class="flex items-center gap-2 text-white font-bold font-mono mb-1">
+          <i class="fa-solid fa-shield-halved text-swiss-red"></i>
+          <span>SWISS PROTOCOL GUARANTEE</span>
+        </div>
+        <p>• If no SMS is received within 15 minutes, funds are automatically refunded to your balance.</p>
+        <p>• Virtual numbers are private, dedicated exclusively for your single session use.</p>
+      </div>
+
+    </section>
+
+    <!-- RIGHT COLUMN: ACTIVE VIRTUAL NUMBER & LIVE INBOX (7 Cols) -->
+    <section class="lg:col-span-7 flex flex-col space-y-6">
+
+      <!-- ACTIVE NUMBER PANEL (Interactive Hero Display) -->
+      <div class="glass-panel rounded-xl p-6 relative overflow-hidden" id="activeNumberContainer">
+        
+        <!-- Status indicator bar -->
+        <div class="flex items-center justify-between mb-4 pb-3 border-b border-white/10">
+          <div class="flex items-center space-x-3">
+            <span class="flex h-3 w-3 relative">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+            </span>
+            <span class="text-xs font-mono font-semibold tracking-wider text-emerald-400 uppercase">ACTIVE SESSION INTERCEPTOR</span>
+          </div>
+
+          <!-- COUNTDOWN TIMER WIDGET -->
+          <div class="flex items-center gap-2 bg-black/40 px-3 py-1 rounded border border-white/10 font-mono text-xs">
+            <i class="fa-regular fa-clock text-swiss-red"></i>
+            <span class="text-slate-400">EXPIRES IN:</span>
+            <span class="text-white font-bold text-sm" id="sessionTimer">14:59</span>
+          </div>
+        </div>
+
+        <!-- NUMBER DISPLAY CARDS -->
+        <div class="bg-black/40 border border-white/10 rounded-xl p-6 text-center relative group">
+          <div class="flex items-center justify-center space-x-2 mb-2">
+            <span class="text-2xl" id="activeFlagDisplay">🇺🇸</span>
+            <span class="text-xs font-mono uppercase text-slate-400 tracking-wider" id="activeServiceDisplay">Telegram (USA)</span>
+          </div>
+
+          <!-- PHONE NUMBER LARGE TEXT -->
+          <div class="font-mono text-3xl sm:text-4xl font-extrabold tracking-wider text-white my-3" id="activeNumberText">
+            +1 (555) 019-2834
+          </div>
+
+          <!-- COPY BUTTON -->
+          <div class="flex items-center justify-center space-x-3 mt-4">
+            <button onclick="copyActiveNumber()" class="bg-white/10 hover:bg-white/20 text-white font-mono text-xs px-4 py-2 rounded-md border border-white/15 transition flex items-center gap-2 active:scale-95">
+              <i class="fa-regular fa-copy text-swiss-red"></i>
+              <span id="copyBtnText">COPY NUMBER</span>
+            </button>
+            <button onclick="triggerSimulatedSms()" class="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 font-mono text-xs px-3 py-2 rounded-md border border-emerald-500/30 transition flex items-center gap-1.5">
+              <i class="fa-solid fa-paper-plane text-xs"></i>
+              <span>Test SMS</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- CONTROL BUTTON BAR -->
+        <div class="grid grid-cols-3 gap-3 mt-4">
+          <button onclick="refreshActiveFeed()" class="glass-card py-2.5 px-3 rounded-lg text-xs font-mono text-slate-300 hover:text-white flex items-center justify-center gap-2">
+            <i class="fa-solid fa-rotate text-xs text-slate-400"></i>
+            <span>Refresh Feed</span>
+          </button>
+          <button onclick="cancelAndRefund()" class="glass-card py-2.5 px-3 rounded-lg text-xs font-mono text-amber-400 hover:text-amber-300 hover:border-amber-400/30 flex items-center justify-center gap-2">
+            <i class="fa-solid fa-ban text-xs"></i>
+            <span>Cancel & Refund</span>
+          </button>
+          <button onclick="banNumber()" class="glass-card py-2.5 px-3 rounded-lg text-xs font-mono text-rose-400 hover:text-rose-300 hover:border-rose-400/30 flex items-center justify-center gap-2">
+            <i class="fa-solid fa-trash-can text-xs"></i>
+            <span>Blacklist Number</span>
+          </button>
+        </div>
+
+      </div>
+
+      <!-- LIVE INCOMING SMS TERMINAL / FEED -->
+      <div class="glass-panel rounded-xl p-6 relative flex-grow flex flex-col">
+        
+        <div class="flex items-center justify-between pb-4 mb-4 border-b border-white/10">
+          <div class="flex items-center gap-3">
+            <div class="w-2.5 h-2.5 rounded-full bg-swiss-red animate-ping"></div>
+            <h3 class="font-bold text-base text-white tracking-wide uppercase font-mono">Live Intercept Feed</h3>
+          </div>
+          <div class="flex items-center gap-3 text-xs font-mono text-slate-400">
+            <span class="flex items-center gap-1.5">
+              <input type="checkbox" id="autoScrollCheck" checked class="rounded bg-black border-white/20 text-swiss-red focus:ring-0">
+              <label for="autoScrollCheck" class="cursor-pointer">Auto-Refresh</label>
+            </span>
+            <span class="bg-white/10 px-2 py-0.5 rounded text-[10px] text-slate-300" id="smsCountBadge">3 Messages</span>
+          </div>
+        </div>
+
+        <!-- SMS LIST CONTAINER -->
+        <div class="space-y-4 overflow-y-auto max-h-[380px] pr-1 flex-grow" id="smsFeedList">
+          <!-- Live Incoming Messages populating here -->
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- TOP UP / BALANCE MODAL -->
+  <div id="topUpModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md hidden flex items-center justify-center p-4">
+    <div class="glass-panel max-w-md w-full rounded-2xl p-6 relative border border-white/20 shadow-2xl">
+      <button onclick="closeTopUpModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
+
+      <div class="flex items-center space-x-3 mb-6">
+        <div class="w-9 h-9 rounded bg-swiss-red/20 border border-swiss-red/40 flex items-center justify-center text-swiss-red">
+          <i class="fa-solid fa-wallet text-base"></i>
+        </div>
+        <div>
+          <h3 class="text-lg font-bold text-white font-mono uppercase">Refill Account Balance</h3>
+          <p class="text-xs text-slate-400 font-mono">Instant Swiss Vault Encryption</p>
+        </div>
+      </div>
+
+      <!-- AMOUNT SELECTION -->
+      <label class="block text-xs font-mono text-slate-400 uppercase mb-2">Select Amount (USD)</label>
+      <div class="grid grid-cols-4 gap-2 mb-4">
+        <button onclick="selectTopUpAmount(5)" class="topup-amt-btn glass-card py-2 text-center text-xs font-mono font-bold hover:border-swiss-red">+$5</button>
+        <button onclick="selectTopUpAmount(10)" class="topup-amt-btn glass-card py-2 text-center text-xs font-mono font-bold hover:border-swiss-red">+$10</button>
+        <button onclick="selectTopUpAmount(25)" class="topup-amt-btn glass-card py-2 text-center text-xs font-mono font-bold border-swiss-red/50 bg-swiss-red/10 text-white">+$25</button>
+        <button onclick="selectTopUpAmount(50)" class="topup-amt-btn glass-card py-2 text-center text-xs font-mono font-bold hover:border-swiss-red">+$50</button>
+      </div>
+
+      <div class="mb-5">
+        <label class="block text-xs font-mono text-slate-400 uppercase mb-1">Or Enter Custom Amount</label>
+        <div class="relative">
+          <span class="absolute left-3 top-2.5 text-slate-400 font-mono text-sm">$</span>
+          <input type="number" id="customTopUpInput" value="25" min="1" class="w-full glass-input rounded-lg pl-7 pr-4 py-2 text-sm font-mono">
+        </div>
+      </div>
+
+      <!-- PAYMENT METHODS -->
+      <label class="block text-xs font-mono text-slate-400 uppercase mb-2">Select Payment Method</label>
+      <div class="space-y-2 mb-6">
+        <label class="flex items-center justify-between p-3 rounded-lg border border-swiss-red/40 bg-swiss-red/5 cursor-pointer">
+          <div class="flex items-center space-x-3">
+            <i class="fa-brands fa-bitcoin text-amber-500 text-lg"></i>
+            <span class="text-xs font-mono text-white">Crypto (BTC / USDT / ETH)</span>
+          </div>
+          <input type="radio" name="paymethod" checked class="text-swiss-red focus:ring-0">
+        </label>
+        <label class="flex items-center justify-between p-3 rounded-lg border border-white/10 bg-white/5 cursor-pointer">
+          <div class="flex items-center space-x-3">
+            <i class="fa-solid fa-credit-card text-sky-400 text-sm"></i>
+            <span class="text-xs font-mono text-white">Credit Card (Stripe Encrypted)</span>
+          </div>
+          <input type="radio" name="paymethod" class="text-swiss-red focus:ring-0">
+        </label>
+      </div>
+
+      <button onclick="processTopUp()" class="w-full bg-swiss-red hover:bg-swiss-hoverRed text-white font-bold font-mono text-sm py-3 rounded-lg shadow-lg shadow-swiss-red/30 transition">
+        CONFIRM PAYMENT
+      </button>
+    </div>
+  </div>
+
+  <!-- ACTIVATION HISTORY MODAL -->
+  <div id="historyModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md hidden flex items-center justify-center p-4">
+    <div class="glass-panel max-w-2xl w-full rounded-2xl p-6 relative border border-white/20 shadow-2xl">
+      <button onclick="toggleHistoryModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white">
+        <i class="fa-solid fa-xmark text-lg"></i>
+      </button>
+
+      <div class="flex items-center space-x-3 mb-6">
+        <div class="w-9 h-9 rounded bg-white/10 border border-white/20 flex items-center justify-center text-white">
+          <i class="fa-solid fa-clock-rotate-left text-sm"></i>
+        </div>
+        <div>
+          <h3 class="text-lg font-bold text-white font-mono uppercase">Activation Log</h3>
+          <p class="text-xs text-slate-400 font-mono">Recent virtual number sessions & messages</p>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse text-xs font-mono">
+          <thead>
+            <tr class="border-b border-white/10 text-slate-400">
+              <th class="py-2 px-3">Service</th>
+              <th class="py-2 px-3">Number</th>
+              <th class="py-2 px-3">Code Extracted</th>
+              <th class="py-2 px-3">Time</th>
+              <th class="py-2 px-3 text-right">Cost</th>
+            </tr>
+          </thead>
+          <tbody id="historyTableBody" class="divide-y divide-white/5 text-slate-300">
+            <!-- Dynamic History Rows -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION CONTAINER -->
+  <div id="toast" class="fixed bottom-6 right-6 z-50 glass-panel border border-swiss-red/40 bg-black/90 px-5 py-3 rounded-xl shadow-2xl flex items-center space-x-3">
+    <div class="w-8 h-8 rounded-full bg-swiss-red/20 text-swiss-red flex items-center justify-center">
+      <i class="fa-solid fa-bell text-sm" id="toastIcon"></i>
+    </div>
+    <div>
+      <h4 class="text-xs font-bold text-white font-mono" id="toastTitle">Notification</h4>
+      <p class="text-[11px] text-slate-300 font-mono" id="toastMessage">Action completed successfully.</p>
+    </div>
+  </div>
+
+  <!-- JAVASCRIPT APPLICATION LOGIC -->
+  <script>
+    // --- STATE DATA ---
+    let userBalance = 18.50;
+    let selectedService = null;
+    let selectedCountry = null;
+    let currentNumber = "+1 (555) 019-2834";
+    let timerInterval = null;
+    let secondsRemaining = 899; // 14:59
+
+    const services = [
+      { id: 'telegram', name: 'Telegram', icon: 'fa-paper-plane', color: 'text-sky-400', price: 0.35, stock: 1420 },
+      { id: 'openai', name: 'OpenAI / ChatGPT', icon: 'fa-robot', color: 'text-emerald-400', price: 0.50, stock: 890 },
+      { id: 'whatsapp', name: 'WhatsApp', icon: 'fa-whatsapp', color: 'text-green-400', price: 0.45, stock: 2100 },
+      { id: 'google', name: 'Google / YouTube', icon: 'fa-google', color: 'text-rose-400', price: 0.25, stock: 3500 },
+      { id: 'discord', name: 'Discord', icon: 'fa-discord', color: 'text-indigo-400', price: 0.30, stock: 1200 },
+      { id: 'tiktok', name: 'TikTok', icon: 'fa-tiktok', color: 'text-pink-400', price: 0.20, stock: 940 },
+      { id: 'twitter', name: 'X / Twitter', icon: 'fa-x-twitter', color: 'text-slate-200', price: 0.35, stock: 670 },
+      { id: 'tinder', name: 'Tinder', icon: 'fa-fire', color: 'text-orange-500', price: 0.60, stock: 310 },
+      { id: 'uber', name: 'Uber / Eats', icon: 'fa-car', color: 'text-slate-300', price: 0.25, stock: 1800 },
+      { id: 'amazon', name: 'Amazon', icon: 'fa-amazon', color: 'text-amber-400', price: 0.30, stock: 2400 },
+      { id: 'facebook', name: 'Meta / FB', icon: 'fa-facebook', color: 'text-blue-500', price: 0.25, stock: 1950 },
+      { id: 'steam', name: 'Steam', icon: 'fa-steam', color: 'text-cyan-400', price: 0.20, stock: 810 }
+    ];
+
+    const countries = [
+      { code: 'US', name: 'United States', flag: '🇺🇸', prefix: '+1', stock: 4500 },
+      { code: 'GB', name: 'United Kingdom', flag: '🇬🇧', prefix: '+44', stock: 2800 },
+      { code: 'DE', name: 'Germany', flag: '🇩🇪', prefix: '+49', stock: 1900 },
+      { code: 'JP', name: 'Japan', flag: '🇯🇵', prefix: '+81', stock: 820 },
+      { code: 'FR', name: 'France', flag: '🇫🇷', prefix: '+33', stock: 1400 },
+      { code: 'CA', name: 'Canada', flag: '🇨🇦', prefix: '+1', stock: 2100 },
+      { code: 'SG', name: 'Singapore', flag: '🇸🇬', prefix: '+65', stock: 650 },
+      { code: 'NL', name: 'Netherlands', flag: '🇳🇱', prefix: '+31', stock: 930 },
+      { code: 'SE', name: 'Sweden', flag: '🇸🇪', prefix: '+46', stock: 740 },
+      { code: 'CN', name: 'China', flag: '🇨🇳', prefix: '+86', stock: 1200 }
+    ];
+
+    let liveSmsList = [
+      {
+        id: 1,
+        sender: 'Telegram',
+        code: '849-204',
+        text: 'Your Telegram verification code is: 849-204. Do not share it with anyone.',
+        time: 'Just now'
+      },
+      {
+        id: 2,
+        sender: 'OpenAI',
+        code: '593012',
+        text: 'Your OpenAI security authentication code is 593012.',
+        time: '2 mins ago'
+      },
+      {
+        id: 3,
+        sender: 'WhatsApp',
+        code: '104-992',
+        text: '<WhatsApp code 104-992> You can tap this link to verify your account: v.whatsapp.com/104992',
+        time: '5 mins ago'
+      }
+    ];
+
+    let activationHistory = [
+      { service: 'Telegram', country: '🇺🇸 US', number: '+1 (555) 019-2834', code: '849-204', time: '10:42:15', cost: '$0.35' },
+      { service: 'OpenAI', country: '🇬🇧 UK', number: '+44 7700 900077', code: '593012', time: '09:15:02', cost: '$0.50' },
+      { service: 'WhatsApp', country: '🇩🇪 DE', number: '+49 151 23456789', code: '104-992', time: 'Yesterday', cost: '$0.45' }
+    ];
+
+    // --- INITIALIZATION ---
+    window.onload = function() {
+      selectedService = services[0];
+      selectedCountry = countries[0];
+      
+      renderServices();
+      renderCountries();
+      updatePriceDisplay();
+      renderSmsFeed();
+      renderHistoryTable();
+      startSessionTimer();
+    };
+
+    // --- RENDER FUNCTIONS ---
+    function renderServices(filter = '') {
+      const grid = document.getElementById('servicesGrid');
+      grid.innerHTML = '';
+      
+      const filtered = services.filter(s => s.name.toLowerCase().includes(filter.toLowerCase()));
+      
+      filtered.forEach(s => {
+        const isSelected = selectedService && selectedService.id === s.id;
+        const card = document.createElement('div');
+        card.className = `glass-card p-3 rounded-lg cursor-pointer flex flex-col justify-between ${isSelected ? 'glass-card-active' : ''}`;
+        card.onclick = () => {
+          selectedService = s;
+          renderServices(filter);
+          updatePriceDisplay();
+        };
+
+        card.innerHTML = `
+          <div class="flex items-center justify-between mb-2">
+            <i class="fa-brands ${s.icon} ${s.color} text-lg"></i>
+            <span class="text-[10px] font-mono text-emerald-400 font-bold">$${s.price.toFixed(2)}</span>
+          </div>
+          <div>
+            <div class="text-xs font-bold text-white font-mono truncate">${s.name}</div>
+            <div class="text-[9px] text-slate-400 font-mono mt-0.5">${s.stock} in stock</div>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+      document.getElementById('serviceCountLabel').innerText = `${filtered.length} Services`;
+    }
+
+    function renderCountries(filter = '') {
+      const container = document.getElementById('countriesList');
+      container.innerHTML = '';
+
+      const filtered = countries.filter(c => 
+        c.name.toLowerCase().includes(filter.toLowerCase()) || 
+        c.prefix.includes(filter)
+      );
+
+      filtered.forEach(c => {
+        const isSelected = selectedCountry && selectedCountry.code === c.code;
+        const row = document.createElement('div');
+        row.className = `glass-card p-2.5 rounded-lg cursor-pointer flex items-center justify-between transition ${isSelected ? 'glass-card-active' : ''}`;
+        row.onclick = () => {
+          selectedCountry = c;
+          renderCountries(filter);
+          updatePriceDisplay();
+        };
+
+        row.innerHTML = `
+          <div class="flex items-center space-x-3">
+            <span class="text-lg">${c.flag}</span>
+            <div>
+              <div class="text-xs font-bold text-white font-mono">${c.name}</div>
+              <div class="text-[10px] text-slate-400 font-mono">${c.prefix}</div>
+            </div>
+          </div>
+          <span class="text-[10px] font-mono bg-white/5 border border-white/10 px-2 py-0.5 rounded text-slate-300">
+            ${c.stock} pcs
+          </span>
+        `;
+        container.appendChild(row);
+      });
+      document.getElementById('countryCountLabel').innerText = `${filtered.length} Regions`;
+    }
+
+    function renderSmsFeed() {
+      const feed = document.getElementById('smsFeedList');
+      feed.innerHTML = '';
+
+      if (liveSmsList.length === 0) {
+        feed.innerHTML = `
+          <div class="h-40 flex flex-col items-center justify-center text-slate-500 font-mono text-xs">
+            <i class="fa-solid fa-spinner animate-spin text-xl mb-2 text-swiss-red"></i>
+            <span>Awaiting incoming SMS stream...</span>
+          </div>
+        `;
+        return;
+      }
+
+      liveSmsList.forEach(sms => {
+        const item = document.createElement('div');
+        item.className = "glass-card p-4 rounded-xl border border-white/10 flex flex-col space-y-3 hover:border-swiss-red/30 transition";
+        item.innerHTML = `
+          <div class="flex items-center justify-between border-b border-white/5 pb-2">
+            <div class="flex items-center space-x-2">
+              <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+              <span class="text-xs font-bold text-white font-mono uppercase">${sms.sender}</span>
+            </div>
+            <span class="text-[10px] font-mono text-slate-400">${sms.time}</span>
+          </div>
+
+          <p class="text-xs text-slate-300 font-mono leading-relaxed">${sms.text}</p>
+
+          <div class="flex items-center justify-between bg-black/40 p-2.5 rounded-lg border border-white/10">
+            <div class="flex items-center space-x-2">
+              <span class="text-[10px] font-mono uppercase text-slate-400">OTP CODE:</span>
+              <span class="font-mono text-base font-extrabold text-swiss-red tracking-widest bg-swiss-red/10 px-2 py-0.5 rounded border border-swiss-red/30">${sms.code}</span>
+            </div>
+            <button onclick="copyToClipboard('${sms.code}', 'OTP Code copied!')" class="bg-white/10 hover:bg-white/20 text-white font-mono text-[11px] px-3 py-1 rounded transition flex items-center gap-1 active:scale-95">
+              <i class="fa-regular fa-copy text-swiss-red"></i>
+              <span>Copy Code</span>
+            </button>
+          </div>
+        `;
+        feed.appendChild(item);
+      });
+
+      document.getElementById('smsCountBadge').innerText = `${liveSmsList.length} Messages`;
+    }
+
+    function renderHistoryTable() {
+      const body = document.getElementById('historyTableBody');
+      body.innerHTML = '';
+      activationHistory.forEach(h => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td class="py-2.5 px-3 font-bold text-white">${h.service}</td>
+          <td class="py-2.5 px-3 text-slate-400">${h.country} ${h.number}</td>
+          <td class="py-2.5 px-3 text-swiss-red font-bold">${h.code}</td>
+          <td class="py-2.5 px-3 text-slate-400">${h.time}</td>
+          <td class="py-2.5 px-3 text-right text-emerald-400">${h.cost}</td>
+        `;
+        body.appendChild(row);
+      });
+    }
+
+    // --- INTERACTIVE ACTIONS ---
+    function updatePriceDisplay() {
+      if (selectedService) {
+        document.getElementById('calculatedPrice').innerText = `$${selectedService.price.toFixed(2)}`;
+      }
+    }
+
+    function filterServices() {
+      const q = document.getElementById('serviceSearchInput').value;
+      renderServices(q);
+    }
+
+    function filterCountries() {
+      const q = document.getElementById('countrySearchInput').value;
+      renderCountries(q);
+    }
+
+    function requestNewVirtualNumber() {
+      if (!selectedService || !selectedCountry) return;
+
+      if (userBalance < selectedService.price) {
+        showToast('Insufficient Balance', 'Please top up your balance to request this number.', 'fa-triangle-exclamation');
+        openTopUpModal();
+        return;
+      }
+
+      // Deduct Balance
+      userBalance -= selectedService.price;
+      document.getElementById('userBalance').innerText = `$${userBalance.toFixed(2)}`;
+
+      // Generate realistic number based on country prefix
+      const randNum = Math.floor(1000000 + Math.random() * 9000000);
+      if (selectedCountry.code === 'US' || selectedCountry.code === 'CA') {
+        currentNumber = `${selectedCountry.prefix} (${Math.floor(200+Math.random()*700)}) ${Math.floor(100+Math.random()*800)}-${Math.floor(1000+Math.random()*9000)}`;
+      } else {
+        currentNumber = `${selectedCountry.prefix} ${Math.floor(100+Math.random()*800)} ${Math.floor(10000+Math.random()*90000)}`;
+      }
+
+      // Update Active Number Hero Container
+      document.getElementById('activeFlagDisplay').innerText = selectedCountry.flag;
+      document.getElementById('activeServiceDisplay').innerText = `${selectedService.name} (${selectedCountry.name})`;
+      document.getElementById('activeNumberText').innerText = currentNumber;
+
+      // Reset Timer
+      secondsRemaining = 899;
+      startSessionTimer();
+
+      showToast('Number Reserved', `Assigned ${currentNumber} for ${selectedService.name}.`, 'fa-circle-check');
+    }
+
+    function triggerSimulatedSms() {
+      const codes = ['492-019', '883012', '109-442', '662091', '304-811'];
+      const randomCode = codes[Math.floor(Math.random() * codes.length)];
+      const serviceName = selectedService ? selectedService.name : 'Telegram';
+
+      const newSms = {
+        id: Date.now(),
+        sender: serviceName,
+        code: randomCode,
+        text: `[VERIFY.SWISS] Your official verification code for ${serviceName} is ${randomCode}. Valid for 10 minutes.`,
+        time: 'Just now'
+      };
+
+      liveSmsList.unshift(newSms);
+      renderSmsFeed();
+
+      // Add to history
+      activationHistory.unshift({
+        service: serviceName,
+        country: selectedCountry ? `${selectedCountry.flag} ${selectedCountry.code}` : '🇺🇸 US',
+        number: currentNumber,
+        code: randomCode,
+        time: new Date().toLocaleTimeString(),
+        cost: `$${selectedService ? selectedService.price.toFixed(2) : '0.35'}`
+      });
+      renderHistoryTable();
+
+      showToast('New SMS Received!', `Code Extracted: ${randomCode}`, 'fa-envelope-open-text');
+    }
+
+    function copyActiveNumber() {
+      copyToClipboard(currentNumber, 'Phone number copied to clipboard!');
+    }
+
+    function cancelAndRefund() {
+      if (!selectedService) return;
+      userBalance += selectedService.price;
+      document.getElementById('userBalance').innerText = `$${userBalance.toFixed(2)}`;
+      showToast('Session Cancelled', `$${selectedService.price.toFixed(2)} refunded to your balance.`, 'fa-rotate-left');
+    }
+
+    function banNumber() {
+      showToast('Number Blacklisted', 'This phone number has been flagged and replaced.', 'fa-shield-cat');
+      requestNewVirtualNumber();
+    }
+
+    function refreshActiveFeed() {
+      showToast('Feed Synchronized', 'Checking Swiss gateway intercept nodes...', 'fa-arrows-rotate');
+      renderSmsFeed();
+    }
+
+    // --- UTILS & HELPERS ---
+    function copyToClipboard(text, message) {
+      const el = document.createElement('textarea');
+      el.value = text;
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand('copy');
+      document.body.removeChild(el);
+
+      showToast('Copied!', message, 'fa-copy');
+    }
+
+    function startSessionTimer() {
+      if (timerInterval) clearInterval(timerInterval);
+      timerInterval = setInterval(() => {
+        if (secondsRemaining <= 0) {
+          clearInterval(timerInterval);
+          document.getElementById('sessionTimer').innerText = "00:00";
+          return;
+        }
+        secondsRemaining--;
+        const m = Math.floor(secondsRemaining / 60).toString().padStart(2, '0');
+        const s = (secondsRemaining % 60).toString().padStart(2, '0');
+        document.getElementById('sessionTimer').innerText = `${m}:${s}`;
+      }, 1000);
+    }
+
+    function showToast(title, message, iconClass = 'fa-bell') {
+      const toast = document.getElementById('toast');
+      document.getElementById('toastTitle').innerText = title;
+      document.getElementById('toastMessage').innerText = message;
+      document.getElementById('toastIcon').className = `fa-solid ${iconClass} text-sm`;
+
+      toast.classList.add('show');
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 3500);
+    }
+
+    // --- MODAL CONTROLS ---
+    function openTopUpModal() {
+      document.getElementById('topUpModal').classList.remove('hidden');
+    }
+
+    function closeTopUpModal() {
+      document.getElementById('topUpModal').classList.add('hidden');
+    }
+
+    function selectTopUpAmount(amt) {
+      document.getElementById('customTopUpInput').value = amt;
+    }
+
+    function processTopUp() {
+      const amt = parseFloat(document.getElementById('customTopUpInput').value) || 0;
+      if (amt <= 0) return;
+      userBalance += amt;
+      document.getElementById('userBalance').innerText = `$${userBalance.toFixed(2)}`;
+      closeTopUpModal();
+      showToast('Payment Successful', `Added $${amt.toFixed(2)} to account balance.`, 'fa-circle-check');
+    }
+
+    function toggleHistoryModal() {
+      const modal = document.getElementById('historyModal');
+      modal.classList.toggle('hidden');
+    }
+  </script>
+</body>
+</html>
