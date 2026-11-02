@@ -179,6 +179,12 @@
 
       <!-- ACCOUNT & TOP-UP CONTROLS -->
       <div class="flex items-center space-x-4">
+        <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white border border-slate-200 shadow-sm">
+          <i class="fa-solid fa-wallet text-swiss-red text-xs"></i>
+          <span class="text-xs text-slate-500 font-mono">余额</span>
+          <span id="userBalance" class="text-sm font-black text-slate-900 font-mono">$12.80</span>
+        </div>
+
         <button onclick="openTopUpModal()" class="bg-swiss-red hover:bg-swiss-hoverRed text-white px-3.5 py-2 rounded-md text-xs font-bold tracking-wide transition shadow-sm shadow-swiss-red/20 flex items-center gap-1.5 active:scale-95">
           <span>充值</span>
         </button>
@@ -219,7 +225,7 @@
         </div>
 
         <!-- SERVICE CARDS GRID -->
-        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 max-h-[220px] overflow-y-auto pr-1 mb-6" id="servicesGrid">
+        <div class="grid grid-cols-2 sm:grid-cols-2 gap-2.5 max-h-[220px] overflow-y-auto pr-1 mb-6" id="servicesGrid">
           <!-- Dynamically Populated Service Cards -->
         </div>
 
@@ -303,7 +309,7 @@
 
           <!-- PHONE NUMBER LARGE TEXT DISPLAY -->
           <div class="font-mono text-3xl sm:text-4xl font-black tracking-wider text-slate-900 my-2" id="activeNumberText">
-            +1 (332) 895-4021
+            <span class="text-slate-300 text-2xl font-bold">点击「立即获取」分配号码</span>
           </div>
 
           <!-- QUICK ACTION BUTTONS -->
@@ -473,13 +479,18 @@
     let userBalance = 12.80;
     let selectedService = null;
     let selectedCountry = null;
-    let currentNumber = "+1 (332) 895-4021";
+    let currentNumber = '';
+    let currentOrderId = null;
+    let hasActiveNumber = false;
     let timerInterval = null;
     let secondsRemaining = 899; // 14:59
+    let currentCost = 0;
+
+    const API_BASE = 'https://api.funbua.uk';
 
     let services = [];
 
-    const countries = [
+    let countries = [
       { code: 'US', name: '美国 (USA)', flag: '🇺🇸', prefix: '+1', stock: 5200 },
       { code: 'GB', name: '英国 (UK)', flag: '🇬🇧', prefix: '+44', stock: 3100 },
       { code: 'DE', name: '德国 (Germany)', flag: '🇩🇪', prefix: '+49', stock: 2400 },
@@ -541,6 +552,7 @@
           selectedService = services[0];
           renderServices();
           updatePriceDisplay();
+          loadCountries(selectedService.id);
         })
         .catch(function (err) { console.error('加载服务列表失败:', err); });
     }
@@ -566,6 +578,72 @@
       return 'fa-solid fa-message';
     }
 
+    // 旗帜渲染：后端返回的是 flagcdn 的 svg 图片，没有则回退 emoji
+    function flagHTML(c) {
+      if (c && c.img) return `<img src="${c.img}" class="w-5 h-4 rounded-sm object-cover inline-block" alt="">`;
+      return `<span class="text-lg">${c ? c.flag : '🏳️'}</span>`;
+    }
+
+    // ISO 3166-1 alpha-2 -> 国际区号（国旗图来自 flagcdn，可反推 ISO 码；用于号码池在国家名前显示区号）
+    const DIAL_CODES = {
+      us:'1', gb:'44', ca:'1', au:'61', de:'49', fr:'33', jp:'81', cn:'86', kr:'82', ru:'7',
+      in:'91', br:'55', mx:'52', it:'39', es:'34', nl:'31', se:'46', pl:'48', tr:'90',
+      id:'62', co:'57', ar:'54', cl:'56', pe:'51', ve:'58', ec:'593', bo:'591', py:'595', uy:'598',
+      cr:'506', pa:'507', gt:'502', hn:'504', sv:'503', ni:'505', do:'1', cu:'53', pr:'1', bs:'1', jm:'1', ht:'509',
+      ua:'380', kz:'76', by:'375', md:'373', ro:'40', hu:'36', cz:'420', sk:'421', si:'386', hr:'385',
+      rs:'381', ba:'387', bg:'359', gr:'30', pt:'351', ie:'353', dk:'45', fi:'358', no:'47', is:'354',
+      ee:'372', lv:'371', lt:'370', at:'43', ch:'41', be:'32', lu:'352',
+      il:'972', sa:'966', ae:'971', eg:'20', ma:'212', dz:'213', tn:'216', ly:'218', jo:'962',
+      lb:'961', sy:'963', iq:'964', ir:'98', kw:'965', qa:'974', bh:'973', om:'968', ye:'967', ps:'970',
+      za:'27', ng:'234', ke:'254', gh:'233', tz:'255', ug:'256', et:'251', ao:'244', zm:'260', zw:'263', gm:'220', td:'235', sd:'249',
+      cm:'237', ci:'225', sn:'221', ml:'223', mg:'261', mu:'230',
+      ph:'63', th:'66', vn:'84', my:'60', sg:'65', mm:'95', kh:'855', la:'856', pk:'92', bd:'880',
+      lk:'94', np:'977', af:'93', mn:'976', nz:'64', fj:'679', pg:'675',
+      hk:'852', mo:'853', tw:'886',
+      kg:'996', tj:'992', tm:'993', uz:'998', am:'374', ge:'995', az:'994', cy:'357', mt:'356', al:'355', me:'382',
+      gn:'224', cg:'242', cd:'243', ga:'241', gq:'240', mr:'222', sl:'232', lr:'231', tg:'228', bj:'229', ne:'227',
+      mz:'258', mw:'265', na:'264', bw:'267', sz:'268', ls:'266'
+    };
+
+    // 选中服务后，把类别号发给后端，拉取该服务下的可购国家/号码列表
+    async function loadCountries(serviceId) {
+      try {
+        const res = await fetch(`${API_BASE}/api/smsactivate/countries?service=${encodeURIComponent(serviceId)}`);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const raw = await res.json();
+        const list = Array.isArray(raw) ? raw : (raw && raw.data ? raw.data : (raw ? [raw] : []));
+        if (!list.length) throw new Error('空列表');
+        countries = list.map(item => {
+          const name = item.name || '';
+          const m = name.match(/\(\+?([\d\s-]+)\)/);
+          const isoM = (item.img || '').match(/flagcdn\.com\/([a-z]{2})/i);
+          const iso2 = isoM ? isoM[1].toLowerCase() : '';
+          const prefix = m ? '+' + m[1].replace(/\s/g, '')
+                           : (DIAL_CODES[iso2] ? '+' + DIAL_CODES[iso2] : (item.prefix || ''));
+          return {
+            code: String(item.id),
+            id: String(item.id),
+            name: name,
+            iso: iso2,
+            prefix: prefix,
+            flag: item.img || '',
+            img: item.img || '',
+            price: parseFloat(item.price) || 0,
+            stock: parseInt(item.stock, 10) || 0,
+            categoryId: item.categoryId || serviceId,
+            categoryName: item.categoryName || ''
+          };
+        });
+        selectedCountry = countries[0];
+      } catch (err) {
+        console.error('加载号码列表失败:', err);
+        showToast('号码池获取失败', '未连接到后端或接口异常，已保留默认列表。', 'fa-triangle-exclamation');
+      }
+      renderCountries();
+      updatePriceDisplay();
+      updateHeroMeta();
+    }
+
     // --- RENDER FUNCTIONS ---
     function renderServices(filter = '') {
       const grid = document.getElementById('servicesGrid');
@@ -576,22 +654,20 @@
       filtered.forEach(s => {
         const isSelected = selectedService && selectedService.id === s.id;
         const card = document.createElement('div');
-        card.className = `swiss-card p-3 rounded-xl cursor-pointer flex flex-col justify-between ${isSelected ? 'swiss-card-active' : ''}`;
+        card.className = `swiss-card p-3 rounded-xl cursor-pointer flex items-center space-x-3 transition ${isSelected ? 'swiss-card-active' : ''}`;
         card.onclick = () => {
           selectedService = s;
           renderServices(filter);
           updatePriceDisplay();
+          updateHeroMeta();
+          loadCountries(s.id);
         };
 
         card.innerHTML = `
-          <div class="flex items-center justify-between mb-2">
-            <i class="${s.icon} text-lg" style="color: ${s.color}"></i>
-            <span class="text-[10px] font-mono text-emerald-600 font-bold">$${s.price.toFixed(2)}</span>
-          </div>
-          <div>
-            <div class="text-xs font-bold text-slate-900 font-mono truncate">${s.name}</div>
-            <div class="text-[9px] text-slate-400 font-mono mt-0.5">${s.stock} 余量</div>
-          </div>
+          <span class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style="background: ${s.color}1a; color: ${s.color}">
+            <i class="${s.icon} text-base"></i>
+          </span>
+          <span class="flex-1 min-w-0 text-xs font-bold text-slate-900 font-mono truncate">${s.name}</span>
         `;
         grid.appendChild(card);
       });
@@ -609,25 +685,31 @@
 
       filtered.forEach(c => {
         const isSelected = selectedCountry && selectedCountry.code === c.code;
+        const cleanName = c.name.replace(/\(\+?[\d\s-]+\)\s*$/, '').trim();
+        const displayName = cleanName;
         const row = document.createElement('div');
-        row.className = `swiss-card p-2.5 rounded-xl cursor-pointer flex items-center justify-between transition ${isSelected ? 'swiss-card-active' : ''}`;
+        row.className = `swiss-card p-3 rounded-xl cursor-pointer transition ${isSelected ? 'swiss-card-active' : ''}`;
         row.onclick = () => {
           selectedCountry = c;
           renderCountries(filter);
           updatePriceDisplay();
+          updateHeroMeta();
         };
 
         row.innerHTML = `
-          <div class="flex items-center space-x-3">
-            <span class="text-lg">${c.flag}</span>
-            <div>
-              <div class="text-xs font-bold text-slate-900 font-mono">${c.name}</div>
-              <div class="text-[10px] text-slate-400 font-mono">${c.prefix}</div>
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center space-x-2.5 min-w-0">
+              ${flagHTML(c)}
+              <span class="text-sm font-bold text-slate-900 font-mono truncate">${displayName}</span>
             </div>
+            <span class="shrink-0 text-xs font-mono bg-emerald-50 border border-emerald-200 text-emerald-700 px-2 py-0.5 rounded-md font-bold">
+              $${Number(c.price).toFixed(2)}
+            </span>
           </div>
-          <span class="text-[10px] font-mono bg-white border border-slate-200 px-2 py-0.5 rounded-md text-slate-600">
-            ${c.stock} 个节点
-          </span>
+          <div class="flex items-center justify-between mt-2 pt-2 border-t border-slate-100">
+            <span class="text-[10px] font-mono text-slate-400">${c.prefix}</span>
+            <span class="text-[10px] font-mono text-slate-400">${c.stock} 个号码</span>
+          </div>
         `;
         container.appendChild(row);
       });
@@ -698,9 +780,20 @@
 
     // --- ACTIONS & HANDLERS ---
     function updatePriceDisplay() {
-      if (selectedService) {
-        document.getElementById('calculatedPrice').innerText = `$${selectedService.price.toFixed(2)}`;
-      }
+      const price = (selectedCountry && selectedCountry.price) ? Number(selectedCountry.price) : (selectedService ? selectedService.price : 0);
+      document.getElementById('calculatedPrice').innerText = `$${Number(price).toFixed(2)}`;
+    }
+
+    // hero 旗帜 +「服务 (国家)」文字跟随当前选择实时变化（已取到号码的会话锁定不随选择变化）
+    function updateHeroMeta() {
+      if (hasActiveNumber) return;
+      const flagEl = document.getElementById('activeFlagDisplay');
+      const svcEl = document.getElementById('activeServiceDisplay');
+      if (!selectedService) { svcEl.innerText = ''; return; }
+      flagEl.innerHTML = (selectedCountry && selectedCountry.img)
+        ? `<img src="${selectedCountry.img}" class="w-7 h-5 rounded-sm inline-block align-middle" alt="">`
+        : (selectedCountry ? (selectedCountry.flag || '🏳️') : '🏳️');
+      svcEl.innerText = `${selectedService.name} (${selectedCountry ? selectedCountry.name : '—'})`;
     }
 
     function filterServices() {
@@ -713,77 +806,195 @@
       renderCountries(q);
     }
 
-    function requestNewVirtualNumber() {
+    async function requestNewVirtualNumber() {
       if (!selectedService || !selectedCountry) return;
 
-      if (userBalance < selectedService.price) {
+      const cost = (selectedCountry && selectedCountry.price) ? Number(selectedCountry.price) : selectedService.price;
+      currentCost = cost;
+
+      if (userBalance < cost) {
         showToast('余额不足', '请先充值账户后再获取手机号码。', 'fa-triangle-exclamation');
         openTopUpModal();
         return;
       }
 
       // Deduct balance
-      userBalance -= selectedService.price;
+      userBalance -= cost;
       document.getElementById('userBalance').innerText = `$${userBalance.toFixed(2)}`;
+      showToast('正在下单...', `正在向 ${selectedService.name} (${selectedCountry.name}) 请求号码...`, 'fa-solid fa-spinner fa-spin');
 
-      // Generate realistic virtual phone number format
-      if (selectedCountry.code === 'US' || selectedCountry.code === 'CA') {
-        currentNumber = `${selectedCountry.prefix} (${Math.floor(200+Math.random()*700)}) ${Math.floor(100+Math.random()*800)}-${Math.floor(1000+Math.random()*9000)}`;
-      } else {
-        currentNumber = `${selectedCountry.prefix} ${Math.floor(100+Math.random()*800)} ${Math.floor(10000+Math.random()*90000)}`;
+      let ok = true;
+      try {
+        const resp = await fetch(`${API_BASE}/api/smsactivate/order`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: selectedCountry.id })
+        });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const raw = await resp.text();
+        // 购买接口只返回 {type:success}，不含号码；需到 /api/numbers 列表反查刚买的那个
+        const num = await fetchActiveNumber(selectedCountry.id);
+        if (!num) throw new Error('未获取到号码');
+        currentNumber = String(num.number);
+        currentOrderId = String(num.id); // 列表里的 id，用于轮询验证码与取消释放
+      } catch (err) {
+        // 下单失败：退还费用并回退为本地模拟号码，保证流程可用
+        userBalance += cost;
+        document.getElementById('userBalance').innerText = `$${userBalance.toFixed(2)}`;
+        currentNumber = mockNumber(selectedCountry);
+        currentOrderId = null;
+        ok = false;
+        console.error('下单获取真实号码失败，已退还并回退模拟:', err);
+        showToast('真实号码获取失败', '已自动退还费用并生成模拟号码。', 'fa-triangle-exclamation');
       }
 
+      hasActiveNumber = true;
+
       // Update Hero Display
-      document.getElementById('activeFlagDisplay').innerText = selectedCountry.flag;
+      const flagEl = document.getElementById('activeFlagDisplay');
+      flagEl.innerHTML = selectedCountry.img
+        ? `<img src="${selectedCountry.img}" class="w-7 h-5 rounded-sm inline-block align-middle" alt="">`
+        : (selectedCountry.flag || '🏳️');
       document.getElementById('activeServiceDisplay').innerText = `${selectedService.name} (${selectedCountry.name})`;
-      document.getElementById('activeNumberText').innerText = currentNumber;
+      displayActiveNumber(currentNumber);
 
       // Reset timer countdown
       secondsRemaining = 899;
       startSessionTimer();
+      startSmsPolling();
 
-      showToast('号码分配成功', `已成功分配 ${currentNumber}。`, 'fa-circle-check');
+      if (ok) showToast('号码分配成功', `已成功分配 ${currentNumber}。`, 'fa-circle-check');
     }
 
-    function triggerSimulatedSms() {
-      const codes = ['739-102', '492019', '883-012', '109442', '662-091'];
-      const randomCode = codes[Math.floor(Math.random() * codes.length)];
-      const serviceName = selectedService ? selectedService.name : 'OpenAI';
+    function displayActiveNumber(num) {
+      const el = document.getElementById('activeNumberText');
+      if (num) {
+        el.innerText = num;
+      } else {
+        el.innerHTML = '<span class="text-slate-300 text-2xl font-bold">点击「立即获取」分配号码</span>';
+      }
+    }
 
+    function mockNumber(c) {
+      if (c.code === 'US' || c.code === 'CA') {
+        return `${c.prefix} (${Math.floor(200+Math.random()*700)}) ${Math.floor(100+Math.random()*800)}-${Math.floor(1000+Math.random()*9000)}`;
+      }
+      return `${c.prefix} ${Math.floor(100+Math.random()*800)} ${Math.floor(10000+Math.random()*90000)}`;
+    }
+
+    // 购买接口不返回号码，这里去 /api/numbers 列表反查「刚买的那个」：
+    // 按 service(=所选国家id) 匹配、排除已失效(status=-1)、取 created_at 最新的一条。多次重试以抵消购买后列表延迟。
+    async function fetchActiveNumber(serviceId) {
+      for (let attempt = 0; attempt < 6; attempt++) {
+        try {
+          const resp = await fetch(`${API_BASE}/api/smsactivate/numbers`);
+          if (!resp.ok) continue;
+          const j = await resp.json();
+          const list = (j && Array.isArray(j.data)) ? j.data : (Array.isArray(j) ? j : []);
+          const matches = list.filter(n => String(n.service) === String(serviceId) && n.number && String(n.status) !== '-1');
+          if (matches.length) {
+            matches.sort((a, b) => Number(b.created_at || 0) - Number(a.created_at || 0));
+            return matches[0];
+          }
+        } catch (e) { console.warn('fetchActiveNumber retry', attempt, e); }
+        if (attempt < 5) await new Promise(r => setTimeout(r, 800));
+      }
+      return null;
+    }
+
+    // 把一条验证码写入收信流 + 历史（真实与模拟复用）
+    function addReceivedSms(code) {
+      const serviceName = selectedService ? selectedService.name : 'SMS';
       const newSms = {
         id: Date.now(),
         sender: serviceName,
-        code: randomCode,
-        text: `[SMSVerify] 您的 ${serviceName} 官方身份验证码为: ${randomCode}，有效期为 10 分钟。`,
+        code: code,
+        text: `[SMSVerify] 您的 ${serviceName} 官方身份验证码为: ${code}，有效期为 10 分钟。`,
         time: '刚刚'
       };
-
       liveSmsList.unshift(newSms);
       renderSmsFeed();
-
-      // Log into history
       activationHistory.unshift({
         service: serviceName,
-        country: selectedCountry ? `${selectedCountry.flag} ${selectedCountry.name}` : '🇺🇸 美国',
+        country: selectedCountry ? (selectedCountry.img ? selectedCountry.name : `${selectedCountry.flag} ${selectedCountry.name}`) : '🇺🇸 美国',
         number: currentNumber,
-        code: randomCode,
+        code: code,
         time: new Date().toLocaleTimeString(),
-        cost: `$${selectedService ? selectedService.price.toFixed(2) : '0.50'}`
+        cost: `$${currentCost.toFixed(2)}`
       });
       renderHistoryTable();
+      showToast('收到新验证码！', `验证码: ${code}`, 'fa-envelope-open-text');
+    }
 
-      showToast('收到新验证码！', `验证码: ${randomCode}`, 'fa-envelope-open-text');
+    function triggerSimulatedSms() {
+      if (!hasActiveNumber) { showToast('请先获取号码', '点击「立即获取」分配一个号码后再模拟收信。', 'fa-triangle-exclamation'); return; }
+      const codes = ['739-102', '492019', '883-012', '109442', '662-091'];
+      addReceivedSms(codes[Math.floor(Math.random() * codes.length)]);
+    }
+
+    // 轮询号码列表，检测刚买号码的验证码是否已下发
+    let smsPollInterval = null;
+    function startSmsPolling() {
+      stopSmsPolling();
+      smsPollInterval = setInterval(async () => {
+        if (!hasActiveNumber || !currentOrderId) return;
+        try {
+          const resp = await fetch(`${API_BASE}/api/smsactivate/numbers`);
+          if (!resp.ok) return;
+          const j = await resp.json();
+          const list = (j && Array.isArray(j.data)) ? j.data : [];
+          const entry = list.find(n => String(n.id) === String(currentOrderId));
+          if (entry && entry.code) {
+            addReceivedSms(String(entry.code));
+            stopSmsPolling();
+          }
+        } catch (e) {}
+      }, 3000);
+    }
+    function stopSmsPolling() {
+      if (smsPollInterval) { clearInterval(smsPollInterval); smsPollInterval = null; }
     }
 
     function copyActiveNumber() {
+      if (!currentNumber) { showToast('请先获取号码', '点击「立即获取」分配一个号码后再复制。', 'fa-triangle-exclamation'); return; }
       copyToClipboard(currentNumber, '手机号码已成功复制到剪贴板！');
     }
 
-    function cancelAndRefund() {
-      if (!selectedService) return;
-      userBalance += selectedService.price;
+    async function cancelAndRefund() {
+      if (!hasActiveNumber) return;
+      const orderId = currentOrderId;
+      const cost = currentCost;
+
+      // 先退还应用内余额
+      userBalance += cost;
       document.getElementById('userBalance').innerText = `$${userBalance.toFixed(2)}`;
-      showToast('会话已释放', `$${selectedService.price.toFixed(2)} 已退还至您的账户。`, 'fa-rotate-left');
+
+      // 通知上游释放号码（尽力而为，失败也保证本地已退费）
+      if (orderId) {
+        try {
+          const resp = await fetch(`${API_BASE}/api/smsactivate/release`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: orderId })
+          });
+          if (!resp.ok) throw new Error('HTTP ' + resp.status);
+          showToast('会话已释放', `号码已退回平台，$${cost.toFixed(2)} 已退还至您的账户。`, 'fa-rotate-left');
+        } catch (err) {
+          console.error('释放号码失败:', err);
+          showToast('号码退回提示', `余额已退还，但平台释放失败（订单 ${orderId}）。`, 'fa-triangle-exclamation');
+        }
+      } else {
+        showToast('会话已释放', `$${cost.toFixed(2)} 已退还至您的账户。`, 'fa-rotate-left');
+      }
+
+      // 重置状态与展示
+      currentNumber = '';
+      currentOrderId = null;
+      currentCost = 0;
+      hasActiveNumber = false;
+      displayActiveNumber('');
+      stopSmsPolling();
+      if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
     }
 
     function refreshActiveFeed() {
