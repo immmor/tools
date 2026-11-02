@@ -311,7 +311,7 @@
             <i class="fa-solid fa-rotate text-xs text-slate-400"></i>
             <span>手动刷新</span>
           </button>
-          <button onclick="cancelAndRefund()" class="swiss-card py-2.5 px-3 rounded-xl text-xs font-mono text-amber-700 font-bold hover:border-amber-400 flex items-center justify-center gap-2">
+          <button id="cancelRefundBtn" onclick="cancelAndRefund()" class="swiss-card py-2.5 px-3 rounded-xl text-xs font-mono text-amber-700 font-bold hover:border-amber-400 flex items-center justify-center gap-2">
             <i class="fa-solid fa-ban text-xs"></i>
             <span>释放并退款</span>
           </button>
@@ -420,7 +420,7 @@
           <label class="block text-xs font-mono text-slate-500 font-semibold uppercase mb-1">密码</label>
           <input id="loginPassword" type="password" placeholder="请输入密码" class="w-full swiss-input rounded-xl px-4 py-2.5 text-sm font-mono">
         </div>
-        <button onclick="handleLogin()" class="w-full bg-swiss-red hover:bg-swiss-hoverRed text-white font-black font-mono text-sm py-3.5 rounded-xl shadow-lg shadow-swiss-red/25 transition">登录</button>
+        <button id="loginBtn" onclick="handleLogin()" class="w-full bg-swiss-red hover:bg-swiss-hoverRed text-white font-black font-mono text-sm py-3.5 rounded-xl shadow-lg shadow-swiss-red/25 transition">登录</button>
       </div>
 
       <!-- REGISTER FORM -->
@@ -444,7 +444,7 @@
           <label class="block text-xs font-mono text-slate-500 font-semibold uppercase mb-1">确认密码</label>
           <input id="regConfirm" type="password" placeholder="请再次输入密码" class="w-full swiss-input rounded-xl px-4 py-2.5 text-sm font-mono">
         </div>
-        <button onclick="handleRegister()" class="w-full bg-swiss-red hover:bg-swiss-hoverRed text-white font-black font-mono text-sm py-3.5 rounded-xl shadow-lg shadow-swiss-red/25 transition">注册并登录</button>
+        <button id="registerBtn" onclick="handleRegister()" class="w-full bg-swiss-red hover:bg-swiss-hoverRed text-white font-black font-mono text-sm py-3.5 rounded-xl shadow-lg shadow-swiss-red/25 transition">注册并登录</button>
       </div>
     </div>
   </div>
@@ -478,6 +478,21 @@
     const USD_TO_RMB = 6.7; // 美元→人民币汇率
     const PRICE_MULT = 2; // 原始价格翻倍系数
     const toRmb = usd => +(Number(usd) * USD_TO_RMB).toFixed(2);
+
+    // 按钮中间态：置灰 + 显示处理文本（spinner）
+    function setLoading(btn, text) {
+      if (!btn) return;
+      btn.dataset._html = btn.innerHTML;
+      btn.disabled = true;
+      btn.classList.add('opacity-60', 'cursor-not-allowed');
+      btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i><span>${text}</span>`;
+    }
+    function resetLoading(btn) {
+      if (!btn) return;
+      btn.disabled = false;
+      btn.classList.remove('opacity-60', 'cursor-not-allowed');
+      if (btn.dataset._html) btn.innerHTML = btn.dataset._html;
+    }
 
     let services = [];
 
@@ -802,11 +817,14 @@
       if (!selectedService || !selectedCountry) return;
       if (!currentUser) { showToast('请先登录', '租赁号码需要先登录账户。', 'fa-triangle-exclamation'); openAuthModal(); return; }
 
+      const btn = $('getTempNumBtn');
+      setLoading(btn, '处理中…');
+      try {
       const cost = ((selectedCountry && selectedCountry.price) ? Number(selectedCountry.price) : selectedService.price) * PRICE_MULT;
       currentCost = cost;
 
-      if (Number(currentUser.balance) < cost) {
-        showToast('余额不足', `账户余额不足以租赁该号码（需 $${cost.toFixed(2)}）。`, 'fa-triangle-exclamation');
+      if (Number(currentUser.balance) < toRmb(cost)) {
+        showToast('余额不足', `账户余额不足以租赁该号码（需 ¥${toRmb(cost).toFixed(2)}）。`, 'fa-triangle-exclamation');
         goTopUp();
         return;
       }
@@ -837,8 +855,8 @@
         return;
       }
 
-      // 仅在下单成功后才扣除真实账户余额（本地 + localStorage + 服务端）
-      await setBalance(Number(currentUser.balance) - cost);
+      // 仅在下单成功后才扣除真实账户余额（按汇率换算成人民币，本地 + localStorage + 服务端）
+      await setBalance(Number(currentUser.balance) - toRmb(cost));
 
       hasActiveNumber = true;
 
@@ -855,7 +873,10 @@
       startSessionTimer();
       startSmsPolling();
 
-      if (ok) showToast('号码分配成功', `已成功分配 ${currentNumber}，租赁费用 $${cost.toFixed(2)} 已扣除。`, 'fa-circle-check');
+      if (ok) showToast('号码分配成功', `已成功分配 ${currentNumber}，租赁费用 ¥${toRmb(cost).toFixed(2)} 已扣除。`, 'fa-circle-check');
+      } finally {
+        resetLoading(btn);
+      }
     }
 
     function displayActiveNumber(num) {
@@ -957,8 +978,11 @@
       const orderId = currentOrderId;
       const cost = currentCost;
 
-      // 先退还应用内余额（真实账户）
-      await setBalance(Number(currentUser ? currentUser.balance : userBalance) + cost);
+      const btn = $('cancelRefundBtn');
+      setLoading(btn, '处理中…');
+      try {
+      // 先退还应用内余额（真实账户，按汇率换算成人民币）
+      await setBalance(Number(currentUser ? currentUser.balance : userBalance) + toRmb(cost));
 
       // 通知上游释放号码（尽力而为，失败也保证本地已退费）
       if (orderId) {
@@ -969,13 +993,13 @@
             body: JSON.stringify({ id: orderId })
           });
           if (!resp.ok) throw new Error('HTTP ' + resp.status);
-          showToast('会话已释放', `号码已退回平台，$${cost.toFixed(2)} 已退还至您的账户。`, 'fa-rotate-left');
+          showToast('会话已释放', `号码已退回平台，¥${toRmb(cost).toFixed(2)} 已退还至您的账户。`, 'fa-rotate-left');
         } catch (err) {
           console.error('释放号码失败:', err);
           showToast('号码退回提示', `余额已退还，但平台释放失败（订单 ${orderId}）。`, 'fa-triangle-exclamation');
         }
       } else {
-        showToast('会话已释放', `$${cost.toFixed(2)} 已退还至您的账户。`, 'fa-rotate-left');
+        showToast('会话已释放', `¥${toRmb(cost).toFixed(2)} 已退还至您的账户。`, 'fa-rotate-left');
       }
 
       // 重置状态与展示
@@ -986,6 +1010,9 @@
       displayActiveNumber('');
       stopSmsPolling();
       if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+      } finally {
+        resetLoading(btn);
+      }
     }
 
     function refreshActiveFeed() {
@@ -1113,14 +1140,17 @@
     async function handleLogin() {
       const acc = $('loginAccount').value.trim(), pwd = $('loginPassword').value;
       if (!acc || !pwd) return showToast('信息不完整', '请输入账号（邮箱）和密码。', 'fa-triangle-exclamation');
+      const btn = $('loginBtn');
+      setLoading(btn, '登录中…');
       try {
         const j = await (await api('/api/login', { username: acc, password: pwd })).json();
-        if (!j.success) return showToast('登录失败', j.message || '用户名或密码错误', 'fa-triangle-exclamation');
+        if (!j.success) { showToast('登录失败', j.message || '用户名或密码错误', 'fa-triangle-exclamation'); return; }
         currentUser = j.userInfo;
         localStorage.setItem('smsverify_user', JSON.stringify(currentUser));
         closeAuthModal(); renderAuthArea();
         showToast('登录成功', `欢迎回来，${currentUser.username}！`, 'fa-circle-check');
       } catch { showToast('网络错误', '登录请求失败，请稍后重试。', 'fa-triangle-exclamation'); }
+      finally { resetLoading(btn); }
     }
 
     async function sendRegisterCode() {
@@ -1142,15 +1172,18 @@
       if (!code) return showToast('请填写验证码', '请先获取并填写邮箱验证码。', 'fa-triangle-exclamation');
       if (pwd.length < 6) return showToast('密码太短', '密码至少需要 6 位。', 'fa-triangle-exclamation');
       if (pwd !== confirm) return showToast('两次输入不一致', '请确认密码与上方相同。', 'fa-triangle-exclamation');
+      const btn = $('registerBtn');
+      setLoading(btn, '注册中…');
       try {
-        if (!(await (await api('/api/verify-code', { email, code })).json()).success) return showToast('验证码错误', '请检查验证码或重新获取。', 'fa-triangle-exclamation');
+        if (!(await (await api('/api/verify-code', { email, code })).json()).success) { showToast('验证码错误', '请检查验证码或重新获取。', 'fa-triangle-exclamation'); return; }
         const rj = await (await api('/api/register', { username: email, password: pwd })).json();
-        if (!rj.success) return showToast('注册失败', rj.message || '注册失败，请重试', 'fa-triangle-exclamation');
+        if (!rj.success) { showToast('注册失败', rj.message || '注册失败，请重试', 'fa-triangle-exclamation'); return; }
         const lj = await (await api('/api/login', { username: email, password: pwd })).json();
         if (lj.success) { currentUser = lj.userInfo; localStorage.setItem('smsverify_user', JSON.stringify(currentUser)); }
         closeAuthModal(); renderAuthArea();
         showToast('注册成功', `欢迎加入，${email}！`, 'fa-circle-check');
       } catch { showToast('网络错误', '注册请求失败，请稍后重试。', 'fa-triangle-exclamation'); }
+      finally { resetLoading(btn); }
     }
 
     function logout() {
