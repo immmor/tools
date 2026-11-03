@@ -896,7 +896,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (isLeaveMessageMode) {
                 const userInfo = window.userInfo || JSON.parse(localStorage.getItem('userInfo') || '{}');
                 const username = userInfo.username || getAnonId();
-                const msg = `[投诉] 用户: ${username}\n内容: ${text}`;
+                const msg = `[联系客服对话消息] 用户: ${username}\n内容: ${text}`;
                 const API = 'https://api.funbua.uk';
                 const firstTime = !leaveSubmittedAt;
                 try {
