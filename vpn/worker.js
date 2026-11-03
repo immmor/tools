@@ -475,6 +475,40 @@ export default {
         });
       }
 
+      // ========== talangya 商品详情代理（绕过CORS，原样返回，含 description） ==========
+      if (path === '/api/talangya/commodityDetail' && request.method === 'GET') {
+        try {
+          const commodityId = url.searchParams.get('commodityId') || url.searchParams.get('commodity_id') || url.searchParams.get('id');
+          if (!commodityId) {
+            return resJson({ code: 400, msg: '缺少 commodityId 参数' }, 400);
+          }
+          const r = await fetch('https://talangya.com/user/api/index/commodityDetail?commodityId=' + encodeURIComponent(commodityId), {
+            headers: {
+              'accept': '*/*',
+              'accept-language': 'zh-CN,zh;q=0.9',
+              'priority': 'u=1, i',
+              'referer': 'https://talangya.com/',
+              'sec-ch-ua': '"Chromium";v="154", "Google Chrome";v="154", "Not A(Brand";v="99"',
+              'sec-ch-ua-mobile': '?0',
+              'sec-ch-ua-platform': '"macOS"',
+              'sec-fetch-dest': 'empty',
+              'sec-fetch-mode': 'cors',
+              'sec-fetch-site': 'same-origin',
+              'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36',
+              'x-requested-with': 'XMLHttpRequest',
+              'cookie': 'ACG-SHOP=l9hhhl05jctiudp28lqm8ae4is; USER_SESSION=ZXlKMGVYQWlPaUpLVjFRaUxDSjFhV1FpT2pNNU16QXdMQ0poYkdjaU9pSklVekkxTmlKOS5leUpsZUhCcGNtVWlPakU0TWpNek1EVTJNelFzSW14dloybHVWR2x0WlNJNklqSXdNall0TVRBdE1USWdNRGs2TkRjNk1UUWlmUS5xMjAzbHN2VTZ1Q0JFVnpQbWJUYjAxX0ZZMUYweFVXQnJyRDZ6ZllOU1d3'
+            }
+          });
+          const text = await r.text();
+          return new Response(text, {
+            headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json; charset=utf-8' }
+          });
+        } catch (err) {
+          console.error('Talangya commodityDetail error:', err);
+          return resJson({ code: 500, msg: '获取商品详情失败', error: err.message }, 500);
+        }
+      }
+
       // ========== talangya 下单代理（绕过CORS，原样下单并把 secret 返回前端） ==========
       if (path === '/api/talangya/order' && request.method === 'POST') {
         try {
@@ -4927,9 +4961,10 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
             const user = await DB.prepare('SELECT ad_clicks FROM user WHERE username = ?').bind(username).first();
             if (!user) return resJson({ code: 404, msg: '用户不存在' }, 404);
             const clicks = user.ad_clicks ? JSON.parse(user.ad_clicks) : {};
-            const cur = clicks[ad_id] || { count: 0 };
-            cur.count = (cur.count || 0) + 1;
-            if (content) cur.content = content;
+            const cur = clicks[ad_id] || { count: 0, times: [] };
+            cur.count++;
+            cur.times.push(new Date().toISOString());
+            if (content && !cur.content) cur.content = content;
             clicks[ad_id] = cur;
             await DB.prepare('UPDATE user SET ad_clicks = ? WHERE username = ?').bind(JSON.stringify(clicks), username).run();
             return resJson({ code: 200, msg: '记录成功', count: cur.count });
