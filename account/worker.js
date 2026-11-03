@@ -22,6 +22,19 @@ const notifyAdmin = async (title, body) => {
   } catch (e) {}
 };
 
+// Supabase 实时消息桥接：把「客服→用户」的回复镜像进 Supabase，前端用 Realtime 接收（无配置则跳过）
+async function supabaseInsert(env, table, row) {
+  const url = env.SUPABASE_URL, key = env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return;
+  try {
+    await fetch(`${url}/rest/v1/${table}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': key, 'Authorization': `Bearer ${key}`, 'Prefer': 'return=minimal' },
+      body: JSON.stringify(row),
+    });
+  } catch (_) {}
+}
+
 function fbChoiceLabel(_match, choice) {
   const map = { a: '主胜', draw: '平局', b: '客胜' };
   return map[choice] || choice;
@@ -462,6 +475,40 @@ export default {
         });
       }
 
+      // ========== talangya 商品详情代理（绕过CORS，原样返回，含 description） ==========
+      if (path === '/api/talangya/commodityDetail' && request.method === 'GET') {
+        try {
+          const commodityId = url.searchParams.get('commodityId') || url.searchParams.get('commodity_id') || url.searchParams.get('id');
+          if (!commodityId) {
+            return resJson({ code: 400, msg: '缺少 commodityId 参数' }, 400);
+          }
+          const r = await fetch('https://talangya.com/user/api/index/commodityDetail?commodityId=' + encodeURIComponent(commodityId), {
+            headers: {
+              'accept': '*/*',
+              'accept-language': 'zh-CN,zh;q=0.9',
+              'priority': 'u=1, i',
+              'referer': 'https://talangya.com/',
+              'sec-ch-ua': '"Chromium";v="154", "Google Chrome";v="154", "Not A(Brand";v="99"',
+              'sec-ch-ua-mobile': '?0',
+              'sec-ch-ua-platform': '"macOS"',
+              'sec-fetch-dest': 'empty',
+              'sec-fetch-mode': 'cors',
+              'sec-fetch-site': 'same-origin',
+              'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36',
+              'x-requested-with': 'XMLHttpRequest',
+              'cookie': 'ACG-SHOP=l9hhhl05jctiudp28lqm8ae4is; USER_SESSION=ZXlKMGVYQWlPaUpLVjFRaUxDSjFhV1FpT2pNNU16QXdMQ0poYkdjaU9pSklVekkxTmlKOS5leUpsZUhCcGNtVWlPakU0TWpNek1EVTJNelFzSW14dloybHVWR2x0WlNJNklqSXdNall0TVRBdE1USWdNRGs2TkRjNk1UUWlmUS5xMjAzbHN2VTZ1Q0JFVnpQbWJUYjAxX0ZZMUYweFVXQnJyRDZ6ZllOU1d3'
+            }
+          });
+          const text = await r.text();
+          return new Response(text, {
+            headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json; charset=utf-8' }
+          });
+        } catch (err) {
+          console.error('Talangya commodityDetail error:', err);
+          return resJson({ code: 500, msg: '获取商品详情失败', error: err.message }, 500);
+        }
+      }
+
       // ========== talangya 下单代理（绕过CORS，原样下单并把 secret 返回前端） ==========
       if (path === '/api/talangya/order' && request.method === 'POST') {
         try {
@@ -526,6 +573,171 @@ export default {
         } catch (err) {
           console.error('Talangya order error:', err);
           return resJson({ code: 500, msg: '下单失败', error: err.message }, 500);
+        }
+      }
+
+      // ========== smsactivate 国家/号码列表代理（绕过CORS，原样返回） ==========
+      // GET /api/smsactivate/countries?service=34  ->  返回指定服务下可购国家/号码（含价格与库存，形如你贴的数组）
+      // 严格按 smsactivate/get_numbers.js 的请求格式去请求上游：路径 /api/getServices/{service} + 同款请求头/cookie
+      if (path === '/api/smsactivate/countries' && request.method === 'GET') {
+        try {
+          const service = url.searchParams.get('service') || '34';
+          const cookie = (env.SMSACTIVATE_COOKIE || '_ga=GA1.1.746476336.1789351337; _ym_uid=1789351338698084716; _ym_d=1789351338; __stripe_mid=437de1c5-3fbe-46e9-a3cc-28a19328f276acc303; _ym_isad=2; cy_remember_token=24d2a573dc4a662c296966992bad4175ae746ec752ceb1fc396b7563d9c4da00; _ga_9SWF8WHWLW=GS2.1.s1793581225$o4$g0$t1793581233$j52$l0$h0; cy_soft_session=qb1d2m91q1kr57hr47m0k5ap5udcpcgo; __stripe_sid=af4a8246-0206-4146-af47-d0b70b5af15ab6f0e9');
+          const r = await fetch(`https://smsactive.org/api/getServices/${service}`, {
+            signal: AbortSignal.timeout(10000),
+            headers: {
+              'accept': '*/*',
+              'accept-language': 'zh-CN,zh;q=0.9',
+              'priority': 'u=1, i',
+              'referer': 'https://smsactive.org/panel',
+              'sec-ch-ua': '"Not:A-Brand";v="8", "Chromium";v="156", "Google Chrome";v="156"',
+              'sec-ch-ua-mobile': '?0',
+              'sec-ch-ua-platform': '"macOS"',
+              'sec-fetch-dest': 'empty',
+              'sec-fetch-mode': 'cors',
+              'sec-fetch-site': 'same-origin',
+              'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36',
+              'cookie': cookie
+            }
+          });
+          const text = await r.text();
+          // 上游非 200（如 cookie 过期被踢到登录页）时不把登录页 HTML 当数据返回，给出明确错误
+          if (!r.ok) {
+            console.error('smsactivate upstream status:', r.status, text.slice(0, 200));
+            return resJson({ code: r.status, msg: '上游返回异常', raw: text.slice(0, 300) }, r.status);
+          }
+          return new Response(text, {
+            headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json; charset=utf-8' }
+          });
+        } catch (err) {
+          console.error('smsactivate countries error:', err);
+          return resJson({ code: 500, msg: '获取国家/号码列表失败', error: err.message }, 500);
+        }
+      }
+
+      // ========== smsactivate 下单获取真实号码（绕过CORS，原样返回） ==========
+      // POST /api/smsactivate/order  body: { "id": "3536" }  （id 来自国家列表的每条 id 字段）
+      // 严格按 smsactivate/buy_number.js 的请求格式去请求上游 /api/getNumber/{id}
+      if (path === '/api/smsactivate/order') {
+        try {
+          let id = url.searchParams.get('id');
+          if (request.method === 'POST') {
+            try { const body = await request.json(); if (body && body.id) id = body.id; } catch {}
+          }
+          if (!id) {
+            return resJson({ code: 400, msg: '缺少 id 参数（国家列表返回的 id）' }, 400);
+          }
+          const cookie = (env.SMSACTIVATE_COOKIE || '_ga=GA1.1.746476336.1789351337; _ym_uid=1789351338698084716; _ym_d=1789351338; __stripe_mid=437de1c5-3fbe-46e9-a3cc-28a19328f276acc303; _ym_isad=2; cy_remember_token=24d2a573dc4a662c296966992bad4175ae746ec752ceb1fc396b7563d9c4da00; _ga_9SWF8WHWLW=GS2.1.s1793581225$o4$g0$t1793581233$j52$l0$h0; __stripe_sid=ac6c2e90-b6cb-470b-8c9d-b878a6761d882fbdfa; cy_soft_session=c8oqfis099digk97tl0ik02q08b63uu5');
+          const r = await fetch(`https://smsactive.org/api/getNumber/${id}`, {
+            signal: AbortSignal.timeout(10000),
+            headers: {
+              'accept': '*/*',
+              'accept-language': 'zh-CN,zh;q=0.9',
+              'priority': 'u=1, i',
+              'referer': 'https://smsactive.org/panel',
+              'sec-ch-ua': '"Not:A-Brand";v="8", "Chromium";v="156", "Google Chrome";v="156"',
+              'sec-ch-ua-mobile': '?0',
+              'sec-ch-ua-platform': '"macOS"',
+              'sec-fetch-dest': 'empty',
+              'sec-fetch-mode': 'cors',
+              'sec-fetch-site': 'same-origin',
+              'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36',
+              'cookie': cookie
+            }
+          });
+          const text = await r.text();
+          if (!r.ok) {
+            console.error('smsactivate order upstream status:', r.status, text.slice(0, 200));
+            return resJson({ code: r.status, msg: '上游返回异常', raw: text.slice(0, 300) }, r.status);
+          }
+          return new Response(text, {
+            headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json; charset=utf-8' }
+          });
+        } catch (err) {
+          console.error('smsactivate order error:', err);
+          return resJson({ code: 500, msg: '下单获取号码失败', error: err.message }, 500);
+        }
+      }
+
+      // ========== smsactivate 释放号码并退款（绕过CORS，原样返回） ==========
+      // POST /api/smsactivate/release  body: { "id": "70556" }  （id 为下单返回的 smsactive 订单 id）
+      // 严格按 smsactivate/cancel_number.js 的请求格式去请求上游 /api/cancelNumber/{id}
+      if (path === '/api/smsactivate/release') {
+        try {
+          let id = url.searchParams.get('id');
+          if (request.method === 'POST') {
+            try { const body = await request.json(); if (body && body.id) id = body.id; } catch {}
+          }
+          if (!id) {
+            return resJson({ code: 400, msg: '缺少 id 参数（下单返回的订单 id）' }, 400);
+          }
+          const cookie = (env.SMSACTIVATE_COOKIE || '_ga=GA1.1.746476336.1789351337; _ym_uid=1789351338698084716; _ym_d=1789351338; __stripe_mid=437de1c5-3fbe-46e9-a3cc-28a19328f276acc303; _ym_isad=2; cy_remember_token=24d2a573dc4a662c296966992bad4175ae746ec752ceb1fc396b7563d9c4da00; _ga_9SWF8WHWLW=GS2.1.s1793581225$o4$g0$t1793581233$j52$l0$h0; __stripe_sid=ac6c2e90-b6cb-470b-8c9d-b878a6761d882fbdfa; cy_soft_session=rsuahclifrvgfq5jcam7eeov49ro6lh0');
+          const r = await fetch(`https://smsactive.org/api/cancelNumber/${id}`, {
+            signal: AbortSignal.timeout(10000),
+            headers: {
+              'accept': '*/*',
+              'accept-language': 'zh-CN,zh;q=0.9',
+              'priority': 'u=1, i',
+              'referer': 'https://smsactive.org/panel',
+              'sec-ch-ua': '"Not:A-Brand";v="8", "Chromium";v="156", "Google Chrome";v="156"',
+              'sec-ch-ua-mobile': '?0',
+              'sec-ch-ua-platform': '"macOS"',
+              'sec-fetch-dest': 'empty',
+              'sec-fetch-mode': 'cors',
+              'sec-fetch-site': 'same-origin',
+              'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36',
+              'cookie': cookie
+            }
+          });
+          const text = await r.text();
+          if (!r.ok) {
+            console.error('smsactivate release upstream status:', r.status, text.slice(0, 200));
+            return resJson({ code: r.status, msg: '上游返回异常', raw: text.slice(0, 300) }, r.status);
+          }
+          return new Response(text, {
+            headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json; charset=utf-8' }
+          });
+        } catch (err) {
+          console.error('smsactivate release error:', err);
+          return resJson({ code: 500, msg: '释放号码失败', error: err.message }, 500);
+        }
+      }
+
+      // ========== smsactivate 号码列表/状态查询（绕过CORS，原样返回） ==========
+      // GET /api/smsactivate/numbers  ->  返回账户下所有号码（含 number / code / status / id / service 等）
+      // 严格按 smsactivate/numbers.js 的请求格式去请求上游 /api/numbers
+      // 注意：该接口用的是另一种 cookie（仅 cy_remember_token，无 cy_soft_session），与下单/取消不同
+      if (path === '/api/smsactivate/numbers' && request.method === 'GET') {
+        try {
+          const cookie = (env.SMSACTIVATE_NUMBERS_COOKIE || 'cy_remember_token=24d2a573dc4a662c296966992bad4175ae746ec752ceb1fc396b7563d9c4da00;');
+          const r = await fetch('https://smsactive.org/api/numbers', {
+            signal: AbortSignal.timeout(10000),
+            headers: {
+              'accept': '*/*',
+              'accept-language': 'zh-CN,zh;q=0.9',
+              'priority': 'u=1, i',
+              'referer': 'https://smsactive.org/panel',
+              'sec-ch-ua': '"Not:A-Brand";v="8", "Chromium";v="156", "Google Chrome";v="156"',
+              'sec-ch-ua-mobile': '?0',
+              'sec-ch-ua-platform': '"macOS"',
+              'sec-fetch-dest': 'empty',
+              'sec-fetch-mode': 'cors',
+              'sec-fetch-site': 'same-origin',
+              'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36',
+              'cookie': cookie
+            }
+          });
+          const text = await r.text();
+          if (!r.ok) {
+            console.error('smsactivate numbers upstream status:', r.status, text.slice(0, 200));
+            return resJson({ code: r.status, msg: '上游返回异常', raw: text.slice(0, 300) }, r.status);
+          }
+          return new Response(text, {
+            headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json; charset=utf-8' }
+          });
+        } catch (err) {
+          console.error('smsactivate numbers error:', err);
+          return resJson({ code: 500, msg: '查询号码列表失败', error: err.message }, 500);
         }
       }
 
@@ -3321,6 +3533,10 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
             
             if (result.success) {
               await notifyAdmin('用户私信', `有用户向 ${username} 发送了私信：${content}`);
+              // 仅「客服→用户」的回复镜像到 Supabase（用户→客服由前端直接写，thread 用真实用户名）
+              if (!['admin', 'immmor'].includes(username)) {
+                await supabaseInsert(env, 'support_messages', { username, from_role: 'agent', content, is_read: false });
+              }
               return resJson({
                 code: 200,
                 msg: '发送成功',
