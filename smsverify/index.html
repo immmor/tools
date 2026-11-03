@@ -458,6 +458,8 @@
     const USD_TO_RMB = 6.7; // 美元→人民币汇率
     const PRICE_MULT = 2; // 原始价格翻倍系数
     const toRmb = usd => +(Number(usd) * USD_TO_RMB).toFixed(2);
+    // 计费：低于 0.5 美元保底为 0.5（不翻倍），不低于 0.5 的才乘 PRICE_MULT
+    const billUsd = raw => Number(raw) >= 0.5 ? Number(raw) * PRICE_MULT : 0.5;
 
     // 按钮中间态：置灰 + 显示处理文本（spinner）
     function setLoading(btn, text) {
@@ -666,7 +668,7 @@
               <span class="text-sm font-bold text-slate-900 font-mono truncate">${displayName}</span>
             </div>
             <span class="shrink-0 text-xs font-mono bg-emerald-50 border border-emerald-200 text-emerald-700 px-2 py-0.5 rounded-md font-bold">
-              $${Number(c.price * PRICE_MULT).toFixed(2)}
+              $${billUsd(c.price).toFixed(2)}
             </span>
           </div>
           <div class="flex items-center justify-between mt-2 pt-2 border-t border-slate-100">
@@ -742,7 +744,7 @@
     // --- ACTIONS & HANDLERS ---
     function updatePriceDisplay() {
       const base = (selectedCountry && selectedCountry.price) ? Number(selectedCountry.price) : (selectedService ? selectedService.price : 0);
-      const price = base * PRICE_MULT;
+      const price = billUsd(base); // 低于0.5保底0.5（不翻倍），≥0.5才乘2
       document.getElementById('calculatedPrice').innerText = `$${price.toFixed(2)} × ${USD_TO_RMB} ≈ ¥${toRmb(price).toFixed(2)}`;
     }
 
@@ -776,7 +778,8 @@
       setLoading(btn, '处理中…');
       stopSmsPolling(); // 清除上一次会话可能残留的轮询定时器
       try {
-      const cost = ((selectedCountry && selectedCountry.price) ? Number(selectedCountry.price) : selectedService.price) * PRICE_MULT;
+      const rawCost = (selectedCountry && selectedCountry.price) ? Number(selectedCountry.price) : selectedService.price;
+      const cost = billUsd(rawCost); // 低于0.5保底0.5（不翻倍），≥0.5才乘2
       currentCost = cost;
 
       if (Number(currentUser.balance) < toRmb(cost)) {
