@@ -630,6 +630,13 @@
         body.theme-light .game-result-modal { background: rgba(245, 243, 236, 0.85); }
         body.theme-light .game-result-modal.win { background: #f5f3ec; }
 
+        /* 登录/注册字段校验出错：输入框标红 + 下方提示 */
+        .input-error {
+            border-color: var(--neon-red) !important;
+            box-shadow: 0 0 0 1px var(--neon-red) !important;
+        }
+        .field-hint { margin-top: 0.25rem; font-size: 0.75rem; line-height: 1.25; color: var(--neon-red); }
+
         /* 登录弹窗：左图右表单 + 移动端顶部横幅 + 白天适配 */
         .auth-hero { background: #0b0b10; }
         .auth-hero-overlay { background: linear-gradient(180deg, rgba(0,0,0,0) 35%, rgba(0,0,0,0.75) 100%); }
@@ -4239,6 +4246,7 @@
                     if (seconds >= totalSeconds) {
                         clearInterval(interval);
                         isTurnstileVerified = true;
+                        clearFieldError(els.turnstileWidget);
                         if (els.turnstileCheckbox) {
                             els.turnstileCheckbox.classList.remove('turnstile-ripple', 'turnstile-ripple-slow');
                             els.turnstileCheckbox.classList.add('border-[var(--neon-blue)]');
@@ -4259,9 +4267,65 @@
             }
             
             const showMsg = (text, error = false) => {
+                if (error) { els.msg.classList.add('hidden'); return; } // 报错只在字段标红+下方提示，底部不显示
                 els.msg.textContent = text;
-                els.msg.className = `mt-4 text-center text-xs ${error ? 'text-[var(--neon-red)]' : 'text-[var(--neon-green)]'}`;
+                els.msg.className = 'mt-4 text-center text-xs text-[var(--neon-green)]';
                 els.msg.classList.remove('hidden');
+            };
+
+            // 字段级错误：把对应输入框标红，并在其所在的 .mb-6 容器内显示提示
+            const setFieldError = (input, msg) => {
+                if (!input) return;
+                input.classList.add('input-error');
+                input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                let hint = input._hintEl;
+                if (!hint) {
+                    hint = document.createElement('div');
+                    hint.className = 'field-hint';
+                    const box = input.closest('.mb-6') || input.parentElement;
+                    if (box) box.appendChild(hint);
+                    input._hintEl = hint;
+                }
+                if (hint) hint.textContent = msg;
+            };
+            const clearFieldError = (input) => {
+                if (!input) return;
+                input.classList.remove('input-error');
+                if (input._hintEl) input._hintEl.textContent = '';
+            };
+            const clearAllFieldErrors = () => {
+                ['user', 'pass', 'confirmPass', 'verifyCode', 'securityAnswer', 'inviteCode'].forEach(k => clearFieldError(els[k]));
+            };
+            // 字段错误：标红 + 下方提示 + 顶部消息
+            const fieldError = (input, msg) => {
+                setFieldError(input, msg);
+                showMsg(msg, true);
+            };
+
+            // 服务端返回错误码 + 中文 message，这里按当前语言翻译（8 种语言回退）
+            const AUTH_ERROR_I18N = {
+                WRONG_CREDENTIALS: { 'zh-CN': '用户名或密码错误', 'en-US': 'Username or password is incorrect', 'ko-KR': '아이디 또는 비밀번호가 올바르지 않습니다', 'ar-SA': 'اسم المستخدم أو كلمة المرور غير صحيحة', 'ru-RU': 'Неверное имя пользователя или пароль', 'es-ES': 'Usuario o contraseña incorrectos', 'ja-JP': 'ユーザー名またはパスワードが正しくありません', 'vi-VN': 'Tên đăng nhập hoặc mật khẩu không đúng' },
+                EMAIL_REGISTERED: { 'zh-CN': '该邮箱已注册', 'en-US': 'This email is already registered', 'ko-KR': '이미 가입된 이메일입니다', 'ar-SA': 'هذا البريد الإلكتروني مسجل بالفعل', 'ru-RU': 'Этот email уже зарегистрирован', 'es-ES': 'Este correo ya está registrado', 'ja-JP': 'このメールは既に登録されています', 'vi-VN': 'Email này đã được đăng ký' },
+                USERNAME_EXISTS: { 'zh-CN': '用户名已存在', 'en-US': 'Username already exists', 'ko-KR': '이미 존재하는 사용자명입니다', 'ar-SA': 'اسم المستخدم موجود بالفعل', 'ru-RU': 'Имя пользователя уже существует', 'es-ES': 'El nombre de usuario ya existe', 'ja-JP': 'ユーザー名は既に存在します', 'vi-VN': 'Tên người dùng đã tồn tại' },
+                VERIFY_EXPIRED: { 'zh-CN': '验证码已过期，请重新获取', 'en-US': 'Verification code expired, please request a new one', 'ko-KR': '인증코드가 만료되었습니다. 다시 받아주세요', 'ar-SA': 'انتهت صلاحية رمز التحقق، يرجى طلبه مرة أخرى', 'ru-RU': 'Срок действия кода истёк, запросите новый', 'es-ES': 'El código expiró, solicita uno nuevo', 'ja-JP': '認証コードの期限が切れました。再度取得してください', 'vi-VN': 'Mã xác minh đã hết hạn, vui lòng lấy mã mới' },
+                VERIFY_CODE_ERROR: { 'zh-CN': '验证码错误', 'en-US': 'Verification code is incorrect', 'ko-KR': '인증코드가 올바르지 않습니다', 'ar-SA': 'رمز التحقق غير صحيح', 'ru-RU': 'Код подтверждения неверен', 'es-ES': 'El código de verificación es incorrecto', 'ja-JP': '認証コードが正しくありません', 'vi-VN': 'Mã xác minh không đúng' },
+                VERIFY_EMPTY: { 'zh-CN': '邮箱和验证码不能为空', 'en-US': 'Email and verification code cannot be empty', 'ko-KR': '이메일과 인증코드를 입력해주세요', 'ar-SA': 'البريد الإلكتروني ورمز التحقق مطلوبان', 'ru-RU': 'Email и код подтверждения не могут быть пустыми', 'es-ES': 'El correo y el código no pueden estar vacíos', 'ja-JP': 'メールと認証コードは必須です', 'vi-VN': 'Email và mã xác minh không được để trống' }
+            };
+            // 错误码 → 对应输入框（与语言无关，避免关键词匹配在非中文下失效）
+            const AUTH_ERROR_FIELD = {
+                WRONG_CREDENTIALS: 'pass',
+                EMAIL_REGISTERED: 'user',
+                USERNAME_EXISTS: 'user',
+                VERIFY_EXPIRED: 'verifyCode',
+                VERIFY_CODE_ERROR: 'verifyCode',
+                VERIFY_EMPTY: 'verifyCode'
+            };
+            const translateAuthError = (data, dict) => {
+                if (data && data.error && AUTH_ERROR_I18N[data.error]) {
+                    return AUTH_ERROR_I18N[data.error][currentLang] || AUTH_ERROR_I18N[data.error]['zh-CN'] || data.message;
+                }
+                if (data && data.message) return data.message;
+                return (dict && (dict.login_failed || '登录失败')) || '登录失败';
             };
             
             // 重置注册验证方式（默认回到邮箱验证码，并清空滑块/文字/声音状态）
@@ -4306,6 +4370,7 @@
                 els.switchText.textContent = dict ? dict[c.tip] : c.tip;
                 els.switch.textContent = dict ? dict[c.switch] : c.switch;
                 els.msg.classList.add('hidden');
+                clearAllFieldErrors();
                 els.modal.classList.toggle('mode-register', !isLogin);
                 els.inviteCodeContainer.classList.toggle('hidden', isLogin);
                 els.verifyCodeContainer.classList.toggle('hidden', isLogin || isGoogleLogin || isGithubLogin);
@@ -5960,28 +6025,33 @@
             
             const handleSubmit = async (e) => {
                 e.preventDefault();
+                clearAllFieldErrors();
                 const dict = translations[currentLang];
                 
                 const pass = els.pass.value.trim();
-                if (!pass) return showMsg(dict?.please_fill_credentials || '请填写密码', true);
-                if (!isTurnstileVerified) return showMsg(dict?.turnstile_verify_first || '请先完成人机验证', true);
+                if (!pass) return fieldError(els.pass, dict?.please_fill_credentials || '请填写密码');
+                if (!isTurnstileVerified) return fieldError(els.turnstileWidget, dict?.turnstile_verify_first || '请先完成人机验证');
                 
                 if (!isLogin) {
                     const prefix = els.user.value.trim();
                     if (!prefix) {
-                        return showMsg(dict?.invalid_email_format || '请输入邮箱前缀', true);
+                        return fieldError(els.user, dict?.invalid_email_format || '请输入邮箱前缀');
                     }
                     if (prefix.includes('@')) {
-                        return showMsg(dict?.invalid_email_format || '邮箱前缀不能包含 @ 符号', true);
+                        return fieldError(els.user, dict?.invalid_email_format || '邮箱前缀不能包含 @ 符号');
                     }
                     // QQ邮箱前缀必须为纯数字
                     const domain = els.emailDomain?.value || 'gmail.com';
                     if (domain === 'qq.com' && !/^\d+$/.test(prefix)) {
-                        return showMsg(dict?.invalid_email_format, true);
+                        return fieldError(els.user, dict?.invalid_email_format || 'QQ邮箱前缀必须为纯数字');
+                    }
+                    // 拼接后缀后校验完整邮箱格式
+                    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(getFullEmail())) {
+                        return fieldError(els.user, dict?.invalid_email_format || '邮箱格式不正确');
                     }
                     
                     if (pass.length < 8) {
-                        return showMsg(dict?.password_min_length || '密码长度至少为 8 位', true);
+                        return fieldError(els.pass, dict?.password_min_length || '密码长度至少为 8 位');
                     }
                     
                     const hasUpper = /[A-Z]/.test(pass);
@@ -5990,27 +6060,27 @@
                     const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pass);
                     
                     if (!hasUpper || !hasLower || !hasNumber || !hasSpecial) {
-                        return showMsg(dict?.password_requirements || '密码必须包含大小写字母、数字和特殊字符', true);
+                        return fieldError(els.pass, dict?.password_requirements || '密码必须包含大小写字母、数字和特殊字符');
                     }
 
                     const confirmPass = els.confirmPass.value.trim();
                     if (pass !== confirmPass) {
-                        return showMsg(dict?.password_mismatch || '两次输入的密码不一致', true);
+                        return fieldError(els.confirmPass, dict?.password_mismatch || '两次输入的密码不一致');
                     }
 
                     const secAnswer = els.securityAnswer.value.trim();
                     if (secAnswer.length < 3) {
-                        return showMsg(dict?.answer_min_length || '密保答案至少需要 3 个字符', true);
+                        return fieldError(els.securityAnswer, dict?.answer_min_length || '密保答案至少需要 3 个字符');
                     }
                     if (!/^[a-zA-Z0-9\u4e00-\u9fa5]+$/.test(secAnswer)) {
-                        return showMsg(dict?.answer_invalid_chars || '密保答案只能包含中文、英文和数字', true);
+                        return fieldError(els.securityAnswer, dict?.answer_invalid_chars || '密保答案只能包含中文、英文和数字');
                     }
                     
                     if (!isGoogleLogin && !isGithubLogin) {
                         // 注册仅邮箱验证码一种方式：调用后端接口真正校验
                         const verifyCode = els.verifyCode.value.trim();
                         if (!verifyCode || verifyCode.length !== 6) {
-                            return showMsg(dict?.verify_code_required || '请输入6位邮箱验证码', true);
+                            return fieldError(els.verifyCode, dict?.verify_code_required || '请输入6位邮箱验证码');
                         }
                         const verifyEmail = getFullEmail();
                         setLoading(true);
@@ -6023,7 +6093,7 @@
                             const verifyData = await verifyRes.json();
                             if (!verifyData.success) {
                                 setLoading(false);
-                                return showMsg(verifyData.message || '验证码错误或已过期！', true);
+                                return fieldError(els.verifyCode, translateAuthError(verifyData, dict));
                             }
                         } catch {
                             setLoading(false);
@@ -6035,7 +6105,7 @@
                 
                 // 获取完整邮箱（注册模式：前缀@域名；登录模式：直接使用输入值）
                 const user = getFullEmail();
-                if (!user) return showMsg(dict?.please_fill_credentials || '请填写用户名', true);
+                if (!user) return fieldError(els.user, dict?.please_fill_credentials || '请填写用户名');
 
                 const urlParams = new URLSearchParams(window.location.search);
                 const urlInviteCode = urlParams.get('invite');
@@ -6110,7 +6180,11 @@
                         }
                     } else {
                         const dict = translations[currentLang];
-                        showMsg(data.message || (isLogin ? (dict?.login_failed || '登录失败') : (dict?.register_failed || '注册失败')), true);
+                        const msg = translateAuthError(data, dict);
+                        // 根据服务端返回的错误码关联到具体字段（与语言无关）
+                        const fieldKey = data.error && AUTH_ERROR_FIELD[data.error];
+                        if (fieldKey && els[fieldKey]) return fieldError(els[fieldKey], msg);
+                        showMsg(msg, true);
                     }
                 } catch {
                     const dict = translations[currentLang];
@@ -6393,6 +6467,42 @@
                 els.switch.addEventListener('click', toggleMode);
                 els.form.addEventListener('submit', handleSubmit);
                 
+                // 注册模式：失焦时实时校验（登录模式只在提交时校验）
+                const runFieldValidation = (el) => {
+                    if (isLogin) return; // 仅注册界面提交前也校验
+                    const d = translations[currentLang] || {};
+                    if (el === els.user) {
+                        const v = el.value.trim();
+                        if (!v) return fieldError(el, d.invalid_email_format || '请输入邮箱前缀');
+                        if (v.includes('@')) return fieldError(el, d.invalid_email_format || '邮箱前缀不能包含 @ 符号');
+                        if (els.emailDomain?.value === 'qq.com' && !/^\d+$/.test(v)) return fieldError(el, d.invalid_email_format || 'QQ邮箱前缀必须为纯数字');
+                        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(getFullEmail())) return fieldError(el, d.invalid_email_format || '邮箱格式不正确');
+                        clearFieldError(el);
+                    } else if (el === els.pass) {
+                        const v = el.value.trim();
+                        if (!v) return fieldError(el, d.please_fill_credentials || '请填写密码');
+                        if (v.length < 8) return fieldError(el, d.password_min_length || '密码长度至少为 8 位');
+                        if (!(/[A-Z]/.test(v) && /[a-z]/.test(v) && /[0-9]/.test(v) && /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(v))) return fieldError(el, d.password_requirements || '密码必须包含大小写字母、数字和特殊字符');
+                        clearFieldError(el);
+                    } else if (el === els.confirmPass) {
+                        if (els.pass.value.trim() !== el.value.trim()) return fieldError(el, d.password_mismatch || '两次输入的密码不一致');
+                        else clearFieldError(el);
+                    } else if (el === els.verifyCode) {
+                        if (el.value.trim() && el.value.trim().length !== 6) return fieldError(el, d.verify_code_required || '请输入6位邮箱验证码');
+                        else clearFieldError(el);
+                    } else if (el === els.securityAnswer) {
+                        if (el.value.trim() && el.value.trim().length < 3) return fieldError(el, d.answer_min_length || '密保答案至少需要 3 个字符');
+                        else clearFieldError(el);
+                    } else {
+                        clearFieldError(el);
+                    }
+                };
+                [els.user, els.pass, els.confirmPass, els.verifyCode, els.securityAnswer].forEach(el => {
+                    if (!el) return;
+                    el.addEventListener('blur', () => runFieldValidation(el));
+                    el.addEventListener('input', () => clearFieldError(el));
+                });
+                
                 // 发送验证码按钮（基于时间戳，后台节流也能对齐真实时间）
                 let sendCodeCooldown = false;
                 let codeTimer = null;
@@ -6435,6 +6545,11 @@
                     const codePrefixDomain = els.emailDomain?.value || 'gmail.com';
                     if (codePrefixDomain === 'qq.com' && !/^\d+$/.test(prefix)) {
                         showMsg(dict?.invalid_email_format, true);
+                        return;
+                    }
+                    // 拼接后缀后校验完整邮箱格式
+                    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                        fieldError(els.user, dict?.invalid_email_format || '邮箱格式不正确');
                         return;
                     }
                     

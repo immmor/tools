@@ -888,18 +888,18 @@ export default {
         const { email, code } = params;
 
         if (!email || !code) {
-          return resJson({ success: false, message: '邮箱和验证码不能为空！' }, 400);
+          return resJson({ success: false, error: 'VERIFY_EMPTY', message: '邮箱和验证码不能为空！' }, 400);
         }
 
         const storedCode = await redis(env, 'GET', `verify_code_${email}`);
 
         if (!storedCode) {
           // key 不存在 = 未获取或已自动过期（Redis TTL）
-          return resJson({ success: false, message: '请先获取验证码，或验证码已过期！' }, 400);
+          return resJson({ success: false, error: 'VERIFY_EXPIRED', message: '请先获取验证码，或验证码已过期！' }, 400);
         }
 
         if (storedCode !== code) {
-          return resJson({ success: false, message: '验证码错误！' }, 400);
+          return resJson({ success: false, error: 'VERIFY_CODE_ERROR', message: '验证码错误！' }, 400);
         }
 
         // 验证成功：删除验证码，写入已验证标记（1分钟自动过期，用于注册校验）
@@ -955,7 +955,7 @@ export default {
           const verifyPassed = await redis(env, 'GET', `verify_passed_${username}`);
           if (!verifyPassed) {
             // key 不存在 = 未验证或已自动过期（Redis TTL）
-            return resJson({ success: false, message: '请先完成邮箱验证，或验证已过期，请重新验证！' }, 400);
+            return resJson({ success: false, error: 'VERIFY_EXPIRED', message: '请先完成邮箱验证，或验证已过期，请重新验证！' }, 400);
           }
         }
 
@@ -966,7 +966,7 @@ export default {
           .first();
 
         if (existingUser) {
-          return resJson({ success: false, message: '该邮箱已注册！' }, 409);
+          return resJson({ success: false, error: 'EMAIL_REGISTERED', message: '该邮箱已注册！' }, 409);
         }
 
         // 生成唯一的6位邀请码（字母+数字）
@@ -1117,7 +1117,7 @@ export default {
         } catch (e) {
           // 捕获 UNIQUE 约束冲突 → 用户名已存在（并发注册竞争时触发）
           if (e.message && (e.message.includes('UNIQUE') || e.message.includes('constraint') || e.message.includes('duplicate'))) {
-            return resJson({ success: false, message: '用户名已存在！' }, 409);
+            return resJson({ success: false, error: 'USERNAME_EXISTS', message: '用户名已存在！' }, 409);
           }
           console.error('注册插入失败:', e);
           return resJson({ success: false, message: '注册失败，请重试！' }, 500);
@@ -1255,7 +1255,7 @@ export default {
         if (await bfEnabled(env)) {
           const bfPresent = await BFMaybe(env, 'bf_user', username);
           if (!bfPresent) {
-            return resJson({ success: false, message: '用户名或密码错误' }, 401);
+            return resJson({ success: false, error: 'WRONG_CREDENTIALS', message: '用户名或密码错误' }, 401);
           }
         }
 
@@ -1290,7 +1290,7 @@ export default {
 
           return resJson({ success: true, message: '登录成功！', userInfo: { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, p_token: pToken, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates, card_number: cardNumber }, pricePlan });
         } else {
-          return resJson({ success: false, message: '用户名或密码错误' }, 401);
+          return resJson({ success: false, error: 'WRONG_CREDENTIALS', message: '用户名或密码错误' }, 401);
         }
       }
 

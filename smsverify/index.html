@@ -190,9 +190,8 @@
     <!-- LEFT SIDEBAR: SELECTION PANELS (7 COLS) -->
     <section id="leftPanel" class="lg:col-span-6 flex flex-col space-y-6">
       
-      <!-- STEP 1 & 2 SELECTION BOARD -->
+      <!-- STEP 1: SERVICE SELECT -->
       <div class="swiss-glass rounded-2xl p-6 relative">
-        
         <!-- SECTION TITLE: SERVICE SELECT -->
         <div class="flex items-center justify-between pb-4 mb-4 border-b border-slate-200/80">
           <div class="flex items-center gap-2.5">
@@ -209,35 +208,50 @@
         </div>
 
         <!-- SERVICE CARDS GRID -->
-        <div class="grid grid-cols-2 sm:grid-cols-2 gap-2.5 max-h-[220px] overflow-y-auto no-scrollbar pr-1 mb-6" id="servicesGrid">
+        <div class="grid grid-cols-2 sm:grid-cols-2 gap-2.5 max-h-[220px] overflow-y-auto no-scrollbar pr-1" id="servicesGrid">
           <!-- Dynamically Populated Service Cards -->
         </div>
+      </div>
 
-        <!-- SECTION TITLE: COUNTRY SELECT -->
-        <div class="flex items-center justify-between pb-3 mb-4 border-b border-slate-200/80 pt-2">
-          <div class="flex items-center gap-2.5">
-            <span class="w-6 h-6 rounded bg-swiss-red text-white text-xs font-black font-mono flex items-center justify-center shadow-sm">02</span>
-            <h2 class="font-extrabold text-sm text-slate-900 tracking-wider uppercase font-mono">选择国家/地区号码池</h2>
+      <!-- STEP 2: COUNTRY SELECT -->
+      <div class="swiss-glass rounded-2xl p-6 relative">
+        <!-- 区域号码池 -->
+        <div id="countryBlock">
+          <!-- SECTION TITLE: COUNTRY SELECT -->
+          <div class="flex items-center justify-between pb-3 mb-4 border-b border-slate-200/80 pt-2">
+            <div class="flex items-center gap-2.5">
+              <span class="w-6 h-6 rounded bg-swiss-red text-white text-xs font-black font-mono flex items-center justify-center shadow-sm">02</span>
+              <h2 class="font-extrabold text-sm text-slate-900 tracking-wider uppercase font-mono">选择区域号码池</h2>
+            </div>
+            <span class="text-xs text-slate-500 font-mono" id="countryCountLabel">—</span>
           </div>
-          <span class="text-xs text-slate-500 font-mono" id="countryCountLabel">10 个国家/地区</span>
+
+          <!-- 未选择服务时的提示（占位与浏览区等高，避免卡片高度跳动） -->
+          <div id="countryPrompt" class="flex flex-col items-center justify-center text-center text-slate-400 font-mono text-xs py-8 min-h-[16rem]">
+            <i class="fa-solid fa-hand-pointer text-2xl mb-2 text-slate-300"></i>
+            <span>请先在上方选择一个服务，再选择区域号码池</span>
+          </div>
+
+          <!-- 已选服务后显示搜索与列表 -->
+          <div id="countryControls" class="min-h-[16rem]" style="display:none">
+            <!-- COUNTRY SEARCH INPUT -->
+            <div class="relative mb-3">
+              <i class="fa-solid fa-globe absolute left-3.5 top-3 text-slate-400 text-xs"></i>
+              <input type="text" id="countrySearchInput" onkeyup="filterCountries()" placeholder="搜索国家或国际区号 (+1, +86, +44)..." class="w-full swiss-input rounded-xl pl-9 pr-4 py-2.5 text-xs font-mono transition">
+            </div>
+
+            <!-- COUNTRY LIST -->
+            <div class="space-y-2 max-h-[200px] overflow-y-auto no-scrollbar pr-1" id="countriesList">
+              <!-- Dynamically Populated Country Rows -->
+            </div>
+          </div>
         </div>
 
-        <!-- COUNTRY SEARCH INPUT -->
-        <div class="relative mb-3">
-          <i class="fa-solid fa-globe absolute left-3.5 top-3 text-slate-400 text-xs"></i>
-          <input type="text" id="countrySearchInput" onkeyup="filterCountries()" placeholder="搜索国家或国际区号 (+1, +86, +44)..." class="w-full swiss-input rounded-xl pl-9 pr-4 py-2.5 text-xs font-mono transition">
-        </div>
-
-        <!-- COUNTRY LIST -->
-        <div class="space-y-2 max-h-[200px] overflow-y-auto no-scrollbar pr-1" id="countriesList">
-          <!-- Dynamically Populated Country Rows -->
-        </div>
-
-        <!-- ORDER CONFIRMATION & PRICING FOOTER -->
-        <div class="mt-6 pt-5 border-t border-slate-200/90 flex flex-col space-y-3">
-          <div class="flex items-center justify-between text-xs font-mono bg-white/70 p-3 rounded-xl border border-slate-200/70">
+        <!-- ORDER CONFIRMATION & PRICING -->
+        <div class="mt-2 flex flex-col space-y-3">
+          <div class="flex items-center justify-between text-xs font-mono bg-white/70 h-12 px-3 rounded-xl border border-slate-200/70">
             <span class="text-slate-500 font-medium">预估费用:</span>
-            <span class="text-base font-black text-emerald-600" id="calculatedPrice">$0.70 × 6.7 ≈ ¥4.69</span>
+            <span class="text-base font-black text-emerald-600" id="calculatedPrice"></span>
           </div>
 
           <button id="getTempNumBtn" onclick="requestNewVirtualNumber()" class="w-full bg-swiss-red hover:bg-swiss-hoverRed text-white font-black font-mono text-sm h-12 px-4 rounded-xl shadow-lg shadow-swiss-red/20 transition flex items-center justify-center space-x-2 active:scale-[0.99] whitespace-nowrap">
@@ -245,8 +259,8 @@
             <span>租赁</span>
           </button>
         </div>
-
       </div>
+
     </section>
 
     <!-- RIGHT PANEL: 已租号码 + 每个号码下方直接收验证码 (5 COLS) -->
@@ -443,7 +457,7 @@
 
     // --- INITIALIZATION ---
     window.onload = function() {
-      selectedCountry = countries[0];
+      selectedCountry = null;
 
       renderCountries();
       renderActiveNumbers();
@@ -456,10 +470,10 @@
         .then(function (res) { return res.json(); })
         .then(function (data) {
           services = data.map(mapCategory);
-          selectedService = services[0];
+          selectedService = null;
           renderServices();
           updatePriceDisplay();
-          loadCountries(selectedService.id);
+          if (selectedService) loadCountries(selectedService.id);
         })
         .catch(function (err) { console.error('加载服务列表失败:', err); });
     }
@@ -565,6 +579,10 @@
           selectedService = s;
           renderServices(filter);
           updatePriceDisplay();
+          const prompt = document.getElementById('countryPrompt');
+          if (prompt) prompt.style.display = 'none';
+          const ctr = document.getElementById('countryControls');
+          if (ctr) ctr.style.display = 'block';
           loadCountries(s.id);
         };
 
@@ -617,7 +635,7 @@
         `;
         container.appendChild(row);
       });
-      document.getElementById('countryCountLabel').innerText = `${filtered.length} 个国家/地区`;
+      document.getElementById('countryCountLabel').innerText = `${filtered.length} 个区域`;
     }
 
     // 渲染所有已租号码卡片
@@ -665,12 +683,12 @@
 
         <div class="flex items-center gap-2">
           <button onclick="copyActiveNumber('${an.id}', true)" class="flex-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-mono text-[11px] h-12 rounded-lg font-bold transition flex flex-col items-center justify-center leading-tight active:scale-95" title="复制含国家区号的完整号码">
-            <span class="flex items-center gap-1"><i class="fa-regular fa-copy text-swiss-red"></i>含区号</span>
+            <span class="flex items-center gap-1"><i class="fa-regular fa-copy text-swiss-red"></i>复制含区号</span>
             <span class="text-[9px] font-normal text-slate-400 mt-0.5 truncate max-w-full">${split.withCode}</span>
           </button>
-          <button onclick="copyActiveNumber('${an.id}', false)" class="flex-1 bg-swiss-red/10 hover:bg-swiss-red/20 text-swiss-red border border-swiss-red/20 font-mono text-[11px] h-12 rounded-lg font-bold transition flex flex-col items-center justify-center leading-tight active:scale-95" title="复制去掉国家区号的纯号码">
-            <span class="flex items-center gap-1"><i class="fa-regular fa-copy"></i>无区号</span>
-            <span class="text-[9px] font-normal text-swiss-red/70 mt-0.5 truncate max-w-full">${split.withoutCode}</span>
+          <button onclick="copyActiveNumber('${an.id}', false)" class="flex-1 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-mono text-[11px] h-12 rounded-lg font-bold transition flex flex-col items-center justify-center leading-tight active:scale-95" title="复制去掉国家区号的纯号码">
+            <span class="flex items-center gap-1"><i class="fa-regular fa-copy text-swiss-red"></i>复制无区号</span>
+            <span class="text-[9px] font-normal text-slate-400 mt-0.5 truncate max-w-full">${split.withoutCode}</span>
           </button>
           <button onclick="releaseNumber('${an.id}', this)" class="swiss-card h-12 px-2.5 rounded-lg text-[11px] font-mono text-amber-700 font-bold hover:border-amber-400 flex items-center justify-center gap-1.5 shrink-0 whitespace-nowrap">
             <i class="fa-solid fa-ban text-xs"></i><span>释放退款</span>
@@ -749,9 +767,14 @@
 
     // --- ACTIONS & HANDLERS ---
     function updatePriceDisplay() {
-      const base = (selectedCountry && selectedCountry.price) ? Number(selectedCountry.price) : (selectedService ? selectedService.price : 0);
+      const priceEl = document.getElementById('calculatedPrice');
+      if (!selectedService && !selectedCountry) {
+        priceEl.innerText = '';
+        return;
+      }
+      const base = (selectedCountry && selectedCountry.price) ? Number(selectedCountry.price) : selectedService.price;
       const price = billUsd(base); // 低于0.5保底0.5（不翻倍），≥0.5才乘2
-      document.getElementById('calculatedPrice').innerText = `$${price.toFixed(2)} × ${USD_TO_RMB} ≈ ¥${toRmb(price).toFixed(2)}`;
+      priceEl.innerText = `$${price.toFixed(2)} × ${USD_TO_RMB} ≈ ¥${toRmb(price).toFixed(2)}`;
     }
 
     function filterServices() {
@@ -819,6 +842,19 @@
         startNumberTimer(an);
         // 同一时刻只允许一个全局轮询，任一号码勾选「自动」即开启
         if (activeNumbers.some(a => a.autoPoll)) startSmsPolling();
+
+        // 平滑滚动到最新已租号码卡片（先滚内部列表，再滚页面并补偿吸顶栏高度）
+        const newCard = $('numCard-' + an.id);
+        const list = $('activeNumbersList');
+        if (list) list.scrollTo({ top: list.scrollHeight, behavior: 'smooth' });
+        if (newCard) {
+          requestAnimationFrame(() => {
+            const headerH = (document.querySelector('header') || {}).offsetHeight || 0;
+            const rect = newCard.getBoundingClientRect();
+            const top = window.pageYOffset + rect.top - headerH - 16;
+            window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+          });
+        }
 
         showToast('号码分配成功', `已成功分配 ${an.number}，租赁费用 ¥${toRmb(cost).toFixed(2)} 已扣除。`, 'fa-circle-check');
       } finally {
