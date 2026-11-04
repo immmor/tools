@@ -475,6 +475,40 @@ export default {
         });
       }
 
+      // ========== talangya 商品详情代理（绕过CORS，原样返回，含 description） ==========
+      if (path === '/api/talangya/commodityDetail' && request.method === 'GET') {
+        try {
+          const commodityId = url.searchParams.get('commodityId') || url.searchParams.get('commodity_id') || url.searchParams.get('id');
+          if (!commodityId) {
+            return resJson({ code: 400, msg: '缺少 commodityId 参数' }, 400);
+          }
+          const r = await fetch('https://talangya.com/user/api/index/commodityDetail?commodityId=' + encodeURIComponent(commodityId), {
+            headers: {
+              'accept': '*/*',
+              'accept-language': 'zh-CN,zh;q=0.9',
+              'priority': 'u=1, i',
+              'referer': 'https://talangya.com/',
+              'sec-ch-ua': '"Chromium";v="154", "Google Chrome";v="154", "Not A(Brand";v="99"',
+              'sec-ch-ua-mobile': '?0',
+              'sec-ch-ua-platform': '"macOS"',
+              'sec-fetch-dest': 'empty',
+              'sec-fetch-mode': 'cors',
+              'sec-fetch-site': 'same-origin',
+              'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36',
+              'x-requested-with': 'XMLHttpRequest',
+              'cookie': 'ACG-SHOP=l9hhhl05jctiudp28lqm8ae4is; USER_SESSION=ZXlKMGVYQWlPaUpLVjFRaUxDSjFhV1FpT2pNNU16QXdMQ0poYkdjaU9pSklVekkxTmlKOS5leUpsZUhCcGNtVWlPakU0TWpNek1EVTJNelFzSW14dloybHVWR2x0WlNJNklqSXdNall0TVRBdE1USWdNRGs2TkRjNk1UUWlmUS5xMjAzbHN2VTZ1Q0JFVnpQbWJUYjAxX0ZZMUYweFVXQnJyRDZ6ZllOU1d3'
+            }
+          });
+          const text = await r.text();
+          return new Response(text, {
+            headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json; charset=utf-8' }
+          });
+        } catch (err) {
+          console.error('Talangya commodityDetail error:', err);
+          return resJson({ code: 500, msg: '获取商品详情失败', error: err.message }, 500);
+        }
+      }
+
       // ========== talangya 下单代理（绕过CORS，原样下单并把 secret 返回前端） ==========
       if (path === '/api/talangya/order' && request.method === 'POST') {
         try {
@@ -854,18 +888,18 @@ export default {
         const { email, code } = params;
 
         if (!email || !code) {
-          return resJson({ success: false, message: '邮箱和验证码不能为空！' }, 400);
+          return resJson({ success: false, error: 'VERIFY_EMPTY', message: '邮箱和验证码不能为空！' }, 400);
         }
 
         const storedCode = await redis(env, 'GET', `verify_code_${email}`);
 
         if (!storedCode) {
           // key 不存在 = 未获取或已自动过期（Redis TTL）
-          return resJson({ success: false, message: '请先获取验证码，或验证码已过期！' }, 400);
+          return resJson({ success: false, error: 'VERIFY_EXPIRED', message: '请先获取验证码，或验证码已过期！' }, 400);
         }
 
         if (storedCode !== code) {
-          return resJson({ success: false, message: '验证码错误！' }, 400);
+          return resJson({ success: false, error: 'VERIFY_CODE_ERROR', message: '验证码错误！' }, 400);
         }
 
         // 验证成功：删除验证码，写入已验证标记（1分钟自动过期，用于注册校验）
@@ -921,7 +955,7 @@ export default {
           const verifyPassed = await redis(env, 'GET', `verify_passed_${username}`);
           if (!verifyPassed) {
             // key 不存在 = 未验证或已自动过期（Redis TTL）
-            return resJson({ success: false, message: '请先完成邮箱验证，或验证已过期，请重新验证！' }, 400);
+            return resJson({ success: false, error: 'VERIFY_EXPIRED', message: '请先完成邮箱验证，或验证已过期，请重新验证！' }, 400);
           }
         }
 
@@ -932,7 +966,7 @@ export default {
           .first();
 
         if (existingUser) {
-          return resJson({ success: false, message: '该邮箱已注册！' }, 409);
+          return resJson({ success: false, error: 'EMAIL_REGISTERED', message: '该邮箱已注册！' }, 409);
         }
 
         // 生成唯一的6位邀请码（字母+数字）
@@ -1083,7 +1117,7 @@ export default {
         } catch (e) {
           // 捕获 UNIQUE 约束冲突 → 用户名已存在（并发注册竞争时触发）
           if (e.message && (e.message.includes('UNIQUE') || e.message.includes('constraint') || e.message.includes('duplicate'))) {
-            return resJson({ success: false, message: '用户名已存在！' }, 409);
+            return resJson({ success: false, error: 'USERNAME_EXISTS', message: '用户名已存在！' }, 409);
           }
           console.error('注册插入失败:', e);
           return resJson({ success: false, message: '注册失败，请重试！' }, 500);
@@ -1221,7 +1255,7 @@ export default {
         if (await bfEnabled(env)) {
           const bfPresent = await BFMaybe(env, 'bf_user', username);
           if (!bfPresent) {
-            return resJson({ success: false, message: '用户名或密码错误' }, 401);
+            return resJson({ success: false, error: 'WRONG_CREDENTIALS', message: '用户名或密码错误' }, 401);
           }
         }
 
@@ -1256,7 +1290,7 @@ export default {
 
           return resJson({ success: true, message: '登录成功！', userInfo: { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, p_token: pToken, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates, card_number: cardNumber }, pricePlan });
         } else {
-          return resJson({ success: false, message: '用户名或密码错误' }, 401);
+          return resJson({ success: false, error: 'WRONG_CREDENTIALS', message: '用户名或密码错误' }, 401);
         }
       }
 
@@ -4068,7 +4102,15 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           if (user.balance < cost) return resJson({ success: false, message: '余额不足' }, 400);
 
           const prizes = [3, 5, 5, 10, 10, 20, 50, 200];
-          const weights = [0.35, 0.22, 0.18, 0.10, 0.08, 0.04, 0.02, 0.01];
+          // 权重：高频小奖(¥3/¥5)占多数，回本(¥10+)约30%，¥200仍仅1% —— 手感"常中、大奖稀有"
+          const weights = [0.30, 0.22, 0.18, 0.14, 0.09, 0.04, 0.02, 0.01];
+          // 保底：连续只中最低奖(¥3)达6次，轻微抬升大奖权重，缓解连败劝退
+          try {
+            const wb = await DB.prepare("SELECT prize FROM game_bet WHERE username = ? AND game_type = 'wheel' ORDER BY id DESC LIMIT 8").bind(username).all();
+            let dry = 0;
+            for (const r of (wb.results || [])) { if ((r.prize || 0) <= prizes[0]) dry++; else break; }
+            if (dry >= 6) weights[weights.length - 1] = Math.min(0.05, weights[weights.length - 1] + 0.04);
+          } catch (e) {}
           let r = Math.random();
           let prizeIndex = 0;
           for (let i = 0; i < weights.length; i++) {
@@ -4117,6 +4159,8 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
             else if (pairSymbol === '💎') prize = 50;
             else if (pairSymbol === '⭐') prize = 25;
             else prize = 15;
+          } else {
+            prize = 5; // 三符号全不同：安慰奖，避免空转劝退（中奖率→100%）
           }
 
           const resultStr = (s1 === s2 && s2 === s3) ? `${s1}${s2}${s3}` : `${s1} ${s2} ${s3}`;
@@ -4145,8 +4189,15 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           if (user.balance < cost) return resJson({ success: false, message: '余额不足' }, 400);
 
           const prizes = [5, 10, 20, 50, 100, 200];
-          // 50/100/200 权重进一步大幅压低，剩余概率补给 5/10/20
-          const weights = [0.60, 0.26, 0.12, 0.018, 0.0018, 0.0002];
+          // 权重：¥5/¥10 占多数，¥20 约13%，大奖稀有 —— 手感"常中、厚度更好"
+          const weights = [0.55, 0.28, 0.13, 0.03, 0.006, 0.004];
+          // 保底：连续只中最低奖(¥5)达6次，轻微抬升大奖权重，缓解连败劝退
+          try {
+            const sb = await DB.prepare("SELECT prize FROM game_bet WHERE username = ? AND game_type = 'scratch' ORDER BY id DESC LIMIT 8").bind(username).all();
+            let dry = 0;
+            for (const r of (sb.results || [])) { if ((r.prize || 0) <= prizes[0]) dry++; else break; }
+            if (dry >= 6) weights[weights.length - 1] = Math.min(0.02, weights[weights.length - 1] + 0.01);
+          } catch (e) {}
           let random = Math.random();
           let prize = 0;
           for (let i = 0; i < prizes.length; i++) {
@@ -4927,9 +4978,10 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
             const user = await DB.prepare('SELECT ad_clicks FROM user WHERE username = ?').bind(username).first();
             if (!user) return resJson({ code: 404, msg: '用户不存在' }, 404);
             const clicks = user.ad_clicks ? JSON.parse(user.ad_clicks) : {};
-            const cur = clicks[ad_id] || { count: 0 };
-            cur.count = (cur.count || 0) + 1;
-            if (content) cur.content = content;
+            const cur = clicks[ad_id] || { count: 0, times: [] };
+            cur.count++;
+            cur.times.push(new Date().toISOString());
+            if (content && !cur.content) cur.content = content;
             clicks[ad_id] = cur;
             await DB.prepare('UPDATE user SET ad_clicks = ? WHERE username = ?').bind(JSON.stringify(clicks), username).run();
             return resJson({ code: 200, msg: '记录成功', count: cur.count });
@@ -5104,6 +5156,47 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
         } catch (err) {
           console.error('AI 对话错误:', err);
           return resJson({ code: 500, msg: 'AI 调用失败：' + err.message }, 500);
+        }
+      }
+
+      // ========== 接码记录（真实持久化到 D1 sms_history 表，单一接口按 action 区分） ==========
+      // POST /api/sms/history
+      //   action: 'list' -> 读取该用户全部记录（不懒加载，一次性返回，最多 500 条）
+      //   action: 'add'  -> 收到验证码时插入一条记录（service/country/number/code/cost）
+      if (path === '/api/sms/history' && request.method === 'POST') {
+        try {
+          const body = await request.json();
+          if (!body.username) return resJson({ success: false, message: '请先登录' }, 401);
+
+          // 租号成功：插入一条待接收的空记录（code 暂空，status=pending）
+          if (body.action === 'rent') {
+            const info = await DB.prepare(
+              "INSERT INTO sms_history (username, service, country, number, code, cost, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now','localtime'))"
+            ).bind(
+              body.username,
+              body.service || '',
+              body.country || '',
+              body.number || '',
+              '',
+              Number(body.cost || 0),
+              'pending'
+            ).run();
+            return resJson({ success: true, id: info.meta ? info.meta.last_row_id : null });
+          }
+
+          // 收到验证码：回填 code 并把状态置为 received
+          if (body.action === 'updateCode') {
+            await DB.prepare(
+              "UPDATE sms_history SET code = ?, status = ? WHERE id = ? AND username = ?"
+            ).bind(body.code || '', 'received', body.id, body.username).run();
+            return resJson({ success: true });
+          }
+
+          // 默认：list
+          const result = await DB.prepare('SELECT * FROM sms_history WHERE username = ? ORDER BY id DESC LIMIT 500').bind(body.username).all();
+          return resJson({ success: true, history: result.results || [] });
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
         }
       }
 
