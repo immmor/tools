@@ -5159,6 +5159,47 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
         }
       }
 
+      // ========== 接码记录（真实持久化到 D1 sms_history 表，单一接口按 action 区分） ==========
+      // POST /api/sms/history
+      //   action: 'list' -> 读取该用户全部记录（不懒加载，一次性返回，最多 500 条）
+      //   action: 'add'  -> 收到验证码时插入一条记录（service/country/number/code/cost）
+      if (path === '/api/sms/history' && request.method === 'POST') {
+        try {
+          const body = await request.json();
+          if (!body.username) return resJson({ success: false, message: '请先登录' }, 401);
+
+          // 租号成功：插入一条待接收的空记录（code 暂空，status=pending）
+          if (body.action === 'rent') {
+            const info = await DB.prepare(
+              "INSERT INTO sms_history (username, service, country, number, code, cost, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now','localtime'))"
+            ).bind(
+              body.username,
+              body.service || '',
+              body.country || '',
+              body.number || '',
+              '',
+              Number(body.cost || 0),
+              'pending'
+            ).run();
+            return resJson({ success: true, id: info.meta ? info.meta.last_row_id : null });
+          }
+
+          // 收到验证码：回填 code 并把状态置为 received
+          if (body.action === 'updateCode') {
+            await DB.prepare(
+              "UPDATE sms_history SET code = ?, status = ? WHERE id = ? AND username = ?"
+            ).bind(body.code || '', 'received', body.id, body.username).run();
+            return resJson({ success: true });
+          }
+
+          // 默认：list
+          const result = await DB.prepare('SELECT * FROM sms_history WHERE username = ? ORDER BY id DESC LIMIT 500').bind(body.username).all();
+          return resJson({ success: true, history: result.results || [] });
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
+        }
+      }
+
       // ========== 默认接口提示 ==========
       return resJson({
         code: 200,

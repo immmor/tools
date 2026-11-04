@@ -3711,11 +3711,11 @@
                                         </div>
                                     </div>
                                 ` : ''}
-                                <div class="mt-4 mb-4 p-3 bg-zinc-900 rounded border border-zinc-700">
+                                <div id="vip-coupon-wrap" class="mt-4 mb-4 p-3 bg-zinc-900 rounded border border-zinc-700">
                                     <div class="text-sm font-bold text-[var(--neon-orange)] mb-2" data-i18n="vip_coupon_title">优惠券</div>
                                     <div class="flex gap-2">
                                         <input id="vip-coupon-input" type="text" data-i18n-placeholder="vip_coupon_placeholder" placeholder="请输入优惠码" class="flex-1 bg-zinc-800 border border-zinc-600 rounded px-3 py-2 text-sm text-white outline-none focus:border-[var(--neon-orange)]">
-                                        <button type="button" onclick="applyVipCoupon(${price})" class="bg-[var(--neon-orange)] text-black px-4 py-2 text-sm font-bold hover:opacity-90 whitespace-nowrap" data-i18n="vip_coupon_apply">应用</button>
+                                        <button id="vip-coupon-apply" type="button" onclick="applyVipCoupon(${price})" class="bg-[var(--neon-orange)] text-black px-4 py-2 text-sm font-bold hover:opacity-90 whitespace-nowrap" data-i18n="vip_coupon_apply">应用</button>
                                     </div>
                                     <div id="vip-coupon-msg" class="mt-2 text-xs"></div>
                                 </div>
@@ -3754,6 +3754,7 @@
                 alert(networkError);
             }
         };
+        window.showVipNodes = showVipNodes; // 暴露给导览模块（优惠码指引需要先打开此弹窗）
 
         const tintVipTitle = (img) => {
             const title = document.querySelector('#vip-modal h2[data-i18n="vip_nodes_title"]');
@@ -4765,7 +4766,7 @@
                 
                 notifications.forEach((notif) => {
                     const meta = parseMessageMeta(notif.content);
-                    const forced = meta.type !== 'normal';
+                    const forced = meta.type === 'must_read' || meta.type === 'must_input';
                     const isMustInputUnread = forced && meta.type === 'must_input' && !notif.is_read;
                     const div = document.createElement('div');
                     div.className = 'px-4 py-3 notification-item relative transition-colors border-b border-zinc-800'
@@ -4828,17 +4829,29 @@
                             }
                         };
                     } else {
-                        // 普通消息 / 必读消息 / 已读消息：外观一致，仅颜色与标记不同
+                        // 普通消息 / 必读消息 / 已读消息 / 按钮消息：外观一致，仅颜色与标记不同
+                        const actionBtn = (meta.type === 'button' && meta.button)
+                            ? `<button class="notif-action-btn shrink-0 text-[var(--neon-orange)] hover:bg-[var(--neon-orange)] hover:text-black transition-colors px-2 py-1 rounded border border-[var(--neon-orange)] font-semibold whitespace-nowrap">${meta.button}</button>`
+                            : '';
                         div.innerHTML = `
                             <div class="flex justify-between items-start gap-2">
                                 <div class="flex-1 min-w-0">
                                     ${bodyHtml}
                                 </div>
                                 <div class="flex items-center gap-2 shrink-0 mt-0.5">
+                                    ${actionBtn}
                                     ${!notif.is_read ? '<span class="w-2 h-2 bg-[var(--neon-red)] rounded-full shrink-0"></span>' : ''}
                                     <button class="notif-reply-btn shrink-0 text-[var(--neon-blue)] hover:text-white hover:border-[var(--neon-blue)] transition-colors px-2 py-1 rounded border border-zinc-700" title="${translations[currentLang]?.notification_reply || '回复'}"><i class="fa-solid fa-reply fa-flip-horizontal"></i></button>
                                 </div>
                             </div>`;
+                        if (meta.type === 'button' && meta.button) {
+                            div.querySelector('.notif-action-btn').addEventListener('click', (e) => {
+                                e.stopPropagation();
+                                runMessageAction(meta.action);
+                                notificationDropdown.classList.add('hidden');
+                                if (!notif.is_read) { markAsRead(notif.id); notif.is_read = true; checkUnread(notifications); renderNotifications(notifications); }
+                            });
+                        }
                         div.onclick = async () => {
                             const wasUnread = !notif.is_read;
                             if (wasUnread) {
@@ -4889,19 +4902,34 @@
 
             // ============ 强制阅读消息：必须已读 / 输入确认才能关闭（集成在通知列表内） ============
             const FORCED_TYPES = ['must_read', 'must_input'];
+            // 内联按钮消息：管理员发送指定格式时，在通知条显示可点击的指定按钮
+            const ACTION_TYPES = ['button'];
+            // 消息内联动作白名单：仅允许预设动作，杜绝任意脚本执行
+            const MESSAGE_ACTION_MAP = {
+                coupon_guide: () => { if (window.TourModule && typeof window.TourModule.startCoupon === 'function') window.TourModule.startCoupon(); },
+                open_vip: () => { if (typeof window.showVipNodes === 'function') window.showVipNodes(); }
+            };
+            const runMessageAction = (action) => {
+                const fn = MESSAGE_ACTION_MAP[action];
+                if (fn) { try { fn(); } catch (e) { console.error('消息动作执行失败:', e); } }
+                else console.warn('未知的消息动作:', action);
+            };
 
             const parseMessageMeta = (content) => {
                 let parsed = null;
                 try { parsed = JSON.parse(content); } catch (e) { parsed = null; }
-                if (parsed && typeof parsed === 'object' && FORCED_TYPES.includes(parsed.type)) {
+                if (parsed && typeof parsed === 'object' && (FORCED_TYPES.includes(parsed.type) || ACTION_TYPES.includes(parsed.type))) {
                     const titleObj = (parsed.title && typeof parsed.title === 'object') ? parsed.title : null;
                     const title = titleObj ? (titleObj[currentLang === 'zh-CN' ? 'cn' : 'en'] || titleObj.cn || titleObj.en || '') : '';
-                    return { type: parsed.type, keyword: parsed.keyword || '', title, body: getMessageContent(content) };
+                    const langMap = { 'zh-CN': 'cn', 'en-US': 'en', 'ja-JP': 'jp', 'ko-KR': 'kr', 'es-ES': 'es', 'vi-VN': 'vi', 'ar-SA': 'ar', 'ru-RU': 'ru' };
+                    const lk = langMap[currentLang] || 'en';
+                    const button = parsed['button_' + lk] || parsed.button || '';
+                    return { type: parsed.type, keyword: parsed.keyword || '', title, action: parsed.action || '', button, body: getMessageContent(content) };
                 }
-                return { type: 'normal', title: '', keyword: '', body: getMessageContent(content) };
+                return { type: 'normal', title: '', keyword: '', action: '', button: '', body: getMessageContent(content) };
             };
 
-            const isForcedType = (content) => parseMessageMeta(content).type !== 'normal';
+            const isForcedType = (content) => FORCED_TYPES.includes(parseMessageMeta(content).type);
 
             const hasUnreadForced = () => notifications.some(n => !n.is_read && isForcedType(n.content));
 

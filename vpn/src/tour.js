@@ -427,6 +427,8 @@
     GROUPS[1].steps = planStepsForUser();
     // 展平为顺序步骤，并附带分组信息（用于“大功能自动介绍小功能”与进度展示）
     let STEPS = [];
+    let couponMode = false; // 独立的“优惠码使用指引”进行中：结束时保留 VIP 弹窗，不自动删除
+    let lastAttempt = -1, retryCount = 0; // 步骤目标元素未出现时的短重试计数（异步弹窗加载）
     function buildSteps() {
         STEPS = [];
         GROUPS.forEach((g, gi) => g.steps.forEach((s, si) => {
@@ -645,9 +647,11 @@
             dom.ring.style.height = (rect.height + pad * 2) + 'px';
         }
 
-        // 讲解气泡贴着被讲解的元素（选空白处一侧、留间距），随步骤滑动且不会遮挡讲解区域
-        const side = chooseSide(rect);
-        const gr = placeGuide(rect, side);
+        // 讲解气泡锚点：默认贴着被讲解元素；若指定 boxSel（如整个优惠码区域），则贴着该区域顶部，避免压住区域
+        const boxEl = step.boxSel ? document.querySelector(step.boxSel) : el;
+        const boxRect = (boxEl || el).getBoundingClientRect();
+        const side = step.forceSide || chooseSide(boxRect);
+        const gr = placeGuide(boxRect, side);
         placeFabInGuide(gr); // 客服旋钮悬浮在信息卡片内右上角，跟随卡片移动
 
         // 指针仅在“需要点击”的步骤出现并移动到目标中心
@@ -836,12 +840,25 @@
         if (i < 0 || i >= STEPS.length) return;
         if (clickTimer) clearTimeout(clickTimer);
         if (autoTimer) clearTimeout(autoTimer); // 取消上一轮的自动前进，避免重复触发
+        if (i !== lastAttempt) { lastAttempt = i; retryCount = 0; }
+
+        const step = STEPS[i];
+        let el = document.querySelector(step.sel);
+        // 目标尚未出现（如异步弹窗仍在加载）：短间隔重试，超时再结束，避免一次性 finish 导致指引中断
+        if (!el) {
+            if (active && retryCount < 15) {
+                retryCount++;
+                autoTimer = setTimeout(() => goTo(i), 200);
+                return;
+            }
+            finish();
+            return;
+        }
+
         leaveStep(activeEl, activeStep); // 清理上一步
 
         idx = i;
-        const step = STEPS[idx];
-        let el = document.querySelector(step.sel);
-        if (!el) { finish(); return; }
+        activeEl = el; activeStep = step;
         // 下拉框步骤：若所属下拉框被（点击空白 / 导览按钮冒泡等）关闭，重新打开后再定位，避免后续步骤定位不到元素
         const owner = el.closest && (el.closest('#dropdown-menu') || el.closest('[id$="-dropdown"]'));
         if (owner && !isVisible(owner)) {
@@ -851,8 +868,6 @@
             el = document.querySelector(step.sel);
         }
         if (!el || !isVisible(el)) { finish(); return; }
-
-        activeEl = el; activeStep = step;
 
         dom.skip.textContent = ui('skip');
         dom.prev.textContent = ui('prev');
@@ -887,7 +902,7 @@
     function updatePlayBtn() { if (dom && dom.play) dom.play.innerHTML = playing ? '<i class="fas fa-pause"></i>' : '<i class="fas fa-play"></i>'; }
 
     // ===== 启动 / 结束 =====
-    function start() {
+    function start(steps) {
         if (active) return;
         buildDom();
         active = true;
@@ -925,7 +940,13 @@
         // 按当前会员状态重算导航与节点套餐步骤，再展平
         GROUPS[0].steps = navStepsForUser();
         GROUPS[1].steps = planStepsForUser();
-        buildSteps();
+        if (steps && steps.length) {
+            STEPS = steps;          // 自定义步骤（如独立的“优惠码使用指引”）
+            couponMode = true;
+        } else {
+            buildSteps();           // 完整站点游览
+            couponMode = false;
+        }
         goTo(0);
     }
 
@@ -940,14 +961,17 @@
         leaveStep(activeEl, activeStep);
         raisedStack.forEach(r => { r.el.style.zIndex = r.z ?? ''; });
         raisedStack = [];
-        // 兜底：若上一步弹窗是异步打开、尚未被登记，结束导览时一并移除
-        setTimeout(() => {
-            document.querySelectorAll('[id$="-modal"]').forEach(n => {
-                const cs = getComputedStyle(n);
-                const r = n.getBoundingClientRect();
-                if (cs.display !== 'none' && cs.visibility !== 'hidden' && r.width > 0 && r.height > 0) n.remove();
-            });
-        }, 700);
+        // 兜底：若上一步弹窗是异步打开、尚未被登记，结束导览时一并移除（优惠码指引模式下保留 VIP 弹窗）
+        if (!couponMode) {
+            setTimeout(() => {
+                document.querySelectorAll('[id$="-modal"]').forEach(n => {
+                    const cs = getComputedStyle(n);
+                    const r = n.getBoundingClientRect();
+                    if (cs.display !== 'none' && cs.visibility !== 'hidden' && r.width > 0 && r.height > 0) n.remove();
+                });
+            }, 700);
+        }
+        couponMode = false;
         // 还原真实客服悬浮窗（位置 / 层级 / 点击行为），让它回到常态
         if (supportFab) {
             supportFab.style.cssText = fabSaved || '';
@@ -977,7 +1001,46 @@
                 start();
             });
         }
+        const couponBtn = document.getElementById('tour-coupon-btn');
+        if (couponBtn) couponBtn.addEventListener('click', () => startCoupon());
     });
 
-    window.TourModule = { start, stop: finish };
+    // ===== 独立的“优惠码使用指引”（分三步：打开弹窗 → 输入优惠码 → 应用查看）=====
+    function buildCouponSteps() {
+        const gTitle = { 'zh-CN': '优惠码使用指引', 'en-US': 'Coupon Guide' };
+        const raw = [
+            {
+                // 第一步：指引点击 VIP 套餐卡片，由导览“演示”打开弹窗（不再预先自动打开）
+                sel: '#tour-monthly', click: true, kind: 'modal', keepOpen: true,
+                dwell: 1800, isGroupStart: false,
+                t: { 'zh-CN': '第一步：打开“开通 VIP”弹窗', 'en-US': 'Step 1: Open the “Open VIP” dialog' },
+                d: { 'zh-CN': '先点击 VIP 套餐卡片，打开“开通 VIP”弹窗——优惠码入口就在弹窗内部。', 'en-US': 'Click a VIP plan card to open the “Open VIP” dialog — the coupon section is inside it.' }
+            },
+            {
+                // 第二步：弹窗打开后，定位到优惠码输入框（讲解气泡浮在整个优惠码区域上方，不压住）
+                sel: '#vip-coupon-input', click: false, noClick: true, kind: 'modal', keepOpen: true,
+                boxSel: '#vip-coupon-wrap', dwell: 1500, forceSide: 'top',
+                t: { 'zh-CN': '第二步：输入优惠码', 'en-US': 'Step 2: Enter the coupon code' },
+                d: { 'zh-CN': '在“优惠券”一栏输入你获得的优惠码（区分大小写，前后不要有空格）。', 'en-US': 'In the “Coupon” section, type your code (case-sensitive, no leading/trailing spaces).' }
+            },
+            {
+                // 第三步：定位“应用”按钮，说明校验与价格更新（讲解气泡浮在整个优惠码区域上方）
+                sel: '#vip-coupon-apply', click: false, noClick: true, kind: 'modal', keepOpen: true,
+                boxSel: '#vip-coupon-wrap', dwell: 1500, forceSide: 'top',
+                t: { 'zh-CN': '第三步：应用并查看优惠', 'en-US': 'Step 3: Apply and see the discount' },
+                d: { 'zh-CN': '点击“应用”后，结果区会显示校验是否通过；有效时下方应付价格立即减去对应金额。', 'en-US': 'After clicking “Apply”, the result shows if it’s valid; if so, the price below drops instantly.' }
+            }
+        ];
+        const total = raw.length;
+        return raw.map((s, i) => Object.assign({}, s, {
+            groupTitle: gTitle, groupStep: i, groupCount: total,
+            isGroupStart: s.isGroupStart !== undefined ? s.isGroupStart : (i === 0)
+        }));
+    }
+    function startCoupon() {
+        if (active) return; // 已有游览在跑，忽略
+        start(buildCouponSteps());
+    }
+
+    window.TourModule = { start, stop: finish, startCoupon };
 })();
