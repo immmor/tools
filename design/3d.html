@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KINÉTIQ ARCHITECTURAL & GRAPHIC STUDIO — 3D & 2D Suite</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Three.js for 3D Interior Room Rendering -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <!-- Google Fonts: Inter & Space Grotesk -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            display: ['Space Grotesk', 'Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            swiss: {
+              red: '#FF3B30',
+              black: '#0A0A0B',
+              dark: '#121316',
+              border: 'rgba(255, 255, 255, 0.12)',
+              accent: '#E63946',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(10, 10, 11, 0.5);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.4);
+    }
+
+    /* Glassmorphism Styles */
+    .glass-panel {
+      background: rgba(16, 17, 22, 0.7);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .glass-card {
+      background: rgba(255, 255, 255, 0.04);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    
+    .glass-card:hover {
+      background: rgba(255, 255, 255, 0.07);
+      border-color: rgba(255, 255, 255, 0.18);
+    }
+
+    .glass-input {
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      backdrop-filter: blur(8px);
+    }
+    .glass-input:focus {
+      border-color: #FF3B30;
+      outline: none;
+    }
+
+    /* Swiss Overlay Grid Lines */
+    .swiss-grid-bg {
+      background-size: 32px 32px;
+      background-image: 
+        linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+    }
+
+    .swiss-blueprint-bg {
+      background-color: #0d1117;
+      background-image: 
+        linear-gradient(to right, rgba(255, 59, 48, 0.1) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 59, 48, 0.1) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+
+    /* Ambient Light Mesh Background */
+    .ambient-blob {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(120px);
+      opacity: 0.3;
+      pointer-events: none;
+      z-index: 0;
+    }
+  </style>
+</head>
+
+<body class="bg-[#0A0A0B] text-slate-100 font-sans antialiased h-screen overflow-hidden flex flex-col selection:bg-swiss-red selection:text-white">
+
+  <!-- Ambient Background Glow -->
+  <div class="fixed inset-0 overflow-hidden pointer-events-none z-0">
+    <div class="ambient-blob w-[600px] h-[600px] bg-red-600/25 -top-32 -left-32 animate-pulse"></div>
+    <div class="ambient-blob w-[700px] h-[700px] bg-blue-600/20 top-1/2 -right-40"></div>
+    <div class="ambient-blob w-[500px] h-[500px] bg-emerald-600/15 -bottom-32 left-1/4"></div>
+  </div>
+
+  <!-- MAIN APP CONTAINER -->
+  <div class="relative z-10 flex flex-col h-full w-full">
+
+    <!-- 1. TOP NAVBAR & TOOLBAR -->
+    <header class="h-14 glass-panel border-b border-white/10 px-4 flex items-center justify-between shrink-0 z-40">
+      
+      <!-- Logo & Project Switcher -->
+      <div class="flex items-center gap-4">
+        <div class="flex items-center gap-2.5 group cursor-pointer">
+          <div class="w-7 h-7 bg-swiss-red flex items-center justify-center font-bold text-white text-xs tracking-tighter rounded-sm shadow-lg shadow-red-500/30 group-hover:rotate-90 transition-transform duration-300">
+            +
+          </div>
+          <span class="font-display font-extrabold text-sm tracking-wider uppercase">KINÉTIQ<span class="text-swiss-red font-mono font-normal text-xs ml-1">//STUDIO</span></span>
+        </div>
+
+        <div class="h-4 w-px bg-white/15 hidden sm:block"></div>
+
+        <!-- Project Switcher Dropdown -->
+        <div class="relative hidden sm:block">
+          <button id="project-menu-btn" class="flex items-center gap-2 px-3 py-1.5 rounded-lg glass-card text-xs font-mono text-slate-200 hover:text-white transition">
+            <i data-lucide="folder-kanban" class="w-3.5 h-3.5 text-swiss-red"></i>
+            <span id="current-project-title">Zürich Minimalist Penthouse (145㎡)</span>
+            <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400"></i>
+          </button>
+          
+          <div id="project-dropdown" class="hidden absolute top-full left-0 mt-2 w-72 glass-panel rounded-xl p-2 border border-white/15 shadow-2xl z-50">
+            <div class="text-[10px] font-mono text-slate-400 px-3 py-1 uppercase tracking-wider">Active Architectural Projects</div>
+            <button class="project-option w-full text-left px-3 py-2 rounded-lg text-xs font-mono text-white hover:bg-white/10 transition flex items-center justify-between" data-title="Zürich Minimalist Penthouse (145㎡)">
+              <span>Zürich Minimalist Penthouse</span>
+              <span class="text-[10px] text-emerald-400">145㎡ 3D/2D</span>
+            </button>
+            <button class="project-option w-full text-left px-3 py-2 rounded-lg text-xs font-mono text-slate-300 hover:bg-white/10 transition flex items-center justify-between" data-title="Geneva Japandi Villa (280㎡)">
+              <span>Geneva Japandi Villa</span>
+              <span class="text-[10px] text-blue-400">280㎡ Interior</span>
+            </button>
+            <button class="project-option w-full text-left px-3 py-2 rounded-lg text-xs font-mono text-slate-300 hover:bg-white/10 transition flex items-center justify-between" data-title="Basel Art Gallery Poster VI">
+              <span>Basel Art Gallery VI</span>
+              <span class="text-[10px] text-amber-400">Graphic Poster</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Center: View Mode Switcher (2D Floor Plan vs 3D Room vs Graphic Poster) -->
+      <div class="flex items-center glass-card p-1 rounded-xl border border-white/10">
+        <button data-mode="2d" class="mode-btn px-3 py-1.5 rounded-lg text-xs font-mono flex items-center gap-1.5 transition text-slate-300 hover:text-white">
+          <i data-lucide="compass" class="w-3.5 h-3.5 text-swiss-red"></i>
+          <span class="hidden md:inline">2D 平面 CAD</span>
+        </button>
+        <button data-mode="3d" class="mode-btn active px-3 py-1.5 rounded-lg text-xs font-mono flex items-center gap-1.5 transition bg-swiss-red text-white shadow-lg shadow-red-500/20">
+          <i data-lucide="box" class="w-3.5 h-3.5"></i>
+          <span class="hidden md:inline">3D 空间漫游</span>
+        </button>
+        <button data-mode="graphic" class="mode-btn px-3 py-1.5 rounded-lg text-xs font-mono flex items-center gap-1.5 transition text-slate-300 hover:text-white">
+          <i data-lucide="layout" class="w-3.5 h-3.5 text-amber-400"></i>
+          <span class="hidden md:inline">瑞士平面海报</span>
+        </button>
+      </div>
+
+      <!-- Right: Actions & Export -->
+      <div class="flex items-center gap-2">
+        <button id="snapshot-btn" class="p-2 glass-card hover:bg-white/10 text-slate-300 rounded-lg transition" title="截屏快照 Snapshot Capture">
+          <i data-lucide="camera" class="w-4 h-4"></i>
+        </button>
+        <button id="share-link-btn" class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 glass-card hover:bg-white/10 text-slate-200 text-xs font-mono rounded-lg transition" title="生成评审分享链接 Share Link">
+          <i data-lucide="share-2" class="w-3.5 h-3.5 text-blue-400"></i>
+          <span>分享</span>
+        </button>
+        <button id="export-modal-btn" class="px-3.5 py-1.5 rounded-lg bg-swiss-red hover:bg-red-600 text-white font-mono text-xs uppercase font-medium tracking-wider flex items-center gap-2 transition shadow-lg shadow-red-500/20">
+          <i data-lucide="download" class="w-3.5 h-3.5"></i>
+          <span>导出 Export</span>
+        </button>
+      </div>
+
+    </header>
+
+    <!-- WORKSPACE BODY (SIDEBAR + MAIN CANVAS + INSPECTOR) -->
+    <div class="flex-1 flex overflow-hidden relative">
+
+      <!-- 2. LEFT SIDEBAR (PRESETS & ELEMENT TOOLBOX) -->
+      <aside id="left-sidebar" class="w-72 glass-panel border-r border-white/10 flex flex-col shrink-0 z-30 transition-all duration-300">
+        
+        <!-- Sidebar Header Tabs -->
+        <div class="flex border-b border-white/10 p-2 gap-1 bg-black/30">
+          <button data-sidebar-tab="presets" class="sidebar-tab-btn flex-1 py-1.5 rounded-lg text-xs font-mono bg-white/10 text-white transition font-semibold">空间预设</button>
+          <button data-sidebar-tab="elements" class="sidebar-tab-btn flex-1 py-1.5 rounded-lg text-xs font-mono text-slate-400 hover:text-white transition">家具/材质</button>
+          <button data-sidebar-tab="layers" class="sidebar-tab-btn flex-1 py-1.5 rounded-lg text-xs font-mono text-slate-400 hover:text-white transition">图层管理</button>
+        </div>
+
+        <!-- Tab Content 1: Room & Style Presets -->
+        <div id="sidebar-tab-presets" class="sidebar-panel-content flex-1 p-4 space-y-5 overflow-y-auto">
+          <div>
+            <div class="text-[10px] font-mono text-swiss-red uppercase tracking-widest font-bold">01 // SPATIAL TEMPLATES</div>
+            <h2 class="text-base font-display font-bold text-white mt-0.5">预设空间场景</h2>
+            <p class="text-xs text-slate-400 mt-0.5 font-light">一键加载专业室内与平面设计案例。</p>
+          </div>
+
+          <div class="space-y-3">
+            <div class="room-preset-card glass-card p-3 rounded-xl border border-white/10 cursor-pointer hover:border-swiss-red/50 transition group" data-room="living">
+              <div class="flex justify-between items-start mb-1.5">
+                <span class="text-xs font-semibold text-white group-hover:text-swiss-red transition">极简挑高客厅 Living Room</span>
+                <span class="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">洞石大板</span>
+              </div>
+              <p class="text-[11px] text-slate-400 font-light">挑高 4.2m，无主灯微水泥墙面与意式极简沙发组合。</p>
+            </div>
+
+            <div class="room-preset-card glass-card p-3 rounded-xl border border-white/10 cursor-pointer hover:border-swiss-red/50 transition group" data-room="kitchen">
+              <div class="flex justify-between items-start mb-1.5">
+                <span class="text-xs font-semibold text-white group-hover:text-swiss-red transition">岛台一体化厨房 Minimal Kitchen</span>
+                <span class="text-[10px] font-mono text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">拉丝黄铜</span>
+              </div>
+              <p class="text-[11px] text-slate-400 font-light">无把手隐形橱柜搭配 Nero Marquina 黑色岩板岛台。</p>
+            </div>
+
+            <div class="room-preset-card glass-card p-3 rounded-xl border border-white/10 cursor-pointer hover:border-swiss-red/50 transition group" data-room="bedroom">
+              <div class="flex justify-between items-start mb-1.5">
+                <span class="text-xs font-semibold text-white group-hover:text-swiss-red transition">寂木风主卧 Japandi Suite</span>
+                <span class="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded">烟熏橡木</span>
+              </div>
+              <p class="text-[11px] text-slate-400 font-light">低矮悬浮床架，原木木格栅背景与柔和 3000K 线性光带。</p>
+            </div>
+
+            <div class="room-preset-card glass-card p-3 rounded-xl border border-white/10 cursor-pointer hover:border-swiss-red/50 transition group" data-room="gallery">
+              <div class="flex justify-between items-start mb-1.5">
+                <span class="text-xs font-semibold text-white group-hover:text-swiss-red transition">苏黎世画廊空间 Art Gallery</span>
+                <span class="text-[10px] font-mono text-purple-400 bg-purple-500/10 px-1.5 py-0.5 rounded">纯白展墙</span>
+              </div>
+              <p class="text-[11px] text-slate-400 font-light">严格遵循瑞士 12 栏网格比例的艺术品展陈纯净空间。</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab Content 2: Elements & Materials (Hidden by default) -->
+        <div id="sidebar-tab-elements" class="sidebar-panel-content flex-1 p-4 space-y-5 overflow-y-auto hidden">
+          <div>
+            <div class="text-[10px] font-mono text-swiss-red uppercase tracking-widest font-bold">02 // MATERIALS & ASSETS</div>
+            <h2 class="text-base font-display font-bold text-white mt-0.5">材质与建筑构件</h2>
+            <p class="text-xs text-slate-400 mt-0.5 font-light">拖拽或点击添加至当前工作区场景。</p>
+          </div>
+
+          <div class="space-y-3">
+            <span class="text-xs font-mono text-slate-300 uppercase tracking-wider block">表面材质 Material Mapping</span>
+            <div class="grid grid-cols-2 gap-2">
+              <button class="mat-swatch p-2.5 rounded-xl glass-card text-left text-xs font-mono text-white hover:border-swiss-red transition flex items-center gap-2" data-mat="travertine">
+                <span class="w-4 h-4 rounded bg-[#D4C4B7] border border-white/20"></span>
+                <span>洞石 Travertine</span>
+              </button>
+              <button class="mat-swatch p-2.5 rounded-xl glass-card text-left text-xs font-mono text-white hover:border-swiss-red transition flex items-center gap-2" data-mat="concrete">
+                <span class="w-4 h-4 rounded bg-[#8A8D91] border border-white/20"></span>
+                <span>微水泥 Concrete</span>
+              </button>
+              <button class="mat-swatch p-2.5 rounded-xl glass-card text-left text-xs font-mono text-white hover:border-swiss-red transition flex items-center gap-2" data-mat="oak">
+                <span class="w-4 h-4 rounded bg-[#5C4033] border border-white/20"></span>
+                <span>烟熏橡木 Oak</span>
+              </button>
+              <button class="mat-swatch p-2.5 rounded-xl glass-card text-left text-xs font-mono text-white hover:border-swiss-red transition flex items-center gap-2" data-mat="brass">
+                <span class="w-4 h-4 rounded bg-[#C5A059] border border-white/20"></span>
+                <span>拉丝黄铜 Brass</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="space-y-3 border-t border-white/10 pt-4">
+            <span class="text-xs font-mono text-slate-300 uppercase tracking-wider block">建筑构件 Architectural Objects</span>
+            <div class="space-y-2">
+              <button class="w-full p-2.5 rounded-xl glass-card text-xs font-mono text-slate-200 hover:text-white flex items-center justify-between transition">
+                <span>+ 落地玻璃隔断 Glass Wall</span>
+                <i data-lucide="plus" class="w-3.5 h-3.5 text-swiss-red"></i>
+              </button>
+              <button class="w-full p-2.5 rounded-xl glass-card text-xs font-mono text-slate-200 hover:text-white flex items-center justify-between transition">
+                <span>+ 线性灯带 Linear LED 3000K</span>
+                <i data-lucide="plus" class="w-3.5 h-3.5 text-swiss-red"></i>
+              </button>
+              <button class="w-full p-2.5 rounded-xl glass-card text-xs font-mono text-slate-200 hover:text-white flex items-center justify-between transition">
+                <span>+ 极简沙发 Minimal Sofa</span>
+                <i data-lucide="plus" class="w-3.5 h-3.5 text-swiss-red"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab Content 3: Layer Manager (Hidden by default) -->
+        <div id="sidebar-tab-layers" class="sidebar-panel-content flex-1 p-4 space-y-4 overflow-y-auto hidden">
+          <div>
+            <div class="text-[10px] font-mono text-swiss-red uppercase tracking-widest font-bold">03 // LAYER MANAGER</div>
+            <h2 class="text-base font-display font-bold text-white mt-0.5">图层与对象结构</h2>
+          </div>
+
+          <div class="space-y-1.5 font-mono text-xs">
+            <div class="p-2.5 rounded-lg glass-card flex items-center justify-between text-white border-l-2 border-swiss-red">
+              <span>01. 主墙体与地面 Structure</span>
+              <i data-lucide="eye" class="w-3.5 h-3.5 text-slate-400"></i>
+            </div>
+            <div class="p-2.5 rounded-lg glass-card flex items-center justify-between text-slate-300">
+              <span>02. 意式极简沙发组 Sofa Set</span>
+              <i data-lucide="eye" class="w-3.5 h-3.5 text-slate-400"></i>
+            </div>
+            <div class="p-2.5 rounded-lg glass-card flex items-center justify-between text-slate-300">
+              <span>03. 落地洞石大板 Travertine Wall</span>
+              <i data-lucide="eye" class="w-3.5 h-3.5 text-slate-400"></i>
+            </div>
+            <div class="p-2.5 rounded-lg glass-card flex items-center justify-between text-slate-300">
+              <span>04. 隐藏式线性灯带 Lighting</span>
+              <i data-lucide="eye" class="w-3.5 h-3.5 text-slate-400"></i>
+            </div>
+          </div>
+        </div>
+
+      </aside>
+
+
+      <!-- 3. MAIN CENTRAL VIEWPORT CANVAS -->
+      <main class="flex-1 relative overflow-hidden bg-[#0A0A0B] flex items-center justify-center" id="main-viewport-container">
+        
+        <!-- VIEW 1: 2D FLOOR PLAN CAD MODE (Hidden by default) -->
+        <div id="view-2d" class="absolute inset-0 swiss-blueprint-bg hidden flex flex-col items-center justify-center p-6">
+          <div class="w-full max-w-4xl h-[560px] glass-panel rounded-2xl relative shadow-2xl p-6 flex flex-col border border-white/15 overflow-hidden">
+            
+            <!-- CAD Header Toolbar -->
+            <div class="flex items-center justify-between pb-4 border-b border-white/10 text-xs font-mono text-slate-300">
+              <div class="flex items-center gap-3">
+                <span class="font-bold text-white">2D ARCHITECTURAL FLOORPLAN // SCALE 1:100</span>
+                <span class="px-2 py-0.5 bg-swiss-red/20 text-swiss-red rounded text-[10px]">CAD MODE</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <button class="px-2.5 py-1 glass-card rounded hover:bg-white/10">墙体 Wall</button>
+                <button class="px-2.5 py-1 glass-card rounded hover:bg-white/10">门窗 Door/Window</button>
+                <button class="px-2.5 py-1 glass-card rounded hover:bg-white/10">标注 Dimension</button>
+              </div>
+            </div>
+
+            <!-- CAD Drawing Canvas Area -->
+            <div class="flex-1 relative mt-4 border border-white/10 rounded-xl bg-black/40 overflow-hidden flex items-center justify-center">
+              <!-- SVG Architectural Floorplan Blueprint -->
+              <svg class="w-full h-full text-slate-300" viewBox="0 0 800 500" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <!-- Grid Lines -->
+                <path d="M0 100H800M0 200H800M0 300H800M0 400H800M100 0V500M200 0V500M300 0V500M400 0V500M500 0V500M600 0V500M700 0V500" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>
+                
+                <!-- Room Outline Walls -->
+                <rect x="100" y="80" width="600" height="340" stroke="#FFFFFF" stroke-width="4" fill="rgba(255,255,255,0.02)"/>
+                <line x1="400" y1="80" x2="400" y2="420" stroke="#FFFFFF" stroke-width="3"/>
+                <line x1="400" y1="250" x2="700" y2="250" stroke="#FFFFFF" stroke-width="2"/>
+                
+                <!-- Doors -->
+                <path d="M360 420C360 395 380 380 400 380" stroke="#FF3B30" stroke-width="2" stroke-dasharray="4 4"/>
+                <path d="M540 250C540 230 560 220 580 220" stroke="#FF3B30" stroke-width="2" stroke-dasharray="4 4"/>
+
+                <!-- Dimensions & Labels -->
+                <text x="220" y="60" fill="#94A3B8" font-family="JetBrains Mono" font-size="12">LIVING ROOM (7.2m x 5.2m)</text>
+                <text x="500" y="60" fill="#94A3B8" font-family="JetBrains Mono" font-size="12">MASTER SUITE (5.0m x 4.2m)</text>
+                
+                <!-- Dimension Lines -->
+                <line x1="100" y1="440" x2="700" y2="440" stroke="#FF3B30" stroke-width="1.5"/>
+                <path d="M100 435V445M700 435V445" stroke="#FF3B30" stroke-width="1.5"/>
+                <text x="380" y="465" fill="#FF3B30" font-family="JetBrains Mono" font-size="12" text-anchor="middle">14.50 m</text>
+              </svg>
+            </div>
+
+            <!-- CAD Bottom Status -->
+            <div class="flex justify-between items-center mt-3 text-[10px] font-mono text-slate-400">
+              <span>GRID SNAP: 100mm // MOUSE X: 412 Y: 185</span>
+              <span>ESTIMATED AREA: 145.2 ㎡</span>
+            </div>
+          </div>
+        </div>
+
+
+        <!-- VIEW 2: 3D INTERIOR DESIGN MODE (Active by default) -->
+        <div id="view-3d" class="absolute inset-0 flex flex-col items-center justify-center">
+          <!-- Three.js Canvas Container -->
+          <div id="three-canvas-container" class="absolute inset-0 w-full h-full"></div>
+
+          <!-- Floating 3D Navigation Watermark Overlay -->
+          <div class="absolute top-6 left-6 glass-card px-4 py-2.5 rounded-xl border border-white/15 pointer-events-none z-10 flex items-center gap-3">
+            <div class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></div>
+            <div>
+              <div class="text-xs font-mono font-bold text-white">3D INTERIOR PERSPECTIVE</div>
+              <div class="text-[10px] font-mono text-slate-400">Zürich Minimalist Penthouse — 3000K Lighting</div>
+            </div>
+          </div>
+
+          <!-- Floating Camera Rotation Hint -->
+          <div class="absolute bottom-6 glass-card px-4 py-2 rounded-full border border-white/10 text-xs font-mono text-slate-300 pointer-events-none z-10 flex items-center gap-2">
+            <i data-lucide="move" class="w-3.5 h-3.5 text-swiss-red"></i>
+            <span>按住鼠标左键可 360° 旋转视角 / 滚轮缩放</span>
+          </div>
+        </div>
+
+
+        <!-- VIEW 3: GRAPHIC POSTER / SWISS LAYOUT MODE (Hidden by default) -->
+        <div id="view-graphic" class="absolute inset-0 swiss-grid-bg hidden flex items-center justify-center p-6">
+          <div class="w-[520px] h-[720px] bg-[#121316] glass-panel rounded-2xl relative shadow-2xl p-10 flex flex-col justify-between border border-white/20">
+            
+            <!-- Poster Header -->
+            <div class="flex justify-between items-start">
+              <div>
+                <span class="text-[10px] font-mono text-swiss-red font-bold tracking-widest uppercase">INTERNATIONAL TYPOGRAPHIC STYLE</span>
+                <h1 class="text-4xl font-display font-black text-white mt-1 leading-none">KINÉTIQ<br>ARCHIVE</h1>
+              </div>
+              <div class="w-10 h-10 bg-swiss-red rounded-lg flex items-center justify-center font-bold text-white text-lg">
+                +
+              </div>
+            </div>
+
+            <!-- Poster Center Graphic -->
+            <div class="my-auto py-8 space-y-4">
+              <div class="h-40 rounded-xl overflow-hidden glass-card border border-white/15 relative">
+                <img src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=800&q=80" alt="Architecture Poster" class="w-full h-full object-cover">
+                <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent flex items-end p-4">
+                  <span class="text-xs font-mono text-white">FIG. 01 — PENTHOUSE SPATIAL RIGOR</span>
+                </div>
+              </div>
+
+              <p class="text-xs text-slate-300 font-light leading-relaxed">
+                Reduction of form to absolute geometry. Pure travertine surfaces paired with brushed brass detailing, creating an atmosphere of silent luxury and functional clarity.
+              </p>
+            </div>
+
+            <!-- Poster Footer Specs -->
+            <div class="pt-4 border-t border-white/10 flex justify-between items-center text-[10px] font-mono text-slate-400">
+              <span>ZÜRICH DESIGN LAB // VOL. 04</span>
+              <span>ISO A2 POSTER GRID</span>
+            </div>
+
+          </div>
+        </div>
+
+      </main>
+
+
+      <!-- 4. RIGHT SIDEBAR INSPECTOR / PROPERTIES PANEL -->
+      <aside id="inspector-panel" class="w-72 glass-panel border-l border-white/10 p-4 flex flex-col shrink-0 z-30 overflow-y-auto">
+        
+        <div class="pb-4 border-b border-white/10 mb-4 flex items-center justify-between">
+          <div>
+            <div class="text-[10px] font-mono text-swiss-red uppercase tracking-widest font-bold">PROPERTY INSPECTOR</div>
+            <h2 class="text-sm font-display font-bold text-white">属性与灯光调节</h2>
+          </div>
+          <i data-lucide="sliders-horizontal" class="w-4 h-4 text-slate-400"></i>
+        </div>
+
+        <div class="space-y-6 text-xs font-mono">
+          
+          <!-- Lighting Controls -->
+          <div class="space-y-3">
+            <span class="text-slate-300 uppercase tracking-wider text-[10px] block">照明与色温 Lighting & Kelvin</span>
+            
+            <div>
+              <div class="flex justify-between text-slate-400 mb-1">
+                <span>色温 Color Temp</span>
+                <span id="kelvin-val" class="text-amber-400 font-bold">3000K (暖光)</span>
+              </div>
+              <input type="range" id="kelvin-slider" min="2700" max="6500" step="100" value="3000" class="w-full accent-swiss-red cursor-pointer">
+            </div>
+
+            <div>
+              <div class="flex justify-between text-slate-400 mb-1">
+                <span>环境光强度 Ambient Lux</span>
+                <span id="lux-val" class="text-white font-bold">85%</span>
+              </div>
+              <input type="range" id="lux-slider" min="10" max="100" value="85" class="w-full accent-swiss-red cursor-pointer">
+            </div>
+          </div>
+
+          <!-- Material Mapping Override -->
+          <div class="space-y-3 border-t border-white/10 pt-4">
+            <span class="text-slate-300 uppercase tracking-wider text-[10px] block">材质映射 Material Finish</span>
+            
+            <div>
+              <label class="text-slate-500 text-[10px] block mb-1">墙面材质 Wall Finish</label>
+              <select id="wall-material-select" class="w-full glass-input px-2.5 py-2 rounded-lg text-white">
+                <option value="travertine">意大利洞石 Travertine Slab</option>
+                <option value="concrete">高级微水泥 Microcement</option>
+                <option value="oak">烟熏木格栅 Smoked Oak</option>
+                <option value="white">纯白画廊展墙 Gallery White</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="text-slate-500 text-[10px] block mb-1">地面铺装 Flooring</label>
+              <select id="floor-material-select" class="w-full glass-input px-2.5 py-2 rounded-lg text-white">
+                <option value="dark-oak">深色橡木地板 Dark Wood</option>
+                <option value="terrazzo">意大利水磨石 Terrazzo</option>
+                <option value="gray-stone">深灰岩板 Dark Slate</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Architectural Dimensions -->
+          <div class="space-y-3 border-t border-white/10 pt-4">
+            <span class="text-slate-300 uppercase tracking-wider text-[10px] block">空间尺寸 Dimensions</span>
+            
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="text-slate-500 text-[10px] block">房间宽度 (m)</label>
+                <input type="number" value="7.2" class="w-full glass-input px-2 py-1.5 rounded text-white" readonly>
+              </div>
+              <div>
+                <label class="text-slate-500 text-[10px] block">房间进深 (m)</label>
+                <input type="number" value="5.2" class="w-full glass-input px-2 py-1.5 rounded text-white" readonly>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </aside>
+
+    </div>
+
+  </div>
+
+
+  <!-- 5. EXPORT & PRESENTATION MODAL -->
+  <div id="export-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md hidden items-center justify-center z-50 p-4">
+    <div class="glass-panel w-full max-w-md rounded-2xl p-6 border border-white/20 space-y-6 shadow-2xl">
+      <div class="flex justify-between items-center">
+        <div>
+          <div class="text-[10px] font-mono text-swiss-red uppercase tracking-widest font-bold">PROJECT EXPORT</div>
+          <h2 class="text-lg font-display font-bold text-white mt-0.5">导出项目设计方案</h2>
+        </div>
+        <button id="close-modal-btn" class="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3 font-mono text-xs">
+        <button class="w-full p-3 rounded-xl glass-card text-left flex items-center justify-between hover:border-swiss-red transition group">
+          <div class="flex items-center gap-3">
+            <i data-lucide="file-text" class="w-5 h-5 text-swiss-red"></i>
+            <div>
+              <div class="text-white font-semibold">导出 2D CAD 平面图 (PDF / DXF)</div>
+              <div class="text-[10px] text-slate-400">包含精确尺寸标注与墙体结构</div>
+            </div>
+          </div>
+          <i data-lucide="download" class="w-4 h-4 text-slate-400 group-hover:text-swiss-red"></i>
+        </button>
+
+        <button class="w-full p-3 rounded-xl glass-card text-left flex items-center justify-between hover:border-swiss-red transition group">
+          <div class="flex items-center gap-3">
+            <i data-lucide="box" class="w-5 h-5 text-blue-400"></i>
+            <div>
+              <div class="text-white font-semibold">导出 3D 渲染高清快照 (PNG)</div>
+              <div class="text-[10px] text-slate-400">4K 景深与材质映射效果</div>
+            </div>
+          </div>
+          <i data-lucide="download" class="w-4 h-4 text-slate-400 group-hover:text-swiss-red"></i>
+        </button>
+
+        <button class="w-full p-3 rounded-xl glass-card text-left flex items-center justify-between hover:border-swiss-red transition group">
+          <div class="flex items-center gap-3">
+            <i data-lucide="share-2" class="w-5 h-5 text-emerald-400"></i>
+            <div>
+              <div class="text-white font-semibold">生成客户评审分享链接</div>
+              <div class="text-[10px] text-slate-400">可在线互动漫游审阅</div>
+            </div>
+          </div>
+          <i data-lucide="copy" class="w-4 h-4 text-slate-400 group-hover:text-swiss-red"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- APPLICATION JAVASCRIPT LOGIC -->
+  <script>
+    // Initialize Lucide Icons
+    lucide.createIcons();
+
+    // 1. VIEW MODE SWITCHING (2D CAD vs 3D Room vs Graphic Poster)
+    const modeButtons = document.querySelectorAll('.mode-btn');
+    const view2D = document.getElementById('view-2d');
+    const view3D = document.getElementById('view-3d');
+    const viewGraphic = document.getElementById('view-graphic');
+
+    modeButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const mode = btn.getAttribute('data-mode');
+
+        // Update button states
+        modeButtons.forEach(b => {
+          b.classList.remove('bg-swiss-red', 'text-white', 'shadow-lg');
+          b.classList.add('text-slate-300');
+        });
+        btn.classList.add('bg-swiss-red', 'text-white', 'shadow-lg');
+        btn.classList.remove('text-slate-300');
+
+        // Toggle views
+        view2D.classList.add('hidden');
+        view3D.classList.add('hidden');
+        viewGraphic.classList.add('hidden');
+
+        if (mode === '2d') view2D.classList.remove('hidden');
+        if (mode === '3d') {
+          view3D.classList.remove('hidden');
+          onWindowResize();
+        }
+        if (mode === 'graphic') viewGraphic.classList.remove('hidden');
+      });
+    });
+
+
+    // 2. SIDEBAR TAB SWITCHING
+    const sidebarTabBtns = document.querySelectorAll('.sidebar-tab-btn');
+    const sidebarPanelContents = document.querySelectorAll('.sidebar-panel-content');
+
+    sidebarTabBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tab = btn.getAttribute('data-sidebar-tab');
+        
+        sidebarTabBtns.forEach(b => {
+          b.classList.remove('bg-white/15', 'text-white', 'font-semibold');
+          b.classList.add('text-slate-400');
+        });
+        btn.classList.add('bg-white/15', 'text-white', 'font-semibold');
+        btn.classList.remove('text-slate-400');
+
+        sidebarPanelContents.forEach(panel => {
+          if (panel.id === `sidebar-tab-${tab}`) {
+            panel.classList.remove('hidden');
+          } else {
+            panel.classList.add('hidden');
+          }
+        });
+      });
+    });
+
+
+    // 3. THREE.JS 3D INTERIOR ROOM VISUALIZER
+    let scene, camera, renderer, roomMesh;
+    let isDragging = false;
+    let previousMousePosition = { x: 0, y: 0 };
+    let cameraAngleX = 0.5, cameraAngleY = 0.8, cameraRadius = 14;
+
+    function initThreeJS() {
+      const container = document.getElementById('three-canvas-container');
+      if (!container) return;
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x0a0a0b);
+      scene.fog = new THREE.FogExp2(0x0a0a0b, 0.035);
+
+      camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
+      
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setSize(container.clientWidth, container.clientHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      container.appendChild(renderer.domElement);
+
+      // Lighting
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+      scene.add(ambientLight);
+
+      const directionalLight = new THREE.DirectionalLight(0xffeedd, 1.2);
+      directionalLight.position.set(10, 15, 10);
+      directionalLight.castShadow = true;
+      scene.add(directionalLight);
+
+      const warmPointLight = new THREE.PointLight(0xffaa55, 2, 20);
+      warmPointLight.position.set(0, 6, 0);
+      scene.add(warmPointLight);
+
+      // Create Architectural Room (Floor & Back Walls)
+      createRoomGeometry();
+
+      // Mouse Controls for 3D Camera Rotation
+      container.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        previousMousePosition = { x: e.clientX, y: e.clientY };
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const deltaX = e.clientX - previousMousePosition.x;
+        const deltaY = e.clientY - previousMousePosition.y;
+
+        cameraAngleX -= deltaX * 0.008;
+        cameraAngleY = Math.min(Math.max(0.1, cameraAngleY + deltaY * 0.008), 1.5);
+
+        previousMousePosition = { x: e.clientX, y: e.clientY };
+        updateCameraPosition();
+      });
+
+      window.addEventListener('mouseup', () => { isDragging = false; });
+      window.addEventListener('resize', onWindowResize);
+
+      updateCameraPosition();
+      animateThree();
+    }
+
+    function createRoomGeometry(matType = 'travertine') {
+      // Remove previous room if any
+      if (roomMesh) scene.remove(roomMesh);
+
+      roomMesh = new THREE.Group();
+
+      // Floor Material Color based on preset
+      let floorColor = 0xd4c4b7;
+      if (matType === 'concrete') floorColor = 0x8a8d91;
+      if (matType === 'oak') floorColor = 0x3b2f2f;
+
+      // Floor
+      const floorGeo = new THREE.PlaneGeometry(10, 10);
+      const floorMat = new THREE.MeshStandardMaterial({ color: floorColor, roughness: 0.3 });
+      const floor = new THREE.Mesh(floorGeo, floorMat);
+      floor.rotation.x = -Math.PI / 2;
+      floor.receiveShadow = true;
+      roomMesh.add(floor);
+
+      // Back Wall
+      const wallGeo = new THREE.PlaneGeometry(10, 6);
+      const wallMat = new THREE.MeshStandardMaterial({ color: 0x1f2229, roughness: 0.8 });
+      const backWall = new THREE.Mesh(wallGeo, wallMat);
+      backWall.position.set(0, 3, -5);
+      roomMesh.add(backWall);
+
+      // Left Wall
+      const leftWall = new THREE.Mesh(wallGeo, wallMat);
+      leftWall.position.set(-5, 3, 0);
+      leftWall.rotation.y = Math.PI / 2;
+      roomMesh.add(leftWall);
+
+      // Minimalist Sofa Furniture block
+      const sofaBaseGeo = new THREE.BoxGeometry(4, 0.8, 1.8);
+      const sofaMat = new THREE.MeshStandardMaterial({ color: 0x27272a, roughness: 0.9 });
+      const sofa = new THREE.Mesh(sofaBaseGeo, sofaMat);
+      sofa.position.set(0, 0.4, -2);
+      roomMesh.add(sofa);
+
+      // Sofa Backrest
+      const sofaBackGeo = new THREE.BoxGeometry(4, 1.2, 0.4);
+      const sofaBack = new THREE.Mesh(sofaBackGeo, sofaMat);
+      sofaBack.position.set(0, 1.4, -2.7);
+      roomMesh.add(sofaBack);
+
+      // Coffee Table (Travertine slab)
+      const tableGeo = new THREE.BoxGeometry(2.2, 0.4, 1.2);
+      const tableMat = new THREE.MeshStandardMaterial({ color: 0xd4c4b7, roughness: 0.2 });
+      const table = new THREE.Mesh(tableGeo, tableMat);
+      table.position.set(0, 0.2, 0.5);
+      roomMesh.add(table);
+
+      scene.add(roomMesh);
+    }
+
+    function updateCameraPosition() {
+      camera.position.x = cameraRadius * Math.sin(cameraAngleY) * sin(cameraAngleX);
+      camera.position.z = cameraRadius * Math.sin(cameraAngleY) * Math.cos(cameraAngleX);
+      camera.position.y = cameraRadius * Math.cos(cameraAngleY);
+      camera.lookAt(0, 2, 0);
+    }
+
+    function sin(val) { return Math.sin(val); }
+
+    function onWindowResize() {
+      const container = document.getElementById('three-canvas-container');
+      if (!container || !renderer) return;
+      camera.aspect = container.clientWidth / container.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(container.clientWidth, container.clientHeight);
+    }
+
+    function animateThree() {
+      requestAnimationFrame(animateThree);
+      renderer.render(scene, camera);
+    }
+
+    // Initialize Three.js on load
+    window.addEventListener('load', initThreeJS);
+
+
+    // 4. INTERACTIVE CONTROLS & MODALS
+    // Material Selectors
+    document.getElementById('wall-material-select').addEventListener('change', (e) => {
+      createRoomGeometry(e.target.value);
+    });
+
+    // Kelvin & Lux Sliders
+    const kelvinSlider = document.getElementById('kelvin-slider');
+    const kelvinVal = document.getElementById('kelvin-val');
+    kelvinSlider.addEventListener('input', (e) => {
+      kelvinVal.textContent = `${e.target.value}K`;
+    });
+
+    const luxSlider = document.getElementById('lux-slider');
+    const luxVal = document.getElementById('lux-val');
+    luxSlider.addEventListener('input', (e) => {
+      luxVal.textContent = `${e.target.value}%`;
+    });
+
+    // Export Modal
+    const exportModalBtn = document.getElementById('export-modal-btn');
+    const exportModal = document.getElementById('export-modal');
+    const closeModalBtn = document.getElementById('close-modal-btn');
+
+    exportModalBtn.addEventListener('click', () => exportModal.classList.remove('hidden'));
+    exportModalBtn.addEventListener('click', () => exportModal.classList.add('flex'));
+    closeModalBtn.addEventListener('click', () => {
+      exportModal.classList.add('hidden');
+      exportModal.classList.remove('flex');
+    });
+
+    // Project Dropdown
+    const projectMenuBtn = document.getElementById('project-menu-btn');
+    const projectDropdown = document.getElementById('project-dropdown');
+    const currentProjectTitle = document.getElementById('current-project-title');
+
+    projectMenuBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      projectDropdown.classList.toggle('hidden');
+    });
+
+    document.querySelectorAll('.project-option').forEach(opt => {
+      opt.addEventListener('click', () => {
+        currentProjectTitle.textContent = opt.getAttribute('data-title');
+        projectDropdown.classList.add('hidden');
+      });
+    });
+
+    document.addEventListener('click', () => projectDropdown.classList.add('hidden'));
+  </script>
+
+</body>
+</html>
