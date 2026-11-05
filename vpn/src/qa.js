@@ -904,11 +904,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         fetch(`${API}/api/send-message`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ content: msg, target: 'single', username: 'admin' })
-                        }),
-                        fetch(`${API}/api/send-message`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ content: msg, target: 'single', username: 'immmor' })
                         })
                     ]);
