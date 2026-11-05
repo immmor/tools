@@ -400,8 +400,10 @@ function getLoginExp(authToken) {
 // 生成新鉴权 token 并持久化：把 userInfo + pricePlan + 过期时间(exp, ms) 一并打包混淆进 p_token 本身
 // 登录响应只返回 p_token，前端解码即可还原全部信息（不再单独返回明文 userInfo / pricePlan）
 async function newPToken(DB, username, userInfoObj, pricePlan) {
+  // 订单历史(vorders)体积大且可经 /api/get-user 重新拉取，不打包进 token，避免 p_token 过长
+  const { vorders, ...userInfoSlim } = userInfoObj;
   const payload = JSON.stringify({
-    u: userInfoObj,
+    u: userInfoSlim,
     p: pricePlan,
     e: Date.now() + 24 * 60 * 60 * 1000  // 过期时间戳(ms)，随 JSON 一起打包进 token
   });

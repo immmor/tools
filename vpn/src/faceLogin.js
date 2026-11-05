@@ -228,19 +228,8 @@
     localStorage.setItem('loginTime', Date.now());
     if (typeof window.updateNav === 'function') window.updateNav(userInfoWithPrice);
     try { window.GameCenterModule && window.GameCenterModule.renderGameHistory && window.GameCenterModule.renderGameHistory('wheel'); } catch (e) {}
-    // 同步邀请码/来源（与密码登录成功路径保持一致）
-    fetch(`${API}/api/get-user?name=${encodeURIComponent(userInfoWithPrice.username)}`)
-      .then(r => r.json())
-      .then(d => {
-        if (d && d.code === 200) {
-          const s = JSON.parse(localStorage.getItem('userInfo') || '{}');
-          if (d.data.invite_code) s.invite_code = d.data.invite_code;
-          if (d.data.source !== undefined) s.source = d.data.source;
-          localStorage.setItem('userInfo', JSON.stringify(s));
-          if (typeof window.updateNav === 'function') window.updateNav(s);
-        }
-      })
-      .catch(() => {});
+    // 登录后同步最新用户态（含订单历史等），统一走 refreshUserSession
+    if (window.refreshUserSession) window.refreshUserSession();
   }
 
   function showFacePanel(m) {

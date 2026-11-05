@@ -1235,16 +1235,73 @@
         let currentUser = null;
         let orderHistory = [];
 
-        // 从 localStorage 恢复登录状态
-        const savedUser = localStorage.getItem('currentUser');
-        if (savedUser) {
-            currentUser = JSON.parse(savedUser);
-            const displayUsername = currentUser.username.length > 6 ? currentUser.username.slice(0, 6) + '*' : currentUser.username;
+        // ============ 登录态解码：p_token 内已打包 userInfo + pricePlan + exp（混淆，可逆） ============
+        const LOGIN_OBF_KEY = 'PHANTOM_LOGIN_OBF_KEY_2024';
+        const deobfuscateLoginToken = (b64) => {
+            try {
+                const bin = atob(b64);
+                const bytes = new Uint8Array(bin.length);
+                for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                const key = new TextEncoder().encode(LOGIN_OBF_KEY);
+                const out = new Uint8Array(bytes.length);
+                for (let i = 0; i < bytes.length; i++) out[i] = bytes[i] ^ key[i % key.length];
+                return new TextDecoder().decode(out);
+            } catch (e) { return ''; }
+        };
+        // 把登录响应还原为 currentUser（含 p_token），兼容旧明文格式
+        const applyLoginData = (data) => {
+            if (!data || !data.success) return null;
+            if (data.p_token) {
+                try {
+                    const obj = JSON.parse(deobfuscateLoginToken(data.p_token));
+                    const u = obj.u || {};
+                    u.p_token = data.p_token;          // 还原给后续鉴权使用
+                    if (obj.p) u.pricePlan = obj.p;
+                    return u;
+                } catch (e) { console.error('登录令牌解析失败', e); return null; }
+            }
+            if (data.userInfo) {
+                const u = Object.assign({}, data.userInfo);
+                if (data.pricePlan) u.pricePlan = data.pricePlan;
+                return u;
+            }
+            return null;
+        };
+        const renderLoginState = (u) => {
+            if (!u || !u.username) return;
+            currentUser = u;
+            const displayUsername = u.username.length > 6 ? u.username.slice(0, 6) + '*' : u.username;
             loginBtn.textContent = displayUsername;
             loginBtn.classList.remove('text-gray-300');
             loginBtn.classList.add('text-black');
-            animateBalance(currentUser.balance);
+            animateBalance(u.balance);
+        };
+        // 用服务器最新余额覆盖内存态（保持与服务器一致），仅更新内存，不写明文
+        const refreshCurrentUser = async () => {
+            if (!currentUser || !currentUser.username) return;
+            try {
+                const res = await fetch('https://api.immmor.com/api/get-user?name=' + encodeURIComponent(currentUser.username));
+                const d = await res.json();
+                if (d && d.code === 200 && d.data) {
+                    if (d.data.balance !== undefined) currentUser.balance = d.data.balance;
+                    if (d.data.v_expire_date !== undefined) currentUser.v_expire_date = d.data.v_expire_date;
+                    if (d.data.v_token !== undefined) currentUser.v_token = d.data.v_token;
+                    if (d.data.invite_code !== undefined) currentUser.invite_code = d.data.invite_code;
+                }
+            } catch (e) {}
+        };
+
+        // 从 localStorage 恢复登录状态（只存混淆后的 p_token，明文 userInfo 不落盘）
+        const savedPToken = localStorage.getItem('p_token');
+        if (savedPToken) {
+            const u = applyLoginData({ success: true, p_token: savedPToken });
+            if (u) {
+                renderLoginState(u);
+                refreshCurrentUser();
+            }
         }
+        // 从充值页(vpay)返回时刷新余额
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refreshCurrentUser(); });
 
         loginBtn.addEventListener('click', (e) => {
             e.preventDefault();
@@ -1263,7 +1320,7 @@
 
         logoutBtn.addEventListener('click', () => {
             currentUser = null;
-            localStorage.removeItem('currentUser');
+            localStorage.removeItem('p_token');
             loginBtn.textContent = '登录';
             loginBtn.classList.remove('text-black');
             loginBtn.classList.add('text-gray-300');
@@ -1388,14 +1445,11 @@
                  });
                  const data = await res.json();
                  if (data.success) {
+                     const u = applyLoginData(data);
+                     if (!u) { alert(data.message || '登录失败'); return; }
                      loginModal.classList.remove('active');
-                     currentUser = { username: email, balance: data.userInfo?.balance || 0 };
-                     localStorage.setItem('currentUser', JSON.stringify(currentUser));
-                     const displayUsername = email.length > 6 ? email.slice(0, 6) + '*' : email;
-                     loginBtn.textContent = displayUsername;
-                     loginBtn.classList.remove('text-gray-300');
-                     loginBtn.classList.add('text-black');
-                     animateBalance(currentUser.balance);
+                     localStorage.setItem('p_token', data.p_token); // 仅落盘混淆后的 token，明文 userInfo 不落盘
+                     renderLoginState(u);
                  } else {
                     alert(data.message || '登录失败');
                  }
@@ -1472,9 +1526,28 @@
                 });
                 const data = await res.json();
                 if (data.success) {
-                    loginModal.classList.remove('active');
-                    const displayUsername = email.length > 6 ? email.slice(0, 6) + '*' : email;
-                    loginBtn.textContent = displayUsername;
+                    // 注册成功后自动登录，统一走 p_token 流程（与登录接口一致）
+                    try {
+                        const lr = await fetch('https://api.immmor.com/api/login', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username: email, password })
+                        });
+                        const ld = await lr.json();
+                        if (ld.success) {
+                            const u = applyLoginData(ld);
+                            if (u) {
+                                localStorage.setItem('p_token', ld.p_token); // 仅落盘混淆后的 token
+                                renderLoginState(u);
+                            }
+                        } else {
+                            loginModal.classList.remove('active');
+                            loginBtn.textContent = email.length > 6 ? email.slice(0, 6) + '*' : email;
+                            loginBtn.classList.add('text-black');
+                        }
+                    } catch (e) {
+                        loginModal.classList.remove('active');
+                    }
                 } else {
                     alert(data.message || '注册失败');
                 }
@@ -1638,8 +1711,7 @@
                 console.log('Balance update response:', data);
                 if (data.code === 200) {
                     currentUser.balance = data.balance;
-                    localStorage.setItem('currentUser', JSON.stringify(currentUser));
-                    animateBalance(currentUser.balance);
+                    animateBalance(currentUser.balance); // 余额仅更新内存；登录态凭据 p_token 已存于 localStorage，重载时再同步
 
                     const orderId = 'ORD-' + Date.now() + '-' + Math.random().toString(36).slice(-4).toUpperCase();
 

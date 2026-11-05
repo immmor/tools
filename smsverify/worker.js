@@ -367,10 +367,47 @@ function generateCardNumber() {
 }
 
 
-// 懒加 p_token 列（幂等），生成新鉴权 token 并持久化，返回完整 token 串
-// token 格式：<随机UUID>.<过期时间戳(ms)>，有效期 1 天，每次登录刷新
-async function newPToken(DB, username) {
-  const token = `${crypto.randomUUID()}.${Date.now() + 24 * 60 * 60 * 1000}`;
+// 登录信息混淆：userInfo + pricePlan + exp 打包成 JSON，XOR 后 base64（仅混淆、可逆、无签名）
+const LOGIN_OBF_KEY = 'PHANTOM_LOGIN_OBF_KEY_2024';
+function obfuscateLogin(str) {
+  const key = new TextEncoder().encode(LOGIN_OBF_KEY);
+  const bytes = new TextEncoder().encode(str);
+  const out = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) out[i] = bytes[i] ^ key[i % key.length];
+  let bin = '';
+  for (let i = 0; i < out.length; i++) bin += String.fromCharCode(out[i]);
+  return btoa(bin);
+}
+function deobfuscateLogin(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const key = new TextEncoder().encode(LOGIN_OBF_KEY);
+  const out = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) out[i] = bytes[i] ^ key[i % key.length];
+  return new TextDecoder().decode(out);
+}
+function getLoginExp(authToken) {
+  try {
+    const obj = JSON.parse(deobfuscateLogin(authToken));
+    return Number(obj.e) || 0;
+  } catch (e) {
+    // 兼容旧格式 token（<uuid>.<expMs>），部署过渡期已登录用户不会被迫下线
+    try { return Number(authToken.split('.')[1]) || 0; } catch (e2) { return 0; }
+  }
+}
+
+// 生成新鉴权 token 并持久化：把 userInfo + pricePlan + 过期时间(exp, ms) 一并打包混淆进 p_token 本身
+// 登录响应只返回 p_token，前端解码即可还原全部信息（不再单独返回明文 userInfo / pricePlan）
+async function newPToken(DB, username, userInfoObj, pricePlan) {
+  // 订单历史(vorders)体积大且可经 /api/get-user 重新拉取，不打包进 token，避免 p_token 过长
+  const { vorders, ...userInfoSlim } = userInfoObj;
+  const payload = JSON.stringify({
+    u: userInfoSlim,
+    p: pricePlan,
+    e: Date.now() + 24 * 60 * 60 * 1000  // 过期时间戳(ms)，随 JSON 一起打包进 token
+  });
+  const token = obfuscateLogin(payload);
   try { await DB.prepare('UPDATE user SET p_token = ? WHERE username = ?').bind(token, username).run(); } catch (e) {}
   return token;
 }
@@ -1267,8 +1304,6 @@ export default {
         if (user) {
           // 自愈：把已存在用户补进布隆过滤器（覆盖上线前老用户 / 漏写情况）
           await BFAdd(env, 'bf_user', username);
-          // 生成登录鉴权 token（p_token），每次登录刷新并持久化，供后续受保护接口校验
-          const pToken = await newPToken(DB, username);
           const now = new Date(new Date().getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
           const loginInfoEntry = { type: 'login', time: now, ip: request.headers.get('CF-Connecting-IP') || 'unknown', location: [request.headers.get('CF-IPCountry'), request.headers.get('CF-IPRegion'), request.headers.get('CF-IPCity')].filter(Boolean).join(' ') || 'unknown', domain: request.url, device: request.headers.get('User-Agent') || 'unknown', acceptLanguage: request.headers.get('Accept-Language') || 'unknown', country: request.headers.get('CF-IPCountry') || 'unknown', referer: request.headers.get('Referer') || 'unknown' };
 
@@ -1284,11 +1319,11 @@ export default {
           await DB.prepare('UPDATE user SET login_info = ? WHERE username = ?').bind(updatedLoginInfo, username).run();
 
           const pricePlan = user.price_plan ? JSON.parse(user.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
-
           const cardNumber = user.card_number || await ensureCardNumber(DB, user.rowid);
+          const userInfo = { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates, card_number: cardNumber };
+          const pToken = await newPToken(DB, username, userInfo, pricePlan);
 
-
-          return resJson({ success: true, message: '登录成功！', userInfo: { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, p_token: pToken, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates, card_number: cardNumber }, pricePlan });
+          return resJson({ success: true, message: '登录成功！', p_token: pToken });
         } else {
           return resJson({ success: false, error: 'WRONG_CREDENTIALS', message: '用户名或密码错误' }, 401);
         }
@@ -1329,7 +1364,6 @@ export default {
         if (dist >= 0.6) {
           return resJson({ success: false, message: '人脸验证失败' }, 401);
         }
-        const pToken = await newPToken(DB, username);
         const now = new Date(new Date().getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
         const loginInfoEntry = { type: 'face-login', time: now, ip: request.headers.get('CF-Connecting-IP') || 'unknown', location: [request.headers.get('CF-IPCountry'), request.headers.get('CF-IPRegion'), request.headers.get('CF-IPCity')].filter(Boolean).join(' ') || 'unknown', domain: request.url, device: request.headers.get('User-Agent') || 'unknown', acceptLanguage: request.headers.get('Accept-Language') || 'unknown', country: request.headers.get('CF-IPCountry') || 'unknown' };
         const loginInfo = await DB.prepare('SELECT login_info FROM user WHERE username = ?').bind(username).first();
@@ -1340,8 +1374,10 @@ export default {
         await DB.prepare('UPDATE user SET login_info = ? WHERE username = ?').bind(updatedLoginInfo, username).run();
         const pricePlan = u.price_plan ? JSON.parse(u.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
         const cardNumber = u.card_number || await ensureCardNumber(DB, u.rowid);
+        const userInfo = { id: u.rowid, username: u.username, balance: u.balance, v_token: u.v_token, v_expire_date: u.v_expire_date, not_trusted: u.not_trusted || '', vorders: u.vorders, invite_code: u.invite_code, invited_user: u.invited_user, rebates: u.rebates, card_number: cardNumber };
+        const pToken = await newPToken(DB, username, userInfo, pricePlan);
         await BFAdd(env, 'bf_user', username); // 自愈：补进布隆过滤器
-        return resJson({ success: true, message: '刷脸登录成功！', userInfo: { id: u.rowid, username: u.username, balance: u.balance, v_token: u.v_token, p_token: pToken, v_expire_date: u.v_expire_date, not_trusted: u.not_trusted || '', vorders: u.vorders, invite_code: u.invite_code, invited_user: u.invited_user, rebates: u.rebates, card_number: cardNumber }, pricePlan });
+        return resJson({ success: true, message: '刷脸登录成功！', p_token: pToken });
       }
 
       // ========== 录入/更新人脸特征接口（需登录态：p_token 校验） ==========
@@ -1384,7 +1420,6 @@ export default {
         if (sim < VOICE_THRESHOLD) {
           return resJson({ success: false, message: '声纹验证失败', sim: +sim.toFixed(3), threshold: VOICE_THRESHOLD }, 401);
         }
-        const pToken = await newPToken(DB, username);
         const now = new Date(new Date().getTime() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
         const loginInfoEntry = { type: 'voice-login', time: now, ip: request.headers.get('CF-Connecting-IP') || 'unknown', location: [request.headers.get('CF-IPCountry'), request.headers.get('CF-IPRegion'), request.headers.get('CF-IPCity')].filter(Boolean).join(' ') || 'unknown', domain: request.url, device: request.headers.get('User-Agent') || 'unknown', acceptLanguage: request.headers.get('Accept-Language') || 'unknown', country: request.headers.get('CF-IPCountry') || 'unknown' };
         const loginInfo = await DB.prepare('SELECT login_info FROM user WHERE username = ?').bind(username).first();
@@ -1395,7 +1430,9 @@ export default {
         await DB.prepare('UPDATE user SET login_info = ? WHERE username = ?').bind(updatedLoginInfo, username).run();
         const pricePlan = u.price_plan ? JSON.parse(u.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
         const cardNumber = u.card_number || await ensureCardNumber(DB, u.rowid);
-        return resJson({ success: true, message: '声纹登录成功！', sim: +sim.toFixed(3), threshold: VOICE_THRESHOLD, userInfo: { id: u.rowid, username: u.username, balance: u.balance, v_token: u.v_token, p_token: pToken, v_expire_date: u.v_expire_date, not_trusted: u.not_trusted || '', vorders: u.vorders, invite_code: u.invite_code, invited_user: u.invited_user, rebates: u.rebates, card_number: cardNumber }, pricePlan });
+        const userInfo = { id: u.rowid, username: u.username, balance: u.balance, v_token: u.v_token, v_expire_date: u.v_expire_date, not_trusted: u.not_trusted || '', vorders: u.vorders, invite_code: u.invite_code, invited_user: u.invited_user, rebates: u.rebates, card_number: cardNumber };
+        const pToken = await newPToken(DB, username, userInfo, pricePlan);
+        return resJson({ success: true, message: '声纹登录成功！', sim: +sim.toFixed(3), threshold: VOICE_THRESHOLD, p_token: pToken });
       }
 
       // ========== 录入/更新声纹特征接口（需登录态：p_token 校验） ==========
@@ -1445,10 +1482,10 @@ export default {
           const pricePlan = user.price_plan ? JSON.parse(user.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
 
           const cardNumber = user.card_number || await ensureCardNumber(DB, user.rowid);
-          const pToken = await newPToken(DB, user.username);
+          const userInfo = { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates, card_number: cardNumber };
+          const pToken = await newPToken(DB, user.username, userInfo, pricePlan);
 
-
-          return resJson({ success: true, message: '登录成功！', userInfo: { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, p_token: pToken, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates, card_number: cardNumber }, pricePlan });
+          return resJson({ success: true, message: '登录成功！', p_token: pToken });
         } else {
           return resJson({ success: true, needRegister: true, address: address, message: '该钱包地址未注册，请完成注册！' });
         }
@@ -1549,9 +1586,10 @@ export default {
           const pricePlan = user.price_plan ? JSON.parse(user.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
 
           const cardNumber = user.card_number || await ensureCardNumber(DB, user.rowid);
+          const userInfo = { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates, card_number: cardNumber };
+          const pToken = await newPToken(DB, user.username, userInfo, pricePlan);
 
-
-          return resJson({ success: true, message: '登录成功！', userInfo: { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates, card_number: cardNumber }, pricePlan });
+          return resJson({ success: true, message: '登录成功！', p_token: pToken });
         } else {
           return resJson({ success: false, message: '用户不存在' }, 401);
         }
@@ -1605,10 +1643,10 @@ export default {
             await DB.prepare('UPDATE user SET login_info = ? WHERE username = ?').bind(updatedLoginInfo, email).run();
 
             const pricePlan = user.price_plan ? JSON.parse(user.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
-            const pToken = await newPToken(DB, user.username);
-  
+            const userInfo = { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates };
+            const pToken = await newPToken(DB, user.username, userInfo, pricePlan);
 
-            return resJson({ success: true, message: '登录成功！', userInfo: { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, p_token: pToken, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates }, pricePlan });
+            return resJson({ success: true, message: '登录成功！', p_token: pToken });
           } else {
             return resJson({ success: true, needRegister: true, email: email, message: '该谷歌账号未注册，请完成注册！' });
           }
@@ -1704,10 +1742,10 @@ export default {
             await DB.prepare('UPDATE user SET login_info = ? WHERE username = ?').bind(updatedLoginInfo, email).run();
 
             const pricePlan = user.price_plan ? JSON.parse(user.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
-            const pToken = await newPToken(DB, user.username);
-  
+            const userInfo = { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates };
+            const pToken = await newPToken(DB, user.username, userInfo, pricePlan);
 
-            return resJson({ success: true, message: '登录成功！', userInfo: { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, p_token: pToken, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates }, pricePlan });
+            return resJson({ success: true, message: '登录成功！', p_token: pToken });
           } else {
             return resJson({ success: true, needRegister: true, email, message: '该 GitHub 账号未注册，请完成注册！' });
           }
@@ -1891,7 +1929,7 @@ export default {
           if (!authToken) {
             return resJson({ code: 401, msg: '缺少 p_token，请先登录' }, 401);
           }
-          const tokenExp = Number(authToken.split('.')[1]);
+          const tokenExp = getLoginExp(authToken);
           if (!tokenExp || Date.now() > tokenExp) {
             return resJson({ code: 401, msg: '登录已过期，请重新登录' }, 401);
           }
@@ -2096,7 +2134,7 @@ export default {
           // p_token 鉴权（校验有效性 + 归属）
           const authToken = p_token || (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim();
           if (!authToken) return resJson({ code: 401, msg: '缺少 p_token，请先登录' }, 401);
-          const tokenExp = Number(authToken.split('.')[1]);
+          const tokenExp = getLoginExp(authToken);
           if (!tokenExp || Date.now() > tokenExp) return resJson({ code: 401, msg: '登录已过期，请重新登录' }, 401);
           const tokenUser = await DB.prepare('SELECT username FROM user WHERE p_token = ?').bind(authToken).first();
           if (!tokenUser || tokenUser.username !== username) return resJson({ code: 403, msg: '无权操作该账号' }, 403);

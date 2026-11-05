@@ -1136,16 +1136,62 @@
       modal.classList.toggle('hidden');
     }
 
-    // --- AUTH (登录 / 注册，客户端模拟，数据存 localStorage) ---
-    function loadUser() {
-      try { const raw = localStorage.getItem('smsverify_user'); if (raw) currentUser = JSON.parse(raw); } catch {}
-      renderAuthArea();
-      if (currentUser?.username) {
-        fetch(API_BASE + '/api/get-user?name=' + encodeURIComponent(currentUser.username))
-          .then(r => r.json()).then(j => {
-            if (j.code === 200 && j.data) { currentUser.balance = j.data.balance; localStorage.setItem('smsverify_user', JSON.stringify(currentUser)); }
-          }).catch(() => {});
+    // --- AUTH (登录 / 注册；登录态以混淆后的 p_token 存储，明文 userInfo 不落盘) ---
+    // ============ 登录态解码：p_token 内已打包 userInfo + pricePlan + exp（混淆，可逆） ============
+    const LOGIN_OBF_KEY = 'PHANTOM_LOGIN_OBF_KEY_2024';
+    const deobfuscateLoginToken = (b64) => {
+      try {
+        const bin = atob(b64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        const key = new TextEncoder().encode(LOGIN_OBF_KEY);
+        const out = new Uint8Array(bytes.length);
+        for (let i = 0; i < bytes.length; i++) out[i] = bytes[i] ^ key[i % key.length];
+        return new TextDecoder().decode(out);
+      } catch (e) { return ''; }
+    };
+    // 把登录响应还原为 currentUser（含 p_token），兼容旧明文格式
+    const applyLoginData = (data) => {
+      if (!data) return null;
+      if (data.p_token) {
+        try {
+          const obj = JSON.parse(deobfuscateLoginToken(data.p_token));
+          const u = obj.u || {};
+          u.p_token = data.p_token; // 还原给后续鉴权使用
+          if (obj.p) u.pricePlan = obj.p;
+          return u;
+        } catch (e) { console.error('登录令牌解析失败', e); return null; }
       }
+      if (data.userInfo) return Object.assign({}, data.userInfo); // 旧明文兼容
+      return null;
+    };
+    // 用服务器最新余额覆盖内存态（保持与服务器一致），仅更新内存，不写明文
+    const refreshCurrentUser = async () => {
+      if (!currentUser || !currentUser.username) return;
+      try {
+        const j = await (await fetch(API_BASE + '/api/get-user?name=' + encodeURIComponent(currentUser.username))).json();
+        if (j && j.code === 200 && j.data) {
+          if (j.data.balance !== undefined) currentUser.balance = j.data.balance;
+          if (j.data.v_expire_date !== undefined) currentUser.v_expire_date = j.data.v_expire_date;
+          if (j.data.v_token !== undefined) currentUser.v_token = j.data.v_token;
+          if (j.data.invite_code !== undefined) currentUser.invite_code = j.data.invite_code;
+        }
+      } catch (e) {}
+    };
+
+    function loadUser() {
+      // 清理旧版明文存储，避免明文 userInfo 残留在 localStorage（无法由明文反推 p_token，故强制重新登录一次）
+      try { localStorage.removeItem('smsverify_user'); } catch (e) {}
+      // 从 localStorage 恢复登录状态（只存混淆后的 p_token，明文 userInfo 不落盘）
+      const token = localStorage.getItem('smsverify_token');
+      if (token) {
+        const u = applyLoginData({ p_token: token });
+        if (u && u.username) {
+          currentUser = u;
+          refreshCurrentUser();
+        }
+      }
+      renderAuthArea();
     }
 
     function renderAuthArea() {
@@ -1216,8 +1262,9 @@
       try {
         const j = await (await api('/api/login', { username: acc, password: pwd })).json();
         if (!j.success) { showToast('登录失败', j.message || '用户名或密码错误', 'fa-triangle-exclamation'); return; }
-        currentUser = j.userInfo;
-        localStorage.setItem('smsverify_user', JSON.stringify(currentUser));
+        currentUser = applyLoginData(j);
+        if (!currentUser) { showToast('登录失败', j.message || '令牌解析失败', 'fa-triangle-exclamation'); return; }
+        localStorage.setItem('smsverify_token', j.p_token); // 仅落盘混淆后的 token，明文 userInfo 不落盘
         closeAuthModal(); renderAuthArea();
         showToast('登录成功', `欢迎回来，${currentUser.username}！`, 'fa-circle-check');
         loadSmsHistory();
@@ -1251,7 +1298,7 @@
         const rj = await (await api('/api/register', { username: email, password: pwd })).json();
         if (!rj.success) { showToast('注册失败', rj.message || '注册失败，请重试', 'fa-triangle-exclamation'); return; }
         const lj = await (await api('/api/login', { username: email, password: pwd })).json();
-        if (lj.success) { currentUser = lj.userInfo; localStorage.setItem('smsverify_user', JSON.stringify(currentUser)); }
+        if (lj.success) { currentUser = applyLoginData(lj); localStorage.setItem('smsverify_token', lj.p_token); }
         closeAuthModal(); renderAuthArea();
         showToast('注册成功', `欢迎加入，${email}！`, 'fa-circle-check');
         loadSmsHistory();
@@ -1261,7 +1308,7 @@
 
     function logout() {
       currentUser = null;
-      localStorage.removeItem('smsverify_user');
+      localStorage.removeItem('smsverify_token');
       activationHistory = [];
       renderHistoryTable();
       renderAuthArea();
@@ -1288,7 +1335,7 @@
       v = Number(v) || 0;
       if (currentUser) {
         currentUser.balance = v;
-        localStorage.setItem('smsverify_user', JSON.stringify(currentUser));
+        // 余额仅更新内存；服务端已落库，重载时由 p_token 快照 + /api/get-user 刷新，不写明文
         try { await api('/api/balance/edit', { username: currentUser.username, balance: v }); }
         catch (e) { console.error('余额同步服务端失败', e); }
       }
