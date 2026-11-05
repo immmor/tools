@@ -222,13 +222,14 @@
 
   // 复用站点既有登录成功逻辑：写 localStorage + 刷新导航
   function completeLogin(data) {
-    const userInfoWithPrice = Object.assign({}, data.userInfo, { pricePlan: data.pricePlan });
+    const userInfoWithPrice = window.applyLoginData(data);
+    if (!userInfoWithPrice) return;
     localStorage.setItem('userInfo', JSON.stringify(userInfoWithPrice));
     localStorage.setItem('loginTime', Date.now());
     if (typeof window.updateNav === 'function') window.updateNav(userInfoWithPrice);
     try { window.GameCenterModule && window.GameCenterModule.renderGameHistory && window.GameCenterModule.renderGameHistory('wheel'); } catch (e) {}
     // 同步邀请码/来源（与密码登录成功路径保持一致）
-    fetch(`${API}/api/get-user?name=${encodeURIComponent(data.userInfo.username)}`)
+    fetch(`${API}/api/get-user?name=${encodeURIComponent(userInfoWithPrice.username)}`)
       .then(r => r.json())
       .then(d => {
         if (d && d.code === 200) {

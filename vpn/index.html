@@ -4677,6 +4677,109 @@
                 });
             };
             
+            // ============ 登录态解码：p_token 内已打包 userInfo + pricePlan + exp（混淆，可逆） ============
+            const LOGIN_OBF_KEY = 'PHANTOM_LOGIN_OBF_KEY_2024';
+            const deobfuscateLoginToken = (b64) => {
+                try {
+                    const bin = atob(b64);
+                    const bytes = new Uint8Array(bin.length);
+                    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                    const key = new TextEncoder().encode(LOGIN_OBF_KEY);
+                    const out = new Uint8Array(bytes.length);
+                    for (let i = 0; i < bytes.length; i++) out[i] = bytes[i] ^ key[i % key.length];
+                    return new TextDecoder().decode(out);
+                } catch (e) { return ''; }
+            };
+            // 把登录响应还原为 userInfo（含 pricePlan 与 p_token），兼容旧明文格式
+            const applyLoginData = (data) => {
+                if (!data || !data.success) return null;
+                if (data.p_token) {
+                    try {
+                        const obj = JSON.parse(deobfuscateLoginToken(data.p_token));
+                        const u = obj.u || {};
+                        const p = obj.p || null;
+                        u.p_token = data.p_token;       // 还原给后续 Bearer 鉴权使用
+                        if (p) u.pricePlan = p;
+                        return u;
+                    } catch (e) { console.error('登录令牌解析失败', e); return null; }
+                }
+                if (data.userInfo) {
+                    const u = Object.assign({}, data.userInfo);
+                    if (data.pricePlan) u.pricePlan = data.pricePlan;
+                    return u;
+                }
+                return null;
+            };
+            window.applyLoginData = applyLoginData;
+            window.deobfuscateLoginToken = deobfuscateLoginToken;
+
+            // ============ 登录态落盘策略：localStorage 只存混淆后的 p_token，明文 userInfo 不落盘 ============
+            // 透明拦截对 'userInfo' 键的读写：读取即时由内存态合成，写入只更新内存并把 p_token 单独落盘
+            (function () {
+                const _getItem = Storage.prototype.getItem;
+                const _setItem = Storage.prototype.setItem;
+                const _removeItem = Storage.prototype.removeItem;
+                const _decodeToken = () => {
+                    const t = _getItem.call(localStorage, 'p_token');
+                    if (!t) return null;
+                    try {
+                        const o = JSON.parse((window.deobfuscateLoginToken || deobfuscateLoginToken)(t));
+                        const u = Object.assign({}, o.u || {}, { p_token: t });
+                        if (o.p) u.pricePlan = o.p;
+                        if (o.e) u.exp = o.e;
+                        return u;
+                    } catch (e) { return null; }
+                };
+                // 迁移：旧版本把明文 userInfo（含 p_token 字段）写进了 localStorage，这里转存为 p_token 并删除明文
+                try {
+                    const legacy = _getItem.call(localStorage, 'userInfo');
+                    if (legacy) {
+                        const obj = JSON.parse(legacy);
+                        if (obj && obj.p_token) _setItem.call(localStorage, 'p_token', obj.p_token);
+                        _removeItem.call(localStorage, 'userInfo');
+                    }
+                } catch (e) {}
+                // 页面加载时若已有 p_token，立刻还原内存态，保证 window.userInfo 随时可用
+                const _init = _decodeToken();
+                if (_init) window.userInfo = _init;
+                Storage.prototype.getItem = function (k) {
+                    if (k === 'userInfo') return window.userInfo ? JSON.stringify(window.userInfo) : null;
+                    return _getItem.call(localStorage, k);
+                };
+                Storage.prototype.setItem = function (k, v) {
+                    if (k === 'userInfo') {
+                        try {
+                            const obj = JSON.parse(v);
+                            window.userInfo = obj;
+                            if (obj && obj.p_token) _setItem.call(localStorage, 'p_token', obj.p_token); // 仅落盘混淆后的 token
+                        } catch (e) {}
+                        return;
+                    }
+                    return _setItem.call(localStorage, k, v);
+                };
+                Storage.prototype.removeItem = function (k) {
+                    if (k === 'userInfo') { window.userInfo = null; try { _removeItem.call(localStorage, 'p_token'); } catch (e) {} return; }
+                    return _removeItem.call(localStorage, k);
+                };
+            })();
+
+            // 页面加载后静默刷新登录态：仅更新内存 window.userInfo，不把明文写回 localStorage
+            const refreshUserSession = async () => {
+                if (!window.userInfo || !window.userInfo.username) return;
+                try {
+                    const res = await fetch(`${API}/api/get-user?name=${encodeURIComponent(window.userInfo.username)}`);
+                    const data = await res.json();
+                    if (data && data.code === 200 && data.data) {
+                        const d = data.data;
+                        ['balance', 'v_expire_date', 'v_token', 'invite_code', 'source', 'vorders', 'rebates', 'game_winnings', 'free_expire_date', 'last_checkin', 'invited_user', 'invited_by'].forEach(k => { if (d[k] !== undefined) window.userInfo[k] = d[k]; });
+                        if (d.price_plan) { try { window.userInfo.pricePlan = typeof d.price_plan === 'string' ? JSON.parse(d.price_plan) : d.price_plan; } catch (e) {} }
+                        if (typeof updateNav === 'function') updateNav(window.userInfo);
+                    }
+                } catch (e) {}
+            };
+            if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', refreshUserSession, { once: true });
+            else refreshUserSession();
+
             // 通知功能
             let notifications = [];
 
@@ -5903,12 +6006,13 @@
             };
 
             const completeOAuthLogin = (data) => {
-                const userInfoWithPrice = { ...data.userInfo, pricePlan: data.pricePlan };
+                const userInfoWithPrice = window.applyLoginData(data);
+                if (!userInfoWithPrice) return;
                 localStorage.setItem('userInfo', JSON.stringify(userInfoWithPrice));
                 localStorage.setItem('loginTime', new Date().getTime());
                 updateNav(userInfoWithPrice);
                 window.GameCenterModule?.renderGameHistory('wheel');
-                fetch(`${API}/api/get-user?name=${encodeURIComponent(data.userInfo.username)}`)
+                fetch(`${API}/api/get-user?name=${encodeURIComponent(userInfoWithPrice.username)}`)
                     .then(res => res.json())
                     .then(userData => {
                         if (userData.code === 200) {
@@ -5995,7 +6099,7 @@
                     });
                     const data = await res.json();
                     if (data.success) {
-                        if (data.userInfo) {
+                        if (data.userInfo || data.p_token) {
                             completeOAuthLogin(data);
                         } else if (data.needRegister) {
                             applyOAuthRegisterEmail(data.email, 'google');
@@ -6018,7 +6122,7 @@
                     });
                     const data = await res.json();
                     if (data.success) {
-                        if (data.userInfo) {
+                        if (data.userInfo || data.p_token) {
                             completeOAuthLogin(data);
                         } else if (data.needRegister) {
                             applyOAuthRegisterEmail(data.email, 'github');
@@ -6172,12 +6276,13 @@
                         const dict = translations[currentLang];
                         showMsg(isLogin ? (dict?.[config.login.success] || config.login.success) : (dict?.[config.register.success] || config.register.success));
                         if (isLogin) {
-                            const userInfoWithPrice = { ...data.userInfo, pricePlan: data.pricePlan };
+                            const userInfoWithPrice = window.applyLoginData(data);
+                            if (!userInfoWithPrice) return;
                             localStorage.setItem('userInfo', JSON.stringify(userInfoWithPrice));
                             localStorage.setItem('loginTime', new Date().getTime());
                 updateNav(userInfoWithPrice);
                 window.GameCenterModule?.renderGameHistory('wheel');
-                fetch(`${API}/api/get-user?name=${encodeURIComponent(data.userInfo.username)}`)
+                fetch(`${API}/api/get-user?name=${encodeURIComponent(userInfoWithPrice.username)}`)
                                 .then(res => res.json())
                                 .then(userData => {
                                     if (userData.code === 200) {
@@ -6251,13 +6356,13 @@
                         const data = await res.json();
                         
                         if (data.success) {
-                            if (data.userInfo) {
-                                const userInfoWithPrice = { ...data.userInfo, pricePlan: data.pricePlan };
+                            const userInfoWithPrice = window.applyLoginData(data);
+                            if (userInfoWithPrice) {
                                 localStorage.setItem('userInfo', JSON.stringify(userInfoWithPrice));
                                 localStorage.setItem('loginTime', new Date().getTime());
                                 updateNav(userInfoWithPrice);
                 window.GameCenterModule?.renderGameHistory('wheel');
-                                fetch(`${API}/api/get-user?name=${encodeURIComponent(data.userInfo.username)}`)
+                                fetch(`${API}/api/get-user?name=${encodeURIComponent(userInfoWithPrice.username)}`)
                                     .then(res => res.json())
                                     .then(userData => {
                                         if (userData.code === 200) {
@@ -6445,7 +6550,7 @@
                                         });
                                         const data = await res.json();
                                         if (data.success) {
-                                            if (data.userInfo) {
+                                            if (data.userInfo || data.p_token) {
                                                 completeOAuthLogin(data);
                                             } else if (data.needRegister) {
                                                 applyOAuthRegisterEmail(data.email, 'google');
