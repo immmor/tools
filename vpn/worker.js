@@ -4168,7 +4168,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
         }
       }
 
-      // ========== 游戏中心：老虎机 ==========
+      // ========== 游戏中心：摇摇机 ==========
       if (path === '/api/game/slot' && request.method === 'POST') {
         try {
           const { username } = await request.json();
@@ -4948,7 +4948,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
 
           const now = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
           const msgNow = new Date().toISOString().slice(0, 19).replace('T', ' ');
-          const gameNames = { wheel: '幸运转盘', slot: '老虎机', scratch: '刮刮乐' };
+          const gameNames = { wheel: '幸运转盘', slot: '摇摇机', scratch: '刮刮乐' };
 
           let successCount = 0;
           let failedNames = [];
