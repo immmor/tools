@@ -5005,6 +5005,37 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
         }
       }
 
+      // ========== 优惠券管理（管理员） ==========
+      // 单一接口：POST /api/admin/coupons，按 action 区分 list / save(upsert) / delete
+      if (path === '/api/admin/coupons' && request.method === 'POST') {
+        try {
+          const { action, code, discount_amount, type, expires_at, max_uses, active } = await request.json();
+          if (action === 'list') {
+            const rows = await DB.prepare('SELECT * FROM coupons ORDER BY code').all();
+            return resJson({ success: true, data: (rows.results || []) });
+          }
+          if (action === 'delete') {
+            if (!code) return resJson({ success: false, message: '缺少优惠码' }, 400);
+            await DB.prepare('DELETE FROM coupons WHERE code = ?').bind(String(code).trim()).run();
+            return resJson({ success: true, message: '优惠券已删除' });
+          }
+          // 默认 save：新增或更新（upsert，保留 used_count）
+          if (!code || !String(code).trim()) return resJson({ success: false, message: '优惠码不能为空' }, 400);
+          const c = String(code).trim();
+          const amt = parseFloat(discount_amount);
+          if (isNaN(amt) || amt < 0) return resJson({ success: false, message: '优惠值无效' }, 400);
+          const t = (type === 'percent') ? 'percent' : 'fixed';
+          const mu = Math.max(0, parseInt(max_uses) || 0);
+          const act = (active === 0 || active === false) ? 0 : 1;
+          await DB.prepare(`INSERT INTO coupons (code, discount_amount, type, active, expires_at, max_uses) VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(code) DO UPDATE SET discount_amount = excluded.discount_amount, type = excluded.type, active = excluded.active, expires_at = excluded.expires_at, max_uses = excluded.max_uses`)
+            .bind(c, amt, t, act, expires_at || null, mu).run();
+          return resJson({ success: true, message: '优惠券已保存' });
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
+        }
+      }
+
       // ========== 广告点击统计接口（数据存于 user 表） ==========
       if (path === '/api/ad-click') {
         // 记录点击：POST /api/ad-click  body { ad_id, username, content? }

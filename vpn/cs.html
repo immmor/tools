@@ -62,7 +62,7 @@
   .new-conv button { background: #22c55e; color: #04210f; border: 0; padding: 8px; border-radius: 8px; font-weight: 700; cursor: pointer; font-family: inherit; }
   body.theme-light .new-conv { background: #ffffff; border-bottom-color: #e2dfd6; }
   body.theme-light .new-conv input { background: #ffffff; border-color: #d1d5db; color: #2b2823; }
-  footer textarea { flex: 1; resize: none; height: 44px; background: #111827; border: 1px solid #374151; color: #fff; padding: 10px 12px; border-radius: 8px; font-size: 14px; line-height: 22px; }
+  footer textarea { flex: 1; resize: none; height: 44px; max-height: 152px; overflow-y: auto; background: #111827; border: 1px solid #374151; color: #fff; padding: 10px 12px; border-radius: 8px; font-size: 14px; line-height: 22px; }
   footer textarea::placeholder { font-size: 14px; color: #6b7280; }
   footer button { background: #22c55e; color: #04210f; border: 0; padding: 0 16px; border-radius: 8px; font-weight: 700; font-size: 14px; font-family: inherit; cursor: pointer; }
   footer button:disabled { opacity: .5; cursor: not-allowed; }
@@ -265,6 +265,7 @@ async function selectUser(name) {
   $('convTitle').textContent = '与 ' + name + ' 的会话';
   $('send').disabled = false;
   $('composer').style.display = '';
+  $('msg').style.height = ''; // 切换到新会话时复位输入框高度
   $('thread').innerHTML = ''; rendered.clear();
   if (window.matchMedia('(max-width: 768px)').matches) $('sidebar').classList.add('collapsed'); // 小屏：选中会话后收起侧边栏以显示对话
   if (currentTab === 'supabase') {
@@ -301,6 +302,7 @@ async function send() {
     const data = await res.json();
     if (data.code === 200) {
       $('msg').value = '';
+      $('msg').style.height = ''; // 发送后恢复默认单行高度
       renderMsg({ content: text, created_at: new Date().toISOString() }, 'agent'); // 本地追加，不重新拉取整段历史
     } else {
       alert(data.msg || '发送失败');
@@ -417,8 +419,11 @@ window.addEventListener('DOMContentLoaded', () => {
   $('pwd').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
   $('toggleSide').addEventListener('click', () => $('sidebar').classList.toggle('collapsed'));
   $('sideClose').addEventListener('click', () => $('sidebar').classList.toggle('collapsed'));
+  const msg = $('msg');
+  const resizeMsg = () => { msg.style.height = ''; msg.style.height = Math.min(msg.scrollHeight, 152) + 'px'; };
   $('send').addEventListener('click', send);
-  $('msg').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+  msg.addEventListener('input', resizeMsg);
+  msg.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
   $('ncSend').addEventListener('click', openNewConv);
   $('ncUser').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); openNewConv(); } });
 });
