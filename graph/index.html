@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>括号脑图 · 多页可编辑</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    background: #eef2f8;
+    min-height: 100vh;
+    padding: 1.5rem 1rem;
+    display: flex;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .app {
+    width: 100%;
+    max-width: 1200px;
+    background: #fff;
+    border-radius: 24px;
+    box-shadow: 0 20px 40px -14px rgba(20,40,80,0.25);
+    padding: 1.25rem 1.25rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    max-height: calc(100vh - 3rem);
+  }
+  /* ===== 页面标签栏 ===== */
+  .page-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    padding-bottom: 0.6rem;
+    border-bottom: 1px solid #e3e9f2;
+  }
+  .page-tabs { display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; }
+  .page-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.7rem;
+    border-radius: 9px;
+    border: 1px solid #d7e0ec;
+    background: #f7faff;
+    color: #34506e;
+    font-size: 0.82rem;
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.12s;
+    white-space: nowrap;
+  }
+  .page-tab:hover { background: #eef4fc; border-color: #b7cbe3; }
+  .page-tab.active {
+    background: #1e3348;
+    border-color: #1e3348;
+    color: #fff;
+    font-weight: 500;
+  }
+  .page-tab .tab-name { max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
+  .page-tab .tab-del {
+    border: none; background: transparent; color: inherit; opacity: 0.6;
+    font-size: 0.75rem; cursor: pointer; padding: 0 2px; border-radius: 4px; line-height: 1;
+  }
+  .page-tab .tab-del:hover { opacity: 1; background: rgba(0,0,0,0.12); }
+  .page-tab.active .tab-del:hover { background: rgba(255,255,255,0.2); }
+  .page-tab input.tab-rename {
+    border: none; background: transparent; color: inherit; font: inherit;
+    width: 90px; outline: none; border-bottom: 1px dashed currentColor;
+  }
+
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    padding-bottom: 0.6rem;
+    border-bottom: 1px solid #e3e9f2;
+  }
+  .toolbar h1 {
+    font-size: 1rem; font-weight: 600; color: #1a2b3c;
+    margin-right: auto; display: flex; align-items: center; gap: 0.4rem;
+  }
+  button {
+    font: inherit; font-size: 0.8rem; font-weight: 500;
+    border: 1px solid #d0d9e8; background: #fff; color: #1e3348;
+    border-radius: 9px; padding: 0.4rem 0.75rem; cursor: pointer;
+    transition: all 0.15s; display: inline-flex; align-items: center; gap: 0.3rem;
+  }
+  button:hover { background: #f2f7ff; border-color: #9db8d6; }
+  button:active { transform: scale(0.97); }
+  button.primary { background: #1e3348; border-color: #1e3348; color: #fff; }
+  button.primary:hover { background: #2b4560; }
+  button.danger { color: #b02a2a; border-color: #f0c9c9; }
+  button.danger:hover { background: #fff0f0; border-color: #e08a8a; }
+  .canvas {
+    flex: 1; overflow: auto; padding: 0.5rem 0.25rem 1.5rem 0.25rem; border-radius: 12px;
+  }
+
+  /* ========== 脑图核心布局 ========== */
+  .mindmap {
+    display: flex; flex-direction: column; gap: 0.25rem; min-width: 680px;
+  }
+  .node-row { display: flex; align-items: stretch; position: relative; }
+  .node-content {
+    display: flex; align-items: center; flex-shrink: 0; position: relative;
+    /* 宽度由内容决定，折叠按钮紧跟其后 */
+    width: auto;
+  }
+  .node-label-wrap {
+    display: inline-flex; align-items: center; gap: 0.35rem;
+    background: #fff; border: 1.5px solid #d0d9e8; border-radius: 18px;
+    padding: 0.4rem 0.75rem; box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+    transition: border-color 0.15s, box-shadow 0.15s;
+    max-width: 260px; white-space: nowrap; cursor: default;
+  }
+  .node-row:hover > .node-content .node-label-wrap {
+    border-color: #8bafd4; box-shadow: 0 4px 12px -6px rgba(59,110,165,0.3);
+  }
+  .node-label-wrap.has-color { background: var(--node-bg, #fff); border-color: var(--node-border, #d0d9e8); }
+  .node-label-wrap.has-color .node-text { color: var(--node-color, #1e3348); }
+  .depth-0 > .node-content .node-label-wrap {
+    background: #1e3348; border-color: #1e3348; color: #fff; font-weight: 600;
+    font-size: 1rem; padding: 0.55rem 0.9rem;
+  }
+  .depth-0 > .node-content .node-label-wrap.has-color { background: var(--node-bg, #1e3348); border-color: var(--node-border, #1e3348); }
+  .depth-0 > .node-content .node-label-wrap.has-color .node-text { color: var(--node-color, #fff); }
+  .depth-1 > .node-content .node-label-wrap { background: #f7faff; border-color: #c6d6e8; }
+  .depth-2 > .node-content .node-label-wrap { background: #fcfdff; border-color: #d4dfec; }
+  .depth-3 > .node-content .node-label-wrap { background: #ffffff; border-color: #dfe7f0; }
+
+  .node-text {
+    outline: none; min-width: 1rem; cursor: text; border-radius: 4px; padding: 0 2px;
+    line-height: 1.4; white-space: pre-wrap; word-break: break-word;
+    max-width: 200px; overflow: hidden; text-overflow: ellipsis; display: inline-block; vertical-align: middle;
+  }
+  .node-text:focus { background: rgba(255,255,255,0.18); box-shadow: 0 0 0 2px #7aa9dd; }
+  .depth-0 .node-text:focus { box-shadow: 0 0 0 2px #b9d2ee; }
+
+  /* 折叠按钮：紧跟卡片右侧，固定间距 6px，不绝对定位 */
+  .toggle-btn {
+    width: 20px; height: 20px; min-width: 20px; border-radius: 50%;
+    border: 1.5px solid #b8c9de; background: #fff; color: #4a6788;
+    font-size: 0.75rem; line-height: 1; display: inline-flex;
+    align-items: center; justify-content: center; cursor: pointer; padding: 0;
+    transition: all 0.15s; user-select: none; flex-shrink: 0;
+    margin-left: 10px; position: relative; z-index: 2;
+  }
+  .toggle-btn:hover { background: #eef4fc; border-color: #7f9fc0; }
+  .toggle-btn.collapsed { background: #eef4fc; }
+  .toggle-btn.hidden { visibility: hidden; }
+  .depth-0 .toggle-btn { border-color: #8bb3e0; color: #2b4560; }
+
+  /* ========== 拖拽 ========== */
+  .node-label-wrap { cursor: grab; }
+  .node-label-wrap.dragging { opacity: 0.45; cursor: grabbing; }
+  .node-row.drop-before > .node-content .node-label-wrap { box-shadow: inset 0 3px 0 #2b78d4; }
+  .node-row.drop-after  > .node-content .node-label-wrap { box-shadow: inset 0 -3px 0 #2b78d4; }
+  .node-row.drop-child  > .node-content .node-label-wrap { box-shadow: 0 0 0 2px #2b78d4; }
+
+  /* ========== 子节点容器 + 固定连接线 ========== */
+  .children-container {
+    display: flex; flex-direction: column; flex: 1; position: relative;
+    justify-content: center; gap: 0.2rem;
+    /* 固定左内边距：折叠按钮之后到子节点卡片左缘的固定距离 */
+    padding-left: 28px;
+  }
+  /* 竖线：固定 left，从首个子节点中心到最后一个子节点中心 */
+  .children-container:not(.empty):not(.single-child):not(.collapsed)::before {
+    content: ''; position: absolute; left: 10px;
+    top: var(--trunk-top, 50%); height: var(--trunk-height, 0px); width: 0;
+    border-left: 2.5px solid #c9d5e5; pointer-events: none; z-index: 1;
+  }
+  .children-container.collapsed::before,
+  .children-container.single-child::before,
+  .children-container.empty::before { display: none; }
+
+  .children-container > .node-row { position: relative; }
+  /* 水平连接线：固定宽度，从竖线位置连到子节点内容区左缘 */
+  .children-container > .node-row::before {
+    content: ''; position: absolute; left: -18px; top: 50%; width: 18px; height: 0;
+    border-top: 2.5px solid #c9d5e5; transform: translateY(-50%);
+    pointer-events: none; z-index: 1;
+  }
+  /* 单子节点：从父节点卡片/折叠按钮右侧直接连到子节点，距离固定 28px */
+  .children-container.single-child > .node-row::before {
+    left: -28px; width: 28px;
+  }
+  .children-container > .node-row > .node-content { position: relative; z-index: 2; }
+
+  /* ========== 右键上下文菜单 ========== */
+  .context-menu {
+    position: fixed; z-index: 1000; min-width: 180px; background: #fff;
+    border: 1px solid #e0e7f0; border-radius: 12px;
+    box-shadow: 0 12px 32px -8px rgba(20,40,80,0.25), 0 4px 12px -2px rgba(0,0,0,0.08);
+    padding: 0.35rem; display: none; flex-direction: column; gap: 1px;
+    animation: menuIn 0.1s ease;
+  }
+  .context-menu.show { display: flex; }
+  @keyframes menuIn { from { opacity: 0; transform: scale(0.96) translateY(-4px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+  .context-menu-item {
+    display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem 0.75rem;
+    border: none; background: transparent; border-radius: 8px; font: inherit;
+    font-size: 0.82rem; color: #1e3348; cursor: pointer; text-align: left;
+    transition: background 0.12s; white-space: nowrap;
+  }
+  .context-menu-item:hover { background: #f0f5fc; }
+  .context-menu-item .menu-icon { width: 18px; text-align: center; font-size: 0.95rem; color: #6c86a4; flex-shrink: 0; }
+  .context-menu-item.danger { color: #b02a2a; }
+  .context-menu-item.danger .menu-icon { color: #c96a6a; }
+  .context-menu-item.danger:hover { background: #fff0f0; }
+  .context-menu-divider { height: 1px; background: #edf1f7; margin: 0.25rem 0.5rem; }
+
+  /* 颜色面板 */
+  .color-panel { display: none; padding: 0.4rem 0.6rem 0.5rem; }
+  .context-menu.show .color-panel.show { display: block; }
+  .color-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.45rem; }
+  .color-row label { font-size: 0.75rem; color: #5d7896; width: 46px; flex-shrink: 0; }
+  .color-row .color-swatches { display: flex; gap: 4px; flex-wrap: wrap; }
+  .color-swatch {
+    width: 20px; height: 20px; border-radius: 6px; border: 1.5px solid rgba(0,0,0,0.1);
+    cursor: pointer; padding: 0; transition: transform 0.1s;
+  }
+  .color-swatch:hover { transform: scale(1.15); }
+  .color-swatch.none {
+    background: #fff; position: relative; color: #9aaec4; font-size: 11px; line-height: 1;
+  }
+  .color-swatch.none::after { content: '∅'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+
+  .hidden { display: none !important; }
+  .canvas::-webkit-scrollbar { width: 9px; height: 9px; }
+  .canvas::-webkit-scrollbar-track { background: #f0f4fa; border-radius: 8px; }
+  .canvas::-webkit-scrollbar-thumb { background: #c2d2e5; border-radius: 8px; }
+  .canvas::-webkit-scrollbar-thumb:hover { background: #a3bad4; }
+
+  @media (max-width: 640px) {
+    .app { padding: 1rem; max-height: calc(100vh - 2rem); }
+    .mindmap { min-width: 560px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- 页面标签栏 -->
+  <div class="page-bar">
+    <div class="page-tabs" id="pageTabs"></div>
+    <button id="btnAddPage" title="新建页面">＋ 新页面</button>
+  </div>
+
+  <div class="toolbar">
+    <h1><span>🧠</span> 括号脑图编辑器</h1>
+    <button class="primary" id="btnAddRoot">＋ 添加根节点</button>
+    <button id="btnExpandAll">展开全部</button>
+    <button id="btnCollapseAll">折叠全部</button>
+    <button id="btnSave">💾 保存到本地</button>
+    <button id="btnExport">⬇ 导出 JSON</button>
+    <button id="btnImport">⬆ 导入 JSON</button>
+    <button class="danger" id="btnReset">重置当前页</button>
+    <input type="file" id="fileInput" accept=".json,application/json" class="hidden">
+  </div>
+  <div class="canvas" id="canvas">
+    <div class="mindmap" id="mindmap"></div>
+  </div>
+</div>
+
+<!-- 右键菜单 -->
+<div class="context-menu" id="contextMenu">
+  <button class="context-menu-item" data-action="addChild"><span class="menu-icon">＋</span> 添加子节点</button>
+  <button class="context-menu-item" data-action="addSibling" id="menuAddSibling"><span class="menu-icon">⇧</span> 添加同级节点</button>
+  <button class="context-menu-item" data-action="setColor"><span class="menu-icon">🎨</span> 设置颜色</button>
+  <div class="context-menu-divider"></div>
+  <button class="context-menu-item danger" data-action="delete"><span class="menu-icon">✕</span> 删除节点</button>
+
+  <div class="color-panel" id="colorPanel">
+    <div class="color-row">
+      <label>文字色</label>
+      <div class="color-swatches" data-target="color" id="swatchColor"></div>
+    </div>
+    <div class="color-row">
+      <label>背景色</label>
+      <div class="color-swatches" data-target="bg" id="swatchBg"></div>
+    </div>
+    <div class="color-row">
+      <label>边框色</label>
+      <div class="color-swatches" data-target="border" id="swatchBorder"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================== 数据模型 ================== */
+let nextId = 1;
+function uid() { return 'n' + (nextId++) + '_' + Math.random().toString(36).slice(2, 6); }
+
+const STORAGE_KEY = 'mindmap_pages_v2';
+
+function createEmptyRoots() {
+  return [{
+    id: uid(), text: '中心主题', collapsed: false, children: [
+      { id: uid(), text: '分支 1', collapsed: false, children: [] },
+      { id: uid(), text: '分支 2', collapsed: false, children: [] },
+    ]
+  }];
+}
+
+function defaultPage(name = '页面 1') {
+  return { id: uid(), name, roots: createEmptyRoots() };
+}
+
+let state = { pages: [defaultPage('页面 1')], activePageId: null };
+state.activePageId = state.pages[0].id;
+
+function getActivePage() {
+  return state.pages.find(p => p.id === state.activePageId) || state.pages[0];
+}
+
+/* ================== 持久化 ================== */
+function saveToLocal() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+  catch (e) { console.warn('保存失败', e); }
+}
+function loadFromLocal() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    if (!data || !Array.isArray(data.pages) || data.pages.length === 0) return false;
+    state = data;
+    if (!state.activePageId || !state.pages.some(p => p.id === state.activePageId)) {
+      state.activePageId = state.pages[0].id;
+    }
+    state.pages.forEach(p => { if (!Array.isArray(p.roots)) p.roots = []; });
+    return true;
+  } catch (e) { console.warn('读取失败', e); return false; }
+}
+
+/* ================== 页面标签渲染 ================== */
+const pageTabsEl = document.getElementById('pageTabs');
+
+function renderPageTabs() {
+  pageTabsEl.innerHTML = '';
+  state.pages.forEach(page => {
+    const tab = document.createElement('div');
+    tab.className = 'page-tab' + (page.id === state.activePageId ? ' active' : '');
+    tab.dataset.pageId = page.id;
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'tab-name';
+    nameSpan.textContent = page.name;
+    tab.appendChild(nameSpan);
+
+    nameSpan.addEventListener('dblclick', (e) => {
+      e.stopPropagation();
+      const input = document.createElement('input');
+      input.className = 'tab-rename';
+      input.value = page.name;
+      input.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') input.blur();
+        if (ev.key === 'Escape') { input.value = page.name; input.blur(); }
+      });
+      input.addEventListener('blur', () => {
+        const val = input.value.trim() || page.name;
+        page.name = val;
+        renderPageTabs();
+        saveToLocal();
+      });
+      nameSpan.replaceWith(input);
+      input.focus();
+      input.select();
+    });
+
+    if (state.pages.length > 1) {
+      const delBtn = document.createElement('button');
+      delBtn.className = 'tab-del';
+      delBtn.title = '删除页面';
+      delBtn.textContent = '✕';
+      delBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!confirm(`确定删除页面「${page.name}」吗？`)) return;
+        const idx = state.pages.findIndex(p => p.id === page.id);
+        state.pages.splice(idx, 1);
+        if (state.activePageId === page.id) {
+          state.activePageId = state.pages[Math.max(0, idx - 1)].id;
+        }
+        renderPageTabs();
+        render();
+        saveToLocal();
+      });
+      tab.appendChild(delBtn);
+    }
+
+    tab.addEventListener('click', () => {
+      if (state.activePageId === page.id) return;
+      state.activePageId = page.id;
+      renderPageTabs();
+      render();
+      saveToLocal();
+    });
+
+    pageTabsEl.appendChild(tab);
+  });
+}
+
+/* ================== 脑图渲染 ================== */
+const mindmapEl = document.getElementById('mindmap');
+
+function findNodeById(nodes, id) {
+  for (const n of nodes) {
+    if (n.id === id) return n;
+    const found = findNodeById(n.children || [], id);
+    if (found) return found;
+  }
+  return null;
+}
+function findParentAndList(nodes, id, parent = null) {
+  for (let i = 0; i < nodes.length; i++) {
+    if (nodes[i].id === id) return { list: nodes, index: i, parent };
+    const res = findParentAndList(nodes[i].children || [], id, nodes[i]);
+    if (res) return res;
+  }
+  return null;
+}
+
+/* ================== 拖拽移动 ================== */
+function removeNodeById(nodes, id) {
+  for (let i = 0; i < nodes.length; i++) {
+    if (nodes[i].id === id) return nodes.splice(i, 1)[0];
+    const r = removeNodeById(nodes[i].children || [], id);
+    if (r) return r;
+  }
+  return null;
+}
+function isDescendant(node, id) {
+  if (!node.children) return false;
+  for (const c of node.children) {
+    if (c.id === id) return true;
+    if (isDescendant(c, id)) return true;
+  }
+  return false;
+}
+function moveNode(dragId, targetId, position) {
+  if (dragId === targetId) return false;
+  const page = getActivePage();
+  const dragNode = findNodeById(page.roots, dragId);
+  const targetNode = findNodeById(page.roots, targetId);
+  if (!dragNode || !targetNode) return false;
+  if (isDescendant(dragNode, targetId)) return false; // 不能拖入自身子树
+  const removed = removeNodeById(page.roots, dragId);
+  if (!removed) return false;
+  if (position === 'child') {
+    if (!targetNode.children) targetNode.children = [];
+    targetNode.children.push(removed);
+    targetNode.collapsed = false;
+  } else {
+    const loc = findParentAndList(page.roots, targetId);
+    if (!loc) return false;
+    const idx = position === 'before' ? loc.index : loc.index + 1;
+    loc.list.splice(idx, 0, removed);
+  }
+  return true;
+}
+let draggedNodeId = null;
+function clearDropMarkers() {
+  document.querySelectorAll('.node-row.drop-before, .node-row.drop-after, .node-row.drop-child')
+    .forEach(r => r.classList.remove('drop-before', 'drop-after', 'drop-child'));
+}
+function getDropPosition(wrap, clientY) {
+  const r = wrap.getBoundingClientRect();
+  const rel = (clientY - r.top) / r.height;
+  if (rel < 0.3) return 'before';
+  if (rel > 0.7) return 'after';
+  return 'child';
+}
+
+function render() {
+  const page = getActivePage();
+  mindmapEl.innerHTML = '';
+  if (!page.roots || page.roots.length === 0) {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'padding:2rem;color:#8ba0b8;font-size:0.9rem;';
+    empty.textContent = '当前页面还没有根节点，点击「＋ 添加根节点」开始。';
+    mindmapEl.appendChild(empty);
+    return;
+  }
+  const frag = document.createDocumentFragment();
+  page.roots.forEach(root => frag.appendChild(renderNode(root, 0)));
+  mindmapEl.appendChild(frag);
+  requestAnimationFrame(() => calibrateTrunks());
+}
+
+function applyNodeColor(labelWrap, node) {
+  if (node.color && (node.color.color || node.color.bg || node.color.border)) {
+    labelWrap.classList.add('has-color');
+    if (node.color.color) labelWrap.style.setProperty('--node-color', node.color.color);
+    if (node.color.bg) labelWrap.style.setProperty('--node-bg', node.color.bg);
+    if (node.color.border) labelWrap.style.setProperty('--node-border', node.color.border);
+  } else {
+    labelWrap.classList.remove('has-color');
+    labelWrap.style.removeProperty('--node-color');
+    labelWrap.style.removeProperty('--node-bg');
+    labelWrap.style.removeProperty('--node-border');
+  }
+}
+
+function renderNode(node, depth) {
+  const row = document.createElement('div');
+  row.className = `node-row depth-${depth}`;
+  row.dataset.nodeId = node.id;
+
+  const content = document.createElement('div');
+  content.className = 'node-content';
+
+  const labelWrap = document.createElement('div');
+  labelWrap.className = 'node-label-wrap';
+  applyNodeColor(labelWrap, node);
+  labelWrap.draggable = true;
+  labelWrap.addEventListener('dragstart', (e) => {
+    if (document.activeElement === textEl) { e.preventDefault(); return; }
+    draggedNodeId = node.id;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', node.id);
+    requestAnimationFrame(() => labelWrap.classList.add('dragging'));
+  });
+  labelWrap.addEventListener('dragend', () => {
+    draggedNodeId = null;
+    labelWrap.classList.remove('dragging');
+    clearDropMarkers();
+  });
+  labelWrap.addEventListener('dragover', (e) => {
+    if (!draggedNodeId || draggedNodeId === node.id) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    clearDropMarkers();
+    const pos = getDropPosition(labelWrap, e.clientY);
+    row.classList.add(pos === 'before' ? 'drop-before' : pos === 'after' ? 'drop-after' : 'drop-child');
+  });
+  labelWrap.addEventListener('dragleave', (e) => {
+    if (e.target === labelWrap) row.classList.remove('drop-before', 'drop-after', 'drop-child');
+  });
+  labelWrap.addEventListener('drop', (e) => {
+    if (!draggedNodeId || draggedNodeId === node.id) return;
+    e.preventDefault();
+    const pos = getDropPosition(labelWrap, e.clientY);
+    const ok = moveNode(draggedNodeId, node.id, pos);
+    clearDropMarkers();
+    labelWrap.classList.remove('dragging');
+    draggedNodeId = null;
+    if (ok) { saveToLocal(); render(); }
+  });
+
+  const textEl = document.createElement('span');
+  textEl.className = 'node-text';
+  textEl.contentEditable = 'true';
+  textEl.spellcheck = false;
+  textEl.textContent = node.text;
+  textEl.dataset.nodeId = node.id;
+  textEl.addEventListener('focus', () => { selectedNodeId = node.id; labelWrap.draggable = false; });
+  textEl.addEventListener('blur', () => {
+    labelWrap.draggable = true;
+    let val = textEl.textContent.replace(/\u00A0/g, ' ').trim();
+    if (val === '') val = '未命名';
+    node.text = val;
+    textEl.textContent = val;
+    saveToLocal();
+    requestAnimationFrame(() => calibrateTrunks());
+  });
+  textEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); textEl.blur(); }
+    if (e.key === 'Escape') { textEl.textContent = node.text; textEl.blur(); }
+    e.stopPropagation();
+  });
+  textEl.addEventListener('paste', (e) => {
+    e.preventDefault();
+    const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+    document.execCommand('insertText', false, text);
+  });
+  labelWrap.appendChild(textEl);
+
+  labelWrap.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    openContextMenu(e.clientX, e.clientY, node.id, depth);
+  });
+
+  content.appendChild(labelWrap);
+
+  // 折叠按钮：紧跟卡片，固定 6px 间距
+  const toggle = document.createElement('button');
+  toggle.className = 'toggle-btn';
+  if (!node.children || node.children.length === 0) {
+    toggle.classList.add('hidden');
+  } else {
+    toggle.textContent = node.collapsed ? '＋' : '−';
+    if (node.collapsed) toggle.classList.add('collapsed');
+    toggle.title = node.collapsed ? '展开子节点' : '折叠子节点';
+    toggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      node.collapsed = !node.collapsed;
+      saveToLocal();
+      render();
+    });
+  }
+  content.appendChild(toggle);
+  row.appendChild(content);
+
+  const childrenContainer = document.createElement('div');
+  childrenContainer.className = 'children-container';
+  if (!node.children || node.children.length === 0) {
+    childrenContainer.classList.add('empty');
+  } else if (node.children.length === 1) {
+    childrenContainer.classList.add('single-child');
+  }
+  if (node.collapsed && node.children && node.children.length > 0) {
+    childrenContainer.classList.add('collapsed');
+  }
+
+  if (!node.collapsed && node.children && node.children.length > 0) {
+    node.children.forEach(child => childrenContainer.appendChild(renderNode(child, depth + 1)));
+  }
+
+  row.appendChild(childrenContainer);
+  return row;
+}
+
+/* ================== 竖线校准 ================== */
+function calibrateTrunks() {
+  document.querySelectorAll('.children-container:not(.empty):not(.single-child):not(.collapsed)').forEach(container => {
+    const childRows = Array.from(container.children).filter(el => el.classList.contains('node-row'));
+    if (childRows.length < 2) return;
+    const first = childRows[0];
+    const last = childRows[childRows.length - 1];
+    const containerRect = container.getBoundingClientRect();
+    const firstRect = first.getBoundingClientRect();
+    const lastRect = last.getBoundingClientRect();
+    const firstCenter = firstRect.top + firstRect.height / 2 - containerRect.top;
+    const lastCenter = lastRect.top + lastRect.height / 2 - containerRect.top;
+    container.style.setProperty('--trunk-top', firstCenter + 'px');
+    container.style.setProperty('--trunk-height', (lastCenter - firstCenter) + 'px');
+  });
+}
+
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(calibrateTrunks, 80);
+});
+
+/* ================== 右键菜单 ================== */
+const contextMenu = document.getElementById('contextMenu');
+const menuAddSibling = document.getElementById('menuAddSibling');
+const colorPanel = document.getElementById('colorPanel');
+let contextNodeId = null;
+let contextNodeDepth = 0;
+
+const COLOR_PALETTE = ['#e74c3c', '#e67e22', '#f1c40f', '#2ecc71', '#1abc9c', '#3498db', '#9b59b6', '#34495e', '#95a5a6', '#1e3348'];
+const BG_PALETTE = ['#fdecea', '#fef5e7', '#fef9e7', '#eafaf1', '#e8f8f5', '#eaf2f8', '#f4ecf7', '#ebedef', '#f8f9f9', '#eef4fc'];
+
+function buildSwatches(container, target, colors, node) {
+  container.innerHTML = '';
+  const noneBtn = document.createElement('button');
+  noneBtn.className = 'color-swatch none';
+  noneBtn.title = '清除';
+  noneBtn.addEventListener('click', () => {
+    if (!node.color) node.color = {};
+    delete node.color[target];
+    cleanupColor(node);
+    saveToLocal();
+    render();
+    reopenMenuAtCurrentPos();
+  });
+  container.appendChild(noneBtn);
+
+  colors.forEach(c => {
+    const sw = document.createElement('button');
+    sw.className = 'color-swatch';
+    sw.style.background = c;
+    sw.title = c;
+    sw.addEventListener('click', () => {
+      if (!node.color) node.color = {};
+      node.color[target] = c;
+      saveToLocal();
+      render();
+      reopenMenuAtCurrentPos();
+    });
+    container.appendChild(sw);
+  });
+}
+
+function cleanupColor(node) {
+  if (node.color && !node.color.color && !node.color.bg && !node.color.border) {
+    delete node.color;
+  }
+}
+
+function reopenMenuAtCurrentPos() {
+  const rect = contextMenu.getBoundingClientRect();
+  openContextMenu(rect.left, rect.top, contextNodeId, contextNodeDepth, true);
+}
+
+function openContextMenu(x, y, nodeId, depth, keepPanel = false) {
+  contextNodeId = nodeId;
+  contextNodeDepth = depth;
+  const page = getActivePage();
+  const node = findNodeById(page.roots, nodeId);
+
+  if (depth === 0) {
+    menuAddSibling.classList.add('hidden');
+    contextMenu.querySelector('.context-menu-divider').classList.add('hidden');
+  } else {
+    menuAddSibling.classList.remove('hidden');
+    contextMenu.querySelector('.context-menu-divider').classList.remove('hidden');
+  }
+
+  if (!keepPanel) colorPanel.classList.remove('show');
+
+  if (node) {
+    buildSwatches(document.getElementById('swatchColor'), 'color', COLOR_PALETTE, node);
+    buildSwatches(document.getElementById('swatchBg'), 'bg', BG_PALETTE, node);
+    buildSwatches(document.getElementById('swatchBorder'), 'border', COLOR_PALETTE, node);
+  }
+
+  contextMenu.classList.add('show');
+  const menuRect = contextMenu.getBoundingClientRect();
+  let left = x, top = y;
+  if (left + menuRect.width > window.innerWidth - 8) left = window.innerWidth - menuRect.width - 8;
+  if (top + menuRect.height > window.innerHeight - 8) top = window.innerHeight - menuRect.height - 8;
+  contextMenu.style.left = left + 'px';
+  contextMenu.style.top = top + 'px';
+}
+
+function closeContextMenu() {
+  contextMenu.classList.remove('show');
+  colorPanel.classList.remove('show');
+  contextNodeId = null;
+}
+
+document.addEventListener('click', (e) => {
+  if (!contextMenu.contains(e.target)) closeContextMenu();
+});
+document.addEventListener('contextmenu', (e) => {
+  if (!e.target.closest('.node-label-wrap')) closeContextMenu();
+});
+window.addEventListener('scroll', closeContextMenu, true);
+
+contextMenu.addEventListener('click', (e) => {
+  if (e.target.closest('.color-panel')) return;
+  const item = e.target.closest('.context-menu-item');
+  if (!item) return;
+  const action = item.dataset.action;
+  if (!contextNodeId) return;
+  const page = getActivePage();
+  const node = findNodeById(page.roots, contextNodeId);
+  if (!node) return;
+
+  if (action === 'addChild') {
+    if (!node.children) node.children = [];
+    const child = { id: uid(), text: '新节点', collapsed: false, children: [] };
+    node.children.push(child);
+    node.collapsed = false;
+    saveToLocal();
+    render();
+    setTimeout(() => {
+      const newEl = document.querySelector(`.node-text[data-node-id="${child.id}"]`);
+      if (newEl) { newEl.focus(); document.execCommand('selectAll', false, null); }
+    }, 30);
+    closeContextMenu();
+  } else if (action === 'addSibling') {
+    const loc = findParentAndList(page.roots, node.id);
+    if (!loc) return;
+    const sibling = { id: uid(), text: '新节点', collapsed: false, children: [] };
+    loc.list.splice(loc.index + 1, 0, sibling);
+    saveToLocal();
+    render();
+    setTimeout(() => {
+      const newEl = document.querySelector(`.node-text[data-node-id="${sibling.id}"]`);
+      if (newEl) { newEl.focus(); document.execCommand('selectAll', false, null); }
+    }, 30);
+    closeContextMenu();
+  } else if (action === 'setColor') {
+    colorPanel.classList.toggle('show');
+    const rect = contextMenu.getBoundingClientRect();
+    if (rect.bottom > window.innerHeight - 8) {
+      contextMenu.style.top = Math.max(8, window.innerHeight - rect.height - 8) + 'px';
+    }
+    return;
+  } else if (action === 'delete') {
+    const hasChildren = node.children && node.children.length > 0;
+    if (hasChildren && !confirm(`确定删除「${node.text}」及其所有子节点吗？`)) return;
+    const loc = findParentAndList(page.roots, node.id);
+    if (!loc) return;
+    loc.list.splice(loc.index, 1);
+    saveToLocal();
+    render();
+    closeContextMenu();
+  }
+});
+
+/* ================== 工具栏 ================== */
+document.getElementById('btnAddRoot').addEventListener('click', () => {
+  const page = getActivePage();
+  const newRoot = { id: uid(), text: '新根节点', collapsed: false, children: [] };
+  page.roots.push(newRoot);
+  saveToLocal();
+  render();
+  setTimeout(() => {
+    const el = document.querySelector(`.node-text[data-node-id="${newRoot.id}"]`);
+    if (el) { el.focus(); document.execCommand('selectAll', false, null); }
+  }, 30);
+});
+
+document.getElementById('btnExpandAll').addEventListener('click', () => {
+  const page = getActivePage();
+  (function expand(nodes){ nodes.forEach(n => { n.collapsed = false; expand(n.children || []); }); })(page.roots);
+  saveToLocal();
+  render();
+});
+
+document.getElementById('btnCollapseAll').addEventListener('click', () => {
+  const page = getActivePage();
+  (function collapse(nodes){ nodes.forEach(n => { if (n.children && n.children.length) n.collapsed = true; collapse(n.children || []); }); })(page.roots);
+  saveToLocal();
+  render();
+});
+
+document.getElementById('btnSave').addEventListener('click', () => {
+  saveToLocal();
+  const btn = document.getElementById('btnSave');
+  const old = btn.textContent;
+  btn.textContent = '✅ 已保存';
+  setTimeout(() => { btn.textContent = old; }, 1200);
+});
+
+document.getElementById('btnReset').addEventListener('click', () => {
+  if (!confirm('确定重置当前页面为示例脑图吗？当前页编辑将丢失。')) return;
+  const page = getActivePage();
+  page.roots = createEmptyRoots();
+  saveToLocal();
+  render();
+});
+
+/* ================== 页面操作 ================== */
+document.getElementById('btnAddPage').addEventListener('click', () => {
+  const page = defaultPage(`页面 ${state.pages.length + 1}`);
+  page.roots = createEmptyRoots();
+  state.pages.push(page);
+  state.activePageId = page.id;
+  renderPageTabs();
+  render();
+  saveToLocal();
+});
+
+/* ================== 导入 / 导出 ================== */
+document.getElementById('btnExport').addEventListener('click', () => {
+  const dataStr = JSON.stringify(state, null, 2);
+  const blob = new Blob([dataStr], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const date = new Date();
+  const stamp = `${date.getFullYear()}${String(date.getMonth()+1).padStart(2,'0')}${String(date.getDate()).padStart(2,'0')}_${String(date.getHours()).padStart(2,'0')}${String(date.getMinutes()).padStart(2,'0')}`;
+  a.href = url;
+  a.download = `mindmap_${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById('btnImport').addEventListener('click', () => {
+  document.getElementById('fileInput').click();
+});
+
+document.getElementById('fileInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      let newState;
+      if (Array.isArray(data)) {
+        newState = { pages: [{ id: uid(), name: '导入页面', roots: data }], activePageId: null };
+        newState.activePageId = newState.pages[0].id;
+      } else if (data && Array.isArray(data.pages)) {
+        newState = data;
+        if (!newState.activePageId || !newState.pages.some(p => p.id === newState.activePageId)) {
+          newState.activePageId = newState.pages[0]?.id;
+        }
+      } else {
+        alert('JSON 格式无法识别：需要包含 pages 数组，或直接是节点数组。');
+        return;
+      }
+      if (!newState.pages.length) { alert('没有找到任何页面数据'); return; }
+      if (!confirm('导入将覆盖当前所有页面数据，确定继续吗？')) return;
+      state = newState;
+      state.pages.forEach(p => { if (!Array.isArray(p.roots)) p.roots = []; });
+      saveToLocal();
+      renderPageTabs();
+      render();
+    } catch (err) {
+      alert('解析失败：' + err.message);
+    } finally {
+      e.target.value = '';
+    }
+  };
+  reader.readAsText(file);
+});
+
+/* ================== 初始化 ================== */
+(function init() {
+  if (!loadFromLocal()) {
+    const page = state.pages[0];
+    page.roots = [{
+      id: uid(), text: '具身智能技术', collapsed: false, children: [
+        { id: uid(), text: '模型驱动范式', collapsed: false, children: [
+          { id: uid(), text: '大语言/多模态模型驱动', collapsed: false, children: [] },
+          { id: uid(), text: '世界模型驱动', collapsed: false, children: [] },
+          { id: uid(), text: '融合架构 (MLLM + WM)', collapsed: false, children: [] },
+        ]},
+        { id: uid(), text: '功能层级（工业场景）', collapsed: false, children: [
+          { id: uid(), text: '感知层 · 工业之眼', collapsed: false, children: [] },
+          { id: uid(), text: '控制层 · 工业之手', collapsed: false, children: [] },
+          { id: uid(), text: '决策层 · 工业之脑', collapsed: false, children: [] },
+        ]},
+        { id: uid(), text: '具体模型技术', collapsed: false, children: [
+          { id: uid(), text: 'VLA · 视觉-语言-动作模型', collapsed: false, children: [] },
+          { id: uid(), text: 'WAM · 世界动作模型', collapsed: false, children: [] },
+          { id: uid(), text: '具身原生模型', collapsed: false, children: [] },
+        ]},
+        { id: uid(), text: '仿真与基础设施', collapsed: false, children: [
+          { id: uid(), text: 'MuJoCo · 物理仿真引擎', collapsed: false, children: [] },
+          { id: uid(), text: 'Isaac Sim · 机器人仿真', collapsed: false, children: [] },
+          { id: uid(), text: 'PyBullet · 轻量仿真', collapsed: false, children: [] },
+        ]},
+      ]
+    }];
+    saveToLocal();
+  }
+  renderPageTabs();
+  render();
+})();
+</script>
+</body>
+</html>
