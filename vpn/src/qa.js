@@ -343,6 +343,16 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         };
 
+        // 未登录拦截：弹登录框并返回 false，调用方应直接 return（与下单 placeOrder 行为一致）
+        const requireLogin = () => {
+            const user = JSON.parse(localStorage.getItem('userInfo') || 'null');
+            if (!user || !user.username) {
+                document.getElementById('auth-toggle')?.click();
+                return false;
+            }
+            return true;
+        };
+
         // 可提现金额：与用户名下拉框一致，取自 /api/get-user -> min(balance, game_winnings)
         const fetchWithdrawable = async () => {
             const userInfo = window.userInfo || JSON.parse(localStorage.getItem('userInfo') || '{}');
@@ -672,6 +682,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const handleSuggestionClick = async (questionData) => {
             if (isBotReplying) return;
+            // 价格/下单类推荐气泡：未登录先要求登录（与问价、下单一致）
+            const a = questionData.action;
+            if (a && (a.type === 'showPrice' || a.type === 'openOrder') && !requireLogin()) return;
             playSendFly();
             addMessage('user', questionData.question);
             await addBotMessageStream(questionData.answer, questionData.action);
@@ -939,6 +952,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const isPriceIntent = /多少钱|价格|售价|定价|费用|什么价|多少块|\bprice\b|\bcost\b|\bhow much\b/i.test(text);
             const isOrderIntent = /下单|我要买|立即买|马上买|直接买|\border\b|\bbuy now\b|\bpurchase\b/i.test(text);
             if (isPriceIntent || isOrderIntent) {
+                // 未登录：问价/下单都要求先登录（与 placeOrder 一致）
+                if (!requireLogin()) return;
                 const entry = findKnowledgeByType(isOrderIntent ? 'openOrder' : 'showPrice')
                     || findKnowledgeByType('showPrice') || findKnowledgeByType('openOrder');
                 if (entry) {
@@ -1200,6 +1215,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 loadedLang = null;
                 questions = [];
             }
+        });
+
+        // 登录方式选择界面（钱包落地页 immmor-wallet-landing / 登录弹窗 auth-modal）弹出时，自动收起客服聊天界面
+        // 注意：auth-toggle 点击后先弹出的是「登录方式选择」落地页，而非 auth-modal，两者都要监听
+        ['immmor-wallet-landing', 'auth-modal'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const obs = new MutationObserver(() => {
+                if (!el.classList.contains('hidden')) closeModal();
+            });
+            obs.observe(el, { attributes: true, attributeFilter: ['class'] });
         });
 
         return { open: openModal, close: closeModal };
