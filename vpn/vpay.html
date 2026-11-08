@@ -1120,6 +1120,7 @@ body.theme-light .user-menu{background:rgba(255,255,255,.97);box-shadow:0 8px 32
 
 <script src="vpay-tier.js"></script>
 <script src="terms.js"></script>
+<script src="login-anime.js"></script>
 <script>
 // ===== 多语言 i18n =====
 const _urlLang=new URLSearchParams(location.search).get('lang');
@@ -2783,6 +2784,8 @@ function initApp(){
   // 若 URL 带 ticket（来自 index 免密登录），优先用 ticket 登录，顶掉本地已有会话
   if(ticket){
     window.history.replaceState({},document.title,window.location.pathname);
+    // 跳转登录全程显示动画，登录成功才消失
+    if(window.VpayLoginAnime)VpayLoginAnime.show({text:t('vpay.loggingIn')||'登录中…'});
     (async()=>{
       try{
         const r=await(await fetch(API_BASE+'/api/quick-login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ticket})})).json();
@@ -2792,7 +2795,7 @@ function initApp(){
             // 顶掉旧会话：覆盖本地登录态并进入主界面
             localStorage.setItem('vpay_user',JSON.stringify(currentUser));
             localStorage.setItem('vpay_login_time',Date.now().toString());
-            enterMain();
+            enterMain(); if(window.VpayLoginAnime)VpayLoginAnime.hide();
             return;
           }
         }
@@ -2803,9 +2806,9 @@ function initApp(){
         try{ currentUser=JSON.parse(saved); }catch(e){ currentUser=null; }
         const lt=localStorage.getItem('vpay_login_time');
         if(lt&&Date.now()-parseInt(lt)>24*60*60*1000){localStorage.removeItem('vpay_user');localStorage.removeItem('vpay_login_time');currentUser=null;}
-        else{ enterMain(); localStorage.setItem('vpay_login_time',Date.now().toString()); return; }
+        else{ enterMain(); if(window.VpayLoginAnime)VpayLoginAnime.hide(); localStorage.setItem('vpay_login_time',Date.now().toString()); return; }
       }
-      showLogin();
+      if(window.VpayLoginAnime)VpayLoginAnime.hide(); showLogin();
     })();
     return;
   }
