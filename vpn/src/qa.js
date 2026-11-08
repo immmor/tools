@@ -65,6 +65,8 @@ document.addEventListener('DOMContentLoaded', () => {
             { avatar: 'static/cs4.webp', 'zh-CN': '璐璐', 'en-US': 'Lulu', 'ja-JP': 'ルル', 'ko-KR': '루루', 'ru-RU': 'Лулу', 'es-ES': 'Lulu', 'vi-VN': 'Lulu', 'ar-SA': 'لولو' },
             { avatar: 'static/cs5.webp', 'zh-CN': '安娜', 'en-US': 'Anna', 'ja-JP': 'アンナ', 'ko-KR': '안나', 'ru-RU': 'Анна', 'es-ES': 'Anna', 'vi-VN': 'Anna', 'ar-SA': 'آ나' }
         ];
+        // 预加载全部客服头像到浏览器缓存：避免每次打开客服/每条消息都重新请求图片，头像即时从本地显示
+        AGENTS.forEach((a) => { const img = new Image(); img.decoding = 'async'; img.src = a.avatar; });
         let currentAgentIndex = 0;
         const pickAgent = () => { currentAgentIndex = Math.floor(Math.random() * AGENTS.length); };
         const agentName = (lang) => { const a = AGENTS[currentAgentIndex]; return a ? (a[lang] || a['zh-CN']) : ''; };
@@ -247,7 +249,7 @@ document.addEventListener('DOMContentLoaded', () => {
             div.id = 'support-typing-indicator';
             div.className = 'flex gap-3 support-bot-message';
             div.innerHTML = `
-                <img src="${agentAvatar()}" alt="客服" class="w-8 h-8 rounded-full object-cover shrink-0">
+                <img src="${agentAvatar()}" alt="客服" class="w-8 h-8 rounded-full object-cover shrink-0" decoding="async">
                 <div class="max-w-[80%] js-bubble-wrap">
                     <div class="support-bubble px-4 py-3 text-sm flex gap-1">
                         <span class="w-2 h-2 bg-zinc-500 rounded-full animate-bounce" style="animation-delay: ${Math.random() * 200}ms"></span>
@@ -389,7 +391,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 div = document.createElement('div');
                 div.className = 'flex gap-3 support-bot-message';
                 div.innerHTML = `
-                    <img src="${agentAvatar()}" alt="客服" class="w-8 h-8 rounded-full object-cover shrink-0">
+                    <img src="${agentAvatar()}" alt="客服" class="w-8 h-8 rounded-full object-cover shrink-0" decoding="async">
                     <div class="max-w-[80%] js-bubble-wrap">
                         <div class="support-bubble px-4 py-3 text-sm"></div>
                     </div>
@@ -628,7 +630,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 `;
             } else if (isSupport) {
                 div.innerHTML = `
-                    <img src="${agentAvatar()}" alt="客服" class="w-8 h-8 rounded-full object-cover shrink-0">
+                    <img src="${agentAvatar()}" alt="客服" class="w-8 h-8 rounded-full object-cover shrink-0" decoding="async">
                     <div class="max-w-[80%] js-bubble-wrap">
                         <span style="display:inline-block;font-size:10px;color:var(--neon-blue);opacity:.75;margin-bottom:4px;">客服</span>
                         <div class="support-bubble px-4 py-3 text-sm bg-[#22c55e26] border border-[#22c55e80]">${text}</div>
@@ -636,7 +638,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 `;
             } else {
                 div.innerHTML = `
-                    <img src="${agentAvatar()}" alt="客服" class="w-8 h-8 rounded-full object-cover shrink-0">
+                    <img src="${agentAvatar()}" alt="客服" class="w-8 h-8 rounded-full object-cover shrink-0" decoding="async">
                     <div class="max-w-[80%] js-bubble-wrap">
                         <div class="support-bubble px-4 py-3 text-sm">${text}</div>
                     </div>
@@ -666,7 +668,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const div = document.createElement('div');
             div.className = 'flex gap-3 support-bot-message';
             div.innerHTML = `
-                <img src="${agentAvatar()}" alt="客服" class="w-8 h-8 rounded-full object-cover shrink-0">
+                <img src="${agentAvatar()}" alt="客服" class="w-8 h-8 rounded-full object-cover shrink-0" decoding="async">
                 <div class="max-w-[80%] js-bubble-wrap">
                     <div class="support-bubble px-4 py-3 text-sm">
                         <span class="support-related-label">${moreInfoLabel}</span>
