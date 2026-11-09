@@ -245,6 +245,9 @@
     const panel = $('face-login-panel');
     panel.classList.remove('hidden');
     panel.classList.add('flex');
+    // 仅录入人脸时隐藏左侧图片与标题；登录模式保留图片与标题
+    const _hero = $('auth-hero'); if (_hero) _hero.style.display = (m === 'enroll') ? 'none' : '';
+    const _mt = $('modal-title'); if (_mt) _mt.classList.toggle('hidden', m === 'enroll');
 
     const titleEl = panel.querySelector('h3');
     const submitBtn = $('face-submit-btn');
@@ -268,6 +271,8 @@
   function restoreAccountView() {
     const panel = $('face-login-panel');
     if (panel) { panel.classList.add('hidden'); panel.classList.remove('flex'); }
+    const _hero = $('auth-hero'); if (_hero) _hero.style.display = '';
+    const _mt = $('modal-title'); if (_mt) _mt.classList.remove('hidden');
     stopCamera();
     $('auth-form') && $('auth-form').classList.remove('hidden');
     $('auth-switch-block') && $('auth-switch-block').classList.remove('hidden');

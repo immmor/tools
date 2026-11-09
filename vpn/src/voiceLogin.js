@@ -24,7 +24,7 @@
       voice_enroll_ok: '声纹录入成功！', voice_enroll_fail: '声纹录入失败',
       voice_need_login: '请先登录后再录入声纹', voice_error: '出错了，请重试',
       voice_mic_fail: '无法访问麦克风', voice_no_audio: '请先录音',
-      nav_enroll_voice: '录入声纹', voice_read_prompt: '请朗读', voice_rerecord: '重新录制', voice_rec: '录音中', voice_need_username: '请输入用户名', voice_read_text: '今天天气真好。', voice_lang_hint: '请使用与录入时相同的语言朗读'
+      nav_enroll_voice: '录入声纹', voice_read_prompt: '请朗读', voice_rerecord: '重新录制', voice_rec: '录音中', voice_need_username: '请输入用户名', voice_read_text: '今天天气真好。', voice_lang_hint: '请使用与录入时相同的语言朗读', voice_info_title: '录制须知', voice_info_1: '请在安静环境中朗读，避免背景噪音干扰', voice_info_2: '使用与录入时相同的语言，朗读上方指定文本', voice_info_3: '录音将自动录满 5 秒，请保持匀速、清晰发音', voice_info_secure: '声纹仅用于本人登录验证，已在服务端加密保存。'
     },
     'en-US': {
       voice_login: 'Voice Login', voice_login_title: 'Voiceprint Login',
@@ -39,7 +39,7 @@
       voice_enroll_ok: 'Voiceprint enrolled!', voice_enroll_fail: 'Failed to enroll voiceprint',
       voice_need_login: 'Please sign in before enrolling your voiceprint', voice_error: 'Something went wrong, please retry',
       voice_mic_fail: 'Cannot access microphone', voice_no_audio: 'Please record first',
-      nav_enroll_voice: 'Enroll Voiceprint', voice_read_prompt: 'Please read', voice_rerecord: 'Record again', voice_rec: 'Recording', voice_need_username: 'Please enter your username', voice_read_text: 'The weather is really nice today.', voice_lang_hint: 'Please read in the same language you used when enrolling'
+      nav_enroll_voice: 'Enroll Voiceprint', voice_read_prompt: 'Please read', voice_rerecord: 'Record again', voice_rec: 'Recording', voice_need_username: 'Please enter your username', voice_read_text: 'The weather is really nice today.', voice_lang_hint: 'Please read in the same language you used when enrolling', voice_info_title: 'Recording Notes', voice_info_1: 'Record in a quiet environment and avoid background noise', voice_info_2: 'Read the text above in the same language you used when enrolling', voice_info_3: 'Recording auto-stops after 5 seconds; speak steadily and clearly', voice_info_secure: 'Your voiceprint is used only for your own login and is encrypted on the server.'
     },
     'ja-JP': {
       voice_login: '声紋ログイン', voice_login_title: '声紋認証ログイン',
@@ -54,7 +54,7 @@
       voice_enroll_ok: '声紋の登録成功！', voice_enroll_fail: '声紋の登録に失敗',
       voice_need_login: '声紋登録前にログインしてください', voice_error: 'エラーが発生しました。再試行してください',
       voice_mic_fail: 'マイクにアクセスできません', voice_no_audio: 'まず録音してください',
-      nav_enroll_voice: '声紋を登録', voice_read_prompt: '以下を読んで', voice_rerecord: '再录制', voice_rec: '録音中', voice_need_username: 'ユーザー名を入力してください', voice_read_text: '今日はいい天気ですね。', voice_lang_hint: '登録時と同じ言語で読み上げてください'
+      nav_enroll_voice: '声紋を登録', voice_read_prompt: '以下を読んで', voice_rerecord: '再录制', voice_rec: '録音中', voice_need_username: 'ユーザー名を入力してください', voice_read_text: '今日はいい天気ですね。', voice_lang_hint: '登録時と同じ言語で読み上げてください', voice_info_title: '録音の注意点', voice_info_1: '静かな環境で読み上げ、背景雑音を避けてください', voice_info_2: '登録時と同じ言語で上の文章を読んでください', voice_info_3: '録音は5秒で自動停止します。一定のペースで明瞭に話してください', voice_info_secure: '声紋は本人のログインのみに使用され、サーバー上で暗号化されて保存されます。'
     },
     'ko-KR': {
       voice_login: '음성 로그인', voice_login_title: '음성 인증 로그인',
@@ -69,7 +69,7 @@
       voice_enroll_ok: '음성 등록 완료!', voice_enroll_fail: '음성 등록 실패',
       voice_need_login: '음성 등록 전에 먼저 로그인하세요', voice_error: '오류가 발생했습니다. 다시 시도하세요',
       voice_mic_fail: '마이크에 접근할 수 없습니다', voice_no_audio: '먼저 녹음하세요',
-      nav_enroll_voice: '음성 등록', voice_read_prompt: '다음을 읽으세요', voice_rerecord: '다시 녹음', voice_rec: '녹음 중', voice_need_username: '사용자 이름을 입력하세요', voice_read_text: '오늘 날씨가 참 좋네요.', voice_lang_hint: '등록할 때와 같은 언어로 읽어 주세요'
+      nav_enroll_voice: '음성 등록', voice_read_prompt: '다음을 읽으세요', voice_rerecord: '다시 녹음', voice_rec: '녹음 중', voice_need_username: '사용자 이름을 입력하세요', voice_read_text: '오늘 날씨가 참 좋네요.', voice_lang_hint: '등록할 때와 같은 언어로 읽어 주세요', voice_info_title: '녹음 안내', voice_info_1: '조용한 환경에서 읽어주시고 배경 소음을 피해 주세요', voice_info_2: '등록할 때와 같은 언어로 위 문장을 읽어 주세요', voice_info_3: '녹음은 5초 후 자동 종료됩니다. 일정한 속도로 또렷하게 말씀해 주세요', voice_info_secure: '음성 데이터는 본인 로그인에만 사용되며 서버에서 암호화되어 저장됩니다.'
     },
     'es-ES': {
       voice_login: 'Inicio de sesión por voz', voice_login_title: 'Inicio de sesión por voz',
@@ -84,7 +84,7 @@
       voice_enroll_ok: '¡Voz registrada!', voice_enroll_fail: 'Error al registrar la voz',
       voice_need_login: 'Inicia sesión antes de registrar tu voz', voice_error: 'Algo salió mal, inténtalo de nuevo',
       voice_mic_fail: 'No se puede acceder al micrófono', voice_no_audio: 'Graba primero',
-      nav_enroll_voice: 'Registrar voz', voice_read_prompt: 'Lea en voz alta', voice_rerecord: 'Grabar de nuevo', voice_rec: 'Grabando', voice_need_username: 'Introduce tu nombre de usuario', voice_read_text: 'Hoy hace muy buen tiempo.', voice_lang_hint: 'Lee en el mismo idioma que usaste al registrar tu voz'
+      nav_enroll_voice: 'Registrar voz', voice_read_prompt: 'Lea en voz alta', voice_rerecord: 'Grabar de nuevo', voice_rec: 'Grabando', voice_need_username: 'Introduce tu nombre de usuario', voice_read_text: 'Hoy hace muy buen tiempo.', voice_lang_hint: 'Lee en el mismo idioma que usaste al registrar tu voz', voice_info_title: 'Notas de grabación', voice_info_1: 'Graba en un entorno tranquilo y evita el ruido de fondo', voice_info_2: 'Lee el texto de arriba en el mismo idioma que usaste al registrarte', voice_info_3: 'La grabación se detiene sola tras 5 s; habla con ritmo constante y claro', voice_info_secure: 'Tu voz se usa solo para tu propio inicio de sesión y se guarda cifrada en el servidor.'
     },
     'vi-VN': {
       voice_login: 'Đăng nhập bằng giọng nói', voice_login_title: 'Đăng nhập bằng giọng nói',
@@ -99,7 +99,7 @@
       voice_enroll_ok: 'Đã đăng ký giọng nói!', voice_enroll_fail: 'Đăng ký giọng nói thất bại',
       voice_need_login: 'Hãy đăng nhập trước khi đăng ký giọng nói', voice_error: 'Có lỗi, vui lòng thử lại',
       voice_mic_fail: 'Không thể truy cập mic', voice_no_audio: 'Hãy ghi âm trước',
-      nav_enroll_voice: 'Đăng ký giọng nói', voice_read_prompt: 'Hãy đọc', voice_rerecord: 'Ghi lại', voice_rec: 'Đang ghi', voice_need_username: 'Vui lòng nhập tên người dùng', voice_read_text: 'Hôm nay thời tiết thật đẹp.', voice_lang_hint: 'Hãy đọc bằng ngôn ngữ bạn đã dùng khi đăng ký'
+      nav_enroll_voice: 'Đăng ký giọng nói', voice_read_prompt: 'Hãy đọc', voice_rerecord: 'Ghi lại', voice_rec: 'Đang ghi', voice_need_username: 'Vui lòng nhập tên người dùng', voice_read_text: 'Hôm nay thời tiết thật đẹp.', voice_lang_hint: 'Hãy đọc bằng ngôn ngữ bạn đã dùng khi đăng ký', voice_info_title: 'Lưu ý khi ghi', voice_info_1: 'Hãy ghi âm ở nơi yên tĩnh và tránh tiếng ồn xung quanh', voice_info_2: 'Đọc văn bản bên trên bằng ngôn ngữ bạn đã dùng khi đăng ký', voice_info_3: 'Ghi âm tự dừng sau 5 giây; hãy nói đều và rõ ràng', voice_info_secure: 'Giọng nói chỉ dùng cho đăng nhập của bạn và được mã hóa lưu trên máy chủ.'
     },
     'ar-SA': {
       voice_login: 'تسجيل الدخول بالصوت', voice_login_title: 'تسجيل الدخول ببصمة الصوت',
@@ -114,7 +114,7 @@
       voice_enroll_ok: 'تم تسجيل بصمة الصوت!', voice_enroll_fail: 'فشل تسجيل بصمة الصوت',
       voice_need_login: 'سجّل الدخول قبل تسجيل بصمة صوتك', voice_error: 'حدث خطأ، حاول مرة أخرى',
       voice_mic_fail: 'تعذّر الوصول إلى الميكروفون', voice_no_audio: 'سجّل أولاً',
-      nav_enroll_voice: 'تسجيل بصمة الصوت', voice_read_prompt: 'اقرأ', voice_rerecord: 'إعادة التسجيل', voice_rec: 'جارٍ التسجيل', voice_need_username: 'الرجاء إدخال اسم المستخدم', voice_read_text: 'إن الجو جميل اليوم.', voice_lang_hint: 'يُرجى القراءة بنفس اللغة التي استخدمتها عند التسجيل'
+      nav_enroll_voice: 'تسجيل بصمة الصوت', voice_read_prompt: 'اقرأ', voice_rerecord: 'إعادة التسجيل', voice_rec: 'جارٍ التسجيل', voice_need_username: 'الرجاء إدخال اسم المستخدم', voice_read_text: 'إن الجو جميل اليوم.', voice_lang_hint: 'يُرجى القراءة بنفس اللغة التي استخدمتها عند التسجيل', voice_info_title: 'ملاحظات التسجيل', voice_info_1: 'سجّل في بيئة هادئة وتجنّب ضجيج الخلفية', voice_info_2: 'اقرأ النص أعلاه بنفس اللغة التي استخدمتها عند التسجيل', voice_info_3: 'يتوقف التسجيل تلقائيًا بعد 5 ثوانٍ؛ تحدث بوضوح وبنبرة ثابتة', voice_info_secure: 'تُستخدم بصمة صوتك فقط لدخولك الشخصي وتُحفظ مشفّرة على الخادم.'
     },
     'ru-RU': {
       voice_login: 'Вход по голосу', voice_login_title: 'Вход по голосовому отпечатку',
@@ -129,7 +129,7 @@
       voice_enroll_ok: 'Голос записан!', voice_enroll_fail: 'Не удалось записать голос',
       voice_need_login: 'Войдите в аккаунт перед записью голоса', voice_error: 'Произошла ошибка, попробуйте снова',
       voice_mic_fail: 'Нет доступа к микрофону', voice_no_audio: 'Сначала запишите звук',
-      nav_enroll_voice: 'Записать голос', voice_read_prompt: 'Прочитайте', voice_rerecord: 'Записать снова', voice_rec: 'Запись', voice_need_username: 'Введите имя пользователя', voice_read_text: 'Сегодня такая хорошая погода.', voice_lang_hint: 'Читайте на том же языке, что и при записи'
+      nav_enroll_voice: 'Записать голос', voice_read_prompt: 'Прочитайте', voice_rerecord: 'Записать снова', voice_rec: 'Запись', voice_need_username: 'Введите имя пользователя', voice_read_text: 'Сегодня такая хорошая погода.', voice_lang_hint: 'Читайте на том же языке, что и при записи', voice_info_title: 'Правила записи', voice_info_1: 'Записывайте в тихом месте и избегайте фонового шума', voice_info_2: 'Читайте текст выше на том же языке, что при регистрации', voice_info_3: 'Запись автоматически остановится через 5 секунд; говорите ровно и чётко', voice_info_secure: 'Ваш голос используется только для вашего входа и хранится зашифрованным на сервере.'
     }
   };
 
@@ -304,6 +304,9 @@
     const panel = $('voice-login-panel');
     panel.classList.remove('hidden');
     panel.classList.add('flex');
+    // 仅录入声纹时隐藏左侧图片与标题；登录模式保留图片与标题
+    const _hero = $('auth-hero'); if (_hero) _hero.style.display = (m === 'enroll') ? 'none' : '';
+    const _mt = $('modal-title'); if (_mt) _mt.classList.toggle('hidden', m === 'enroll');
 
     const titleEl = panel.querySelector('h3');
     const submitBtn = $('voice-submit-btn');
@@ -342,6 +345,8 @@
   function restoreAccountView() {
     const panel = $('voice-login-panel');
     if (panel) { panel.classList.add('hidden'); panel.classList.remove('flex'); }
+    const _hero = $('auth-hero'); if (_hero) _hero.style.display = '';
+    const _mt = $('modal-title'); if (_mt) _mt.classList.remove('hidden');
     stopRecording();
     $('auth-form') && $('auth-form').classList.remove('hidden');
     $('auth-switch-block') && $('auth-switch-block').classList.remove('hidden');
