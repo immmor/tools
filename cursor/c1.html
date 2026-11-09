@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Cursor Architectural UI Construction Engine</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #080c14;
+            color: #f1f5f9;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Blueprint grid pattern */
+        .bg-cad-grid {
+            background-size: 30px 30px;
+            background-image: 
+                linear-gradient(to right, rgba(56, 189, 248, 0.03) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(56, 189, 248, 0.03) 1px, transparent 1px);
+        }
+
+        /* Architectural Elements */
+        .cad-element {
+            opacity: 0;
+            transition: opacity 0.2s ease, border-color 0.2s ease;
+        }
+        .cad-element.visible {
+            opacity: 1;
+        }
+
+        /* Cursor & Guides */
+        .agent-cursor {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            z-index: 9999;
+            will-change: transform;
+            transition: transform 0.05s linear;
+        }
+
+        .cursor-badge {
+            white-space: nowrap;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 7px;
+            border-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+
+        /* Custom Scrollbar for Terminal */
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); }
+        ::-webkit-scrollbar-thumb { background: rgba(56, 189, 248, 0.3); border-radius: 2px; }
+    </style>
+</head>
+<body class="bg-cad-grid min-h-screen relative flex flex-col justify-between">
+
+    <!-- OVERLAY CANVAS: Drawing Path Strokes, Crosshairs, Measurements, & Snap Lines -->
+    <canvas id="cadCanvas" class="absolute inset-0 pointer-events-none z-50 w-full h-full"></canvas>
+
+    <!-- TOP CONTROL TOOLBAR -->
+    <header class="h-14 border-b border-slate-800 bg-slate-950/90 backdrop-blur-md px-5 flex items-center justify-between z-40 relative">
+        <div class="flex items-center space-x-3">
+            <div class="h-8 w-8 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
+                <i class="fa-solid fa-drafting-compass text-sm"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-sm tracking-wide flex items-center gap-2">
+                    CAD<span class="text-cyan-400">LAYOUT</span>_ENGINE
+                    <span id="stageBadge" class="text-[10px] mono px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 border border-cyan-800">
+                        STEP 1: STRUCTURAL WIREFRAME
+                    </span>
+                </h1>
+            </div>
+        </div>
+
+        <!-- Telemetry Stats -->
+        <div class="hidden lg:flex items-center gap-6 text-xs mono text-slate-400">
+            <div>PROGRESS: <strong id="progressPct" class="text-cyan-400">0%</strong></div>
+            <div class="h-3 w-px bg-slate-800"></div>
+            <div>CURSORS: <strong class="text-purple-400">6 ACTIVE BOTS</strong></div>
+            <div class="h-3 w-px bg-slate-800"></div>
+            <div>ACTION: <span id="currentActionText" class="text-amber-400">Initializing Vector Paths...</span></div>
+        </div>
+
+        <!-- Controls -->
+        <div class="flex items-center space-x-2 text-xs">
+            <button id="btnPrevStep" class="px-2.5 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-semibold flex items-center gap-1 transition">
+                <i class="fa-solid fa-backward-step"></i> Prev
+            </button>
+            <button id="btnTogglePlay" class="px-3 py-1.5 rounded bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/40 font-semibold flex items-center gap-1.5 transition">
+                <i id="playIcon" class="fa-solid fa-pause"></i> <span id="playText">Pause</span>
+            </button>
+            <button id="btnNextStep" class="px-2.5 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-semibold flex items-center gap-1 transition">
+                Next <i class="fa-solid fa-forward-step"></i>
+            </button>
+            <button id="btnResetDraw" class="px-2.5 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-semibold flex items-center gap-1 transition">
+                <i class="fa-solid fa-rotate-right"></i> Reset
+            </button>
+
+            <div class="h-4 w-px bg-slate-800 mx-1"></div>
+
+            <!-- Speed Selector -->
+            <div class="flex items-center gap-1 bg-slate-900 px-2 py-1 rounded border border-slate-800 text-[11px] mono">
+                <span class="text-slate-500">SPD:</span>
+                <button class="btn-spd text-slate-400 hover:text-cyan-400 px-1" data-spd="0.5">0.5x</button>
+                <button class="btn-spd text-cyan-400 font-bold px-1" data-spd="1">1x</button>
+                <button class="btn-spd text-slate-400 hover:text-cyan-400 px-1" data-spd="2">2x</button>
+                <button class="btn-spd text-slate-400 hover:text-cyan-400 px-1" data-spd="4">4x</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN DASHBOARD (Target UI DOM Structure to be rendered) -->
+    <main class="flex-1 p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-4 relative z-10 overflow-hidden">
+        
+        <!-- LEFT COLUMN: ANNOTATION CANVAS & TERMINAL (7 Cols) -->
+        <div class="lg:col-span-7 flex flex-col gap-4">
+            
+            <!-- Panel 1: Dataset Annotation Canvas -->
+            <div id="panel-annotation" class="cad-element bg-slate-950/80 border border-slate-800 rounded-xl p-4 flex flex-col flex-1 relative">
+                <div class="flex items-center justify-between pb-3 mb-3 border-b border-slate-800/80">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-vector-square text-cyan-400 text-xs"></i>
+                        <span id="title-annotation" class="font-semibold text-xs tracking-wide"></span>
+                    </div>
+                    <span id="badge-annotation" class="text-[10px] mono bg-slate-900 text-slate-400 px-2 py-0.5 rounded border border-slate-800 opacity-0">IMG_4092_AUTONOMOUS.RAW</span>
+                </div>
+
+                <!-- Vision Image Container -->
+                <div id="box-image-container" class="cad-element relative flex-1 bg-slate-900/60 rounded-lg overflow-hidden border border-slate-800/80 min-h-[280px] flex items-center justify-center">
+                    <div class="absolute inset-0 bg-cad-grid opacity-30"></div>
+                    
+                    <!-- SVG Image Target -->
+                    <svg id="droneSvg" class="w-3/4 h-3/4 text-slate-800 opacity-30" viewBox="0 0 400 240" fill="none">
+                        <rect x="70" y="50" width="260" height="140" rx="12" stroke="currentColor" stroke-width="2"/>
+                        <circle cx="200" cy="120" r="45" stroke="currentColor" stroke-width="2"/>
+                        <circle cx="110" cy="75" r="18" stroke="currentColor" stroke-width="2"/>
+                        <circle cx="290" cy="75" r="18" stroke="currentColor" stroke-width="2"/>
+                        <circle cx="110" cy="165" r="18" stroke="currentColor" stroke-width="2"/>
+                        <circle cx="290" cy="165" r="18" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+
+                    <!-- Precision Drawn Bounding Boxes -->
+                    <div id="bbox-vehicle" class="cad-element absolute border-2 border-cyan-400 bg-cyan-500/10 rounded pointer-events-none">
+                        <span id="label-bbox-1" class="absolute -top-5 left-0 bg-cyan-500 text-slate-950 mono text-[9px] font-bold px-1.5 py-0.5 rounded shadow"></span>
+                    </div>
+
+                    <div id="bbox-sensor" class="cad-element absolute border-2 border-purple-400 bg-purple-500/10 rounded pointer-events-none">
+                        <span id="label-bbox-2" class="absolute -top-5 left-0 bg-purple-500 text-white mono text-[9px] font-bold px-1.5 py-0.5 rounded shadow"></span>
+                    </div>
+                </div>
+
+                <!-- Footer Stats Strip -->
+                <div class="grid grid-cols-3 gap-3 mt-3 mono text-[11px]">
+                    <div id="stat-card-1" class="cad-element bg-slate-900/90 p-2 rounded border border-slate-800 text-center">
+                        <span class="text-slate-500 text-[9px] block">ANNOTATION COUNT</span>
+                        <span id="txt-stat-1" class="font-bold text-cyan-400"></span>
+                    </div>
+                    <div id="stat-card-2" class="cad-element bg-slate-900/90 p-2 rounded border border-slate-800 text-center">
+                        <span class="text-slate-500 text-[9px] block">SEGMENTATION MASK</span>
+                        <span id="txt-stat-2" class="font-bold text-purple-400"></span>
+                    </div>
+                    <div id="stat-card-3" class="cad-element bg-slate-900/90 p-2 rounded border border-slate-800 text-center">
+                        <span class="text-slate-500 text-[9px] block">MODEL CONFIDENCE</span>
+                        <span id="txt-stat-3" class="font-bold text-emerald-400"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panel 2: Telemetry Terminal -->
+            <div id="panel-terminal" class="cad-element bg-slate-950/80 border border-slate-800 rounded-xl p-4 flex flex-col h-44">
+                <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-800/80">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-terminal text-emerald-400 text-xs"></i>
+                        <span id="title-terminal" class="font-semibold text-xs tracking-wide"></span>
+                    </div>
+                    <span id="badge-terminal" class="text-[10px] mono text-slate-500 opacity-0">LIVE STACK STREAM</span>
+                </div>
+                <div id="terminalLog" class="flex-1 bg-slate-900/90 p-2.5 rounded mono text-[11px] overflow-y-auto space-y-1 border border-slate-800/80 text-slate-300">
+                    <!-- Lines injected dynamically by Text Synthesizer cursor -->
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT COLUMN: GRAPH & HYPERPARAMETERS (5 Cols) -->
+        <div class="lg:col-span-5 flex flex-col gap-4">
+            
+            <!-- Panel 3: Neural Loss Chart -->
+            <div id="panel-chart" class="cad-element bg-slate-950/80 border border-slate-800 rounded-xl p-4 flex flex-col h-[280px]">
+                <div class="flex items-center justify-between pb-3 mb-2 border-b border-slate-800/80">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-chart-line text-purple-400 text-xs"></i>
+                        <span id="title-chart" class="font-semibold text-xs tracking-wide"></span>
+                    </div>
+                    <div id="legend-chart" class="flex items-center gap-3 text-[10px] mono opacity-0">
+                        <span class="text-cyan-400">■ Loss</span>
+                        <span class="text-purple-400">■ Accuracy</span>
+                    </div>
+                </div>
+
+                <!-- Interactive Chart Canvas -->
+                <div id="box-chart-container" class="cad-element relative flex-1 bg-slate-900/60 rounded-lg p-2 border border-slate-800/80 flex items-center justify-center">
+                    <canvas id="neuralChart" class="w-full h-full"></canvas>
+                </div>
+
+                <!-- Stats Strip -->
+                <div class="grid grid-cols-3 gap-2 mt-2 pt-2 border-t border-slate-800/80 mono text-center">
+                    <div>
+                        <span class="text-[9px] text-slate-500 block">EPOCH</span>
+                        <span id="txt-chart-epoch" class="text-xs font-bold text-slate-200"></span>
+                    </div>
+                    <div>
+                        <span class="text-[9px] text-slate-500 block">CURR LOSS</span>
+                        <span id="txt-chart-loss" class="text-xs font-bold text-cyan-400"></span>
+                    </div>
+                    <div>
+                        <span class="text-[9px] text-slate-500 block">VAL ACC</span>
+                        <span id="txt-chart-acc" class="text-xs font-bold text-purple-400"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Panel 4: Training Control Deck -->
+            <div id="panel-controls" class="cad-element bg-slate-950/80 border border-slate-800 rounded-xl p-4 flex flex-col flex-1">
+                <div class="flex items-center justify-between pb-3 mb-3 border-b border-slate-800/80">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-sliders text-amber-400 text-xs"></i>
+                        <span id="title-controls" class="font-semibold text-xs tracking-wide"></span>
+                    </div>
+                    <span id="badge-controls" class="text-[10px] mono text-amber-400 bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800/60 opacity-0">TENSOR CLUSTER</span>
+                </div>
+
+                <div class="space-y-3 flex-1 text-xs">
+                    <!-- Slider Box -->
+                    <div id="box-slider" class="cad-element bg-slate-900/80 p-2.5 rounded border border-slate-800/80 space-y-1.5">
+                        <div class="flex justify-between items-center">
+                            <span id="lbl-lr" class="text-slate-300 text-[11px]"></span>
+                            <span id="txt-lr-val" class="mono text-cyan-400 font-bold bg-slate-950 px-2 py-0.5 rounded border border-slate-800 text-[10px]"></span>
+                        </div>
+                        <input id="input-lr" type="range" min="0.0001" max="0.01" step="0.0001" value="0.00035" class="w-full h-1.5 bg-slate-800 rounded accent-cyan-400">
+                    </div>
+
+                    <!-- Selectors -->
+                    <div class="grid grid-cols-2 gap-2">
+                        <div id="box-opt" class="cad-element bg-slate-900/80 p-2 rounded border border-slate-800/80 space-y-1">
+                            <span id="lbl-opt" class="text-slate-400 text-[10px] block"></span>
+                            <div id="val-opt" class="bg-slate-950 p-1.5 rounded border border-slate-800 text-cyan-300 mono text-[11px]"></div>
+                        </div>
+                        <div id="box-batch" class="cad-element bg-slate-900/80 p-2 rounded border border-slate-800/80 space-y-1">
+                            <span id="lbl-batch" class="text-slate-400 text-[10px] block"></span>
+                            <div id="val-batch" class="bg-slate-950 p-1.5 rounded border border-slate-800 text-purple-300 mono text-[11px]"></div>
+                        </div>
+                    </div>
+
+                    <!-- Deploy Button -->
+                    <div id="btn-deploy" class="cad-element py-2 bg-gradient-to-r from-cyan-600 to-indigo-600 text-white font-semibold text-xs rounded-lg shadow-lg flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-rocket"></i>
+                        <span id="txt-deploy"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="h-8 border-t border-slate-800 bg-slate-950 px-5 flex items-center justify-between text-[11px] mono text-slate-500 z-40 relative">
+        <div>SYSTEM: <span class="text-slate-300">NEURAL_CAD_PARSER_v4</span></div>
+        <div id="statusFooterText" class="text-cyan-400">STATUS: INITIALIZING CAD BLUEPRINT...</div>
+    </footer>
+
+    <!-- ENGINE SCRIPT -->
+    <script>
+        // --- 1. GLOBAL STATE & AGENT DEFINITIONS ---
+        const state = {
+            isPlaying: true,
+            speed: 1,
+            stepIndex: 0,
+            subProgress: 0,
+            activeActionText: 'Drawing UI Framework Wireframes...',
+            laserStrokes: [],
+            chartPoints: []
+        };
+
+        const agents = [
+            { id: 'architect', name: 'Layout Architect', role: 'Framing Panels', color: '#06b6d4', x: 50, y: 50, targetX: 50, targetY: 50, active: true },
+            { id: 'component', name: 'UI Components', role: 'Vector Buttons & Inputs', color: '#f59e0b', x: 100, y: 50, targetX: 100, targetY: 50, active: true },
+            { id: 'textSynth', name: 'Text Synthesizer', role: 'Character Ingestion', color: '#10b981', x: 150, y: 50, targetX: 150, targetY: 50, active: true },
+            { id: 'chartPlotter', name: 'Chart Plotter', role: 'Axis & Loss Line', color: '#38bdf8', x: 200, y: 50, targetX: 200, targetY: 50, active: true },
+            { id: 'annotator', name: 'Vision Annotator', role: 'Bounding Boxes', color: '#a855f7', x: 250, y: 50, targetX: 250, targetY: 50, active: true },
+            { id: 'inspector', name: 'CAD Inspector', role: 'Alignment & Snap Guides', color: '#ec4899', x: 300, y: 50, targetX: 300, targetY: 50, active: true }
+        ];
+
+        // --- 2. CANVAS SETUP ---
+        const cadCanvas = document.getElementById('cadCanvas');
+        const ctx = cadCanvas.getContext('2d');
+        const neuralCanvas = document.getElementById('neuralChart');
+        const neuralCtx = neuralCanvas.getContext('2d');
+
+        function resizeCanvases() {
+            cadCanvas.width = window.innerWidth;
+            cadCanvas.height = window.innerHeight;
+
+            const rect = neuralCanvas.parentElement.getBoundingClientRect();
+            neuralCanvas.width = rect.width;
+            neuralCanvas.height = rect.height;
+        }
+        window.addEventListener('resize', resizeCanvases);
+
+        // DOM Cursor Generator
+        function initCursorsDOM() {
+            agents.forEach(agent => {
+                const el = document.createElement('div');
+                el.id = `cursor-${agent.id}`;
+                el.className = 'agent-cursor flex flex-col items-start gap-1';
+                el.innerHTML = `
+                    <svg class="w-5 h-5 filter drop-shadow(0 2px 6px rgba(0,0,0,0.8))" viewBox="0 0 24 24" fill="none">
+                        <path d="M3 3L10.07 19.97L12.58 12.58L19.97 10.07L3 3Z" fill="${agent.color}" stroke="#ffffff" stroke-width="1.2"/>
+                    </svg>
+                    <div class="cursor-badge bg-slate-950/95 text-slate-100" style="border-color:${agent.color};">
+                        <span class="w-1.5 h-1.5 rounded-full" style="background:${agent.color};"></span>
+                        <span>${agent.name}</span>
+                        <span class="text-[9px] text-slate-400 mono">(${agent.role})</span>
+                    </div>
+                `;
+                document.body.appendChild(el);
+                agent.el = el;
+            });
+        }
+
+        // Helper: Get bounding rectangle coordinates of an element by ID
+        function getRect(id) {
+            const el = document.getElementById(id);
+            if (!el) return { x: 0, y: 0, w: 100, h: 100, l: 0, t: 0, r: 100, b: 100 };
+            const r = el.getBoundingClientRect();
+            return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height, l: r.left, t: r.top, r: r.right, b: r.bottom };
+        }
+
+        // Show DOM Element cleanly
+        function showEl(id) {
+            const el = document.getElementById(id);
+            if (el) el.classList.add('visible');
+        }
+
+        // --- 3. STRUCTURED ASSEMBLY SEQUENCE DEFINITION ---
+        const STEPS = [
+            // STEP 1: Layout Architect & CAD Inspector construct containers
+            {
+                title: "STEP 1: STRUCTURAL CONTAINER FRAMING",
+                action: "Drawing Orthogonal Panel Outlines",
+                duration: 180,
+                run: (p) => {
+                    const p1 = getRect('panel-annotation');
+                    const p2 = getRect('panel-terminal');
+                    const p3 = getRect('panel-chart');
+                    const p4 = getRect('panel-controls');
+
+                    // Architect cursor draws panels sequentially
+                    const arch = agents[0];
+                    const insp = agents[5];
+
+                    if (p < 0.25) {
+                        const subP = p / 0.25;
+                        arch.targetX = p1.l + subP * p1.w; arch.targetY = p1.t;
+                        insp.targetX = p1.l; insp.targetY = p1.t + subP * p1.h;
+                        if (subP > 0.8) showEl('panel-annotation');
+                    } else if (p < 0.50) {
+                        const subP = (p - 0.25) / 0.25;
+                        arch.targetX = p2.l + subP * p2.w; arch.targetY = p2.t;
+                        insp.targetX = p2.r; insp.targetY = p2.t + subP * p2.h;
+                        if (subP > 0.8) showEl('panel-terminal');
+                    } else if (p < 0.75) {
+                        const subP = (p - 0.50) / 0.25;
+                        arch.targetX = p3.l + subP * p3.w; arch.targetY = p3.t;
+                        insp.targetX = p3.l; insp.targetY = p3.b - subP * p3.h;
+                        if (subP > 0.8) showEl('panel-chart');
+                    } else {
+                        const subP = (p - 0.75) / 0.25;
+                        arch.targetX = p4.l + subP * p4.w; arch.targetY = p4.t;
+                        insp.targetX = p4.r; insp.targetY = p4.b - subP * p4.h;
+                        if (subP > 0.8) showEl('panel-controls');
+                    }
+
+                    // Stroke guides
+                    state.laserStrokes.push({ x1: arch.x, y1: arch.y, x2: insp.x, y2: insp.y, color: '#06b6d4' });
+                }
+            },
+
+            // STEP 2: UI Component Cursor inserts inner containers, sliders, and controls
+            {
+                title: "STEP 2: VECTOR COMPONENT OUTLINING",
+                action: "Constructing Inner Frames & Control Widgets",
+                duration: 160,
+                run: (p) => {
+                    const comp = agents[1];
+                    const boxImg = getRect('box-image-container');
+                    const boxChart = getRect('box-chart-container');
+                    const boxSlider = getRect('box-slider');
+                    const btnDeploy = getRect('btn-deploy');
+
+                    if (p < 0.3) {
+                        comp.targetX = boxImg.l + p / 0.3 * boxImg.w; comp.targetY = boxImg.t;
+                        if (p > 0.2) showEl('box-image-container');
+                    } else if (p < 0.5) {
+                        comp.targetX = boxChart.l + (p - 0.3) / 0.2 * boxChart.w; comp.targetY = boxChart.t;
+                        if (p > 0.4) showEl('box-chart-container');
+                    } else if (p < 0.75) {
+                        comp.targetX = boxSlider.l + (p - 0.5) / 0.25 * boxSlider.w; comp.targetY = boxSlider.t;
+                        if (p > 0.7) {
+                            showEl('box-slider'); showEl('box-opt'); showEl('box-batch');
+                        }
+                    } else {
+                        comp.targetX = btnDeploy.l + (p - 0.75) / 0.25 * btnDeploy.w; comp.targetY = btnDeploy.y;
+                        if (p > 0.9) showEl('btn-deploy');
+                    }
+                }
+            },
+
+            // STEP 3: Text Synthesizer Cursor types titles, text fields character by character
+            {
+                title: "STEP 3: TEXT & TYPOGRAPHY SYNTHESIS",
+                action: "Synthesizing UI Labels & Terminal Output",
+                duration: 200,
+                run: (p) => {
+                    const txtCursor = agents[2];
+
+                    const typeText = (id, str, curP, startP, endP) => {
+                        if (curP >= startP) {
+                            const ratio = Math.min(1, (curP - startP) / (endP - startP));
+                            const charCount = Math.floor(ratio * str.length);
+                            document.getElementById(id).innerText = str.substring(0, charCount);
+                            const r = getRect(id);
+                            txtCursor.targetX = r.r + 5;
+                            txtCursor.targetY = r.y;
+                        }
+                    };
+
+                    typeText('title-annotation', 'Dataset Annotation Canvas', p, 0.0, 0.15);
+                    typeText('title-terminal', 'Execution Telemetry Log', p, 0.15, 0.30);
+                    typeText('title-chart', 'Neural Loss & Accuracy Convergence', p, 0.30, 0.45);
+                    typeText('title-controls', 'Hyperparameter Deck', p, 0.45, 0.60);
+                    typeText('lbl-lr', 'Learning Rate (LR)', p, 0.60, 0.70);
+                    typeText('txt-lr-val', '0.00035', p, 0.70, 0.75);
+                    typeText('lbl-opt', 'Optimizer Engine', p, 0.75, 0.80);
+                    typeText('lbl-batch', 'Batch Size', p, 0.80, 0.85);
+                    typeText('txt-deploy', 'DEPLOY CLUSTER EXPERIMENT', p, 0.85, 1.0);
+
+                    // Reveal static content boxes
+                    document.getElementById('val-opt').innerText = 'AdamW (FP16)';
+                    document.getElementById('val-batch').innerText = '64 Samples';
+                    document.getElementById('badge-annotation').style.opacity = '1';
+                    document.getElementById('badge-terminal').style.opacity = '1';
+                    document.getElementById('badge-controls').style.opacity = '1';
+                    document.getElementById('legend-chart').style.opacity = '1';
+                }
+            },
+
+            // STEP 4: Data/Chart Plotter draws axes and plots Loss & Accuracy graph
+            {
+                title: "STEP 4: NEURAL LOSS & ACCURACY PLOTTING",
+                action: "Plotting Line Segments and Axis Ticks",
+                duration: 180,
+                run: (p) => {
+                    const plotter = agents[3];
+                    const chartPos = getRect('box-chart-container');
+
+                    plotter.targetX = chartPos.l + p * chartPos.w;
+                    plotter.targetY = chartPos.b - 20 - Math.sin(p * Math.PI * 2) * 30;
+
+                    // Compute points
+                    const totalPts = Math.floor(p * 25);
+                    state.chartPoints = [];
+                    for (let i = 0; i <= totalPts; i++) {
+                        const ratio = i / 25;
+                        const loss = 0.85 * Math.exp(-ratio * 2.5) + Math.sin(i) * 0.02 + 0.05;
+                        const acc = 40 + 58 * (1 - Math.exp(-ratio * 3)) + Math.cos(i) * 0.8;
+                        state.chartPoints.push({ loss, acc });
+                    }
+
+                    if (state.chartPoints.length > 0) {
+                        const curr = state.chartPoints[state.chartPoints.length - 1];
+                        document.getElementById('txt-chart-epoch').innerText = `${totalPts}/50`;
+                        document.getElementById('txt-chart-loss').innerText = curr.loss.toFixed(4);
+                        document.getElementById('txt-chart-acc').innerText = `${curr.acc.toFixed(1)}%`;
+                    }
+                }
+            },
+
+            // STEP 5: Vision Annotator draws precision bounding boxes and masks
+            {
+                title: "STEP 5: COMPUTER VISION OBJECT ANNOTATION",
+                action: "Fitting Precise Object Bounding Boxes",
+                duration: 180,
+                run: (p) => {
+                    const ann = agents[4];
+                    const imgBox = getRect('box-image-container');
+
+                    if (p < 0.5) {
+                        const subP = p / 0.5;
+                        const b1 = document.getElementById('bbox-vehicle');
+                        showEl('bbox-vehicle');
+                        b1.style.left = '16%'; b1.style.top = '18%';
+                        b1.style.width = `${subP * 64}%`; b1.style.height = `${subP * 64}%`;
+                        
+                        ann.targetX = imgBox.l + (0.16 + subP * 0.64) * imgBox.w;
+                        ann.targetY = imgBox.t + (0.18 + subP * 0.64) * imgBox.h;
+                        document.getElementById('label-bbox-1').innerText = `Autonomous_Vehicle [99.2%]`;
+                    } else {
+                        const subP = (p - 0.5) / 0.5;
+                        const b2 = document.getElementById('bbox-sensor');
+                        showEl('bbox-sensor');
+                        b2.style.left = '42%'; b2.style.top = '40%';
+                        b2.style.width = `${subP * 22}%`; b2.style.height = `${subP * 22}%`;
+
+                        ann.targetX = imgBox.l + (0.42 + subP * 0.22) * imgBox.w;
+                        ann.targetY = imgBox.t + (0.40 + subP * 0.22) * imgBox.h;
+                        document.getElementById('label-bbox-2').innerText = `LiDAR_Sensor [96.4%]`;
+                    }
+
+                    // Stat Cards
+                    showEl('stat-card-1'); showEl('stat-card-2'); showEl('stat-card-3');
+                    document.getElementById('txt-stat-1').innerText = p > 0.5 ? '2 Objects' : '1 Object';
+                    document.getElementById('txt-stat-2').innerText = 'POLYGON';
+                    document.getElementById('txt-stat-3').innerText = '98.8%';
+                }
+            },
+
+            // STEP 6: Terminal & Live Real-Time Continuous Sync
+            {
+                title: "STEP 6: LIVE TELEMETRY & SYNC ACTIVE",
+                action: "Continuous Collaborative Editing",
+                duration: 200,
+                run: (p) => {
+                    const termCursor = agents[2];
+                    const termPos = getRect('panel-terminal');
+                    termCursor.targetX = termPos.l + 30 + (Math.sin(p * Math.PI * 4) + 1) * 80;
+                    termCursor.targetY = termPos.b - 30;
+
+                    if (Math.floor(p * 20) > state.lastLogIdx) {
+                        state.lastLogIdx = Math.floor(p * 20);
+                        const logs = [
+                            '[INFO] CUDA Device 0: NVIDIA A100-SXM4-80GB initialized.',
+                            '[DATA] Processing batch chunk #4092 (1024 samples)...',
+                            '[OPT] AdamW learning rate adjusted to 0.00035.',
+                            '[METRIC] Val loss reduced: 0.0412 -> 0.0218',
+                            '[CHECKPOINT] Model weights serialized to /export/yolo_v8.pt'
+                        ];
+                        const text = logs[state.lastLogIdx % logs.length];
+                        const item = document.createElement('div');
+                        item.className = 'text-cyan-400 mono text-[10px]';
+                        item.innerHTML = `<span class="text-slate-600">&gt;</span> ${text}`;
+                        const logBox = document.getElementById('terminalLog');
+                        logBox.appendChild(item);
+                        logBox.scrollTop = logBox.scrollHeight;
+                    }
+                }
+            }
+        ];
+
+        // --- 4. ANIMATION & PHYSICS ENGINE ---
+        function updateSimulation() {
+            if (!state.isPlaying) return;
+
+            const currentStep = STEPS[state.stepIndex];
+            state.subProgress += (1 / currentStep.duration) * state.speed;
+
+            if (state.subProgress >= 1) {
+                state.subProgress = 0;
+                if (state.stepIndex < STEPS.length - 1) {
+                    state.stepIndex++;
+                } else {
+                    state.stepIndex = STEPS.length - 1; // Stay in live sync
+                }
+            }
+
+            // Update UI Header Telemetry
+            document.getElementById('stageBadge').innerText = currentStep.title;
+            document.getElementById('currentActionText').innerText = currentStep.action;
+            document.getElementById('statusFooterText').innerText = `STATUS: ${currentStep.title} (${Math.floor(state.subProgress * 100)}%)`;
+            
+            const totalProgress = Math.floor(((state.stepIndex + state.subProgress) / STEPS.length) * 100);
+            document.getElementById('progressPct').innerText = `${totalProgress}%`;
+
+            // Clear frame strokes
+            state.laserStrokes = [];
+
+            // Execute current step logic
+            currentStep.run(state.subProgress);
+
+            // Move agent cursors smoothly with lerp physics
+            agents.forEach(agent => {
+                agent.x += (agent.targetX - agent.x) * 0.2;
+                agent.y += (agent.targetY - agent.y) * 0.2;
+
+                if (agent.el) {
+                    agent.el.style.transform = `translate3d(${agent.x}px, ${agent.y}px, 0)`;
+                }
+            });
+        }
+
+        // Render Canvas Overlays (Crosshairs, Laser Paths, Axis Ticks, Chart Line)
+        function renderOverlays() {
+            ctx.clearRect(0, 0, cadCanvas.width, cadCanvas.height);
+
+            // 1. Render Alignment Crosshairs for Inspectors & Architect
+            agents.forEach(agent => {
+                if (!agent.active) return;
+
+                // Draw alignment guides
+                ctx.strokeStyle = agent.color + '33';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([4, 4]);
+
+                ctx.beginPath();
+                ctx.moveTo(agent.x, 0); ctx.lineTo(agent.x, cadCanvas.height);
+                ctx.moveTo(0, agent.y); ctx.lineTo(cadCanvas.width, agent.y);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Coordinate Tooltip Box
+                ctx.fillStyle = '#090d16';
+                ctx.strokeStyle = agent.color;
+                ctx.lineWidth = 1;
+                const txt = `X:${Math.round(agent.x)} Y:${Math.round(agent.y)}`;
+                ctx.fillRect(agent.x + 12, agent.y + 12, 80, 18);
+                ctx.strokeRect(agent.x + 12, agent.y + 12, 80, 18);
+
+                ctx.fillStyle = agent.color;
+                ctx.font = '9px JetBrains Mono';
+                ctx.fillText(txt, agent.x + 18, agent.y + 24);
+            });
+
+            // 2. Render Laser Path Diffs
+            state.laserStrokes.forEach(s => {
+                ctx.strokeStyle = s.color;
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(s.x1, s.y1);
+                ctx.lineTo(s.x2, s.y2);
+                ctx.stroke();
+            });
+
+            // 3. Render Neural Chart Graph
+            if (state.chartPoints.length > 1 && neuralCtx) {
+                const w = neuralCanvas.width;
+                const h = neuralCanvas.height;
+                neuralCtx.clearRect(0, 0, w, h);
+
+                // Axis Grid
+                neuralCtx.strokeStyle = 'rgba(51, 65, 85, 0.4)';
+                neuralCtx.lineWidth = 1;
+                for (let y = 10; y < h; y += 25) {
+                    neuralCtx.beginPath(); neuralCtx.moveTo(0, y); neuralCtx.lineTo(w, y); neuralCtx.stroke();
+                }
+
+                const step = w / 25;
+
+                // Loss Line (Cyan)
+                neuralCtx.beginPath();
+                neuralCtx.strokeStyle = '#06b6d4';
+                neuralCtx.lineWidth = 2;
+                state.chartPoints.forEach((pt, idx) => {
+                    const x = idx * step;
+                    const y = h - (1 - pt.loss) * (h * 0.7) - 10;
+                    if (idx === 0) neuralCtx.moveTo(x, y);
+                    else neuralCtx.lineTo(x, y);
+                });
+                neuralCtx.stroke();
+
+                // Accuracy Line (Purple)
+                neuralCtx.beginPath();
+                neuralCtx.strokeStyle = '#a855f7';
+                neuralCtx.lineWidth = 2;
+                state.chartPoints.forEach((pt, idx) => {
+                    const x = idx * step;
+                    const y = h - (pt.acc / 100) * (h * 0.75) - 5;
+                    if (idx === 0) neuralCtx.moveTo(x, y);
+                    else neuralCtx.lineTo(x, y);
+                });
+                neuralCtx.stroke();
+            }
+        }
+
+        // --- 5. CONTROL EVENT HANDLERS ---
+        document.getElementById('btnTogglePlay').addEventListener('click', () => {
+            state.isPlaying = !state.isPlaying;
+            document.getElementById('playIcon').className = state.isPlaying ? 'fa-solid fa-pause' : 'fa-solid fa-play';
+            document.getElementById('playText').innerText = state.isPlaying ? 'Pause' : 'Play';
+        });
+
+        document.getElementById('btnPrevStep').addEventListener('click', () => {
+            state.stepIndex = Math.max(0, state.stepIndex - 1);
+            state.subProgress = 0;
+        });
+
+        document.getElementById('btnNextStep').addEventListener('click', () => {
+            state.stepIndex = Math.min(STEPS.length - 1, state.stepIndex + 1);
+            state.subProgress = 0;
+        });
+
+        document.getElementById('btnResetDraw').addEventListener('click', () => {
+            state.stepIndex = 0;
+            state.subProgress = 0;
+            state.chartPoints = [];
+            document.querySelectorAll('.cad-element').forEach(el => el.classList.remove('visible'));
+            document.getElementById('terminalLog').innerHTML = '';
+        });
+
+        document.querySelectorAll('.btn-spd').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.btn-spd').forEach(b => {
+                    b.classList.remove('text-cyan-400', 'font-bold');
+                    b.classList.add('text-slate-400');
+                });
+                e.target.classList.remove('text-slate-400');
+                e.target.classList.add('text-cyan-400', 'font-bold');
+                state.speed = parseFloat(e.target.getAttribute('data-spd'));
+            });
+        });
+
+        // Loop
+        function loop() {
+            updateSimulation();
+            renderOverlays();
+            requestAnimationFrame(loop);
+        }
+
+        window.onload = () => {
+            resizeCanvases();
+            initCursorsDOM();
+            requestAnimationFrame(loop);
+        };
+    </script>
+</body>
+</html>
