@@ -3528,7 +3528,7 @@
 
         // ==================== 开通VIP功能 ====================
         let isOpeningVip = false; // 防重复点击：同一时刻只允许一笔开通请求在飞
-        const openVip = async (username, duration = 30, price = 10.00, coupon = null) => {
+        const openVip = async (username, duration = 30, price = 10.00, coupon = null, skipConfirm = false) => {
             if (isOpeningVip) {
                 console.warn('开通VIP请求进行中，已忽略重复点击');
                 return false;
@@ -3537,6 +3537,7 @@
             // 余额不足：提示并询问是否前往充值（不再走开通确认，避免确认后扣款失败）
             const currentBalance = Number(userInfo?.balance || 0);
             if (currentBalance < finalPrice) {
+                if (skipConfirm) return false; // 自动续费场景：余额仍不足则不再跳转，直接结束（VIP 界面已展示）
                 const balTip = translations[currentLang]?.['alert_balance不足'] || '余额不足！当前余额：¥{balance}，是否前往充值？';
                 if (!confirm(balTip.replace('{balance}', currentBalance.toFixed(2)))) {
                     return false;
@@ -3545,7 +3546,7 @@
                 return false;
             }
             const confirmOpenVip = translations[currentLang]?.alert_confirm_open_vip || '确定要开通VIP吗？将从您的余额中扣除¥{price}。';
-            if (!confirm(confirmOpenVip.replace('{price}', finalPrice.toFixed(2)))) {
+            if (!skipConfirm && !confirm(confirmOpenVip.replace('{price}', finalPrice.toFixed(2)))) {
                 return false;
             }
             isOpeningVip = true;
@@ -4786,10 +4787,32 @@
                         _clean.delete('after_recharge'); _clean.delete('duration');
                         const _newUrl = window.location.pathname + (_clean.toString() ? '?' + _clean.toString() : '') + window.location.hash;
                         history.replaceState({}, document.title, _newUrl);
+
+                        // 先关掉自动弹出的消息面板，避免遮挡 VIP 界面
+                        const _nd = document.getElementById('notification-dropdown');
+                        if (_nd) _nd.classList.add('hidden');
+
                         if (!window.userInfo || !window.userInfo.username) return;
-                        if (typeof updateBalance === 'function') { try { await updateBalance(); } catch (e) {} }
                         const _dur = parseInt(_p.get('duration'), 10) || 30;
-                        showVipNodes(_dur);
+
+                        // 刷新最新余额，保证实时
+                        if (typeof updateBalance === 'function') { try { await updateBalance(); } catch (e) {} }
+                        // 显示 VIP 节点界面
+                        await showVipNodes(_dur);
+                        // 再次确保消息面板已关闭（防止延迟弹出）
+                        if (_nd) _nd.classList.add('hidden');
+
+                        // 余额充足则自动续费（跳过确认弹窗）
+                        const _u = JSON.parse(localStorage.getItem('userInfo') || '{}');
+                        const _price = _dur === 365 ? (Number(_u.pricePlan?.annual_discount) || 100) : (Number(_u.pricePlan?.monthly_discount) || 10);
+                        const _balance = Number(_u.balance) || 0;
+                        if (_u.username && _balance >= _price) {
+                            // 同步实时余额到内存态，确保 openVip 的余额校验使用最新值
+                            if (typeof userInfo !== 'undefined' && window.userInfo) userInfo = window.userInfo;
+                            if (typeof userInfo !== 'undefined' && userInfo) userInfo.balance = _balance;
+                            await new Promise(r => setTimeout(r, 800)); // 让用户先看到 VIP 界面再自动续费
+                            openVip(_u.username, _dur, _price, null, true);
+                        }
                     } catch (e) { console.error('处理充值后续费失败', e); }
                 };
                 if (document.readyState === 'complete') setTimeout(_run, 0);
