@@ -3534,6 +3534,16 @@
                 return false;
             }
             const finalPrice = (coupon && coupon.discount) ? Math.max(0, price - coupon.discount) : price;
+            // 余额不足：提示并询问是否前往充值（不再走开通确认，避免确认后扣款失败）
+            const currentBalance = Number(userInfo?.balance || 0);
+            if (currentBalance < finalPrice) {
+                const balTip = translations[currentLang]?.['alert_balance不足'] || '余额不足！当前余额：¥{balance}，是否前往充值？';
+                if (!confirm(balTip.replace('{balance}', currentBalance.toFixed(2)))) {
+                    return false;
+                }
+                await jumpToRecharge(duration);
+                return false;
+            }
             const confirmOpenVip = translations[currentLang]?.alert_confirm_open_vip || '确定要开通VIP吗？将从您的余额中扣除¥{price}。';
             if (!confirm(confirmOpenVip.replace('{price}', finalPrice.toFixed(2)))) {
                 return false;
@@ -3615,6 +3625,32 @@
                 isOpeningVip = false; // 无论结果如何都复位，避免按钮永久锁死
             }
             return undefined;
+        };
+
+        // 跳转到充值页：沿用免密 ticket 逻辑；带 plan（月付/年付，决定最小充值额度）与 return（支付后返回原界面）
+        const jumpToRecharge = async (duration = 30) => {
+            const lang = (window.currentLang || 'zh-CN').split('-')[0];
+            const theme = document.body.classList.contains('theme-light') ? 'light' : 'dark';
+            const plan = duration === 365 ? 'annual' : 'monthly';
+            const ret = 'https://phantom.funbua.uk/vpn?after_recharge=renew_vip&duration=' + duration;
+            const base = `https://funbua.uk/vpay?lang=${encodeURIComponent(lang)}&theme=${encodeURIComponent(theme)}&plan=${encodeURIComponent(plan)}&return=${encodeURIComponent(ret)}`;
+            if (userInfo && userInfo.username) {
+                try {
+                    const resp = await fetch(_ql(), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username: userInfo.username })
+                    });
+                    const data = await resp.json();
+                    if (data.success && data.ticket) {
+                        window.location.href = `${base}&ticket=${encodeURIComponent(data.ticket)}`;
+                        return;
+                    }
+                } catch (err) {
+                    console.error('获取授权码失败', err);
+                }
+            }
+            window.location.href = base;
         };
 
         // ==================== 增加流量功能 ====================
@@ -4733,7 +4769,29 @@
                     console.error('更新用户信息失败:', err);
                 }
             };
-            
+
+            // 充值后回跳：URL 带 after_recharge=renew_vip 时，刷新最新余额并自动打开 VIP 界面（续费入口）
+            const handleAfterRecharge = () => {
+                const _run = async () => {
+                    try {
+                        const _p = new URLSearchParams(window.location.search);
+                        if (_p.get('after_recharge') !== 'renew_vip') return;
+                        // 清理 URL，避免刷新后重复触发
+                        const _clean = new URLSearchParams(window.location.search);
+                        _clean.delete('after_recharge'); _clean.delete('duration');
+                        const _newUrl = window.location.pathname + (_clean.toString() ? '?' + _clean.toString() : '') + window.location.hash;
+                        history.replaceState({}, document.title, _newUrl);
+                        if (!window.userInfo || !window.userInfo.username) return;
+                        if (typeof updateBalance === 'function') { try { await updateBalance(); } catch (e) {} }
+                        const _dur = parseInt(_p.get('duration'), 10) || 30;
+                        showVipNodes(_dur);
+                    } catch (e) { console.error('处理充值后续费失败', e); }
+                };
+                if (document.readyState === 'complete') setTimeout(_run, 0);
+                else window.addEventListener('load', _run, { once: true });
+            };
+            handleAfterRecharge();
+
             const loadPricePlan = async () => {
                 let plan = userInfo?.pricePlan;
                 if (!plan) {

@@ -1180,6 +1180,10 @@ const API_BASE='https://api.funbua.uk',API_LEGACY='https://funbua.uk',USD_TO_CNY
 const FINANCE_API=API_BASE;
 let currentUser=null,currentPage='dashboard',payMethod='creem',creditAmount=5,cnyAmount=null,alipayAmount=null,
     orderPage=1,totalOrderPages=1,recordsPage=1,totalRecordPages=1;
+// 来自 index 余额不足跳转发来的参数：return=支付成功后返回的原界面；plan=月付/年付决定最小充值额度
+let returnUrl=new URLSearchParams(location.search).get('return')||'';
+const PLAN_MIN_AMOUNT={monthly:{creem:10,alipay_static:30,usdt:100},annual:{creem:100,alipay_static:100,usdt:100}};
+let _creemReturnUrl='';
 
 // ============ 登录态解码：p_token 内已打包 userInfo + pricePlan + exp（混淆，可逆，与 worker 同密钥） ============
 const LOGIN_OBF_KEY = 'PHANTOM_LOGIN_OBF_KEY_2024';
@@ -1755,7 +1759,16 @@ function enterMain(){
     const alipayOpt=document.querySelector('.method-option[data-method="alipay_static"]');
     if(alipayOpt)alipayOpt.style.display='none';
   }
-  updateBalance();loadRecentOrders();switchPage('dashboard');loadRealNameHistory()
+  updateBalance();loadRecentOrders();
+  // 带 plan/return 参数（来自 index 余额不足跳转）时直接进入充值页，而非总览页
+  const _jumpParams=new URLSearchParams(location.search);
+  const _isJump=!!_jumpParams.get('plan')||!!_jumpParams.get('return');
+  switchPage(_isJump?'recharge':'dashboard');
+  loadRealNameHistory();
+  applyPlanAndMethod();handleCreemReturn();
+  // 跳转场景：选好方式与最小额度后自动进入支付界面（支付宝静态弹二维码，creem 跳结账页）
+  // creem 支付完成回跳 /pay 时 URL 已无 plan/return，且 _creemReturnUrl 已消费，不会误触发
+  if(_isJump&&!_creemReturnUrl){setTimeout(handlePay,500);}
 }
 
 // Balance（默认隐藏金额，点眼睛切换）
@@ -1849,6 +1862,51 @@ document.addEventListener('click',function(e){
     document.getElementById('methodSelect')?.classList.remove('open');
   }
 });
+// 自动选中「上一个充值方式」并按 plan 设置最小充值额度（来自 index 余额不足跳转发来的参数）
+function applyPlanAndMethod(){
+  const params=new URLSearchParams(location.search);
+  const urlMethod=params.get('method');
+  const lastMethod=localStorage.getItem('lastRechargeMethod');
+  const valid=['creem','alipay_static','usdt'];
+  let m=null;
+  if(urlMethod&&valid.includes(urlMethod))m=urlMethod;
+  else if(lastMethod&&valid.includes(lastMethod))m=lastMethod;
+  if(!m){
+    // 没有上一次充值方式时：有静态支付（支付宝人工）选项的优先用静态，否则 creem
+    m=(currentUser&&currentUser.not_trusted!=='yes')?'alipay_static':'creem';
+  }
+  // 不可信用户没有支付宝人工，回退到 creem
+  if(m==='alipay_static'&&currentUser&&currentUser.not_trusted==='yes')m='creem';
+  selectMethodFromDropdown(m);
+  const plan=params.get('plan');
+  if(plan==='monthly'||plan==='annual'){
+    const min=PLAN_MIN_AMOUNT[plan][m];
+    if(m==='creem'){
+      creditAmount=min;
+      document.querySelectorAll('#amtGridCredit .amount-btn').forEach(b=>b.classList.toggle('active',b.dataset.amount==String(min)));
+    }else if(m==='alipay_static'){
+      selectAlipayAmt(min);
+    }else{
+      selectCny(min);
+    }
+    updatePayBtn();
+  }
+}
+// 从 Creem 支付成功返回后：先展示 vpay 成功界面，再返回原界面
+function handleCreemReturn(){
+  if(!_creemReturnUrl)return;
+  const url=_creemReturnUrl;_creemReturnUrl='';
+  localStorage.setItem('lastRechargeMethod','creem');
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:10000;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:18px;color:#fff;text-align:center;padding:20px';
+  ov.innerHTML='<div style="font-size:20px;font-weight:800;color:#00b894">支付成功</div>'+
+    '<div style="font-size:14px;color:#cfcfcf">即将返回原界面…</div>'+
+    '<button id="creemReturnBtn" style="margin-top:8px;padding:11px 26px;background:#6c5ce7;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">返回原界面</button>';
+  document.body.appendChild(ov);
+  const go=()=>{window.location.href=url;};
+  document.getElementById('creemReturnBtn').onclick=go;
+  setTimeout(go,3000);
+}
 function renderCreditSubs(){
   document.querySelectorAll('#amtGridCredit .amount-btn').forEach(b=>{
     const amt=parseFloat(b.dataset.amount);if(isNaN(amt))return;
@@ -1866,6 +1924,8 @@ function updatePayBtn(){const btn=document.getElementById('payBtnText');if(payMe
 async function handlePay(){
   if(!currentUser||!currentUser.username)return;
   showLoading(t('vpay.processing'));
+  // 非 Creem 方式：清掉可能存在的 Creem 回跳标记，避免误触
+  if(payMethod!=='creem')sessionStorage.removeItem('vpayReturnUrl');
   if(payMethod==='creem'){
     const orderNo=currentUser.username+'_'+Date.now();
     try{
@@ -1873,6 +1933,7 @@ async function handlePay(){
       hideLoading();
       if(r.code===200&&r.data?.checkout_url){
         localStorage.setItem('creditCardOrder_'+orderNo,JSON.stringify({username:currentUser.username,amount:creditAmount*USDT_RATE,order_no:orderNo}));
+        if(returnUrl)sessionStorage.setItem('vpayReturnUrl',returnUrl);
         window.location.href=r.data.checkout_url;
       }else showToast(r.msg||t('vpay.payFailed'),'error')
     }catch(e){hideLoading();showToast(t('alert.networkError'),'error')}
@@ -2760,6 +2821,9 @@ async function confirmRecharge(orderNo,amount,paymentType,onClose){
   updateBalance();
   loadOrders();
   if(onClose)onClose();
+  // 记住上一个充值方式；若带 return 参数（来自 index 余额不足跳转），则支付成功后返回原界面
+  localStorage.setItem('lastRechargeMethod',payMethod);
+  if(returnUrl){setTimeout(()=>{window.location.href=returnUrl;},1200);}
 }
 
 function openAlipayApp(){
@@ -2780,10 +2844,17 @@ function copyOrderNo(){
 // Init
 function initApp(){
   renderCreditSubs();
+  // 读取 Creem 回跳标记（支付成功返回 vpay 时用于回到原界面，消费一次）
+  const _cr=sessionStorage.getItem('vpayReturnUrl');
+  if(_cr){sessionStorage.removeItem('vpayReturnUrl');_creemReturnUrl=_cr;}
   const params=new URLSearchParams(window.location.search),ticket=params.get('ticket');
   // 若 URL 带 ticket（来自 index 免密登录），优先用 ticket 登录，顶掉本地已有会话
   if(ticket){
-    window.history.replaceState({},document.title,window.location.pathname);
+    // 仅清理 ticket 参数，保留 return/plan/method/lang/theme 等其它参数
+    const _p=new URLSearchParams(window.location.search);
+    _p.delete('ticket');
+    const _newUrl=window.location.pathname+(_p.toString()?'?'+_p.toString():'')+window.location.hash;
+    window.history.replaceState({},document.title,_newUrl);
     // 跳转登录全程显示动画，登录成功才消失
     if(window.VpayLoginAnime)VpayLoginAnime.show({text:t('vpay.loggingIn')||'登录中…'});
     (async()=>{
