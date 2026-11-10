@@ -1555,7 +1555,7 @@ export default {
         }
 
         const user = await DB
-          .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders, invite_code, invited_user, rebates, login_ticket, ticket_expire, card_number FROM user WHERE login_ticket = ?')
+          .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders, invite_code, invited_user, rebates, login_ticket, ticket_expire, p_token, card_number FROM user WHERE login_ticket = ?')
           .bind(ticket)
           .first();
 
@@ -1587,7 +1587,12 @@ export default {
 
           const cardNumber = user.card_number || await ensureCardNumber(DB, user.rowid);
           const userInfo = { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates, card_number: cardNumber };
-          const pToken = await newPToken(DB, user.username, userInfo, pricePlan);
+          // 复用仍有效的旧 token：避免充值（quick-login）后原页面 token 被轮换，导致后续 open-vip 等接口返回 403「无权操作该账号」；仅当旧 token 缺失或已过期才重新签发
+          let pToken = user.p_token;
+          const _exp = pToken ? getLoginExp(pToken) : 0;
+          if (!pToken || !_exp || Date.now() > _exp) {
+            pToken = await newPToken(DB, user.username, userInfo, pricePlan);
+          }
 
           return resJson({ success: true, message: '登录成功！', p_token: pToken });
         } else {

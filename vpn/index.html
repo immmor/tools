@@ -4802,6 +4802,23 @@
                         // 再次确保消息面板已关闭（防止延迟弹出）
                         if (_nd) _nd.classList.add('hidden');
 
+                        // 重新建立会话 token：充值经 quick-login 可能已轮换 DB 的 p_token，导致本地旧 p_token 失效、open-vip 返回 403「无权操作该账号」。此处用免密 ticket 主动换取最新 token 并落盘
+                        try {
+                            const _uname = window.userInfo && window.userInfo.username ? window.userInfo.username : '';
+                            if (_uname) {
+                                const _tk = await fetch(`${API}/api/quick-login-ticket`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: _uname }) }).then(r => r.json());
+                                if (_tk && _tk.success && _tk.ticket) {
+                                    const _ql = await fetch(`${API}/api/quick-login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ticket: _tk.ticket }) }).then(r => r.json());
+                                    if (_ql && _ql.success && _ql.p_token) {
+                                        const _cur = JSON.parse(localStorage.getItem('userInfo') || '{}');
+                                        _cur.p_token = _ql.p_token;
+                                        window.userInfo = _cur;
+                                        try { localStorage.setItem('userInfo', JSON.stringify(_cur)); } catch (e) {}
+                                    }
+                                }
+                            }
+                        } catch (e) { console.error('重新建立会话失败', e); }
+
                         // 余额充足则自动续费（跳过确认弹窗）
                         const _u = JSON.parse(localStorage.getItem('userInfo') || '{}');
                         const _price = _dur === 365 ? (Number(_u.pricePlan?.annual_discount) || 100) : (Number(_u.pricePlan?.monthly_discount) || 10);
