@@ -2288,7 +2288,7 @@ export default {
           return resJson({
             code: 200, msg: '查询成功',
             data: {
-              username: user.username, v_expire_date: user.v_expire_date, v_token: user.v_token,
+              username: user.username, balance: user.balance, v_expire_date: user.v_expire_date, v_token: user.v_token,
               v_link_clash: user.v_link_clash, v_link_v2ray: user.v_link_v2ray,
               monthly_quota: user.monthly_quota, used_quota: user.used_quota, quota_reset_date: user.quota_reset_date,
               bonus_quota_monthly: user.bonus_quota_monthly, bonus_expire_monthly: user.bonus_expire_monthly,
