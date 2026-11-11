@@ -1862,7 +1862,15 @@ document.addEventListener('click',function(e){
     document.getElementById('methodSelect')?.classList.remove('open');
   }
 });
-// 自动选中「上一个充值方式」并按 plan 设置最小充值额度（来自 index 余额不足跳转发来的参数）
+// 选能覆盖 need（同币种）的最小预设档位；若 need 超过所有预设，则取最大预设
+function pickPresetGE(gridId, need){
+  const amts=[...document.querySelectorAll('#'+gridId+' .amount-btn[data-amount]')]
+    .map(b=>Number(b.dataset.amount)).filter(n=>!isNaN(n)).sort((a,b)=>a-b);
+  if(!amts.length) return need;
+  const hit=amts.find(a=>a>=need);
+  return hit!==undefined?hit:amts[amts.length-1];
+}
+// 自动选中「上一个充值方式」并按 plan + 当前余额 设置最合适充值额度（余额不足跳转发来的参数）
 function applyPlanAndMethod(){
   const params=new URLSearchParams(location.search);
   const urlMethod=params.get('method');
@@ -1880,14 +1888,23 @@ function applyPlanAndMethod(){
   selectMethodFromDropdown(m);
   const plan=params.get('plan');
   if(plan==='monthly'||plan==='annual'){
-    const min=PLAN_MIN_AMOUNT[plan][m];
+    // 套餐价（人民币）− 当前余额 = 还需补足金额；默认选中能补足该差额的最小档位
+    const planPriceCNY = plan==='annual' ? (currentUser?.pricePlan?.annual_discount||100) : (currentUser?.pricePlan?.monthly_discount||10);
+    const balanceCNY = Number(currentUser?.balance||0);
+    const needCNY = Math.max(planPriceCNY - balanceCNY, 0);
     if(m==='creem'){
-      creditAmount=min;
-      document.querySelectorAll('#amtGridCredit .amount-btn').forEach(b=>b.classList.toggle('active',b.dataset.amount==String(min)));
+      // 信用卡为美元，需折算成人民币后再与差额比较，选 CNY 等价能覆盖差额的最小美元档
+      const btns=[...document.querySelectorAll('#amtGridCredit .amount-btn[data-amount]')].filter(b=>!isNaN(Number(b.dataset.amount)));
+      const pick = btns.map(b=>({usd:Number(b.dataset.amount), cny:Number(b.dataset.amount)*USD_TO_CNY}))
+                       .sort((a,b)=>a.cny-b.cny)
+                       .find(x=>x.cny>=needCNY);
+      const usd = pick ? pick.usd : Math.max(...btns.map(b=>Number(b.dataset.amount)));
+      creditAmount=usd;
+      document.querySelectorAll('#amtGridCredit .amount-btn').forEach(b=>b.classList.toggle('active',b.dataset.amount==String(usd)));
     }else if(m==='alipay_static'){
-      selectAlipayAmt(min);
+      selectAlipayAmt(pickPresetGE('amtGridAlipay', needCNY));
     }else{
-      selectCny(min);
+      selectCny(pickPresetGE('amtGridCny', needCNY));
     }
     updatePayBtn();
   }
