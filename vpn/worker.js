@@ -460,7 +460,7 @@ export default {
         headers: {
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-mj-cookie, cookie',
           'Access-Control-Max-Age': '86400'
         }
       });
@@ -944,6 +944,167 @@ export default {
         await redis(env, 'SET', `verify_passed_${email}`, String(Date.now()), 'EX', 60);
 
         return resJson({ success: true, message: '验证成功！' });
+      }
+
+      // ========== mojie 通用上游代理（复用：所有 mojie 接口都走这里） ==========
+      // 固定会话令牌 cw_conversation（从原 mojie/*.js 抓包得到；上游必须带，否则 403/1003；过期需更新）
+      const MJ_CONV_47 = 'lang=zh-cn; cw_conversation=eyJhbGciOiJIUzI1NiJ9.eyJzb3VyY2VfaWQiOiI0MDIwMWI0MC1kOWY5LTRhZjItOTlkNS1hYzI4YjYzMGQ0MWIiLCJpbmJveF9pZCI6MSwiZXhwIjoxODA1MzUyODYzLCJpYXQiOjE3ODk4MDA4NjN9.m33pMqtkZmVif4eTAJ1MWViaJfyXAOWfoJtzRE2FPOA';
+      const MJ_CONV_43 = 'lang=zh-cn; cw_conversation=eyJhbGciOiJIUzI1NiJ9.eyJzb3VyY2VfaWQiOiJiMjUzNmYwNC03MTQ1LTQ3Y2UtYjk0Mi0zNzFjMDhlNzdiOTIiLCJpbmJveF9pZCI6MSwiZXhwIjoxODA5NTczNDA2LCJpYXQiOjE3OTQwMjE0MDZ9._emuRLQpTVeqTjpLjuCmK1T8-guJdYoL15GgUKpwGZ0';
+      async function mjProxy(targetUrl, opts = {}) {
+        const method = opts.method || 'GET';
+        const u = new URL(targetUrl);
+        const headers = Object.assign({
+          'accept': '*/*',
+          'accept-language': 'zh-CN,zh;q=0.9',
+          'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36',
+          'origin': `https://${u.host}`,
+          'referer': `https://${u.host}/`
+        }, opts.extraHeaders || {});
+        // 组装 cookie：固定会话令牌 cw_conversation（部分上游必须带，否则 403/1003）+ 调用方透传的登录态
+        let cookieStr = opts.convCookie || '';
+        const incomingCookie = request.headers.get('x-mj-cookie') || request.headers.get('cookie');
+        if (opts.passCookies !== false && incomingCookie) {
+          cookieStr += (cookieStr ? '; ' : '') + incomingCookie;
+        }
+        if (cookieStr) headers['cookie'] = cookieStr;
+
+        const init = { method, headers };
+        if (opts.body !== undefined) {
+          init.body = opts.body;
+        } else if (method !== 'GET' && method !== 'HEAD') {
+          init.body = await request.text();
+        }
+        const r = await fetch(targetUrl, init);
+        if (opts.extractCookie) {
+          const setCookie = r.headers.get('set-cookie') || '';
+          const text = await r.text();
+          // 优先取响应体里的 cookie 字段，取不到则回退到 set-cookie 响应头
+          let cookie = setCookie;
+          try { const j = JSON.parse(text); if (j && j.cookie) cookie = j.cookie; } catch (e) {}
+          return resJson({ success: true, cookie, status: r.status, raw: text });
+        }
+        const ct = r.headers.get('content-type') || 'application/json; charset=utf-8';
+        const text = await r.text();
+        return new Response(text, {
+          status: r.status,
+          headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': ct }
+        });
+      }
+
+      // ========== mojie 登录：接收 email/password，返回 cookie ==========
+      if (path === '/api/mj/login' && request.method === 'POST') {
+        try {
+          const ct = request.headers.get('content-type') || '';
+          let email, password;
+          if (ct.includes('application/json')) {
+            const p = await request.json();
+            email = p.email; password = p.password;
+          } else {
+            const p = await request.formData();
+            email = p.get('email'); password = p.get('password');
+          }
+          if (!email || !password) return resJson({ success: false, message: '缺少 email 或 password' }, 400);
+          const body = `email=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`;
+          return await mjProxy('https://47.242.128.61:8000/api/?action=login', {
+            method: 'POST',
+            body,
+            extraHeaders: {
+              'content-type': 'application/x-www-form-urlencoded',
+              'origin': 'https://47.242.128.61:8000',
+              'referer': 'https://47.242.128.61:8000/login',
+              'priority': 'u=1, i',
+              'sec-ch-ua': '"Google Chrome";v="153", "Not_A Brand";v="8", "Chromium";v="153"',
+              'sec-ch-ua-mobile': '?0',
+              'sec-ch-ua-platform': '"macOS"',
+              'sec-fetch-dest': 'empty',
+              'sec-fetch-mode': 'cors',
+              'sec-fetch-site': 'same-origin'
+            },
+            convCookie: MJ_CONV_47,
+            extractCookie: true
+          });
+        } catch (err) {
+          return resJson({ success: false, message: 'mj login 失败: ' + (err && err.message || err) }, 500);
+        }
+      }
+
+      // ========== mojie 注册 ==========
+      if (path === '/api/mj/register' && request.method === 'POST') {
+        try {
+          return await mjProxy('https://43.129.207.58:8000/api/?action=register', {
+            method: 'POST',
+            extraHeaders: {
+              'content-type': request.headers.get('content-type') || 'application/x-www-form-urlencoded',
+              'origin': 'https://43.129.207.58:8000',
+              'referer': 'https://43.129.207.58:8000/register',
+              'x-requested-with': 'XMLHttpRequest'
+            },
+            convCookie: MJ_CONV_43
+          });
+        } catch (err) {
+          return resJson({ success: false, message: 'mj register 失败: ' + (err && err.message || err) }, 500);
+        }
+      }
+
+      // ========== mojie 重置安全（GET，需登录 cookie） ==========
+      if (path === '/api/mj/reset-security' && request.method === 'GET') {
+        try {
+          return await mjProxy('https://43.129.207.58:8000/api?action=resetSecurity', {
+            method: 'GET',
+            extraHeaders: {
+              'referer': 'https://43.129.207.58:8000/profile',
+              'x-requested-with': 'XMLHttpRequest'
+            },
+            convCookie: MJ_CONV_43
+          });
+        } catch (err) {
+          return resJson({ success: false, message: 'mj reset-security 失败: ' + (err && err.message || err) }, 500);
+        }
+      }
+
+      // ========== mojie 获取提示文案（GET，需登录 cookie） ==========
+      if (path === '/api/mj/get-tips' && request.method === 'GET') {
+        try {
+          return await mjProxy('https://43.129.207.58:8000/api?action=gettipsbody', {
+            method: 'GET',
+            extraHeaders: {
+              'referer': 'https://43.129.207.58:8000/dashboard',
+              'x-requested-with': 'XMLHttpRequest'
+            },
+            convCookie: MJ_CONV_43
+          });
+        } catch (err) {
+          return resJson({ success: false, message: 'mj get-tips 失败: ' + (err && err.message || err) }, 500);
+        }
+      }
+
+      // ========== mojie 仪表盘/用量（GET，返回 HTML，需登录 cookie） ==========
+      if (path === '/api/mj/dashboard' && request.method === 'GET') {
+        try {
+          return await mjProxy('https://43.129.207.58:8000/dashboard', {
+            method: 'GET',
+            extraHeaders: {
+              'referer': 'https://43.129.207.58:8000/dashboard',
+              'sec-fetch-dest': 'document',
+              'sec-fetch-mode': 'navigate',
+              'upgrade-insecure-requests': '1'
+            },
+            convCookie: MJ_CONV_43
+          });
+        } catch (err) {
+          return resJson({ success: false, message: 'mj dashboard 失败: ' + (err && err.message || err) }, 500);
+        }
+      }
+
+      // ========== mojie 订阅下载（GET，返回 base64 订阅原文） ==========
+      if (path === '/api/mj/subscribe' && request.method === 'GET') {
+        try {
+          return await mjProxy('https://103.117.100.123:5000/api/v1/client/subscribe?token=063f74b0f31345b67555d6f3b94ae3dd', {
+            method: 'GET'
+          });
+        } catch (err) {
+          return resJson({ success: false, message: 'mj subscribe 失败: ' + (err && err.message || err) }, 500);
+        }
       }
 
       // ========== 布隆过滤器回填（运维调用一次：把已存在用户名写入 bf_user；跑完置 bf_user_init=1 启用拒绝优化） ==========

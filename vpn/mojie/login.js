@@ -19,7 +19,7 @@ var headers = {
     'cookie': 'lang=zh-cn; cw_conversation=eyJhbGciOiJIUzI1NiJ9.eyJzb3VyY2VfaWQiOiI0MDIwMWI0MC1kOWY5LTRhZjItOTlkNS1hYzI4YjYzMGQ0MWIiLCJpbmJveF9pZCI6MSwiZXhwIjoxODA1MzUyODYzLCJpYXQiOjE3ODk4MDA4NjN9.m33pMqtkZmVif4eTAJ1MWViaJfyXAOWfoJtzRE2FPOA'
 };
 
-var dataString = 'email=immmor%40foxmail.com&password=Wang123.';
+var dataString = 'email=mmmbb%40gmail.com&password=mmmbb%40gm';
 var TARGET = { host: '47.242.128.61', port: 8000, path: '/api/?action=login' };
 
 function onResp(res) {
