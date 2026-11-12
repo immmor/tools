@@ -304,18 +304,23 @@
     const panel = $('voice-login-panel');
     panel.classList.remove('hidden');
     panel.classList.add('flex');
-    // 仅录入声纹时隐藏左侧图片与标题；登录模式保留图片与标题
+    // 仅录入声纹时隐藏左侧图片；登录模式保留图片
     const _hero = $('auth-hero'); if (_hero) _hero.style.display = (m === 'enroll') ? 'none' : '';
-    const _mt = $('modal-title'); if (_mt) _mt.classList.toggle('hidden', m === 'enroll');
+    // 顶部标题：录入模式显示“录入声纹”，登录模式显示“登录”
+    const _mt = $('modal-title');
+    if (_mt) {
+      _mt.classList.remove('hidden');
+      _mt.textContent = (m === 'enroll') ? t('voice_enroll_title', '录入声纹') : t('modal_title_login', '登录');
+    }
 
     const titleEl = panel.querySelector('h3');
     const submitBtn = $('voice-submit-btn');
     const recordBtn = $('voice-record-btn');
     if (m === 'enroll') {
-      if (titleEl) titleEl.textContent = t('voice_enroll_title', '录入声纹');
+      if (titleEl) { titleEl.textContent = t('voice_enroll_title', '录入声纹'); titleEl.style.display = 'none'; }
       if (submitBtn) submitBtn.textContent = t('voice_enroll_btn', '录入声纹');
     } else {
-      if (titleEl) titleEl.textContent = t('voice_login_title', '声纹识别登录');
+      if (titleEl) { titleEl.textContent = t('voice_login_title', '声纹识别登录'); titleEl.style.display = ''; }
       if (submitBtn) submitBtn.textContent = t('voice_recognize', '声纹登录');
     }
     // 录入模式（已登录，从账户菜单进入）不显示“返回账号登录”和用户名输入
@@ -346,7 +351,7 @@
     const panel = $('voice-login-panel');
     if (panel) { panel.classList.add('hidden'); panel.classList.remove('flex'); }
     const _hero = $('auth-hero'); if (_hero) _hero.style.display = '';
-    const _mt = $('modal-title'); if (_mt) _mt.classList.remove('hidden');
+    const _mt = $('modal-title'); if (_mt) { _mt.classList.remove('hidden'); _mt.textContent = t('modal_title_login', '登录'); }
     stopRecording();
     $('auth-form') && $('auth-form').classList.remove('hidden');
     $('auth-switch-block') && $('auth-switch-block').classList.remove('hidden');
