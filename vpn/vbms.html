@@ -1110,6 +1110,23 @@
                                     </div>
                                     <pre id="mjOpOut" style="white-space:pre-wrap; word-break:break-all; background:#fff; border:1px solid #e2e8f0; border-radius:4px; padding:.5rem; max-height:300px; overflow:auto;"></pre>
                                 </div>
+
+                                <!-- ④ 临时流量包订阅链接 -->
+                                <div style="margin-bottom:1.5rem; padding:1rem; background:#f7fafc; border-radius:8px;">
+                                    <h4 style="color:#4a5568; margin-bottom:.75rem;">④ 临时流量包订阅链接（clash_traffic / v2ray_traffic）</h4>
+                                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:.75rem; margin-bottom:.75rem;">
+                                        <div>
+                                            <label style="display:block; margin-bottom:.25rem; font-weight:500; color:#4a5568;">Clash 流量包链接</label>
+                                            <input type="text" id="linkClashTraffic" placeholder="clash_traffic" style="width:100%; padding:.5rem; border:1px solid #e2e8f0; border-radius:4px;">
+                                        </div>
+                                        <div>
+                                            <label style="display:block; margin-bottom:.25rem; font-weight:500; color:#4a5568;">V2Ray 流量包链接</label>
+                                            <input type="text" id="linkV2rayTraffic" placeholder="v2ray_traffic" style="width:100%; padding:.5rem; border:1px solid #e2e8f0; border-radius:4px;">
+                                        </div>
+                                    </div>
+                                    <div style="font-size:.8rem; color:#718096; margin-bottom:.75rem;">前端购买临时流量包 / 生成 data_token 时优先使用这两项；留空则回退到「月度链接」。</div>
+                                    <button class="add-btn" onclick="saveTrafficLinkConfig()" style="background-color:#667eea;">保存流量包链接</button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -2680,6 +2697,7 @@
         }
 
         // ===== mj 节点管理（mojie 接口，基址复用 NEW_API_BASE） =====
+        let mjCookie = '';
         async function mjLogin() {
             const email = document.getElementById('mjEmail').value.trim();
             const password = document.getElementById('mjPassword').value.trim();
@@ -2691,7 +2709,8 @@
                     body: JSON.stringify({ email, password })
                 });
                 const data = await r.json();
-                document.getElementById('mjCookie').value = data.cookie || '';
+                mjCookie = data.cookie || '';
+                document.getElementById('mjCookie').value = mjCookie;
                 document.getElementById('mjLoginOut').textContent = JSON.stringify(data, null, 2);
             } catch (e) { alert('mj 登录失败: ' + e.message); }
         }
@@ -2712,12 +2731,11 @@
             } catch (e) { alert('mj 注册失败: ' + e.message); }
         }
         async function mjOp(action) {
-            const cookie = document.getElementById('mjCookie').value.trim();
-            if (!cookie) return alert('请先在①登录获取 cookie');
+            if (!mjCookie) return alert('请先在①登录获取 cookie');
             try {
                 const r = await fetch(NEW_API_BASE + '/api/mj/' + action, {
                     method: 'GET',
-                    headers: { 'x-mj-cookie': cookie }
+                    headers: { 'x-mj-cookie': mjCookie }
                 });
                 document.getElementById('mjOpOut').textContent = 'HTTP ' + r.status + '\n' + await r.text();
             } catch (e) { alert('mj ' + action + ' 失败: ' + e.message); }
@@ -3977,6 +3995,10 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
                 document.getElementById('linkV2rayMonthly').value = config.v2ray_monthly || '';
                 document.getElementById('linkClashYearly').value = config.clash_yearly || '';
                 document.getElementById('linkV2rayYearly').value = config.v2ray_yearly || '';
+                const ct = document.getElementById('linkClashTraffic');
+                const vt = document.getElementById('linkV2rayTraffic');
+                if (ct) ct.value = config.clash_traffic || '';
+                if (vt) vt.value = config.v2ray_traffic || '';
             }
         }
 
@@ -4001,6 +4023,23 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
             try {
                 const results = await Promise.all(promises);
                 alert(results.every(r => r.code === 200) ? '保存成功' : '部分保存失败');
+            } catch (err) { alert('保存失败'); }
+        }
+
+        // 保存临时流量包订阅链接（clash_traffic / v2ray_traffic）
+        async function saveTrafficLinkConfig() {
+            const links = {
+                clash_traffic: (document.getElementById('linkClashTraffic') || {}).value || '',
+                v2ray_traffic: (document.getElementById('linkV2rayTraffic') || {}).value || ''
+            };
+            const entries = Object.entries(links).filter(([, v]) => v.trim());
+            if (!entries.length) return alert('请至少填写一个流量包链接');
+            const promises = entries.map(([key, value]) =>
+                newApiRequest('/api/link/update', 'POST', { key, value })
+            );
+            try {
+                const results = await Promise.all(promises);
+                alert(results.every(r => r.code === 200) ? '流量包链接保存成功' : '部分保存失败');
             } catch (err) { alert('保存失败'); }
         }
 

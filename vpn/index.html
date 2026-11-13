@@ -2842,20 +2842,16 @@
 
             <div class="space-y-6">
                 <div class="grid grid-cols-2 gap-3">
-                <div id="tour-free" class="cyber-card p-4 md:p-6 flex flex-col md:flex-row md:justify-between md:items-center group cursor-pointer col-span-2 relative" onclick="showFreeNodes()">
+                <div id="tour-free" class="cyber-card p-4 md:p-6 flex flex-col md:flex-row md:justify-between md:items-center group cursor-pointer relative" onclick="showFreeNodes()">
                     <div class="flex justify-between items-center w-full">
                         <div class="flex-1">
                             <div class="text-[var(--neon-green)] text-xs mb-1 font-bold tracking-widest uppercase" data-i18n="free_tag">Free</div>
                             <h3 class="text-xl md:text-2xl font-black uppercase" data-i18n="free_title">免费节点包</h3>
                         </div>
                     </div>
-                    <div class="text-right hidden md:flex md:flex-col items-center justify-end gap-2">
-                        <div class="text-xl md:text-2xl font-black text-[var(--neon-green)]">¥0</div>
-                    </div>
-                </div>
                 </div>
 
-                <div id="tour-traffic" class="hidden cyber-card p-4 md:p-6 flex flex-col md:flex-row md:justify-between md:items-center group relative opacity-60 cursor-not-allowed pointer-events-none" aria-disabled="true">
+                <div id="tour-traffic" class="cyber-card p-4 md:p-6 flex flex-col md:flex-row md:justify-between md:items-center group cursor-not-allowed relative opacity-60 pointer-events-none" aria-disabled="true">
                     <div class="absolute -left-1 top-1/2 -translate-y-1/2 w-1 md:w-2 h-8 md:h-10 bg-[var(--neon-blue)] hidden md:block"></div>
                     <div class="flex justify-between items-center w-full">
                         <div class="flex-1">
@@ -2866,6 +2862,7 @@
                             <h3 class="text-xl md:text-2xl font-black uppercase mt-1" data-i18n="traffic_card_title">临时流量包</h3>
                         </div>
                     </div>
+                </div>
                 </div>
 
                 <div id="tour-monthly" class="cyber-card p-4 md:p-6 flex flex-col md:flex-row md:justify-between md:items-center group cursor-pointer relative" onclick="showVipNodes()">
@@ -3957,20 +3954,62 @@
         let selectedTrafficDuration = null;
         const trafficPrice = (tier, duration) => Number(tier.price) * Number(duration.factor);
 
-        const buyTrafficPackage = () => {
+        const buyTrafficPackage = async () => {
             if (!selectedTrafficTier || !selectedTrafficDuration) return;
-            // TODO(后端): 接入临时流量包购买接口（预期类似 PUT /api/add-traffic，传 username/price/gb/duration=天数）。
-            // 当前按用户要求暂不实现后端，仅占位提示。
-            const dict = translations[currentLang] || {};
-            const price = trafficPrice(selectedTrafficTier, selectedTrafficDuration).toFixed(2);
-            const msg = (dict.traffic_backend_pending || '临时流量包功能开发中，后端接口待接入') + `（${selectedTrafficTier.gb}GB / ${selectedTrafficDuration.days}天 / ¥${price}）`;
-            const msgEl = document.getElementById('traffic-msg');
-            if (msgEl) { msgEl.textContent = msg; msgEl.className = 'mt-2 text-xs text-center text-[var(--neon-orange)]'; }
-            console.warn('[traffic] 后端未接入，buyTrafficPackage 为占位实现', { tier: selectedTrafficTier, duration: selectedTrafficDuration, price });
+            const userInfo = JSON.parse(localStorage.getItem('userInfo') || 'null');
+            if (!userInfo || !userInfo.username) { alert(translations[currentLang]?.alert_please_login || '请先登录！'); return; }
+            const pToken = userInfo.p_token || '';
+            const price = trafficPrice(selectedTrafficTier, selectedTrafficDuration);
+            const gb = selectedTrafficTier.gb;
+            const days = selectedTrafficDuration.days;
+            const btn = document.getElementById('traffic-buy-btn');
+            if (btn) { btn.disabled = true; btn.textContent = '处理中...'; }
+            try {
+                const r = await fetch('https://api.funbua.uk/api/buy-temp-traffic', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', ...(pToken ? { 'Authorization': 'Bearer ' + pToken } : {}) },
+                    body: JSON.stringify({ username: userInfo.username, price: price.toFixed(2), gb, days, p_token: pToken })
+                });
+                const data = await r.json();
+                const msgEl = document.getElementById('traffic-msg');
+                if (r.ok && data.code === 200) {
+                    const saved = JSON.parse(localStorage.getItem('userInfo') || '{}');
+                    saved.balance = data.data.balance;
+                    saved.data_token = data.data.data_token;
+                    saved.data_expire_date = data.data.data_expire_date;
+                    saved.temp_traffic_quota = data.data.temp_traffic_quota;
+                    saved.temp_traffic_used = data.data.temp_traffic_used;
+                    if (data.data.vorders) {
+                        try { saved.vorders = typeof data.data.vorders === 'string' ? JSON.parse(data.data.vorders) : data.data.vorders; } catch (e) {}
+                    }
+                    localStorage.setItem('userInfo', JSON.stringify(saved));
+                    if (typeof window.userInfo !== 'undefined' && window.userInfo.username === saved.username) {
+                        Object.assign(window.userInfo, {
+                            balance: saved.balance,
+                            data_token: saved.data_token,
+                            data_expire_date: saved.data_expire_date,
+                            temp_traffic_quota: saved.temp_traffic_quota,
+                            temp_traffic_used: saved.temp_traffic_used,
+                            vorders: saved.vorders
+                        });
+                    }
+                    const dict = translations[currentLang] || {};
+                    if (msgEl) { msgEl.textContent = (dict.alert_add_traffic_success || `购买 ${gb}GB 临时流量包成功！`) + `（${days}天 / ¥${price.toFixed(2)}）`; msgEl.className = 'mt-2 text-xs text-center text-[var(--neon-green)]'; }
+                    // 购买成功后刷新弹窗，展示最新令牌/有效期/配置
+                    openTrafficPackage();
+                } else {
+                    if (msgEl) { msgEl.textContent = '购买失败：' + (data.msg || '未知错误'); msgEl.className = 'mt-2 text-xs text-center text-[var(--neon-orange)]'; }
+                }
+            } catch (e) {
+                const msgEl = document.getElementById('traffic-msg');
+                if (msgEl) { msgEl.textContent = '购买失败: ' + e.message; msgEl.className = 'mt-2 text-xs text-center text-[var(--neon-orange)]'; }
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = (translations[currentLang]?.traffic_buy_btn || '购买流量包'); }
+            }
         };
         window.buyTrafficPackage = buyTrafficPackage;
 
-        const openTrafficPackage = () => {
+        const openTrafficPackage = async () => {
             const userInfo = JSON.parse(localStorage.getItem('userInfo') || 'null');
             if (!userInfo) {
                 const loginAlert = translations[currentLang]?.alert_please_login || '请先登录！';
@@ -3978,14 +4017,75 @@
                 document.getElementById('auth-toggle').click();
                 return;
             }
+            // 查询临时流量包状态（只读，类似 /api/vip-status）
+            let tokenInfo;
+            try {
+                const r = await fetch(`https://api.funbua.uk/api/traffic-status?username=${encodeURIComponent(userInfo.username)}`);
+                const data = await r.json();
+                if (!r.ok || data.code !== 200) {
+                    alert('获取流量包信息失败：' + (data.msg || '未知错误'));
+                    return;
+                }
+                tokenInfo = data.data;
+                // 回写本地，便于复制/后续操作使用
+                userInfo.data_token = tokenInfo.data_token || userInfo.data_token;
+                userInfo.data_expire_date = tokenInfo.data_expire_date || userInfo.data_expire_date;
+                localStorage.setItem('userInfo', JSON.stringify(userInfo));
+                if (typeof window.userInfo !== 'undefined' && window.userInfo.username === userInfo.username) {
+                    window.userInfo.data_token = tokenInfo.data_token;
+                }
+            } catch (e) {
+                alert('获取流量包信息失败: ' + e.message);
+                return;
+            }
+
             const dict = translations[currentLang] || {};
             const balance = (Number(userInfo.balance) || 0).toFixed(2);
 
             const now = new Date();
             const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
-            // TODO(后端): 流量包专用的 Clash/V2Ray 配置地址（区别于 VIP 的 vip/clash、免费的 free/clash），待后端提供后替换
-            const trafficClashUrl = `https://api.funbua.uk/traffic/clash?v=${encodeURIComponent(userInfo.username || '')}`;
-            const trafficV2rayUrl = `https://api.funbua.uk/traffic/v2ray?v=${encodeURIComponent(userInfo.username || '')}`;
+            const token = tokenInfo.data_token || '';
+            const isTrafficValid = !!tokenInfo.is_traffic_valid;
+            const daysRemaining = tokenInfo.days_remaining || 0;
+            const quota = Number(tokenInfo.temp_traffic_quota || 0);
+            const used = Number(tokenInfo.temp_traffic_used || 0);
+            const remainQuota = Math.max(0, quota - used);
+            const expireStr = tokenInfo.data_expire_date ? (() => {
+                const d = new Date(tokenInfo.data_expire_date.replace(' ', 'T') + 'Z');
+                const p = (n) => String(n).padStart(2, '0');
+                return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+            })() : '-';
+            const trafficClashUrl = token ? `https://api.funbua.uk/traffic/clash?v=${encodeURIComponent(token)}` : '';
+            const trafficV2rayUrl = token ? `https://api.funbua.uk/traffic/v2ray?v=${encodeURIComponent(token)}` : '';
+            const validityNote = isTrafficValid ? ('流量包有效期至：' + expireStr) : '流量包未开通';
+
+            const statusHtml = isTrafficValid
+                ? `<div class="text-[var(--neon-green)] text-sm">
+                     <div><span data-i18n="vip_valid_until_label">有效期至</span>: ${expireStr}</div>
+                     <div><span data-i18n="vip_remaining_days_label">剩余天数</span>: ${daysRemaining}</div>
+                     <div><span data-i18n="traffic_used_quota">已用/总量</span>: ${used.toFixed(2)} / ${quota.toFixed(2)} GB</div>
+                     <div><span data-i18n="traffic_remain_quota">剩余流量</span>: ${remainQuota.toFixed(2)} GB</div>
+                   </div>`
+                : `<div class="text-[var(--neon-red)] text-sm" data-i18n="traffic_not_opened">临时流量包未开通或已过期</div>`;
+
+            const configBodyHtml = token
+                ? `<div class="border border-[var(--neon-blue)] p-4 rounded">
+                     <h3 class="text-lg font-bold text-[var(--neon-blue)] mb-2" data-i18n="traffic_clash_config">流量包 Clash 配置</h3>
+                     <div class="w-full bg-zinc-900 border border-zinc-600 px-3 py-2 text-xs md:text-sm text-white mb-2 whitespace-nowrap overflow-x-auto overflow-y-hidden" data-link="${trafficClashUrl}">${trafficClashUrl}</div>
+                     <div class="flex gap-2">
+                       <button onclick="copyToClipboard('${trafficClashUrl}', this)" class="flex-1 bg-[var(--neon-blue)] text-black py-2 text-xs md:text-sm font-bold hover:opacity-90" data-i18n="free_copy">复制</button>
+                       <a href="${trafficClashUrl}" download="traffic-clash-${dateStr}.yaml" class="flex-1 bg-[var(--neon-green)] text-black py-2 text-xs md:text-sm font-bold hover:opacity-90 text-center" data-i18n="free_download">下载</a>
+                     </div>
+                   </div>
+                   <div class="border border-[var(--neon-blue)] p-4 rounded">
+                     <h3 class="text-lg font-bold text-[var(--neon-blue)] mb-2" data-i18n="traffic_v2ray_config">流量包 V2Ray 配置</h3>
+                     <div class="w-full bg-zinc-900 border border-zinc-600 px-3 py-2 text-xs md:text-sm text-white mb-2 whitespace-nowrap overflow-x-auto overflow-y-hidden" data-link="${trafficV2rayUrl}">${trafficV2rayUrl}</div>
+                     <div class="flex gap-2">
+                       <button onclick="copyToClipboard('${trafficV2rayUrl}', this)" class="flex-1 bg-[var(--neon-blue)] text-black py-2 text-xs md:text-sm font-bold hover:opacity-90" data-i18n="free_copy">复制</button>
+                       <a href="${trafficV2rayUrl}" download="traffic-v2ray-${dateStr}.txt" class="flex-1 bg-[var(--neon-green)] text-black py-2 text-xs md:text-sm font-bold hover:opacity-90 text-center" data-i18n="free_download">下载</a>
+                     </div>
+                   </div>`
+                : `<div class="text-sm text-zinc-400 text-center py-4" data-i18n="traffic_config_locked">开通流量包后，此处将显示 Clash / V2Ray 配置链接</div>`;
 
             document.getElementById('traffic-modal')?.remove();
 
@@ -4022,7 +4122,7 @@
                                     <div class="flex items-center gap-1.5 mt-1 text-xs md:text-sm text-white/85 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
                                         <span data-i18n="nav_balance">余额</span><span class="font-black text-[var(--neon-green)]">¥${balance}</span>
                                     </div>
-                                    <div class="text-[10px] text-white/70" id="traffic-validity-note"></div>
+                                    <div class="text-[10px] text-white/70" id="traffic-validity-note">${validityNote}</div>
                                 </div>
                                 <button onclick="document.getElementById('traffic-modal').remove()" class="text-white/90 hover:text-white bg-black/40 rounded-full p-1 backdrop-blur shrink-0">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
@@ -4030,29 +4130,18 @@
                             </div>
                         </div>
                         <div class="p-6 md:p-8">
+                            <div class="mb-4 p-2 md:p-3 bg-zinc-900 rounded border border-zinc-700">
+                                <div class="text-center">
+                                    <div class="text-lg font-bold text-[var(--neon-blue)] mb-2" data-i18n="traffic_status">流量包状态</div>
+                                    ${statusHtml}
+                                </div>
+                            </div>
                             <div class="mb-4 rounded border border-zinc-700 overflow-hidden">
                                 <button type="button" id="traffic-config-toggle" class="w-full flex items-center justify-between px-4 py-3 bg-zinc-900 hover:bg-zinc-800 transition-colors">
                                     <span class="text-sm font-bold text-[var(--neon-blue)]" data-i18n="traffic_config_title">节点配置链接</span>
                                     <svg id="traffic-config-chevron" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-[var(--neon-blue)] transition-transform"><polyline points="6 9 12 15 18 9"></polyline></svg>
                                 </button>
-                                <div id="traffic-config-body" class="hidden p-4 space-y-4">
-                                    <div class="border border-[var(--neon-blue)] p-4 rounded">
-                                        <h3 class="text-lg font-bold text-[var(--neon-blue)] mb-2" data-i18n="traffic_clash_config">流量包 Clash 配置</h3>
-                                        <div class="w-full bg-zinc-900 border border-zinc-600 px-3 py-2 text-xs md:text-sm text-white mb-2 whitespace-nowrap overflow-x-auto overflow-y-hidden" data-link="${trafficClashUrl}">${trafficClashUrl}</div>
-                                        <div class="flex gap-2">
-                                            <button onclick="copyToClipboard('${trafficClashUrl}', this)" class="flex-1 bg-[var(--neon-blue)] text-black py-2 text-xs md:text-sm font-bold hover:opacity-90" data-i18n="free_copy">复制</button>
-                                            <a href="${trafficClashUrl}" download="traffic-clash-${dateStr}.yaml" class="flex-1 bg-[var(--neon-green)] text-black py-2 text-xs md:text-sm font-bold hover:opacity-90 text-center" data-i18n="free_download">下载</a>
-                                        </div>
-                                    </div>
-                                    <div class="border border-[var(--neon-blue)] p-4 rounded">
-                                        <h3 class="text-lg font-bold text-[var(--neon-blue)] mb-2" data-i18n="traffic_v2ray_config">流量包 V2Ray 配置</h3>
-                                        <div class="w-full bg-zinc-900 border border-zinc-600 px-3 py-2 text-xs md:text-sm text-white mb-2 whitespace-nowrap overflow-x-auto overflow-y-hidden" data-link="${trafficV2rayUrl}">${trafficV2rayUrl}</div>
-                                        <div class="flex gap-2">
-                                            <button onclick="copyToClipboard('${trafficV2rayUrl}', this)" class="flex-1 bg-[var(--neon-blue)] text-black py-2 text-xs md:text-sm font-bold hover:opacity-90" data-i18n="free_copy">复制</button>
-                                            <a href="${trafficV2rayUrl}" download="traffic-v2ray-${dateStr}.txt" class="flex-1 bg-[var(--neon-green)] text-black py-2 text-xs md:text-sm font-bold hover:opacity-90 text-center" data-i18n="free_download">下载</a>
-                                        </div>
-                                    </div>
-                                </div>
+                                <div id="traffic-config-body" class="hidden p-4 space-y-4">${configBodyHtml}</div>
                             </div>
                             <div class="text-lg font-bold text-[var(--neon-blue)] mb-3" data-i18n="traffic_choose">选择流量包</div>
                             <div class="grid grid-cols-3 gap-3" id="traffic-tiers">
