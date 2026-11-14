@@ -261,7 +261,7 @@
     try {
       recordedBlob = null;
       const dlBtn0 = $('voice-download-btn');
-      if (dlBtn0) { dlBtn0.disabled = true; dlBtn0.classList.add('opacity-50', 'cursor-not-allowed'); }
+      if (dlBtn0) { dlBtn0.disabled = true; dlBtn0.classList.add('opacity-50', 'cursor-not-allowed'); dlBtn0.style.display = (mode === 'enroll') ? '' : 'none'; }
       if (submitBtn) { submitBtn.disabled = true; submitBtn.classList.add('opacity-50', 'cursor-not-allowed'); }
       generatePrompt();
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -279,7 +279,7 @@
         if (status) status.textContent = t('voice_recorded', '已录制，点击“声纹登录”');
         if (submitBtn) { submitBtn.disabled = false; submitBtn.classList.remove('opacity-50', 'cursor-not-allowed'); }
         const dlBtn = $('voice-download-btn');
-        if (dlBtn) { dlBtn.disabled = false; dlBtn.classList.remove('opacity-50', 'cursor-not-allowed'); }
+        if (dlBtn) { dlBtn.disabled = false; dlBtn.classList.remove('opacity-50', 'cursor-not-allowed'); dlBtn.style.display = (mode === 'enroll') ? '' : 'none'; }
         if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
       };
       mediaRecorder.start();
