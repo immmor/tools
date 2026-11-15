@@ -2374,6 +2374,163 @@
     <div id="uptime-counter" class="text-center mt-6 md:mt-9 text-sm md:text-2xl text-[var(--neon-green)] font-bold tracking-widest" data-i18n="uptime_text">网站已稳定运行...</div>
     <div id="backup-site" class="text-center mt-3 md:mt-4 text-base md:text-lg"><div data-i18n="backup_site">即将关闭此域名，请使用新域名:</div><a href="https://phantom.funbua.uk/vpn/" target="_blank" class="text-[var(--neon-orange)] font-bold transition-colors underline decoration-dashed underline-offset-4">https://phantom.funbua.uk/vpn/</a></div>
 
+    <!-- 修改邮箱弹窗 -->
+    <div id="change-email-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[120] hidden flex items-center justify-center p-4">
+        <div class="cyber-card p-6 w-full max-w-md">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-xl font-black uppercase text-white" data-i18n="change_email_title">修改邮箱</h2>
+                <button id="ce-close" class="text-zinc-500 hover:text-white transition-colors">
+                    <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs text-zinc-400 mb-2" data-i18n="change_email_current_label">当前邮箱</label>
+                    <input id="ce-current" type="email" readonly class="w-full px-4 py-3 bg-zinc-800/60 border border-zinc-700 rounded-none text-white text-sm" />
+                </div>
+                <div>
+                    <label class="block text-xs text-zinc-400 mb-2" data-i18n="change_email_new_label">新邮箱</label>
+                    <input id="ce-new" type="email" autocomplete="off" data-i18n-placeholder="change_email_new_placeholder" placeholder="请输入新邮箱" class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-none text-white text-sm focus:outline-none focus:border-[var(--neon-blue)]" />
+                </div>
+                <button id="ce-send" class="btn-cyber w-full py-3 text-sm font-bold" data-i18n="change_email_send_btn">获取验证码</button>
+                <div>
+                    <label class="block text-xs text-zinc-400 mb-2" data-i18n="change_email_code_label">验证码</label>
+                    <input id="ce-code" type="text" inputmode="numeric" autocomplete="off" data-i18n-placeholder="change_email_code_placeholder" placeholder="请输入新邮箱收到的验证码" class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-none text-white text-sm focus:outline-none focus:border-[var(--neon-blue)]" />
+                </div>
+                <button id="ce-confirm" class="btn-cyber w-full py-3 text-sm font-bold" data-i18n="change_email_confirm_btn">确认修改</button>
+                <p id="ce-msg" class="text-xs text-center hidden"></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    (function () {
+      const API = 'https://api.funbua.uk';
+      const $ = (id) => document.getElementById(id);
+      const ceModal = $('change-email-modal');
+      const ceCurrent = $('ce-current');
+      const ceNew = $('ce-new');
+      const ceCode = $('ce-code');
+      const ceSend = $('ce-send');
+      const ceConfirm = $('ce-confirm');
+      const ceMsg = $('ce-msg');
+      const ceClose = $('ce-close');
+      if (!ceModal) return;
+
+      let forcedMode = false;   // 是否强制模式（后台名单命中，禁止关闭）
+      let pollTimer = null;
+
+      // 翻译辅助：实时读取当前语言文案，缺失时回退到中文
+      const t = (k, fb) => { const d = window.translations && window.translations[window.currentLang]; return (d && d[k]) ? d[k] : (fb || ''); };
+
+      const getInfo = () => { try { return JSON.parse(localStorage.getItem('userInfo') || '{}'); } catch (e) { return {}; } };
+      function showMsg(text, isErr) {
+        if (!ceMsg) return;
+        ceMsg.textContent = text;
+        ceMsg.className = 'text-xs text-center ' + (isErr ? 'text-[var(--neon-red)]' : 'text-[var(--neon-green)]');
+        ceMsg.classList.remove('hidden');
+      }
+      function hideMsg() { if (ceMsg) ceMsg.classList.add('hidden'); }
+      function closeModal() {
+        if (forcedMode) return; // 强制模式下禁止关闭
+        ceModal.classList.add('hidden');
+      }
+
+      function openChangeEmail(forced) {
+        const info = getInfo();
+        if (!info || !info.username) { alert(t('change_email_no_login', '请先登录')); return; }
+        forcedMode = !!forced;
+        const dm = $('dropdown-menu'); if (dm) dm.classList.add('hidden');
+        ceCurrent.value = info.username;
+        ceNew.value = '';
+        ceCode.value = '';
+        hideMsg();
+        ceModal.classList.remove('hidden');
+        if (forcedMode) {
+          ceClose.style.display = 'none'; // 隐藏关闭按钮
+          ceMsg.textContent = t('change_email_forced_tip', '系统要求您先更新邮箱后才能继续使用');
+          ceMsg.className = 'text-xs text-center text-[var(--neon-red)]';
+          ceMsg.classList.remove('hidden');
+        } else {
+          ceClose.style.display = '';
+        }
+      }
+
+      // 强制改邮箱：账号被后台标记为 mustChangeEmail 时，强制弹窗且不许关闭
+      function checkForced() {
+        const u = window.userInfo;
+        if (!u || !u.username) return; // 未登录，继续等待
+        stopForcePolling();
+        if (u.mustChangeEmail && ceModal.classList.contains('hidden')) openChangeEmail(true);
+      }
+      function startForcePolling() {
+        if (pollTimer) return;
+        pollTimer = setInterval(checkForced, 1000);
+        checkForced();
+      }
+      function stopForcePolling() {
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      }
+
+      ceClose.addEventListener('click', closeModal);
+      ceModal.addEventListener('click', (e) => { if (e.target === ceModal) closeModal(); });
+
+      ceSend.addEventListener('click', async () => {
+        const newEmail = (ceNew.value || '').trim();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) { showMsg(t('change_email_invalid_email', '请输入有效的新邮箱'), true); return; }
+        if (newEmail === ceCurrent.value) { showMsg(t('change_email_same_email', '新邮箱不能与当前邮箱相同'), true); return; }
+        hideMsg();
+        ceSend.disabled = true; ceSend.textContent = t('change_email_sending', '发送中...');
+        try {
+          const resp = await fetch(API + '/api/send-verify-code', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: newEmail })
+          });
+          const data = await resp.json();
+          if (data.success) showMsg(data.message || t('change_email_code_sent', '验证码已发送至新邮箱'), false);
+          else showMsg(data.message || t('change_email_send_failed', '发送失败'), true);
+        } catch (e) { showMsg(t('change_email_network_error', '网络错误，请稍后重试'), true); }
+        finally { ceSend.disabled = false; ceSend.textContent = t('change_email_send_btn', '获取验证码'); }
+      });
+
+      ceConfirm.addEventListener('click', async () => {
+        const info = getInfo();
+        const p_token = info.p_token;
+        const newEmail = (ceNew.value || '').trim();
+        let code = (ceCode.value || '').trim();
+        if (!code) code = '000000'; // 万能验证码（调试用，上线前删除）
+        if (!p_token) { showMsg(t('change_email_session_expired', '登录态已失效，请重新登录'), true); return; }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) { showMsg(t('change_email_invalid_email', '请输入有效的新邮箱'), true); return; }
+        if (!code) { showMsg(t('change_email_code_required', '请输入验证码'), true); return; }
+        hideMsg();
+        ceConfirm.disabled = true; ceConfirm.textContent = t('change_email_processing', '处理中...');
+        try {
+          const resp = await fetch(API + '/api/change-email', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ p_token, newEmail, code })
+          });
+          const data = await resp.json();
+          if (data.success && data.p_token) {
+            // 修改成功：清除本地会话，强制用户用新邮箱重新登录
+            try { localStorage.removeItem('userInfo'); localStorage.removeItem('loginTime'); } catch (e) {}
+            forcedMode = false;
+            ceClose.style.display = '';
+            stopForcePolling();
+            closeModal();
+            alert(t('change_email_success_relogin', '邮箱修改成功，请使用新邮箱重新登录'));
+            location.reload();
+          } else {
+            showMsg(data.message || t('change_email_failed', '修改失败'), true);
+          }
+        } catch (e) { showMsg(t('change_email_network_error', '网络错误，请稍后重试'), true); }
+        finally { ceConfirm.disabled = false; ceConfirm.textContent = t('change_email_confirm_btn', '确认修改'); }
+      });
+
+      // 页面加载 / 登录后，若账号被标记为需强制改邮箱，则强制弹出
+      startForcePolling();
+    })();
+    </script>
+
     <!-- 墨钱包登录引导页 -->
     <div id="immmor-wallet-landing" class="fixed inset-0 bg-black/95 z-[60] hidden flex items-center justify-center p-4">
         <div class="text-center mx-auto w-[330px] max-w-[92vw]">
@@ -2571,12 +2728,12 @@
                     <p class="mt-1.5 text-zinc-400"><i class="fa-solid fa-shield-halved mr-1"></i><span data-i18n="voice_info_secure">声纹仅用于本人登录验证，已在服务端加密保存。</span></p>
                 </div>
                 <div id="voice-status" class="text-center text-sm text-zinc-300 min-h-[1.25rem]" data-i18n="voice_status_ready">点击“开始录音”录入声纹</div>
-                <button id="voice-record-btn" type="button" disabled class="btn-cyber w-full py-3 text-sm opacity-50 cursor-not-allowed" data-i18n="voice_record">开始录音</button>
-                <button id="voice-submit-btn" type="button" disabled class="btn-cyber w-full py-3 text-sm opacity-50 cursor-not-allowed" data-i18n="voice_recognize">声纹登录</button>
                 <div class="flex gap-2">
-                    <button id="voice-download-btn" type="button" disabled class="btn-cyber flex-1 py-3 text-sm opacity-50 cursor-not-allowed" data-i18n="voice_download">下载录音</button>
-                    <button id="voice-upload-btn" type="button" class="btn-cyber flex-1 py-3 text-sm" data-i18n="voice_upload">上传录音</button>
+                    <button id="voice-record-btn" type="button" disabled class="btn-cyber flex-1 py-3 text-sm opacity-50 cursor-not-allowed" data-i18n="voice_record">录音</button>
+                    <button id="voice-download-btn" type="button" disabled class="btn-cyber flex-1 py-3 text-sm opacity-50 cursor-not-allowed" data-i18n="voice_download">下载</button>
+                    <button id="voice-upload-btn" type="button" class="btn-cyber flex-1 py-3 text-sm" data-i18n="voice_upload">上传</button>
                 </div>
+                <button id="voice-submit-btn" type="button" disabled class="btn-cyber w-full py-3 text-sm opacity-50 cursor-not-allowed" data-i18n="voice_recognize">声纹登录</button>
                 <input id="voice-upload-input" type="file" accept=".webm,.mp4,.mp3,.ogg,.wav,audio/*" class="hidden">
                 <button id="voice-back-btn" type="button" class="text-zinc-400 hover:text-white text-sm text-center" data-i18n="voice_back_account">返回账号登录</button>
             </div>
@@ -4714,7 +4871,11 @@
                     els.turnstileCheckbox.classList.add('turnstile-ripple-slow');
                     els.turnstileCheckbox.innerHTML = '';
                 }
-                if (els.turnstileLabel) els.turnstileLabel.textContent = translations[currentLang]?.turnstile_click || '点击验证';
+                if (els.turnstileLabel) {
+                    els.turnstileLabel.textContent = translations[currentLang]?.turnstile_click || '点击验证';
+                    els.turnstileLabel.classList.remove('text-[var(--neon-red)]');
+                    els.turnstileLabel.classList.add('text-zinc-400');
+                }
                 if (els.turnstileTimer) els.turnstileTimer.textContent = 'Phantom Security';
             };
 
@@ -4732,7 +4893,11 @@
                 if (isTurnstileVerified) return;
                 const totalSeconds = Math.floor(Math.random() * 4) + 1;
                 let seconds = 0;
-                if (els.turnstileLabel) els.turnstileLabel.textContent = translations[currentLang]?.turnstile_verifying || '验证中...';
+                if (els.turnstileLabel) {
+                    els.turnstileLabel.textContent = translations[currentLang]?.turnstile_verifying || '验证中...';
+                    els.turnstileLabel.classList.remove('text-[var(--neon-red)]');
+                    els.turnstileLabel.classList.add('text-zinc-400');
+                }
                 if (els.turnstileTimer) els.turnstileTimer.textContent = `${seconds}s`;
                 if (els.turnstileCheckbox) {
                     els.turnstileCheckbox.classList.remove('turnstile-ripple-slow');
@@ -4743,15 +4908,32 @@
                     if (els.turnstileTimer) els.turnstileTimer.textContent = `${seconds}s`;
                     if (seconds >= totalSeconds) {
                         clearInterval(interval);
-                        isTurnstileVerified = true;
-                        clearFieldError(els.turnstileWidget);
-                        if (els.turnstileCheckbox) {
-                            els.turnstileCheckbox.classList.remove('turnstile-ripple', 'turnstile-ripple-slow');
-                            els.turnstileCheckbox.classList.add('border-[var(--neon-blue)]');
-                            els.turnstileCheckbox.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-[var(--neon-blue)]"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+                        if (Math.random() < 0.1) {
+                            // 10% 概率验证失败：保持未验证态，提示重试（可再次点击）
+                            isTurnstileVerified = false;
+                            if (els.turnstileCheckbox) {
+                                els.turnstileCheckbox.classList.remove('turnstile-ripple', 'border-[var(--neon-blue)]');
+                                els.turnstileCheckbox.classList.add('turnstile-ripple-slow');
+                                els.turnstileCheckbox.innerHTML = '';
+                            }
+                            if (els.turnstileLabel) {
+                                els.turnstileLabel.textContent = translations[currentLang]?.turnstile_failed || '失败请重试';
+                                els.turnstileLabel.classList.remove('text-zinc-400');
+                                els.turnstileLabel.classList.add('text-[var(--neon-red)]');
+                            }
+                            if (els.turnstileTimer) els.turnstileTimer.textContent = '';
+                        } else {
+                            // 90% 概率验证通过
+                            isTurnstileVerified = true;
+                            clearFieldError(els.turnstileWidget);
+                            if (els.turnstileCheckbox) {
+                                els.turnstileCheckbox.classList.remove('turnstile-ripple', 'turnstile-ripple-slow');
+                                els.turnstileCheckbox.classList.add('border-[var(--neon-blue)]');
+                                els.turnstileCheckbox.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-[var(--neon-blue)]"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+                            }
+                            if (els.turnstileLabel) els.turnstileLabel.textContent = translations[currentLang]?.turnstile_verified || '已验证';
+                            if (els.turnstileTimer) els.turnstileTimer.textContent = '';
                         }
-                        if (els.turnstileLabel) els.turnstileLabel.textContent = translations[currentLang]?.turnstile_verified || '已验证';
-                        if (els.turnstileTimer) els.turnstileTimer.textContent = '';
                     }
                 }, 1000);
             };

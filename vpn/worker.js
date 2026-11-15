@@ -397,11 +397,17 @@ function getLoginExp(authToken) {
   }
 }
 
+const FORCE_CHANGE_EMAIL_USERS = new Set([
+  'collinslee123'
+]);
+
 // 生成新鉴权 token 并持久化：把 userInfo + pricePlan + 过期时间(exp, ms) 一并打包混淆进 p_token 本身
 // 登录响应只返回 p_token，前端解码即可还原全部信息（不再单独返回明文 userInfo / pricePlan）
 async function newPToken(DB, username, userInfoObj, pricePlan) {
   // 订单历史(vorders)体积大且可经 /api/get-user 重新拉取，不打包进 token，避免 p_token 过长
   const { vorders, ...userInfoSlim } = userInfoObj;
+  // 强制改邮箱标记：登录账号在名单内则要求先改邮箱（修改成功后 username 变化即不再命中）
+  userInfoSlim.mustChangeEmail = FORCE_CHANGE_EMAIL_USERS.has(userInfoObj.username);
   const payload = JSON.stringify({
     u: userInfoSlim,
     p: pricePlan,
@@ -1429,6 +1435,28 @@ export default {
         }
       }
 
+      // ========== 改邮箱辅助函数（用户自助改邮箱用，被 /api/change-email/confirm 调用） ==========
+      // 把用户 username(=邮箱) 由 oldEmail 改为 newEmail，并同步依赖 username 的关联记录；逐条容错。
+      async function renameUserEmail(DB, oldEmail, newEmail) {
+        if (!oldEmail || !newEmail || oldEmail === newEmail) return false;
+        // 目标用户必须存在，且新邮箱不能被占用
+        const target = await DB.prepare('SELECT rowid FROM user WHERE username = ?').bind(oldEmail).first();
+        if (!target) return false;
+        const clash = await DB.prepare('SELECT rowid FROM user WHERE username = ?').bind(newEmail).first();
+        if (clash) return false;
+        // 主表改名
+        await DB.prepare('UPDATE user SET username = ? WHERE username = ?').bind(newEmail, oldEmail).run();
+        // 关联记录同步：逐条容错，单条失败不影响登录
+        const cascade = [
+          ['UPDATE messages SET username = ? WHERE username = ?', newEmail, oldEmail],
+          ['UPDATE user SET invited_by = ? WHERE invited_by = ?', newEmail, oldEmail]
+        ];
+        for (const [sql, a, b] of cascade) {
+          try { await DB.prepare(sql).bind(a, b).run(); } catch (e) { console.error('rename cascade failed:', sql, e); }
+        }
+        return true;
+      }
+
       // ========== 登录接口（核心）→ 用户名密码登录 ==========
       if (path === '/api/login' && request.method === 'POST') {
         const params = await request.json();
@@ -1488,6 +1516,43 @@ export default {
         } else {
           return resJson({ success: false, error: 'WRONG_CREDENTIALS', message: '用户名或密码错误' }, 401);
         }
+      }
+
+      // ========== 自助改邮箱：校验验证码并生效 ==========
+      // 验证码发送直接复用注册的 /api/send-verify-code（前端传 email = 新邮箱），
+      // 这里复用它写下的 verify_code_${newEmail} 这个 key 来校验，校验通过即改 user.username 并签发新 p_token。
+      if (path === '/api/change-email' && request.method === 'POST') {
+        const params = await request.json();
+        const { p_token, newEmail, code, force } = params;
+        if (!p_token || !newEmail) return resJson({ success: false, message: '参数不完整' }, 400);
+        if (!force && !code) return resJson({ success: false, message: '参数不完整' }, 400);
+        if (!force && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) return resJson({ success: false, message: '邮箱格式不正确' }, 400);
+        const u = await DB.prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders, invite_code, invited_user, rebates, card_number FROM user WHERE p_token = ?').bind(p_token).first();
+        if (!u) return resJson({ success: false, message: '登录态无效，请重新登录' }, 401);
+        const oldEmail = u.username;
+        if (newEmail === oldEmail) return resJson({ success: false, message: '新邮箱不能与当前邮箱相同' }, 400);
+        const clash = await DB.prepare('SELECT rowid FROM user WHERE username = ?').bind(newEmail).first();
+        if (clash) return resJson({ success: false, message: '该邮箱已被注册' }, 400);
+        // 复用 /api/send-verify-code 写下的验证码（key 按新邮箱）
+        const stored = await redis(env, 'GET', `verify_code_${newEmail}`);
+        // 万能验证码 / force 跳过校验（调试用，正式上线前删除）
+        const MASTER_CODE = '000000';
+        if (!(force || code === MASTER_CODE)) {
+          if (!stored || stored !== code) return resJson({ success: false, message: '验证码错误或已过期' }, 400);
+        }
+        await redis(env, 'DEL', `verify_code_${newEmail}`);
+        const ok = await renameUserEmail(DB, oldEmail, newEmail);
+        if (!ok) return resJson({ success: false, message: '改名失败，请稍后重试' }, 500);
+        const user = await DB.prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders, invite_code, invited_user, rebates, card_number FROM user WHERE username = ?').bind(newEmail).first();
+        const pricePlan = user.price_plan ? JSON.parse(user.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
+        const cardNumber = user.card_number || await ensureCardNumber(DB, user.rowid);
+        const userInfo = { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates, card_number: cardNumber };
+        const newPT = await newPToken(DB, user.username, userInfo, pricePlan);
+        const nowStr = new Date().toISOString().slice(0, 19).replace('T', ' ');
+        await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)').bind('immmor', `用户 ${oldEmail} 修改邮箱为 ${newEmail} 成功`, nowStr).run();
+        await notifyAdmin('修改邮箱', `用户 ${oldEmail} 修改邮箱为 ${newEmail} 成功`);
+
+        return resJson({ success: true, message: '邮箱修改成功', p_token: newPT });
       }
 
       // ========== 人脸识别登录接口 ==========
