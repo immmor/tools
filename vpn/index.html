@@ -4602,7 +4602,16 @@
             const expireDate = userInfo.free_expire_date || '-';
             const isExpired = expireDate !== '-' && new Date(expireDate) < now;
             const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-            const todayChecked = userInfo.last_checkin === todayStr;
+            // last_checkin 兼容两种格式：老 YYYY-MM-DD（本地日期）与新 UTC ISO 时间戳（转本地日期比较）
+            let lastCheckinLocal = '';
+            if (userInfo.last_checkin) {
+                if (/^\d{4}-\d{2}-\d{2}$/.test(userInfo.last_checkin)) lastCheckinLocal = userInfo.last_checkin;
+                else {
+                    const d = new Date(userInfo.last_checkin);
+                    if (!isNaN(d)) lastCheckinLocal = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                }
+            }
+            const todayChecked = lastCheckinLocal === todayStr;
             let expireDisplay = expireDate;
             if (expireDate !== '-' && expireDate.includes('T')) {
                 const d = new Date(expireDate);
@@ -4678,8 +4687,9 @@
             if (data.code === 200 && data.free_expire_date) {
                 const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
                 userInfo.free_expire_date = data.free_expire_date;
+                // 优先用服务器返回的完整时间戳（UTC ISO）；无则回退本地日期字符串
                 const now = new Date();
-                userInfo.last_checkin = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                userInfo.last_checkin = data.last_checkin || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
                 localStorage.setItem('userInfo', JSON.stringify(userInfo));
                 showFreeNodes();
             }

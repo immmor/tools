@@ -3548,7 +3548,16 @@ rules:
           const localDate = new Date(now.getTime() - offset * 60 * 1000);
           const todayStr = localDate.toISOString().slice(0, 10);
 
-          if (user.last_checkin === todayStr) {
+          // 判重按"用户本地日期"：兼容老格式（YYYY-MM-DD 即本地日期）与新格式（ISO 时间戳）
+          let lastLocalDate = '';
+          if (user.last_checkin) {
+            if (/^\d{4}-\d{2}-\d{2}$/.test(user.last_checkin)) lastLocalDate = user.last_checkin;
+            else {
+              const t = new Date(user.last_checkin).getTime();
+              if (!isNaN(t)) lastLocalDate = new Date(t - offset * 60 * 1000).toISOString().slice(0, 10);
+            }
+          }
+          if (lastLocalDate === todayStr) {
             return resJson({ code: 200, msg: '今日已签到', free_expire_date: user.free_expire_date });
           }
 
@@ -3556,10 +3565,11 @@ rules:
           localEndOfDay.setUTCHours(23, 59, 59, 999);
           const expireDate = new Date(localEndOfDay.getTime() + offset * 60 * 1000);
 
+          // last_checkin 改存完整时间戳（UTC ISO），后台可显示到分钟
           await DB.prepare('UPDATE user SET last_checkin = ?, free_expire_date = ? WHERE username = ?')
-            .bind(todayStr, expireDate.toISOString(), username).run();
+            .bind(now.toISOString(), expireDate.toISOString(), username).run();
 
-          return resJson({ code: 200, msg: '签到成功，免费节点有效期至今日23:59', free_expire_date: expireDate.toISOString() });
+          return resJson({ code: 200, msg: '签到成功，免费节点有效期至今日23:59', free_expire_date: expireDate.toISOString(), last_checkin: now.toISOString() });
         } catch (err) {
           return resJson({ code: 500, msg: '签到失败', error: err.message }, 500);
         }
