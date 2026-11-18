@@ -2409,6 +2409,7 @@
                 <div>
                     <label class="block text-xs text-zinc-400 mb-2" data-i18n="change_email_code_label">验证码</label>
                     <input id="ce-code" type="text" inputmode="numeric" autocomplete="off" data-i18n-placeholder="change_email_code_placeholder" placeholder="请输入新邮箱收到的验证码" class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-none text-white text-sm focus:outline-none focus:border-[var(--neon-blue)]" />
+                    <p id="ce-code-hint" class="text-xs text-[var(--neon-green)] mt-2 text-center hidden" data-i18n="verify_code_valid_hint">验证码发送成功，有效时间为5分钟</p>
                 </div>
                 <button id="ce-confirm" class="btn-cyber w-full py-3 text-sm font-bold" data-i18n="change_email_confirm_btn">确认修改</button>
                 <p id="ce-msg" class="text-xs text-center hidden"></p>
@@ -2500,7 +2501,11 @@
             body: JSON.stringify({ email: newEmail })
           });
           const data = await resp.json();
-          if (data.success) showMsg(data.message || t('change_email_code_sent', '验证码已发送至新邮箱'), false);
+          if (data.success) {
+            // 成功提示由内联绿色 hint 展示，不再走底部 showMsg
+            const hint = document.getElementById('ce-code-hint');
+            if (hint) hint.classList.remove('hidden');
+          }
           else showMsg(data.message || t('change_email_send_failed', '发送失败'), true);
         } catch (e) { showMsg(t('change_email_network_error', '网络错误，请稍后重试'), true); }
         finally { ceSend.disabled = false; ceSend.textContent = t('change_email_send_btn', '获取验证码'); }
@@ -2631,6 +2636,7 @@
                             <button type="button" id="send-code-btn" class="btn-cyber px-4 py-3 whitespace-nowrap text-sm" data-i18n="modal_send_code">发送验证码</button>
                         </div>
                     </div>
+                    <p id="verify-code-hint" class="text-xs text-[var(--neon-green)] mt-2 text-center hidden" data-i18n="verify_code_valid_hint">验证码发送成功，有效时间为5分钟</p>
 
                 </div>
                 <div class="mb-6 relative">
@@ -4990,7 +4996,12 @@
                     hint = document.createElement('div');
                     hint.className = 'field-hint';
                     const box = input.closest('.mb-6') || input.parentElement;
-                    if (box) box.appendChild(hint);
+                    if (box) {
+                        // 若容器内有绿色成功提示（verify-code-hint），错误提示插到它前面，保证紧挨输入框
+                        const anchor = box.querySelector('#verify-code-hint');
+                        if (anchor) box.insertBefore(hint, anchor);
+                        else box.appendChild(hint);
+                    }
                     input._hintEl = hint;
                 }
                 if (hint) hint.textContent = msg;
@@ -7437,7 +7448,9 @@
                         const data = await res.json();
 
                         if (data.success) {
-                            showMsg(dict?.code_sent_to_email || data.message || '验证码已发送到您的邮箱！');
+                            // 成功提示由内联绿色 hint 展示，不再走底部 showMsg
+                            const hint = document.getElementById('verify-code-hint');
+                            if (hint) hint.classList.remove('hidden');
                         } else {
                             showMsg(data.message || '发送失败，请稍后重试', true);
                             resetCodeBtn();

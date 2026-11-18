@@ -864,15 +864,16 @@ export default {
           return resJson({ success: false, message: `请求过于频繁，请 ${rlSendIp.retryAfter} 秒后再试！` }, 429);
         }
 
-        // 频率限制：验证码 key 本身带 60s TTL，只要它还存活（TTL>0）就说明 60 秒内已发送过
-        const ttl = await redis(env, 'TTL', `verify_code_${email}`);
+        // 发送冷却（60s）：独立 key，不占用验证码本身的有效期
+        const ttl = await redis(env, 'TTL', `verify_code_cd_${email}`);
         if (ttl > 0) {
           return resJson({ success: false, message: `请 ${ttl} 秒后再试！` }, 429);
         }
 
-        // 生成6位数字验证码，存入同一个 key（1分钟自动过期，过期即等于冷却结束）
+        // 生成6位数字验证码：有效期 5 分钟；发送冷却 key 60 秒
         const verifyCode = Math.floor(100000 + Math.random() * 900000).toString();
-        await redis(env, 'SET', `verify_code_${email}`, verifyCode, 'EX', 60);
+        await redis(env, 'SET', `verify_code_${email}`, verifyCode, 'EX', 300);
+        await redis(env, 'SET', `verify_code_cd_${email}`, '1', 'EX', 60);
 
         // 通过 Resend 发送验证码
         const RESEND_API_KEY = env.RESEND_API_KEY;
