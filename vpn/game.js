@@ -460,6 +460,17 @@
             { bg: '#17072b', text: '#a3ff00', icon: '👑' }
         ];
 
+        const WHEEL_SEGMENT_LIGHT = [
+            { bg: '#efeaf7', text: '#a1146b', icon: '💵' },
+            { bg: '#fbf8fc', text: '#5d7a00', icon: '🪙' },
+            { bg: '#efeaf7', text: '#2b2823', icon: '🐟' },
+            { bg: '#fbf8fc', text: '#a1146b', icon: '✨' },
+            { bg: '#efeaf7', text: '#5d7a00', icon: '🎵' },
+            { bg: '#fbf8fc', text: '#2b2823', icon: '💎' },
+            { bg: '#efeaf7', text: '#a1146b', icon: '🎁' },
+            { bg: '#fbf8fc', text: '#5d7a00', icon: '👑' }
+        ];
+
         const wheelCanvas = document.getElementById('wheelCanvas');
         const spinBtn = document.getElementById('spin-wheel');
         const wheelResult = document.getElementById('wheel-result');
@@ -474,6 +485,8 @@
             if (!wheelCtx) return;
             const radius = wheelCanvas.width / 2;
             const segRad = (2 * Math.PI) / WHEEL_PRIZES.length;
+            const light = document.body.classList.contains('theme-light');
+            const palette = light ? WHEEL_SEGMENT_LIGHT : WHEEL_SEGMENT_STYLE;
             wheelCtx.clearRect(0, 0, wheelCanvas.width, wheelCanvas.height);
             wheelCtx.save();
             wheelCtx.translate(radius, radius);
@@ -481,7 +494,7 @@
             WHEEL_PRIZES.forEach((prize, i) => {
                 const startAng = i * segRad - Math.PI / 2;
                 const endAng = startAng + segRad;
-                const style = WHEEL_SEGMENT_STYLE[i];
+                const style = palette[i];
                 wheelCtx.beginPath();
                 wheelCtx.moveTo(0, 0);
                 wheelCtx.arc(0, 0, radius - 15, startAng, endAng);
@@ -549,6 +562,10 @@
         };
 
         drawWheel();
+        document.addEventListener('themechange', () => {
+            drawWheel();
+            if (!hasValidCard) initScratchCard();
+        });
 
         // 幸运转盘为默认激活 Tab，初始化时加载其历史记录
         renderGameHistory('wheel');
@@ -912,9 +929,10 @@
             const dict = window.translations?.[window.currentLang] || {};
             if (!hasValidCard) {
                 scratchPrize.textContent = '';
-                scratchCtx.fillStyle = 'rgba(17, 7, 36, 0.95)';
+                const light = document.body.classList.contains('theme-light');
+                scratchCtx.fillStyle = light ? '#f3f1ec' : 'rgba(17, 7, 36, 0.95)';
                 scratchCtx.fillRect(0, 0, canvas.width, canvas.height);
-                scratchCtx.fillStyle = '#ff99cc';
+                scratchCtx.fillStyle = light ? '#5f5c56' : '#ff99cc';
                 scratchCtx.font = 'bold 16px "PingFang SC", sans-serif';
                 scratchCtx.fillText(dict.scratch_buy_first || '请先购买刮刮卡', canvas.width / 2, canvas.height / 2);
                 return;
