@@ -1133,7 +1133,7 @@ export default {
       // ========== 注册接口（核心）→ 用户名密码注册 ==========
       if (path === '/api/register' && request.method === 'POST') {
         const params = await request.json();
-        const { username, password, inviteCode, securityAnswer, source, priceParam, fromGoogle, fromGithub, web3Address, sliderVerified, textVerified, audioVerified, faceDescriptor } = params;
+        const { username, password, inviteCode, securityAnswer, source, site, priceParam, fromGoogle, fromGithub, web3Address, sliderVerified, textVerified, audioVerified, faceDescriptor } = params;
         
         // 滑动窗口限流：同一 IP 1 小时内最多注册 5 次，防批量注册/机器刷号
         const regIp = request.headers.get('CF-Connecting-IP') || 'unknown';
@@ -1316,8 +1316,8 @@ export default {
         let result;
         try {
           result = await DB
-            .prepare('INSERT INTO user (username, password, balance, v_expire_date, learn_vip_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code, v_token, v_link_clash, v_link_v2ray, price_plan, survey, security_answer, fetch_link, source, not_trusted, auto_rewn, vorders, web3_address, card_number) VALUES (?, ?, ?, NULL, NULL, 153600, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)')
-            .bind(username, password, finalBalance, new Date().toISOString().slice(0, 19).replace('T', ' '), userInviteCode, '', '', '', pricePlanStr, '{}', securityAnswer || '', '[]', source || '', notTrustedValue, '[]', web3AddressLower || '', newCardNumber)
+            .prepare('INSERT INTO user (username, password, balance, v_expire_date, learn_vip_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code, v_token, v_link_clash, v_link_v2ray, price_plan, survey, security_answer, fetch_link, source, site, not_trusted, auto_rewn, vorders, web3_address, card_number) VALUES (?, ?, ?, NULL, NULL, 153600, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)')
+            .bind(username, password, finalBalance, new Date().toISOString().slice(0, 19).replace('T', ' '), userInviteCode, '', '', '', pricePlanStr, '{}', securityAnswer || '', '[]', source || '', site || '', notTrustedValue, '[]', web3AddressLower || '', newCardNumber)
             .run();
         } catch (e) {
           // 捕获 UNIQUE 约束冲突 → 用户名已存在（并发注册竞争时触发）
