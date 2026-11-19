@@ -1828,27 +1828,47 @@ export default {
       }
 
       // ========== 谷歌快捷登录接口 ==========
+      // 支持两种凭证：token(OAuth access_token，按钮授权流程) / idToken(One Tap 的 credential JWT)
       if (path === '/api/google-login' && request.method === 'POST') {
         const params = await request.json();
-        const { token } = params;
+        const { token, idToken } = params;
 
-        if (!token) {
+        if (!token && !idToken) {
           return resJson({ success: false, message: '请提供谷歌登录token！' }, 400);
         }
 
+        const GOOGLE_CLIENT_ID = '640788321986-ncc1r0oeb1lja771ioj2in4359c807q5.apps.googleusercontent.com';
+
         try {
-          const googleRes = await fetch('https://oauth2.googleapis.com/tokeninfo', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: `access_token=${token}`
-          });
+          let email;
 
-          if (!googleRes.ok) {
-            return resJson({ success: false, message: '谷歌token验证失败！' }, 401);
+          if (idToken) {
+            // One Tap：验证 ID token（JWT），校验 aud / email_verified 防冒用
+            const verifyRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
+            if (!verifyRes.ok) {
+              return resJson({ success: false, message: '谷歌ID token验证失败！' }, 401);
+            }
+            const info = await verifyRes.json();
+            if (info.aud !== GOOGLE_CLIENT_ID) {
+              return resJson({ success: false, message: '谷歌token受众不匹配！' }, 401);
+            }
+            if (info.email_verified !== 'true' && info.email_verified !== true) {
+              return resJson({ success: false, message: '谷歌邮箱未验证！' }, 401);
+            }
+            email = info.email;
+          } else {
+            // 按钮授权流程：验证 OAuth access_token
+            const googleRes = await fetch('https://oauth2.googleapis.com/tokeninfo', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: `access_token=${token}`
+            });
+            if (!googleRes.ok) {
+              return resJson({ success: false, message: '谷歌token验证失败！' }, 401);
+            }
+            const googleData = await googleRes.json();
+            email = googleData.email;
           }
-
-          const googleData = await googleRes.json();
-          const email = googleData.email;
 
           if (!email) {
             return resJson({ success: false, message: '无法获取谷歌账号邮箱！' }, 401);

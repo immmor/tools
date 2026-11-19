@@ -6882,6 +6882,70 @@
                 }
             };
 
+            // One Tap：把 Google 返回的 ID token（credential）交给后端验证，复用现有登录/注册流程
+            const handleGoogleCredential = async (credential) => {
+                try {
+                    const res = await fetch(`${API}/api/google-login`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ idToken: credential })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        if (data.userInfo || data.p_token) {
+                            completeOAuthLogin(data);
+                        } else if (data.needRegister) {
+                            applyOAuthRegisterEmail(data.email, 'google');
+                        }
+                    } else {
+                        showMsg(data.message || translations[currentLang]?.google_login_failed, true);
+                    }
+                } catch {
+                    showMsg(translations[currentLang]?.network_error, true);
+                }
+            };
+
+            // Google One Tap：检测浏览器已登录的 Google 账号，弹出提示一键登录/注册
+            // 仅当本站未登录时才调起；Google 自身会判断浏览器是否有可用账号
+            const initGoogleOneTap = () => {
+                const CLIENT_ID = '560769820364-kror930ei6i85o5ggjr8f9telvc58quj.apps.googleusercontent.com';
+                // 本站已登录：不提示
+                if (localStorage.getItem('userInfo')) return;
+                // 正在处理 GitHub / 手机端 Google 的 OAuth 回调：跳过，避免冲突
+                const hash = window.location.hash || '';
+                const search = window.location.search || '';
+                if (hash.includes('access_token') || /(?:^|[?&])code=/.test(search)) return;
+
+                const start = () => {
+                    if (!window.google?.accounts?.id) return;
+                    window.google.accounts.id.initialize({
+                        client_id: CLIENT_ID,
+                        callback: (resp) => {
+                            if (resp && resp.credential) handleGoogleCredential(resp.credential);
+                        },
+                        auto_select: false,
+                        cancel_on_tap_outside: true
+                    });
+                    window.google.accounts.id.prompt();
+                };
+
+                // 动态加载 GSI 脚本（与"谷歌登录"按钮共用同一个脚本，只加载一次）
+                if (!document.querySelector('script[src="https://accounts.google.com/gsi/client"]')) {
+                    const script = document.createElement('script');
+                    script.src = 'https://accounts.google.com/gsi/client';
+                    script.async = true;
+                    script.onload = start;
+                    document.head.appendChild(script);
+                } else if (window.google?.accounts?.id) {
+                    start();
+                } else {
+                    const timer = setInterval(() => {
+                        if (window.google?.accounts?.id) { clearInterval(timer); start(); }
+                    }, 100);
+                    setTimeout(() => clearInterval(timer), 5000);
+                }
+            };
+
             const handleGithubCode = async (code) => {
                 try {
                     const redirectUri = window.location.origin + window.location.pathname;
@@ -7858,6 +7922,7 @@
                     els.forgotSubmitBtn.classList.remove('hidden');
                 });
                 checkAuth();
+                initGoogleOneTap();
             };
 
             return { init };
