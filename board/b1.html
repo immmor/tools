@@ -1,0 +1,2320 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI 短剧与视频生成基准榜单 · 2026.11</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    /* ==========================================================================
+       设计系统 Token：Film Inspection Lab（胶片检片室）
+       ========================================================================== */
+    :root {
+      --bg-canvas: #F7F8FA;       /* 高亮度冷调检片台白 */
+      --bg-surface: #FFFFFF;      /* 纯白数据切片与折叠抽屉底色 */
+      --bg-recessed: #EEF0F4;     /* 微凹胶片槽 / 标签背景 */
+      --ink-primary: #0F1216;     /* 碳素黑核心排印文字 */
+      --ink-secondary: #475467;   /* 工业板岩灰辅助数据与短剧工艺注释 */
+      --ink-muted: #7A869A;       /* 淡铅灰表头与次要时间戳 */
+      --rule-hairline: #D8DEE6;   /* 1px 精密检片台刻度分割线 */
+      --accent-signal: #0047FF;   /* 国际克莱因 / 信号蓝 */
+      --accent-emerald: #0A7B3E;  /* 正增长排名上升与高保真达标标记 */
+      --accent-crimson: #C92A2A;  /* 排名下滑或高崩坏预警标记 */
+
+      --row-hover: #F2F5FA;
+      --row-active: #F4F7FF;
+
+      --font-sans: 'PingFang SC', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+      --ease-film: cubic-bezier(0.19, 1, 0.22, 1);
+    }
+
+    *, *::before, *::after {
+      box-sizing: border-box;
+      border-radius: 0 !important; /* 胶片检片台严格直角几何 */
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background-color: var(--bg-canvas);
+      color: var(--ink-primary);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+
+    :focus-visible {
+      outline: 2px solid var(--accent-signal);
+      outline-offset: -2px;
+    }
+
+    .mono {
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+      font-feature-settings: "tnum" 1, "zero" 1;
+    }
+
+    /* 主检片台容器 */
+    .inspection-desk {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 18px 24px 136px;
+    }
+
+    /* ==========================================================================
+       1. 顶部检片室头栏（单行紧凑结构 + 专项筛选）
+       ========================================================================== */
+    .desk-header {
+      background: var(--bg-surface);
+      border: 1px solid var(--ink-primary);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: stretch;
+      justify-content: space-between;
+    }
+
+    .desk-brand {
+      padding: 12px 18px;
+      border-right: 1px solid var(--ink-primary);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-width: 310px;
+    }
+
+    .desk-title {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: -0.015em;
+      color: var(--ink-primary);
+      line-height: 1.3;
+    }
+
+    .desk-subtitle {
+      margin-top: 3px;
+      font-size: 12px;
+      color: var(--ink-secondary);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .timecode-chip {
+      background: var(--bg-recessed);
+      color: var(--ink-primary);
+      padding: 0 5px;
+      font-size: 11px;
+      border: 1px solid var(--rule-hairline);
+    }
+
+    .desk-filters {
+      display: flex;
+      flex: 1;
+      flex-wrap: wrap;
+      align-items: stretch;
+      justify-content: flex-end;
+    }
+
+    /* 短剧生产专项赛道标签 */
+    .track-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: stretch;
+      border-right: 1px solid var(--ink-primary);
+    }
+
+    .track-btn {
+      appearance: none;
+      background: transparent;
+      border: none;
+      border-right: 1px solid var(--rule-hairline);
+      padding: 0 14px;
+      min-height: 52px;
+      font-family: var(--font-sans);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--ink-primary);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: background-color 0.14s ease, color 0.14s ease;
+    }
+
+    .track-btn:last-child {
+      border-right: none;
+    }
+
+    .track-btn:hover {
+      background: var(--bg-canvas);
+    }
+
+    .track-btn[aria-selected="true"] {
+      background: var(--accent-signal);
+      color: #FFFFFF;
+    }
+
+    .track-count {
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+      font-size: 11px;
+      opacity: 0.72;
+    }
+
+    /* 输出画幅 / 时长过滤快速切换 */
+    .spec-filter-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      background: var(--bg-surface);
+    }
+
+    .spec-filter-label {
+      font-size: 11px;
+      color: var(--ink-muted);
+      margin-right: 2px;
+      white-space: nowrap;
+    }
+
+    .spec-pill {
+      appearance: none;
+      border: 1px solid var(--rule-hairline);
+      background: var(--bg-recessed);
+      color: var(--ink-secondary);
+      padding: 4px 9px;
+      font-family: var(--font-sans);
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: border-color 0.14s ease, background-color 0.14s ease, color 0.14s ease;
+    }
+
+    .spec-pill:hover {
+      border-color: var(--ink-primary);
+      color: var(--ink-primary);
+    }
+
+    .spec-pill[aria-pressed="true"] {
+      border-color: var(--accent-signal);
+      background: var(--accent-signal);
+      color: #FFFFFF;
+    }
+
+    /* ==========================================================================
+       2. Hero 核心视觉：动态 ELO 检片标尺（Optical Film Gauge）
+       ========================================================================== */
+    .film-gauge-panel {
+      background: var(--bg-surface);
+      border-left: 1px solid var(--ink-primary);
+      border-right: 1px solid var(--ink-primary);
+      border-bottom: 1px solid var(--ink-primary);
+      padding: 12px 18px 14px;
+    }
+
+    .gauge-topbar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .gauge-caption {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--ink-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .gauge-indicator-sq {
+      width: 8px;
+      height: 8px;
+      background: var(--accent-signal);
+      display: inline-block;
+    }
+
+    .gauge-readout {
+      font-size: 12px;
+      color: var(--ink-secondary);
+    }
+
+    .gauge-readout strong {
+      color: var(--ink-primary);
+      font-weight: 600;
+    }
+
+    /* 检片标尺视窗：含顶部胶片齿孔隐喻与 1100–1450 ELO 精密刻度 */
+    .gauge-viewport {
+      position: relative;
+      height: 86px;
+      border-top: 1px solid var(--ink-primary);
+      border-bottom: 1px solid var(--rule-hairline);
+      background-color: var(--bg-canvas);
+      /* 顶部胶片齿孔细微隐喻刻度 */
+      background-image:
+        repeating-linear-gradient(
+          to right,
+          var(--rule-hairline) 0,
+          var(--rule-hairline) 4px,
+          transparent 4px,
+          transparent 14px
+        );
+      background-size: 100% 4px;
+      background-position: 0 2px;
+      background-repeat: no-repeat;
+      overflow: hidden;
+    }
+
+    .gauge-scale-layer,
+    .gauge-cursors-layer {
+      position: absolute;
+      inset: 0;
+    }
+
+    /* 2 分微刻度与 10 分主刻度 */
+    .gauge-tick-minor {
+      position: absolute;
+      top: 8px;
+      width: 1px;
+      height: 6px;
+      background: var(--rule-hairline);
+    }
+
+    .gauge-tick-major {
+      position: absolute;
+      top: 8px;
+      width: 1px;
+      height: 14px;
+      background: var(--ink-primary);
+    }
+
+    .gauge-tick-label {
+      position: absolute;
+      top: 23px;
+      transform: translateX(-50%);
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+      font-size: 10px;
+      color: var(--ink-muted);
+      user-select: none;
+    }
+
+    /* 垂直刻度游标（前 6 名模型） */
+    .gauge-cursor {
+      position: absolute;
+      bottom: 0;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      cursor: pointer;
+      z-index: 3;
+      transition: transform 0.22s var(--ease-film);
+    }
+
+    .cursor-tag {
+      background: var(--bg-surface);
+      border: 1px solid var(--ink-primary);
+      padding: 2px 6px;
+      font-size: 11px;
+      line-height: 1.25;
+      white-space: nowrap;
+      color: var(--ink-primary);
+      transition: background-color 0.14s ease, color 0.14s ease, border-color 0.14s ease;
+    }
+
+    .cursor-needle {
+      width: 1px;
+      background: var(--ink-primary);
+      margin-top: 1px;
+      transition: background-color 0.14s ease, width 0.14s ease;
+    }
+
+    .gauge-cursor.is-lead .cursor-tag {
+      border-color: var(--accent-signal);
+      color: var(--accent-signal);
+      font-weight: 600;
+    }
+
+    .gauge-cursor.is-lead .cursor-needle,
+    .gauge-cursor.is-expanded .cursor-needle,
+    .gauge-cursor:hover .cursor-needle {
+      background: var(--accent-signal);
+      width: 2px;
+    }
+
+    .gauge-cursor.is-expanded .cursor-tag,
+    .gauge-cursor:hover .cursor-tag {
+      background: var(--accent-signal);
+      border-color: var(--accent-signal);
+      color: #FFFFFF;
+    }
+
+    /* 游标悬停浮窗（显示模型名、总分与短剧核心强项） */
+    .gauge-tooltip {
+      position: fixed;
+      pointer-events: none;
+      background: var(--ink-primary);
+      color: #FFFFFF;
+      border-left: 3px solid var(--accent-signal);
+      padding: 7px 10px;
+      font-size: 11px;
+      line-height: 1.45;
+      z-index: 80;
+      opacity: 0;
+      transform: translateY(4px);
+      transition: opacity 0.12s ease, transform 0.12s ease;
+      max-width: 280px;
+    }
+
+    .gauge-tooltip.is-visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .gauge-tooltip-head {
+      font-weight: 600;
+      margin-bottom: 2px;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .gauge-tooltip-sub {
+      color: #D0D5DD;
+    }
+
+    /* ==========================================================================
+       3. 高密度短剧视频模型主榜单
+       ========================================================================== */
+    .ledger-wrapper {
+      background: var(--bg-surface);
+      border-left: 1px solid var(--ink-primary);
+      border-right: 1px solid var(--ink-primary);
+      border-bottom: 1px solid var(--ink-primary);
+      overflow-x: auto;
+    }
+
+    .ledger-table {
+      width: 100%;
+      min-width: 1120px;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    .ledger-table thead th {
+      height: 40px;
+      padding: 0 12px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--ink-muted);
+      border-bottom: 1px solid var(--ink-primary);
+      background: var(--bg-surface);
+      text-align: left;
+      user-select: none;
+      white-space: nowrap;
+    }
+
+    .ledger-table thead th.align-right {
+      text-align: right;
+    }
+
+    .ledger-table thead th.align-center {
+      text-align: center;
+    }
+
+    .sort-btn {
+      appearance: none;
+      background: none;
+      border: none;
+      padding: 0;
+      font: inherit;
+      color: inherit;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .sort-btn:hover {
+      color: var(--ink-primary);
+    }
+
+    .sort-btn[aria-sort="descending"],
+    .sort-btn[aria-sort="ascending"] {
+      color: var(--accent-signal);
+      font-weight: 600;
+    }
+
+    /* 主数据行 */
+    .film-row {
+      height: 52px;
+      border-bottom: 1px solid var(--rule-hairline);
+      cursor: pointer;
+      transition: background-color 0.12s ease;
+    }
+
+    .film-row:hover {
+      background-color: var(--row-hover);
+    }
+
+    .film-row.is-expanded {
+      background-color: var(--row-active);
+      border-bottom-color: var(--accent-signal);
+    }
+
+    .film-row.is-cursor-focus {
+      outline: 2px solid var(--accent-signal);
+      outline-offset: -2px;
+    }
+
+    .film-row td {
+      padding: 0 12px;
+      vertical-align: middle;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .film-row td.align-right {
+      text-align: right;
+    }
+
+    .film-row td.align-center {
+      text-align: center;
+    }
+
+    /* 列 1：排名 / 变动 */
+    .rank-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .rank-index {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink-primary);
+      min-width: 22px;
+    }
+
+    .rank-shift {
+      font-size: 11px;
+      min-width: 28px;
+    }
+
+    .shift-up {
+      color: var(--accent-emerald);
+      font-weight: 500;
+    }
+
+    .shift-down {
+      color: var(--accent-crimson);
+      font-weight: 500;
+    }
+
+    .shift-flat {
+      color: var(--ink-muted);
+    }
+
+    .shift-new {
+      color: var(--accent-signal);
+      font-weight: 600;
+    }
+
+    /* 列 2：模型与开发商 + 原生规格标签 */
+    .model-cell {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .model-title-wrap {
+      display: flex;
+      align-items: baseline;
+      gap: 7px;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .model-title {
+      font-weight: 600;
+      color: var(--ink-primary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .model-vendor {
+      font-size: 12px;
+      color: var(--ink-secondary);
+      flex-shrink: 0;
+    }
+
+    .model-badges {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .spec-chip {
+      background: var(--bg-recessed);
+      border: 1px solid var(--rule-hairline);
+      color: var(--ink-secondary);
+      font-size: 11px;
+      padding: 1px 6px;
+    }
+
+    .row-arrow {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--ink-muted);
+      transition: transform 0.18s var(--ease-film), color 0.14s ease;
+    }
+
+    .film-row.is-expanded .row-arrow {
+      color: var(--accent-signal);
+      transform: rotate(90deg);
+    }
+
+    /* 列 3：综合 ELO（含 ±95% CI） */
+    .elo-group {
+      display: inline-flex;
+      align-items: baseline;
+      justify-content: flex-end;
+      gap: 6px;
+    }
+
+    .elo-val {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink-primary);
+    }
+
+    .elo-ci {
+      font-size: 11px;
+      color: var(--ink-muted);
+    }
+
+    /* 列 4, 5, 6：单项评分条 + 数值 */
+    .score-meter {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .meter-track {
+      width: 54px;
+      height: 5px;
+      background: var(--bg-recessed);
+      border: 1px solid var(--rule-hairline);
+      flex-shrink: 0;
+    }
+
+    .meter-bar {
+      height: 100%;
+      background: var(--ink-primary);
+    }
+
+    .meter-bar.is-high {
+      background: var(--accent-emerald);
+    }
+
+    .meter-bar.is-warn {
+      background: var(--accent-crimson);
+    }
+
+    .score-num {
+      font-size: 12px;
+      font-weight: 500;
+      min-width: 34px;
+      text-align: right;
+      color: var(--ink-primary);
+    }
+
+    .score-num.is-high {
+      color: var(--accent-emerald);
+      font-weight: 600;
+    }
+
+    .score-num.is-warn {
+      color: var(--accent-crimson);
+    }
+
+    /* 列 7：单分钟成片成本 / 生成耗时 */
+    .cost-cell {
+      font-size: 12px;
+      color: var(--ink-primary);
+    }
+
+    .cost-sep {
+      color: var(--ink-muted);
+      margin: 0 3px;
+    }
+
+    .cost-time {
+      color: var(--ink-secondary);
+    }
+
+    /* 列 8：对比勾选 */
+    .compare-box {
+      appearance: none;
+      width: 15px;
+      height: 15px;
+      border: 1px solid var(--ink-primary);
+      background: var(--bg-surface);
+      cursor: pointer;
+      display: inline-grid;
+      place-content: center;
+      margin: 0;
+      vertical-align: middle;
+    }
+
+    .compare-box:checked {
+      background: var(--accent-signal);
+      border-color: var(--accent-signal);
+    }
+
+    .compare-box:checked::after {
+      content: "";
+      width: 7px;
+      height: 7px;
+      background: #FFFFFF;
+    }
+
+    /* ==========================================================================
+       4. 原地短剧分镜评估抽屉（Inline Storyboard Inspection Drawer）
+       ========================================================================== */
+    .storyboard-drawer-row td {
+      padding: 0;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--ink-primary);
+    }
+
+    .storyboard-drawer {
+      display: grid;
+      grid-template-columns: 1.05fr 1.45fr 260px;
+      border-top: 1px solid var(--rule-hairline);
+      background: var(--bg-surface);
+      animation: drawerSlide 0.2s var(--ease-film);
+    }
+
+    @keyframes drawerSlide {
+      from {
+        opacity: 0;
+        transform: translateY(-4px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .drawer-pane {
+      padding: 16px 18px;
+      border-right: 1px solid var(--rule-hairline);
+      white-space: normal;
+    }
+
+    .drawer-pane:last-child {
+      border-right: none;
+      background: var(--bg-canvas);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .pane-heading {
+      margin: 0 0 12px 0;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--ink-primary);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .pane-heading-note {
+      font-weight: 400;
+      font-size: 11px;
+      color: var(--ink-muted);
+    }
+
+    /* 左侧：四维短剧工业化指标条 */
+    .ind-metric-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .ind-metric-row {
+      display: grid;
+      grid-template-columns: 118px 1fr 40px;
+      align-items: center;
+      gap: 10px;
+      font-size: 12px;
+    }
+
+    .ind-metric-name {
+      color: var(--ink-secondary);
+    }
+
+    .ind-metric-track {
+      height: 7px;
+      background: var(--bg-recessed);
+      border: 1px solid var(--rule-hairline);
+    }
+
+    .ind-metric-fill {
+      height: 100%;
+      background: var(--accent-signal);
+    }
+
+    .ind-metric-val {
+      text-align: right;
+      font-weight: 500;
+      color: var(--ink-primary);
+    }
+
+    /* 中间：标准短剧盲测剧本 Prompt 与分镜缺陷/高光记录 */
+    .script-slate {
+      background: var(--bg-canvas);
+      border: 1px solid var(--rule-hairline);
+      border-left: 3px solid var(--ink-primary);
+      padding: 10px 12px;
+      margin-bottom: 10px;
+    }
+
+    .script-meta-line {
+      font-size: 11px;
+      color: var(--ink-muted);
+      margin-bottom: 4px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .script-prompt-body {
+      margin: 0;
+      font-size: 12px;
+      color: var(--ink-primary);
+      line-height: 1.55;
+    }
+
+    .inspection-log {
+      margin: 0;
+      font-size: 12px;
+      color: var(--ink-secondary);
+      line-height: 1.6;
+    }
+
+    .inspection-log strong {
+      color: var(--ink-primary);
+    }
+
+    /* 右侧：短剧制片选型建议 */
+    .producer-specs {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      font-size: 12px;
+    }
+
+    .producer-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--rule-hairline);
+    }
+
+    .producer-row span:first-child {
+      color: var(--ink-muted);
+      flex-shrink: 0;
+    }
+
+    .producer-row span:last-child {
+      color: var(--ink-primary);
+      text-align: right;
+    }
+
+    .producer-fit-note {
+      margin: 10px 0 12px;
+      font-size: 12px;
+      color: var(--ink-secondary);
+      line-height: 1.5;
+    }
+
+    .btn-bench-toggle {
+      appearance: none;
+      width: 100%;
+      padding: 9px 12px;
+      background: var(--accent-signal);
+      border: 1px solid var(--accent-signal);
+      color: #FFFFFF;
+      font-family: var(--font-sans);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.14s ease;
+    }
+
+    .btn-bench-toggle:hover {
+      background: #0038CC;
+    }
+
+    .btn-bench-toggle.is-added {
+      background: var(--bg-surface);
+      color: var(--accent-signal);
+    }
+
+    /* 空状态 */
+    .ledger-empty {
+      padding: 44px 20px;
+      text-align: center;
+      color: var(--ink-secondary);
+    }
+
+    .ledger-empty p {
+      margin: 0 0 12px;
+    }
+
+    .btn-reset-filters {
+      appearance: none;
+      background: var(--bg-surface);
+      border: 1px solid var(--ink-primary);
+      color: var(--ink-primary);
+      padding: 6px 14px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .btn-reset-filters:hover {
+      background: var(--ink-primary);
+      color: #FFFFFF;
+    }
+
+    /* ==========================================================================
+       5. 底部固定双模型对比工作台（A/B Cut Comparison Bench）
+       ========================================================================== */
+    .ab-cut-bench {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: var(--bg-surface);
+      border-top: 2px solid var(--ink-primary);
+      box-shadow: 0 -6px 22px rgba(15, 18, 22, 0.08);
+      z-index: 60;
+      transform: translateY(100%);
+      transition: transform 0.24s var(--ease-film);
+    }
+
+    .ab-cut-bench.is-open {
+      transform: translateY(0);
+    }
+
+    .ab-bench-inner {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 12px 24px;
+      display: grid;
+      grid-template-columns: 176px 1fr auto;
+      align-items: center;
+      gap: 18px;
+    }
+
+    .ab-bench-head {
+      border-right: 1px solid var(--rule-hairline);
+      padding-right: 14px;
+    }
+
+    .ab-bench-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink-primary);
+    }
+
+    .ab-bench-count {
+      font-size: 11px;
+      color: var(--ink-muted);
+      margin-top: 2px;
+    }
+
+    .ab-bench-body {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr 1.35fr;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .cut-slot {
+      border: 1px solid var(--ink-primary);
+      background: var(--bg-canvas);
+      padding: 7px 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      min-height: 48px;
+    }
+
+    .cut-slot.is-vacant {
+      border-style: dashed;
+      border-color: var(--ink-muted);
+      background: var(--bg-surface);
+      color: var(--ink-muted);
+      font-size: 12px;
+    }
+
+    .cut-slot-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink-primary);
+    }
+
+    .cut-slot-meta {
+      font-size: 11px;
+      color: var(--ink-secondary);
+    }
+
+    .btn-slot-drop {
+      appearance: none;
+      background: var(--bg-surface);
+      border: 1px solid var(--rule-hairline);
+      color: var(--ink-secondary);
+      font-size: 11px;
+      padding: 2px 6px;
+      cursor: pointer;
+    }
+
+    .btn-slot-drop:hover {
+      border-color: var(--ink-primary);
+      color: var(--ink-primary);
+    }
+
+    /* 四项核心差值读数 */
+    .ab-diff-matrix {
+      display: grid;
+      grid-template-columns: repeat(2, auto);
+      gap: 3px 12px;
+      font-size: 11px;
+      color: var(--ink-secondary);
+      padding: 0 4px;
+    }
+
+    .ab-diff-item {
+      white-space: nowrap;
+    }
+
+    .ab-diff-item strong {
+      color: var(--accent-signal);
+      font-weight: 600;
+    }
+
+    /* 导演/制片选型结论 */
+    .producer-verdict {
+      border-left: 2px solid var(--accent-signal);
+      padding-left: 12px;
+      font-size: 12px;
+      color: var(--ink-primary);
+      line-height: 1.48;
+    }
+
+    .btn-bench-clear {
+      appearance: none;
+      border: 1px solid var(--ink-primary);
+      background: var(--bg-surface);
+      color: var(--ink-primary);
+      padding: 8px 12px;
+      font-size: 12px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .btn-bench-clear:hover {
+      background: var(--ink-primary);
+      color: #FFFFFF;
+    }
+
+    /* 检片室提示条 */
+    .desk-toast {
+      position: fixed;
+      top: 16px;
+      right: 24px;
+      background: var(--ink-primary);
+      color: #FFFFFF;
+      border-left: 3px solid var(--accent-signal);
+      padding: 9px 14px;
+      font-size: 12px;
+      z-index: 90;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-6px);
+      transition: opacity 0.16s ease, transform 0.16s ease;
+    }
+
+    .desk-toast.is-active {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ==========================================================================
+       响应式折叠适配
+       ========================================================================== */
+    @media (max-width: 1120px) {
+      .storyboard-drawer {
+        grid-template-columns: 1fr;
+      }
+      .drawer-pane {
+        border-right: none;
+        border-bottom: 1px solid var(--rule-hairline);
+      }
+      .ab-bench-inner {
+        grid-template-columns: 1fr;
+        gap: 10px;
+      }
+      .ab-bench-head {
+        border-right: none;
+        border-bottom: 1px solid var(--rule-hairline);
+        padding-bottom: 6px;
+      }
+      .ab-bench-body {
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .inspection-desk {
+        padding: 12px 12px 180px;
+      }
+      .desk-brand {
+        border-right: none;
+        border-bottom: 1px solid var(--ink-primary);
+        width: 100%;
+      }
+      .track-tabs {
+        border-right: none;
+        border-bottom: 1px solid var(--ink-primary);
+        width: 100%;
+      }
+      .track-btn {
+        flex: 1 1 auto;
+        justify-content: center;
+        min-height: 42px;
+        padding: 0 10px;
+      }
+      .spec-filter-group {
+        width: 100%;
+        flex-wrap: wrap;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="inspection-desk">
+    <!-- 1. 顶部检片室头栏 -->
+    <header class="desk-header" role="banner">
+      <div class="desk-brand">
+        <h1 class="desk-title">AI 短剧与视频生成基准榜单</h1>
+        <div class="desk-subtitle">
+          <span>短剧工业化评测 · 2026.11 批次（<strong class="mono" style="color:var(--ink-primary);font-weight:500;">1,480</strong> 组剧本分镜盲测）</span>
+          <span class="timecode-chip mono">TC 00:00:15:00</span>
+        </div>
+      </div>
+
+      <div class="desk-filters">
+        <!-- 短剧生产专项赛道筛选标签 -->
+        <nav class="track-tabs" role="tablist" aria-label="短剧生产专项赛道">
+          <button class="track-btn" role="tab" aria-selected="true" data-track="all">全部赛道 <span class="track-count" id="cnt-all">14</span></button>
+          <button class="track-btn" role="tab" aria-selected="false" data-track="竖屏爽剧">竖屏爽剧（9:16 强冲突） <span class="track-count" id="cnt-drama">4</span></button>
+          <button class="track-btn" role="tab" aria-selected="false" data-track="古风仙侠">古风仙侠（高动态特效） <span class="track-count" id="cnt-xianxia">3</span></button>
+          <button class="track-btn" role="tab" aria-selected="false" data-track="口播对口型">口播对口型（中文音画同步） <span class="track-count" id="cnt-lipsync">4</span></button>
+          <button class="track-btn" role="tab" aria-selected="false" data-track="多镜头连续剧">多镜头连续剧（角色一致性） <span class="track-count" id="cnt-series">3</span></button>
+        </nav>
+
+        <!-- 输出画幅 / 时长过滤快速切换 -->
+        <div class="spec-filter-group" role="group" aria-label="输出画幅与单镜头时长过滤">
+          <span class="spec-filter-label">片比/时长</span>
+          <button type="button" class="spec-pill" aria-pressed="true" data-spec="all">全部</button>
+          <button type="button" class="spec-pill" aria-pressed="false" data-spec="long15">支持 ≥15s 连续长镜头</button>
+          <button type="button" class="spec-pill" aria-pressed="false" data-spec="native916">原生 9:16 竖屏</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- 2. Hero 核心视觉：动态 ELO 检片标尺（Optical Film Gauge） -->
+    <section class="film-gauge-panel" aria-label="动态 ELO 检片标尺">
+      <div class="gauge-topbar">
+        <div class="gauge-caption">
+          <span class="gauge-indicator-sq" aria-hidden="true"></span>
+          <span>动态 ELO 检片标尺（1100 – 1450 ELO 胶片刻度 · 悬停读取短剧强项，点击定位分镜抽屉）</span>
+        </div>
+        <div class="gauge-readout" id="gaugeReadout">
+          当前赛道头名：<strong>—</strong>
+        </div>
+      </div>
+
+      <div class="gauge-viewport" id="gaugeViewport">
+        <div class="gauge-scale-layer" id="gaugeScaleLayer"></div>
+        <div class="gauge-cursors-layer" id="gaugeCursorsLayer"></div>
+      </div>
+    </section>
+
+    <!-- 3. 高密度短剧视频模型主榜单 -->
+    <main class="ledger-wrapper" role="main">
+      <table class="ledger-table" aria-label="AI 短剧与视频生成模型基准排行榜">
+        <colgroup>
+          <col style="width: 78px;" />
+          <col style="width: 310px;" />
+          <col style="width: 124px;" />
+          <col style="width: 128px;" />
+          <col style="width: 132px;" />
+          <col style="width: 132px;" />
+          <col style="width: 134px;" />
+          <col style="width: 58px;" />
+        </colgroup>
+        <thead>
+          <tr>
+            <th scope="col">
+              <button type="button" class="sort-btn" data-sort="elo" aria-sort="descending">排名 / 变动</button>
+            </th>
+            <th scope="col">模型与开发商（原生规格）</th>
+            <th class="align-right" scope="col">
+              <button type="button" class="sort-btn" data-sort="elo" aria-sort="descending">综合 ELO</button>
+            </th>
+            <th class="align-right" scope="col">
+              <button type="button" class="sort-btn" data-sort="consistency">角色跨镜一致性</button>
+            </th>
+            <th class="align-right" scope="col">
+              <button type="button" class="sort-btn" data-sort="lipsync">中文口型与微表情</button>
+            </th>
+            <th class="align-right" scope="col">
+              <button type="button" class="sort-btn" data-sort="physics">物理与武打连贯性</button>
+            </th>
+            <th class="align-right" scope="col">
+              <button type="button" class="sort-btn" data-sort="cost">单分钟成本 / 耗时</button>
+            </th>
+            <th class="align-center" scope="col">对比</th>
+          </tr>
+        </thead>
+        <tbody id="ledgerBody"></tbody>
+      </table>
+
+      <div class="ledger-empty" id="ledgerEmpty" hidden>
+        <p>当前赛道与片比/时长组合下暂无匹配模型。</p>
+        <button type="button" class="btn-reset-filters" id="resetFiltersBtn">重置全部检片条件</button>
+      </div>
+    </main>
+  </div>
+
+  <!-- 5. 底部固定双模型对比工作台（A/B Cut Comparison Bench） -->
+  <aside class="ab-cut-bench" id="abCutBench" aria-label="A/B 剪辑对比工作台" aria-hidden="true">
+    <div class="ab-bench-inner">
+      <div class="ab-bench-head">
+        <div class="ab-bench-title">A/B 剪辑对比工作台</div>
+        <div class="ab-bench-count" id="abBenchCount">已锁定 0 / 2 个成片样本</div>
+      </div>
+
+      <div class="ab-bench-body" id="abBenchBody"></div>
+
+      <div>
+        <button type="button" class="btn-bench-clear" id="clearBenchBtn">清空对比台</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- 游标悬停浮窗 -->
+  <div class="gauge-tooltip" id="gaugeTooltip" role="tooltip"></div>
+
+  <!-- 检片室操作提示 -->
+  <div class="desk-toast" id="deskToast" role="status" aria-live="polite"></div>
+
+  <script>
+    (function () {
+      "use strict";
+
+      /* ========================================================================
+         1. 2026.11 AI 短剧与视频生成模型评测数据集（14 个代表性模型）
+         ======================================================================== */
+      const VIDEO_MODELS = [
+        {
+          id: "seedance-2-pro",
+          name: "Seedance 2.0 Pro",
+          vendor: "字节跳动",
+          track: "竖屏爽剧",
+          aspectTag: "9:16 · 1080p · 15s",
+          native916: true,
+          maxDurationSec: 15,
+          elo: 1418,
+          ci: 4,
+          rankDelta: 2,
+          consistency: 95.4,
+          lipsync: 96.8,
+          physics: 92.6,
+          costPerMin: 3.8,
+          genSecondsPerMin: 44,
+          strengthShort: "9:16 竖屏强冲突微表情与中文口型双料第一",
+          subMetrics: {
+            faceLock: 95.8,
+            chineseLipSync: 97.2,
+            cameraControl: 93.4,
+            handPropStability: 94.1
+          },
+          scriptTag: "9:16 竖屏 · 15秒长镜头 · TC 00:00:15:00",
+          scriptPrompt: "雨夜豪门别墅门口，身穿黑色湿透西装的男主红着眼眶抓住女主手腕，低声嘶吼“你敢走试试”，镜头从特写急推至雨滴砸落的特写。",
+          inspectionRecord: "第 6.2 秒手指交握处无穿模，雨丝物理反光自然，中文“试试”双唇闭合精准，情绪递进无抽搐。",
+          frameControl: "首尾帧双锚定 + 运镜曲线",
+          recommendedGenre: "都市霸总竖屏爽剧、强情绪对峙与日更微短剧"
+        },
+        {
+          id: "kling-2-5-master",
+          name: "Kling 2.5 Master",
+          vendor: "快手可灵",
+          track: "古风仙侠",
+          aspectTag: "9:16 / 16:9 · 2K · 20s",
+          native916: true,
+          maxDurationSec: 20,
+          elo: 1412,
+          ci: 4,
+          rankDelta: -1,
+          consistency: 94.2,
+          lipsync: 92.6,
+          physics: 97.7,
+          costPerMin: 6.1,
+          genSecondsPerMin: 68,
+          strengthShort: "古风威亚武打与长袖衣袂物理连贯性标杆",
+          subMetrics: {
+            faceLock: 94.0,
+            chineseLipSync: 92.4,
+            cameraControl: 96.2,
+            handPropStability: 96.8
+          },
+          scriptTag: "9:16 竖屏 · 18秒长镜头 · TC 00:00:18:00",
+          scriptPrompt: "竹林夜战，白衣剑客凌空旋身格挡三枚暗器后落地收剑，宽大广袖随气浪剧烈翻卷，镜头环绕 270 度跟拍。",
+          inspectionRecord: "高速旋身期间剑身保持直线无弯曲，竹叶受剑气扰动轨迹真实，落地瞬间衣摆垂坠符合重力衰减。",
+          frameControl: "首尾帧 + 运动轨迹笔刷",
+          recommendedGenre: "精品古偶仙侠、高燃动作武侠与特效大场面"
+        },
+        {
+          id: "sora-2-turbo",
+          name: "Sora 2 Turbo",
+          vendor: "OpenAI",
+          track: "多镜头连续剧",
+          aspectTag: "16:9 / 9:16 · 1080p · 20s",
+          native916: true,
+          maxDurationSec: 20,
+          elo: 1404,
+          ci: 5,
+          rankDelta: 1,
+          consistency: 96.1,
+          lipsync: 89.5,
+          physics: 95.3,
+          costPerMin: 8.4,
+          genSecondsPerMin: 56,
+          strengthShort: "多机位切镜下环境光影与角色衣装零漂移",
+          subMetrics: {
+            faceLock: 96.5,
+            chineseLipSync: 88.9,
+            cameraControl: 97.0,
+            handPropStability: 94.6
+          },
+          scriptTag: "16:9 宽银幕 · 20秒三机位 · TC 00:00:20:00",
+          scriptPrompt: "老式港风茶餐厅内，男女主隔桌对坐谈判，先给男主过肩中景，切女主指尖敲击咖啡杯特写，再拉至全景。",
+          inspectionRecord: "三次切镜后桌面菜单文字、杯中咖啡液面高度与人物耳饰完全一致，英文口型极准，中文略偏柔和。",
+          frameControl: "时间轴关键帧分镜编排",
+          recommendedGenre: "电影感横屏网剧、多机位悬疑叙事与海外短剧"
+        },
+        {
+          id: "veo-3-1-cinema",
+          name: "Veo 3.1 Cinema",
+          vendor: "Google",
+          track: "古风仙侠",
+          aspectTag: "16:9 · 4K · 16s",
+          native916: false,
+          maxDurationSec: 16,
+          elo: 1396,
+          ci: 5,
+          rankDelta: 0,
+          consistency: 93.8,
+          lipsync: 88.2,
+          physics: 96.4,
+          costPerMin: 9.2,
+          genSecondsPerMin: 74,
+          strengthShort: "4K 电影级实拍光影与复杂流体烟火仿真",
+          subMetrics: {
+            faceLock: 93.5,
+            chineseLipSync: 87.6,
+            cameraControl: 96.8,
+            handPropStability: 95.1
+          },
+          scriptTag: "16:9 宽银幕 · 16秒长镜头 · TC 00:00:16:00",
+          scriptPrompt: "暴雨倾盆的古代城楼上，将军手持火把走过积水青石板，火光在水洼中形成动态倒影，镜头低角度仰拍推近。",
+          inspectionRecord: "火焰火星飞溅与雨幕景深虚化具有真实光学镜头畸变特征，但原生输出以 16:9 为主，竖屏需裁切构图。",
+          frameControl: "首帧锚定 + 镜头焦段指令",
+          recommendedGenre: "横屏精品短剧、历史战争预告与高预算视效镜头"
+        },
+        {
+          id: "hailuo-02-director",
+          name: "Hailuo-02 Director",
+          vendor: "MiniMax 海螺",
+          track: "竖屏爽剧",
+          aspectTag: "9:16 · 1080p · 10s",
+          native916: true,
+          maxDurationSec: 10,
+          elo: 1388,
+          ci: 4,
+          rankDelta: 3,
+          consistency: 92.9,
+          lipsync: 95.1,
+          physics: 90.4,
+          costPerMin: 3.2,
+          genSecondsPerMin: 36,
+          strengthShort: "极高情绪爆发力与导演级推拉运镜响应",
+          subMetrics: {
+            faceLock: 92.6,
+            chineseLipSync: 95.4,
+            cameraControl: 95.9,
+            handPropStability: 90.2
+          },
+          scriptTag: "9:16 竖屏 · 10秒长镜头 · TC 00:00:10:00",
+          scriptPrompt: "宴会厅聚光灯下，穿红色礼服的女主当众撕毁婚约文件，纸屑飘落中冷笑转身离开，镜头希区柯克式变焦拉近。",
+          inspectionRecord: "眼神戏与嘴角冷笑微表情极富戏剧张力，希区柯克变焦背景压缩感准确，单镜头上限 10 秒需配合剪辑。",
+          frameControl: "首帧锚定 + 12种运镜指令",
+          recommendedGenre: "强反转女频爽剧、情绪切片预告与高密度快节奏短剧"
+        },
+        {
+          id: "vidu-3-0-studio",
+          name: "Vidu 3.0 Studio",
+          vendor: "生数科技",
+          track: "多镜头连续剧",
+          aspectTag: "9:16 / 16:9 · 1080p · 16s",
+          native916: true,
+          maxDurationSec: 16,
+          elo: 1379,
+          ci: 5,
+          rankDelta: 1,
+          consistency: 96.7,
+          lipsync: 91.8,
+          physics: 91.2,
+          costPerMin: 4.1,
+          genSecondsPerMin: 42,
+          strengthShort: "多主体参考图锁定，三人同框群戏角色零串脸",
+          subMetrics: {
+            faceLock: 97.4,
+            chineseLipSync: 91.5,
+            cameraControl: 92.1,
+            handPropStability: 91.8
+          },
+          scriptTag: "9:16 竖屏 · 16秒群戏 · TC 00:00:16:00",
+          scriptPrompt: "办公室争执戏，同时锁定男女主与秘书三张参考脸，三人围绕会议桌走位对峙并传递一份牛皮纸档案袋。",
+          inspectionRecord: "三人侧脸交错走位时五官特征保持稳定未发生互换，档案袋交接无悬浮，复杂大跨度武打动作略显保守。",
+          frameControl: "最多 4 主体参考图 + 首尾帧",
+          recommendedGenre: "多角色室内群戏、职场商战连续剧与漫改短剧"
+        },
+        {
+          id: "jimeng-video-3-0",
+          name: "Jimeng Video 3.0",
+          vendor: "即梦 AI",
+          track: "口播对口型",
+          aspectTag: "9:16 · 1080p · 15s",
+          native916: true,
+          maxDurationSec: 15,
+          elo: 1371,
+          ci: 5,
+          rankDelta: 2,
+          consistency: 91.8,
+          lipsync: 96.3,
+          physics: 88.9,
+          costPerMin: 3.5,
+          genSecondsPerMin: 39,
+          strengthShort: "中文快语速台词唇齿贴合与方言情绪适配",
+          subMetrics: {
+            faceLock: 92.1,
+            chineseLipSync: 96.9,
+            cameraControl: 90.4,
+            handPropStability: 89.5
+          },
+          scriptTag: "9:16 竖屏 · 15秒口播 · TC 00:00:15:00",
+          scriptPrompt: "近景特写，律师在法庭外面对镜头语速极快地陈述三条关键证据，配合抬手推眼镜与严肃点头动作。",
+          inspectionRecord: "唇齿开合与喉部微动随音频重音同步准确，推眼镜动作手指与镜框接触自然，适合高台词密度场景。",
+          frameControl: "音频驱动对口型 + 首尾帧",
+          recommendedGenre: "强台词解说短剧、数字人直播切片与现代都市剧"
+        },
+        {
+          id: "wan-2-6-14b",
+          name: "Wan 2.6-14B",
+          vendor: "阿里通义万相",
+          track: "古风仙侠",
+          aspectTag: "9:16 / 16:9 · 1080p · 15s",
+          native916: true,
+          maxDurationSec: 15,
+          elo: 1362,
+          ci: 6,
+          rankDelta: 0,
+          consistency: 91.2,
+          lipsync: 90.7,
+          physics: 93.4,
+          costPerMin: 2.6,
+          genSecondsPerMin: 52,
+          strengthShort: "支持私有化部署，东方古建筑与水墨粒子特效稳定",
+          subMetrics: {
+            faceLock: 91.0,
+            chineseLipSync: 90.5,
+            cameraControl: 91.8,
+            handPropStability: 92.4
+          },
+          scriptTag: "9:16 竖屏 · 15秒长镜头 · TC 00:00:15:00",
+          scriptPrompt: "云海仙山悬崖边，道袍女修结印召唤金色法阵，袖口随罡风猎猎作响，镜头自下而上拉升展现全貌。",
+          inspectionRecord: "法阵几何符文旋转无畸变，单分钟综合算力成本全榜最低，支持企业自建集群微调特定剧组画风。",
+          frameControl: "首尾帧 + LoRA 角色权重加载",
+          recommendedGenre: "自有算力集群批量制片、古风玄幻与低成本日更剧"
+        },
+        {
+          id: "runway-gen-4-alpha",
+          name: "Runway Gen-4 Alpha",
+          vendor: "Runway",
+          track: "多镜头连续剧",
+          aspectTag: "16:9 / 9:16 · 1080p · 10s",
+          native916: true,
+          maxDurationSec: 10,
+          elo: 1354,
+          ci: 5,
+          rankDelta: -2,
+          consistency: 94.6,
+          lipsync: 84.3,
+          physics: 92.8,
+          costPerMin: 7.8,
+          genSecondsPerMin: 48,
+          strengthShort: "影视级调色质感与局部运动笔刷精细控制",
+          subMetrics: {
+            faceLock: 94.8,
+            chineseLipSync: 83.2,
+            cameraControl: 95.6,
+            handPropStability: 92.0
+          },
+          scriptTag: "16:9 宽银幕 · 10秒长镜头 · TC 00:00:10:00",
+          scriptPrompt: "霓虹雨夜街头，侦探站在电话亭内抽烟，背景车流光轨虚化，仅允许烟雾升腾与人物眨眼微动。",
+          inspectionRecord: "局部运动控制精度极高，胶片颗粒与暗部宽容度优秀；中文普通话唇形同步略显生硬，建议搭配配音剪辑。",
+          frameControl: "多区域运动笔刷 + 摄像机控制",
+          recommendedGenre: "悬疑惊悚空镜、品牌概念短片与后期精修镜头"
+        },
+        {
+          id: "hunyuan-video-pro",
+          name: "HunyuanVideo-Pro",
+          vendor: "腾讯混元",
+          track: "口播对口型",
+          aspectTag: "9:16 / 16:9 · 1080p · 15s",
+          native916: true,
+          maxDurationSec: 15,
+          elo: 1345,
+          ci: 6,
+          rankDelta: 1,
+          consistency: 90.8,
+          lipsync: 94.4,
+          physics: 89.7,
+          costPerMin: 3.4,
+          genSecondsPerMin: 46,
+          strengthShort: "中文语义理解扎实，日常现代生活场景光影自然",
+          subMetrics: {
+            faceLock: 90.6,
+            chineseLipSync: 94.8,
+            cameraControl: 89.5,
+            handPropStability: 89.9
+          },
+          scriptTag: "9:16 竖屏 · 15秒对话 · TC 00:00:15:00",
+          scriptPrompt: "暖光咖啡馆内，年轻女主一边搅拌拿铁一边笑着说出“这次项目终于拿下了”，自然抬头看向镜头外。",
+          inspectionRecord: "中文口语连读嘴型自然，室内肤色还原真实无过度磨皮感，但快速大角度转头时发丝边缘偶有轻微模糊。",
+          frameControl: "首尾帧 + 语音驱动表情",
+          recommendedGenre: "现代甜宠竖屏短剧、生活情景剧与口播带货短剧"
+        },
+        {
+          id: "luma-ray-3",
+          name: "Luma Ray 3",
+          vendor: "Luma AI",
+          track: "竖屏爽剧",
+          aspectTag: "16:9 / 9:16 · 1080p · 10s",
+          native916: true,
+          maxDurationSec: 10,
+          elo: 1336,
+          ci: 6,
+          rankDelta: -1,
+          consistency: 89.5,
+          lipsync: 85.0,
+          physics: 93.1,
+          costPerMin: 5.5,
+          genSecondsPerMin: 34,
+          strengthShort: "HDR 光影动态范围与高速车载追逐镜头稳定",
+          subMetrics: {
+            faceLock: 89.2,
+            chineseLipSync: 84.1,
+            cameraControl: 94.3,
+            handPropStability: 91.5
+          },
+          scriptTag: "9:16 竖屏 · 10秒追逐 · TC 00:00:10:00",
+          scriptPrompt: "深夜高架桥，黑色跑车在湿滑路面上甩尾漂移，车灯扫过金属护栏，镜头贴地疾速跟拍。",
+          inspectionRecord: "出片速度极快（单分钟仅需 34s），载具金属反射与速度感出色，东亚人脸近景情绪微表情细腻度一般。",
+          frameControl: "首尾帧平滑插值",
+          recommendedGenre: "豪车/动作过场空镜、快节奏分镜预览与视觉转场"
+        },
+        {
+          id: "pixverse-v4-5",
+          name: "PixVerse V4.5",
+          vendor: "爱诗科技",
+          track: "口播对口型",
+          aspectTag: "9:16 · 1080p · 10s",
+          native916: true,
+          maxDurationSec: 10,
+          elo: 1324,
+          ci: 6,
+          rankDelta: 1,
+          consistency: 88.7,
+          lipsync: 93.2,
+          physics: 87.4,
+          costPerMin: 2.9,
+          genSecondsPerMin: 31,
+          strengthShort: "动漫二次元短剧与夸张表情风格化表现突出",
+          subMetrics: {
+            faceLock: 89.1,
+            chineseLipSync: 93.6,
+            cameraControl: 88.2,
+            handPropStability: 87.0
+          },
+          scriptTag: "9:16 竖屏 · 10秒漫剧 · TC 00:00:10:00",
+          scriptPrompt: "日系厚涂动漫风，银发少年在天台逆光中震惊回头，瞳孔收缩并喊出“不可能”，发丝与领带剧烈飘动。",
+          inspectionRecord: "二次元与 2.5D 漫剧角色五官崩坏率极低，生成耗时全榜最短；写实真人大场面物理交互仍有提升空间。",
+          frameControl: "角色主体锁定 + 风格模板",
+          recommendedGenre: "AI 漫剧、动态有声漫画与轻量级竖屏口播短剧"
+        },
+        {
+          id: "cogvideox-3",
+          name: "CogVideoX-3",
+          vendor: "智谱清影",
+          track: "口播对口型",
+          aspectTag: "9:16 / 16:9 · 1080p · 10s",
+          native916: true,
+          maxDurationSec: 10,
+          elo: 1311,
+          ci: 7,
+          rankDelta: 0,
+          consistency: 87.9,
+          lipsync: 91.4,
+          physics: 86.2,
+          costPerMin: 2.8,
+          genSecondsPerMin: 40,
+          strengthShort: "长段中文提示词解析准确，中景单人叙事稳定",
+          subMetrics: {
+            faceLock: 88.0,
+            chineseLipSync: 91.8,
+            cameraControl: 87.4,
+            handPropStability: 85.9
+          },
+          scriptTag: "9:16 竖屏 · 10秒叙事 · TC 00:00:10:00",
+          scriptPrompt: "书房内，中年父亲坐在红木桌前缓缓摘下老花镜，叹气后将一封泛黄信件推向镜头前。",
+          inspectionRecord: "中景稳态叙事节奏自然，中文指令遵循度良好；多人快速肢体接触场景易出现手部细节粘连。",
+          frameControl: "首帧图像驱动 + 文本精修",
+          recommendedGenre: "家庭伦理叙事片段、单人内心独白与低成本分镜测试"
+        },
+        {
+          id: "pika-2-2",
+          name: "Pika 2.2",
+          vendor: "Pika",
+          track: "竖屏爽剧",
+          aspectTag: "9:16 / 16:9 · 1080p · 10s",
+          native916: true,
+          maxDurationSec: 10,
+          elo: 1298,
+          ci: 7,
+          rankDelta: -2,
+          consistency: 86.4,
+          lipsync: 84.8,
+          physics: 85.1,
+          costPerMin: 4.5,
+          genSecondsPerMin: 35,
+          strengthShort: "道具替换与局部重绘特效敏捷，适合短剧奇幻变身桥段",
+          subMetrics: {
+            faceLock: 86.8,
+            chineseLipSync: 84.0,
+            cameraControl: 87.1,
+            handPropStability: 84.5
+          },
+          scriptTag: "9:16 竖屏 · 10秒特效 · TC 00:00:10:00",
+          scriptPrompt: "现代客厅内，女主手中普通玻璃杯瞬间化作散发蓝光的古老罗盘，房间灯光随之一暗。",
+          inspectionRecord: "局部物体变形与特效粒子替换响应敏捷，但长时连续运镜下人物远景面部清晰度衰减较明显。",
+          frameControl: "局部框选重绘 + 特效模板",
+          recommendedGenre: "奇幻道具变身特效、短剧片头包装与创意转场"
+        }
+      ];
+
+      /* ========================================================================
+         2. 检片台应用状态
+         ======================================================================== */
+      const state = {
+        track: "all",          // all | 竖屏爽剧 | 古风仙侠 | 口播对口型 | 多镜头连续剧
+        spec: "all",           // all | long15 | native916
+        sortBy: "elo",         // elo | consistency | lipsync | physics | cost
+        sortDir: "desc",       // desc | asc
+        expandedId: "seedance-2-pro",
+        focusedIdx: 0,
+        compareIds: []         // 最多锁定 2 个模型 ID
+      };
+
+      /* ========================================================================
+         3. DOM 引用
+         ======================================================================== */
+      const ledgerBody = document.getElementById("ledgerBody");
+      const ledgerEmpty = document.getElementById("ledgerEmpty");
+      const trackBtns = Array.from(document.querySelectorAll(".track-btn"));
+      const specPills = Array.from(document.querySelectorAll(".spec-pill"));
+      const sortBtns = Array.from(document.querySelectorAll(".sort-btn"));
+      const resetFiltersBtn = document.getElementById("resetFiltersBtn");
+
+      const gaugeScaleLayer = document.getElementById("gaugeScaleLayer");
+      const gaugeCursorsLayer = document.getElementById("gaugeCursorsLayer");
+      const gaugeReadout = document.getElementById("gaugeReadout");
+      const gaugeTooltip = document.getElementById("gaugeTooltip");
+
+      const abCutBench = document.getElementById("abCutBench");
+      const abBenchCount = document.getElementById("abBenchCount");
+      const abBenchBody = document.getElementById("abBenchBody");
+      const clearBenchBtn = document.getElementById("clearBenchBtn");
+      const deskToast = document.getElementById("deskToast");
+
+      let toastTimer = null;
+
+      /* ========================================================================
+         4. 工具函数
+         ======================================================================== */
+      function showToast(msg) {
+        deskToast.textContent = msg;
+        deskToast.classList.add("is-active");
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => {
+          deskToast.classList.remove("is-active");
+        }, 2600);
+      }
+
+      function esc(str) {
+        return String(str)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+
+      // 获取当前筛选条件下的模型集合与视图排序结果
+      function getFilteredDataset() {
+        const filtered = VIDEO_MODELS.filter((m) => {
+          const matchTrack = state.track === "all" || m.track === state.track;
+          const matchSpec =
+            state.spec === "all" ||
+            (state.spec === "long15" && m.maxDurationSec >= 15) ||
+            (state.spec === "native916" && m.native916);
+          return matchTrack && matchSpec;
+        });
+
+        // 按 ELO 确定当前筛选池中的基准名次
+        const eloRanked = [...filtered]
+          .sort((a, b) => b.elo - a.elo)
+          .map((item, idx) => ({ ...item, currentRank: idx + 1 }));
+
+        // 按用户选择的指标列排序
+        const sorted = [...eloRanked].sort((a, b) => {
+          let va, vb;
+          if (state.sortBy === "elo") {
+            va = a.elo;
+            vb = b.elo;
+          } else if (state.sortBy === "consistency") {
+            va = a.consistency;
+            vb = b.consistency;
+          } else if (state.sortBy === "lipsync") {
+            va = a.lipsync;
+            vb = b.lipsync;
+          } else if (state.sortBy === "physics") {
+            va = a.physics;
+            vb = b.physics;
+          } else {
+            va = a.costPerMin;
+            vb = b.costPerMin;
+          }
+          return state.sortDir === "desc" ? vb - va : va - vb;
+        });
+
+        return { sorted, eloRanked };
+      }
+
+      /* ========================================================================
+         5. Hero 动态 ELO 检片标尺（1100 – 1450 ELO 胶片刻度）
+         ======================================================================== */
+      function renderFilmGauge(eloRanked) {
+        gaugeScaleLayer.innerHTML = "";
+        gaugeCursorsLayer.innerHTML = "";
+
+        const MIN_ELO = 1100;
+        const MAX_ELO = 1450;
+        const SPAN = MAX_ELO - MIN_ELO;
+
+        // 绘制 2 分微刻度与 10 分主刻度（每 50 分标注数字）
+        for (let val = MIN_ELO; val <= MAX_ELO; val += 2) {
+          const pct = ((val - MIN_ELO) / SPAN) * 100;
+          if (val % 10 === 0) {
+            const major = document.createElement("div");
+            major.className = "gauge-tick-major";
+            major.style.left = `${pct}%`;
+            gaugeScaleLayer.appendChild(major);
+
+            if (val % 50 === 0) {
+              const lbl = document.createElement("div");
+              lbl.className = "gauge-tick-label";
+              lbl.style.left = `${pct}%`;
+              lbl.textContent = val;
+              gaugeScaleLayer.appendChild(lbl);
+            }
+          } else if (val % 4 === 0) {
+            const minor = document.createElement("div");
+            minor.className = "gauge-tick-minor";
+            minor.style.left = `${pct}%`;
+            gaugeScaleLayer.appendChild(minor);
+          }
+        }
+
+        if (!eloRanked.length) {
+          gaugeReadout.innerHTML = "当前赛道头名：<strong>无匹配模型</strong>";
+          return;
+        }
+
+        const topSix = eloRanked.slice(0, 6);
+        const leader = topSix[0];
+        gaugeReadout.innerHTML = `当前赛道头名：<strong>${esc(leader.name)} (${leader.elo} ±${leader.ci})</strong> · 短剧强项：${esc(leader.strengthShort)}`;
+
+        // 垂直游标智能阶梯防重叠映射
+        const placedX = [];
+        topSix.forEach((m, idx) => {
+          const pct = Math.max(3, Math.min(97, ((m.elo - MIN_ELO) / SPAN) * 100));
+
+          // 检查左侧相邻游标距离，防止标签遮挡
+          let tier = 0;
+          for (let i = placedX.length - 1; i >= 0; i--) {
+            if (Math.abs(pct - placedX[i].pct) < 9.5) {
+              tier = (placedX[i].tier + 1) % 3;
+              break;
+            }
+          }
+          placedX.push({ pct, tier });
+
+          const needleHeights = [10, 26, 42];
+          const cursor = document.createElement("div");
+          cursor.className =
+            "gauge-cursor" +
+            (idx === 0 ? " is-lead" : "") +
+            (state.expandedId === m.id ? " is-expanded" : "");
+          cursor.style.left = `${pct}%`;
+          cursor.setAttribute("role", "button");
+          cursor.setAttribute("tabindex", "0");
+          cursor.setAttribute("aria-label", `${m.name}，综合 ${m.elo} ELO，点击展开分镜报告`);
+
+          cursor.innerHTML = `
+            <span class="cursor-tag mono">${esc(m.name)} · ${m.elo}</span>
+            <span class="cursor-needle" style="height:${needleHeights[tier]}px;"></span>
+          `;
+
+          // 悬停显示浮窗（模型名、总分与短剧核心强项）
+          cursor.addEventListener("mouseenter", (e) => {
+            gaugeTooltip.innerHTML = `
+              <div class="gauge-tooltip-head">
+                <span>${esc(m.name)} (${esc(m.vendor)})</span>
+                <span class="mono">${m.elo} ELO</span>
+              </div>
+              <div class="gauge-tooltip-sub">${esc(m.strengthShort)}</div>
+            `;
+            gaugeTooltip.classList.add("is-visible");
+            positionTooltip(e);
+          });
+
+          cursor.addEventListener("mousemove", positionTooltip);
+
+          cursor.addEventListener("mouseleave", () => {
+            gaugeTooltip.classList.remove("is-visible");
+          });
+
+          // 点击游标直接定位并展开对应模型的分镜评测抽屉
+          cursor.addEventListener("click", () => {
+            gaugeTooltip.classList.remove("is-visible");
+            state.expandedId = m.id;
+            renderAll();
+            const rowEl = ledgerBody.querySelector(`tr.film-row[data-id="${m.id}"]`);
+            if (rowEl) {
+              rowEl.scrollIntoView({ behavior: "smooth", block: "center" });
+              rowEl.focus({ preventScroll: true });
+            }
+          });
+
+          gaugeCursorsLayer.appendChild(cursor);
+        });
+      }
+
+      function positionTooltip(e) {
+        const pad = 12;
+        const rect = gaugeTooltip.getBoundingClientRect();
+        let left = e.clientX + pad;
+        let top = e.clientY + pad;
+        if (left + rect.width > window.innerWidth - 12) {
+          left = e.clientX - rect.width - pad;
+        }
+        if (top + rect.height > window.innerHeight - 12) {
+          top = e.clientY - rect.height - pad;
+        }
+        gaugeTooltip.style.left = `${left}px`;
+        gaugeTooltip.style.top = `${top}px`;
+      }
+
+      /* ========================================================================
+         6. 主榜单与原地短剧分镜评估抽屉渲染
+         ======================================================================== */
+      function formatRankShift(delta) {
+        if (delta > 0) {
+          return `<span class="rank-shift shift-up">▲${delta}</span>`;
+        }
+        if (delta < 0) {
+          return `<span class="rank-shift shift-down">▼${Math.abs(delta)}</span>`;
+        }
+        return `<span class="rank-shift shift-flat">—</span>`;
+      }
+
+      function renderScoreMeter(score) {
+        const cls = score >= 95 ? "is-high" : score < 86 ? "is-warn" : "";
+        return `
+          <div class="score-meter">
+            <div class="meter-track" aria-hidden="true">
+              <div class="meter-bar ${cls}" style="width:${score}%"></div>
+            </div>
+            <span class="score-num mono ${cls}">${score.toFixed(1)}</span>
+          </div>
+        `;
+      }
+
+      function renderLedgerTable(models) {
+        ledgerBody.innerHTML = "";
+
+        if (!models.length) {
+          ledgerEmpty.hidden = false;
+          return;
+        }
+        ledgerEmpty.hidden = true;
+
+        models.forEach((m, idx) => {
+          const isExpanded = state.expandedId === m.id;
+          const isCompared = state.compareIds.includes(m.id);
+          const isFocused = state.focusedIdx === idx;
+
+          const tr = document.createElement("tr");
+          tr.className =
+            "film-row" +
+            (isExpanded ? " is-expanded" : "") +
+            (isFocused ? " is-cursor-focus" : "");
+          tr.dataset.id = m.id;
+          tr.dataset.idx = idx;
+          tr.setAttribute("tabindex", "0");
+          tr.setAttribute("aria-expanded", String(isExpanded));
+
+          tr.innerHTML = `
+            <td>
+              <div class="rank-group mono">
+                <span class="rank-index">${String(m.currentRank).padStart(2, "0")}</span>
+                ${formatRankShift(m.rankDelta)}
+              </div>
+            </td>
+            <td>
+              <div class="model-cell">
+                <div class="model-title-wrap">
+                  <span class="model-title">${esc(m.name)}</span>
+                  <span class="model-vendor">${esc(m.vendor)}</span>
+                </div>
+                <div class="model-badges">
+                  <span class="spec-chip mono">${esc(m.aspectTag)}</span>
+                  <span class="row-arrow" aria-hidden="true">›</span>
+                </div>
+              </div>
+            </td>
+            <td class="align-right">
+              <div class="elo-group mono">
+                <span class="elo-val">${m.elo}</span>
+                <span class="elo-ci">±${m.ci}</span>
+              </div>
+            </td>
+            <td class="align-right">${renderScoreMeter(m.consistency)}</td>
+            <td class="align-right">${renderScoreMeter(m.lipsync)}</td>
+            <td class="align-right">${renderScoreMeter(m.physics)}</td>
+            <td class="align-right mono cost-cell">
+              <span>¥${m.costPerMin.toFixed(1)}</span><span class="cost-sep">/</span><span class="cost-time">${m.genSecondsPerMin}s</span>
+            </td>
+            <td class="align-center" onclick="event.stopPropagation()">
+              <input
+                type="checkbox"
+                class="compare-box"
+                aria-label="选择 ${esc(m.name)} 加入 A/B 对比台"
+                ${isCompared ? "checked" : ""}
+              />
+            </td>
+          `;
+
+          tr.addEventListener("click", () => {
+            state.focusedIdx = idx;
+            state.expandedId = isExpanded ? null : m.id;
+            renderAll();
+          });
+
+          const cb = tr.querySelector(".compare-box");
+          cb.addEventListener("change", (e) => {
+            toggleCompareSelection(m.id, e.target.checked);
+          });
+
+          ledgerBody.appendChild(tr);
+
+          // 原地短剧分镜评估抽屉（Inline Storyboard Inspection Drawer）
+          if (isExpanded) {
+            const drawerRow = document.createElement("tr");
+            drawerRow.className = "storyboard-drawer-row";
+            drawerRow.innerHTML = `
+              <td colspan="8">
+                <div class="storyboard-drawer" role="region" aria-label="${esc(m.name)} 短剧分镜评估报告">
+                  <!-- 左侧：四维短剧工业化指标条 -->
+                  <div class="drawer-pane">
+                    <h2 class="pane-heading">四维短剧工业化指标 <span class="pane-heading-note">百分制实测</span></h2>
+                    <div class="ind-metric-list">
+                      <div class="ind-metric-row">
+                        <span class="ind-metric-name">角色五官锁定率</span>
+                        <div class="ind-metric-track"><div class="ind-metric-fill" style="width:${m.subMetrics.faceLock}%"></div></div>
+                        <span class="ind-metric-val mono">${m.subMetrics.faceLock.toFixed(1)}</span>
+                      </div>
+                      <div class="ind-metric-row">
+                        <span class="ind-metric-name">中文唇形同步度</span>
+                        <div class="ind-metric-track"><div class="ind-metric-fill" style="width:${m.subMetrics.chineseLipSync}%"></div></div>
+                        <span class="ind-metric-val mono">${m.subMetrics.chineseLipSync.toFixed(1)}</span>
+                      </div>
+                      <div class="ind-metric-row">
+                        <span class="ind-metric-name">复杂运镜推拉执行</span>
+                        <div class="ind-metric-track"><div class="ind-metric-fill" style="width:${m.subMetrics.cameraControl}%"></div></div>
+                        <span class="ind-metric-val mono">${m.subMetrics.cameraControl.toFixed(1)}</span>
+                      </div>
+                      <div class="ind-metric-row">
+                        <span class="ind-metric-name">手部道具防畸变率</span>
+                        <div class="ind-metric-track"><div class="ind-metric-fill" style="width:${m.subMetrics.handPropStability}%"></div></div>
+                        <span class="ind-metric-val mono">${m.subMetrics.handPropStability.toFixed(1)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- 中间：标准短剧盲测剧本 Prompt 与成片缺陷/高光记录 -->
+                  <div class="drawer-pane">
+                    <h2 class="pane-heading">标准短剧盲测剧本与检片记录 <span class="pane-heading-note mono">${esc(m.scriptTag)}</span></h2>
+                    <div class="script-slate">
+                      <div class="script-meta-line">
+                        <span>场记板测试分镜 Prompt</span>
+                        <span class="mono">主赛道：${esc(m.track)}</span>
+                      </div>
+                      <p class="script-prompt-body">${esc(m.scriptPrompt)}</p>
+                    </div>
+                    <p class="inspection-log"><strong>检片室高光/缺陷记录：</strong>${esc(m.inspectionRecord)}</p>
+                  </div>
+
+                  <!-- 右侧：短剧制片选型建议 -->
+                  <div class="drawer-pane">
+                    <div>
+                      <h2 class="pane-heading">短剧制片选型建议</h2>
+                      <div class="producer-specs">
+                        <div class="producer-row">
+                          <span>单镜头上限</span>
+                          <span class="mono">${m.maxDurationSec}s (${m.native916 ? "原生 9:16" : "需裁切竖屏"})</span>
+                        </div>
+                        <div class="producer-row">
+                          <span>首尾帧控制</span>
+                          <span>${esc(m.frameControl)}</span>
+                        </div>
+                        <div class="producer-row">
+                          <span>成片成本效率</span>
+                          <span class="mono">¥${m.costPerMin.toFixed(1)} / 分钟 (${m.genSecondsPerMin}s)</span>
+                        </div>
+                      </div>
+                      <p class="producer-fit-note"><strong>适配题材：</strong>${esc(m.recommendedGenre)}</p>
+                    </div>
+
+                    <button
+                      type="button"
+                      class="btn-bench-toggle ${isCompared ? "is-added" : ""}"
+                      data-drawer-bench="${m.id}"
+                    >
+                      ${isCompared ? "移出底部对比工作台" : "加入底部对比工作台"}
+                    </button>
+                  </div>
+                </div>
+              </td>
+            `;
+
+            const benchBtn = drawerRow.querySelector("[data-drawer-bench]");
+            benchBtn.addEventListener("click", (e) => {
+              e.stopPropagation();
+              toggleCompareSelection(m.id, !isCompared);
+            });
+
+            ledgerBody.appendChild(drawerRow);
+          }
+        });
+      }
+
+      /* ========================================================================
+         7. 底部固定双模型对比工作台（A/B Cut Comparison Bench）
+         ======================================================================== */
+      function toggleCompareSelection(modelId, add) {
+        const existsIdx = state.compareIds.indexOf(modelId);
+        if (add && existsIdx === -1) {
+          if (state.compareIds.length >= 2) {
+            const dropped = VIDEO_MODELS.find((x) => x.id === state.compareIds[0]);
+            state.compareIds.shift();
+            state.compareIds.push(modelId);
+            showToast(`对比台已满，已替换原样本 ${dropped ? dropped.name : ""}`);
+          } else {
+            state.compareIds.push(modelId);
+          }
+        } else if (!add && existsIdx !== -1) {
+          state.compareIds.splice(existsIdx, 1);
+        }
+        renderAll();
+      }
+
+      function generateProducerVerdict(a, b) {
+        const eloDiff = a.elo - b.elo;
+        const consDiff = a.consistency - b.consistency;
+        const lipDiff = a.lipsync - b.lipsync;
+        const physDiff = a.physics - b.physics;
+        const cheaper = a.costPerMin <= b.costPerMin ? a : b;
+        const pricier = a.costPerMin <= b.costPerMin ? b : a;
+        const costSavePct = Math.round(((pricier.costPerMin - cheaper.costPerMin) / pricier.costPerMin) * 100);
+
+        const lipLeader = lipDiff >= 0 ? a : b;
+        const physLeader = physDiff >= 0 ? a : b;
+        const consLeader = consDiff >= 0 ? a : b;
+
+        if (cheaper.id === lipLeader.id && costSavePct >= 15) {
+          return `预算敏感型日更爽剧推荐 ${cheaper.name}，单分钟成本低 ${costSavePct}% 且中文口型领先 ${Math.abs(lipDiff).toFixed(1)} 分；高难度特效场景可选 ${physLeader.name}（物理连贯性高出 ${Math.abs(physDiff).toFixed(1)} 分）。`;
+        }
+        if (Math.abs(physDiff) >= 4.0) {
+          return `古风仙侠与武打动作剧优先选用 ${physLeader.name}（物理与武打连贯性高出 ${Math.abs(physDiff).toFixed(1)} 分）；强台词竖屏情感剧推荐 ${lipLeader.name}（中文口型与微表情领先 ${Math.abs(lipDiff).toFixed(1)} 分）。`;
+        }
+        if (Math.abs(consDiff) >= 2.5) {
+          return `多镜头连续剧优先选用 ${consLeader.name}（角色跨镜一致性领先 ${Math.abs(consDiff).toFixed(1)} 分）；追求更低制片单价可选 ${cheaper.name}（单分钟节省 ¥${(pricier.costPerMin - cheaper.costPerMin).toFixed(1)}）。`;
+        }
+        const overallLeader = eloDiff >= 0 ? a : b;
+        return `综合盲测表现 ${overallLeader.name} 领先 ${Math.abs(eloDiff)} ELO；若需控制单集预算，${cheaper.name} 单分钟成片成本更具优势（¥${cheaper.costPerMin.toFixed(1)}/分钟）。`;
+      }
+
+      function renderAbCutBench() {
+        const count = state.compareIds.length;
+        abBenchCount.textContent = `已锁定 ${count} / 2 个成片样本`;
+
+        if (count === 0) {
+          abCutBench.classList.remove("is-open");
+          abCutBench.setAttribute("aria-hidden", "true");
+          return;
+        }
+
+        abCutBench.classList.add("is-open");
+        abCutBench.setAttribute("aria-hidden", "false");
+
+        const modelA = VIDEO_MODELS.find((m) => m.id === state.compareIds[0]);
+        const modelB = state.compareIds[1] ? VIDEO_MODELS.find((m) => m.id === state.compareIds[1]) : null;
+
+        const slotAHtml = `
+          <div class="cut-slot">
+            <div>
+              <div class="cut-slot-name">A 轨 · ${esc(modelA.name)}</div>
+              <div class="cut-slot-meta mono">${modelA.elo} ELO · 一致性 ${modelA.consistency} · 口型 ${modelA.lipsync} · ¥${modelA.costPerMin.toFixed(1)}/m</div>
+            </div>
+            <button type="button" class="btn-slot-drop" data-drop-id="${modelA.id}">移除</button>
+          </div>
+        `;
+
+        if (!modelB) {
+          abBenchBody.innerHTML =
+            slotAHtml +
+            `<div class="ab-diff-matrix"><span class="ab-diff-item">等待 B 轨样本</span></div>` +
+            `<div class="cut-slot is-vacant">请在上方榜单勾选第二个模型，启动 A/B 分镜参数对照</div>` +
+            `<div class="producer-verdict">已锁定 <strong>${esc(modelA.name)}</strong>（${esc(modelA.recommendedGenre)}）。再选一个模型即可生成制片选型对照。</div>`;
+        } else {
+          const eloDiff = modelA.elo - modelB.elo;
+          const consDiff = modelA.consistency - modelB.consistency;
+          const lipDiff = modelA.lipsync - modelB.lipsync;
+          const costDiff = modelA.costPerMin - modelB.costPerMin;
+
+          const fmt = (n, digits = 0) => (n > 0 ? `+${n.toFixed(digits)}` : n.toFixed(digits));
+
+          const diffHtml = `
+            <div class="ab-diff-matrix mono">
+              <span class="ab-diff-item">ELO 差 <strong>${fmt(eloDiff, 0)}</strong></span>
+              <span class="ab-diff-item">一致性 <strong>${fmt(consDiff, 1)}</strong></span>
+              <span class="ab-diff-item">口型差 <strong>${fmt(lipDiff, 1)}</strong></span>
+              <span class="ab-diff-item">成本差 <strong>${costDiff > 0 ? "+¥" + costDiff.toFixed(1) : "-¥" + Math.abs(costDiff).toFixed(1)}</strong></span>
+            </div>
+          `;
+
+          const slotBHtml = `
+            <div class="cut-slot">
+              <div>
+                <div class="cut-slot-name">B 轨 · ${esc(modelB.name)}</div>
+                <div class="cut-slot-meta mono">${modelB.elo} ELO · 一致性 ${modelB.consistency} · 口型 ${modelB.lipsync} · ¥${modelB.costPerMin.toFixed(1)}/m</div>
+              </div>
+              <button type="button" class="btn-slot-drop" data-drop-id="${modelB.id}">移除</button>
+            </div>
+          `;
+
+          const verdictHtml = `<div class="producer-verdict">${esc(generateProducerVerdict(modelA, modelB))}</div>`;
+
+          abBenchBody.innerHTML = slotAHtml + diffHtml + slotBHtml + verdictHtml;
+        }
+
+        abBenchBody.querySelectorAll("[data-drop-id]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            toggleCompareSelection(btn.dataset.dropId, false);
+          });
+        });
+      }
+
+      /* ========================================================================
+         8. 总体渲染调度与交互事件绑定
+         ======================================================================== */
+      function renderAll() {
+        const { sorted, eloRanked } = getFilteredDataset();
+
+        if (state.focusedIdx >= sorted.length) {
+          state.focusedIdx = Math.max(0, sorted.length - 1);
+        }
+
+        // 更新表头排序激活指示
+        sortBtns.forEach((btn) => {
+          if (btn.dataset.sort === state.sortBy) {
+            btn.setAttribute("aria-sort", state.sortDir === "desc" ? "descending" : "ascending");
+          } else {
+            btn.removeAttribute("aria-sort");
+          }
+        });
+
+        renderFilmGauge(eloRanked);
+        renderLedgerTable(sorted);
+        renderAbCutBench();
+      }
+
+      // 短剧生产专项赛道切换
+      trackBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          trackBtns.forEach((b) => b.setAttribute("aria-selected", "false"));
+          btn.setAttribute("aria-selected", "true");
+          state.track = btn.dataset.track;
+          state.focusedIdx = 0;
+
+          const { eloRanked } = getFilteredDataset();
+          state.expandedId = eloRanked.length ? eloRanked[0].id : null;
+          renderAll();
+        });
+      });
+
+      // 输出画幅 / 时长过滤快速切换
+      specPills.forEach((pill) => {
+        pill.addEventListener("click", () => {
+          specPills.forEach((p) => p.setAttribute("aria-pressed", "false"));
+          pill.setAttribute("aria-pressed", "true");
+          state.spec = pill.dataset.spec;
+          state.focusedIdx = 0;
+
+          const { eloRanked } = getFilteredDataset();
+          state.expandedId = eloRanked.length ? eloRanked[0].id : null;
+          renderAll();
+        });
+      });
+
+      // 重置筛选条件
+      resetFiltersBtn.addEventListener("click", () => {
+        state.track = "all";
+        state.spec = "all";
+        trackBtns.forEach((b) => b.setAttribute("aria-selected", b.dataset.track === "all" ? "true" : "false"));
+        specPills.forEach((p) => p.setAttribute("aria-pressed", p.dataset.spec === "all" ? "true" : "false"));
+        state.expandedId = "seedance-2-pro";
+        renderAll();
+      });
+
+      // 列头排序切换
+      sortBtns.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const key = btn.dataset.sort;
+          if (state.sortBy === key) {
+            state.sortDir = state.sortDir === "desc" ? "asc" : "desc";
+          } else {
+            state.sortBy = key;
+            // 单分钟成本默认升序（越便宜越靠前），其余能力指标默认降序
+            state.sortDir = key === "cost" ? "asc" : "desc";
+          }
+          renderAll();
+        });
+      });
+
+      // 清空对比工作台
+      clearBenchBtn.addEventListener("click", () => {
+        state.compareIds = [];
+        renderAll();
+      });
+
+      // 键盘无障碍导航：↑/↓ 移动光标，Enter 展开/收起分镜抽屉
+      document.addEventListener("keydown", (e) => {
+        const { sorted } = getFilteredDataset();
+        if (!sorted.length) return;
+
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          state.focusedIdx = (state.focusedIdx + 1) % sorted.length;
+          renderAll();
+          const row = ledgerBody.querySelector(`tr.film-row[data-idx="${state.focusedIdx}"]`);
+          if (row) row.focus();
+        } else if (e.key === "ArrowUp") {
+          e.preventDefault();
+          state.focusedIdx = (state.focusedIdx - 1 + sorted.length) % sorted.length;
+          renderAll();
+          const row = ledgerBody.querySelector(`tr.film-row[data-idx="${state.focusedIdx}"]`);
+          if (row) row.focus();
+        } else if (e.key === "Enter" && document.activeElement && document.activeElement.classList.contains("film-row")) {
+          e.preventDefault();
+          const id = document.activeElement.dataset.id;
+          state.expandedId = state.expandedId === id ? null : id;
+          renderAll();
+          const row = ledgerBody.querySelector(`tr.film-row[data-id="${id}"]`);
+          if (row) row.focus();
+        }
+      });
+
+      // 初始化检片台
+      renderAll();
+    })();
+  </script>
+</body>
+</html>

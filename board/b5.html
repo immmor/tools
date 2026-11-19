@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FRAME·AIGC 打投现场</title>
+<style>
+  /* ==========================================================
+     FRAME · AIGC 打投现场 v3
+     风格：信号塔台 / 直播数据面板
+     去掉所有横向分隔线与扫描线，改用竖向条形与留白建立节奏
+     交互：投票 / 实时重排 / 票数跳动
+     ========================================================== */
+
+  *{ margin:0; padding:0; box-sizing:border-box; }
+
+  :root{
+    /* 调色板 — 6 值，干净 + 刺眼信号 */
+    --void:    #0b0a10;   /* 底色：偏紫夜黑 */
+    --panel:   #14121c;   /* 面板暗部 */
+    --acid:    #d8ff3e;   /* 酸性荧光绿 — 主信号 */
+    --ultra:   #ff3ea5;   /* 荧光品红 — 投票高亮 */
+    --cyan:    #3ae0ff;   /* 电光青 — 次信号 */
+    --paper:   #f4f2ec;   /* 冷白正文 */
+    --fog:     #807d8e;   /* 雾紫灰辅助 */
+
+    --font-display: 'Anton', 'Impact', sans-serif;
+    --font-mono:    'Space Mono', 'Courier New', monospace;
+    --font-body:    'Space Grotesk', system-ui, sans-serif;
+  }
+
+  html{ scroll-behavior:smooth; }
+
+  body{
+    background:var(--void);
+    color:var(--paper);
+    font-family:var(--font-body);
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+    position:relative;
+  }
+
+  /* 一片柔和信号光，仅此一处背景装饰，无横线 */
+  body::before{
+    content:"";
+    position:fixed;
+    inset:0;
+    pointer-events:none;
+    z-index:0;
+    background:
+      radial-gradient(ellipse 70% 50% at 12% -5%, rgba(216,255,62,.08), transparent 58%),
+      radial-gradient(ellipse 55% 45% at 95% 20%, rgba(255,62,165,.10), transparent 60%),
+      radial-gradient(ellipse 60% 55% at 50% 108%, rgba(58,224,255,.06), transparent 60%);
+  }
+
+  .page{
+    position:relative;
+    z-index:1;
+    max-width:1240px;
+    margin:0 auto;
+    padding:2.5rem 2rem 6rem;
+  }
+
+  /* ---------- 顶栏 ---------- */
+  .topbar{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:1rem;
+    margin-bottom:4.5rem;
+  }
+  .brand{
+    font-family:var(--font-display);
+    font-size:1.4rem;
+    letter-spacing:-.02em;
+    display:flex;
+    align-items:center;
+    gap:.55rem;
+  }
+  .brand .glyph{
+    width:.8rem;height:.8rem;
+    background:var(--acid);
+    clip-path:polygon(0 0,100% 0,100% 55%,55% 55%,55% 100%,0 100%);
+  }
+  .topbar .live-meta{
+    display:flex;
+    align-items:center;
+    gap:1.25rem;
+    font-family:var(--font-mono);
+    font-size:.72rem;
+    letter-spacing:.04em;
+    color:var(--fog);
+  }
+  .live-badge{
+    display:inline-flex;
+    align-items:center;
+    gap:.4rem;
+    color:var(--ultra);
+    font-weight:700;
+  }
+  .live-badge::before{
+    content:"";
+    width:.55rem;height:.55rem;
+    background:var(--ultra);
+    border-radius:50%;
+    box-shadow:0 0 10px var(--ultra);
+    animation:blink 1.2s steps(2) infinite;
+  }
+  @keyframes blink{ 50%{ opacity:0; } }
+
+  /* ---------- 主视觉 ---------- */
+  .hero{
+    margin-bottom:4rem;
+  }
+  .hero .kicker{
+    font-family:var(--font-mono);
+    font-size:.72rem;
+    letter-spacing:.16em;
+    color:var(--acid);
+    margin-bottom:1.25rem;
+    display:flex;
+    align-items:center;
+    gap:.6rem;
+  }
+  .hero .kicker::before{
+    content:"";
+    width:1.8rem;height:1px;
+    background:var(--acid);
+  }
+  .hero h1{
+    font-family:var(--font-display);
+    font-size:clamp(3.2rem, 11vw, 9rem);
+    line-height:.84;
+    letter-spacing:-.015em;
+    text-transform:uppercase;
+  }
+  .hero h1 .hit{
+    color:var(--ultra);
+    position:relative;
+    display:inline-block;
+  }
+  .hero h1 .hit::before{
+    content:"打投";
+    position:absolute;
+    inset:0;
+    color:var(--cyan);
+    transform:translate(3px,-1px);
+    opacity:.65;
+    clip-path:inset(0 0 52% 0);
+    pointer-events:none;
+  }
+  .hero h1 .outline{
+    color:transparent;
+    -webkit-text-stroke:2px var(--fog);
+  }
+
+  .hero-sub{
+    display:flex;
+    flex-wrap:wrap;
+    gap:.75rem 2.5rem;
+    margin-top:2.25rem;
+    font-family:var(--font-mono);
+    font-size:.76rem;
+    color:var(--fog);
+    letter-spacing:.02em;
+    align-items:baseline;
+  }
+  .hero-sub .stat b{
+    color:var(--acid);
+    font-size:1.05rem;
+    font-weight:700;
+    margin-right:.2rem;
+  }
+
+  /* ---------- 前三名：竖向条形面板 ---------- */
+  .podium{
+    display:grid;
+    grid-template-columns:1fr 1.2fr 1fr;
+    gap:1.25rem;
+    margin-bottom:5rem;
+    align-items:stretch;
+  }
+  .podium-card{
+    background:var(--panel);
+    border-radius:0;
+    padding:1.75rem 1.5rem;
+    position:relative;
+    display:flex;
+    flex-direction:column;
+    transition:transform .25s ease;
+    overflow:hidden;
+  }
+  .podium-card:hover{ transform:translateY(-4px); }
+  /* 竖向信号条：左侧一条细柱，表示排名强度 */
+  .podium-card::before{
+    content:"";
+    position:absolute;
+    left:0;top:0;bottom:0;
+    width:4px;
+    background:var(--acid);
+  }
+  .podium-card.mid{
+    background:linear-gradient(170deg, #1d1a29 0%, var(--panel) 70%);
+    box-shadow:0 0 60px rgba(255,62,165,.10);
+  }
+  .podium-card.mid::before{ background:var(--ultra); }
+
+  .podium-rank{
+    font-family:var(--font-display);
+    font-size:2.6rem;
+    line-height:1;
+    color:transparent;
+    -webkit-text-stroke:1.5px var(--fog);
+  }
+  .podium-card.mid .podium-rank{
+    font-size:3.4rem;
+    color:var(--ultra);
+    -webkit-text-stroke:0;
+    text-shadow:0 0 24px rgba(255,62,165,.5);
+  }
+  .podium-title{
+    font-family:var(--font-display);
+    font-size:1.2rem;
+    letter-spacing:.01em;
+    margin-top:.9rem;
+    line-height:1.15;
+    text-transform:uppercase;
+  }
+  .podium-card.mid .podium-title{ font-size:1.45rem; }
+  .podium-creator{
+    font-family:var(--font-mono);
+    font-size:.7rem;
+    color:var(--fog);
+    margin-top:.35rem;
+  }
+
+  /* 竖向票数条：宽窄随票数变化 */
+  .podium-meter{
+    margin-top:auto;
+    padding-top:1.5rem;
+  }
+  .podium-meter .bar-wrap{
+    height:6px;
+    background:rgba(244,242,236,.08);
+    width:100%;
+    margin-bottom:.75rem;
+  }
+  .podium-meter .bar{
+    height:100%;
+    width:0%;
+    background:var(--acid);
+    transition:width .5s cubic-bezier(.2,.8,.3,1);
+  }
+  .podium-card.mid .podium-meter .bar{ background:var(--ultra); }
+
+  .podium-votes{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:.5rem;
+  }
+  .podium-votes .num{
+    font-family:var(--font-display);
+    font-size:1.5rem;
+    color:var(--paper);
+    font-variant-numeric:tabular-nums;
+    transition:color .2s;
+  }
+  .podium-votes .num.bump{ color:var(--acid); }
+
+  .vote-btn{
+    font-family:var(--font-mono);
+    font-size:.72rem;
+    font-weight:700;
+    letter-spacing:.06em;
+    color:var(--void);
+    background:var(--acid);
+    border:none;
+    border-radius:0;
+    padding:.5rem .95rem;
+    cursor:pointer;
+    transition:background .15s, color .15s, transform .1s;
+    text-transform:uppercase;
+  }
+  .vote-btn:hover{ background:var(--paper); }
+  .vote-btn:active{ transform:scale(.94); }
+  .vote-btn.voted{
+    background:transparent;
+    color:var(--acid);
+    border:1px solid var(--acid);
+    cursor:default;
+    pointer-events:none;
+  }
+  .vote-btn.voted::after{ content:" ✓"; }
+
+  /* ---------- 完整榜单：无横线，竖向节奏 ---------- */
+  .board-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    gap:1rem;
+    margin-bottom:1.5rem;
+  }
+  .board-head h2{
+    font-family:var(--font-display);
+    font-size:clamp(1.8rem, 4.5vw, 3rem);
+    letter-spacing:.01em;
+    text-transform:uppercase;
+    line-height:1;
+  }
+  .board-head .sort-note{
+    font-family:var(--font-mono);
+    font-size:.68rem;
+    color:var(--fog);
+    letter-spacing:.03em;
+    text-align:right;
+    line-height:1.7;
+  }
+  .board-head .sort-note b{ color:var(--acid); }
+
+  .rank-list{
+    list-style:none;
+    display:flex;
+    flex-direction:column;
+    gap:.6rem;
+  }
+  .rank-item{
+    display:flex;
+    align-items:center;
+    gap:1.1rem;
+    padding:1.1rem 1.25rem;
+    background:rgba(20,18,28,.7);
+    border-radius:0;
+    position:relative;
+    transition:background .2s, transform .2s;
+    overflow:hidden;
+  }
+  .rank-item:hover{
+    background:rgba(28,25,38,.9);
+    transform:translateX(4px);
+  }
+  /* 左侧竖向信号条 */
+  .rank-item::before{
+    content:"";
+    position:absolute;
+    left:0;top:0;bottom:0;
+    width:3px;
+    background:var(--fog);
+    opacity:.35;
+    transition:background .25s, opacity .25s;
+  }
+  .rank-item:hover::before{ background:var(--acid); opacity:1; }
+  .rank-item.top3::before{ background:var(--ultra); opacity:.8; }
+
+  .rank-item.flash{
+    animation:flashRow .6s ease;
+  }
+  @keyframes flashRow{
+    0%{ background:rgba(255,62,165,.22); }
+    100%{ background:rgba(20,18,28,.7); }
+  }
+
+  .rank-no{
+    flex:0 0 3.2rem;
+    font-family:var(--font-display);
+    font-size:1.9rem;
+    letter-spacing:-.01em;
+    color:var(--fog);
+    line-height:1;
+    font-variant-numeric:tabular-nums;
+    transition:color .25s;
+  }
+  .rank-item:hover .rank-no{ color:var(--acid); }
+  .rank-item.top3 .rank-no{ color:var(--ultra); }
+
+  .rank-info{ flex:1 1 auto; min-width:0; }
+  .rank-info .t{
+    font-weight:700;
+    font-size:1.05rem;
+    letter-spacing:.01em;
+    line-height:1.3;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .rank-info .c{
+    font-family:var(--font-mono);
+    font-size:.7rem;
+    color:var(--fog);
+    margin-top:.2rem;
+  }
+
+  .rank-tag{
+    flex:0 0 auto;
+    font-family:var(--font-mono);
+    font-size:.64rem;
+    color:var(--fog);
+    background:rgba(128,125,142,.12);
+    padding:.2rem .55rem;
+    border-radius:0;
+    white-space:nowrap;
+  }
+
+  /* 竖向票数条（榜单内） */
+  .rank-bar{
+    flex:0 0 70px;
+    height:5px;
+    background:rgba(244,242,236,.08);
+    position:relative;
+    overflow:hidden;
+    display:none;
+  }
+  @media (min-width:720px){ .rank-bar{ display:block; } }
+  .rank-bar .fill{
+    position:absolute;
+    left:0;top:0;bottom:0;
+    width:0%;
+    background:var(--acid);
+    transition:width .5s cubic-bezier(.2,.8,.3,1);
+  }
+  .rank-item.top3 .rank-bar .fill{ background:var(--ultra); }
+
+  .rank-votes{
+    flex:0 0 4.5rem;
+    text-align:right;
+    font-family:var(--font-display);
+    font-size:1.25rem;
+    color:var(--paper);
+    font-variant-numeric:tabular-nums;
+    line-height:1;
+    transition:color .2s;
+  }
+  .rank-votes.bump{ color:var(--acid); }
+
+  .vote-mini{
+    flex:0 0 auto;
+    font-family:var(--font-mono);
+    font-size:.64rem;
+    font-weight:700;
+    letter-spacing:.05em;
+    color:var(--void);
+    background:var(--acid);
+    border:none;
+    border-radius:0;
+    padding:.42rem .7rem;
+    cursor:pointer;
+    transition:background .15s, color .15s, transform .1s;
+    text-transform:uppercase;
+  }
+  .vote-mini:hover{ background:var(--paper); }
+  .vote-mini:active{ transform:scale(.94); }
+  .vote-mini.voted{
+    background:transparent;
+    color:var(--acid);
+    border:1px solid var(--acid);
+    cursor:default;
+    pointer-events:none;
+  }
+  .vote-mini.voted::after{ content:" ✓"; }
+
+  /* ---------- 页脚 ---------- */
+  .foot{
+    margin-top:3.5rem;
+    display:flex;
+    flex-wrap:wrap;
+    justify-content:space-between;
+    gap:1rem;
+    font-family:var(--font-mono);
+    font-size:.68rem;
+    color:var(--fog);
+    letter-spacing:.02em;
+  }
+  .foot a{
+    color:var(--paper);
+    text-decoration:none;
+    border-bottom:1px solid var(--ultra);
+    padding-bottom:1px;
+    transition:color .2s, border-color .2s;
+  }
+  .foot a:hover{ color:var(--ultra); border-color:var(--paper); }
+
+  /* ---------- 入场动效 ---------- */
+  @media (prefers-reduced-motion: no-preference){
+    .reveal{
+      opacity:0;
+      transform:translateY(22px);
+      animation:rise .65s cubic-bezier(.2,.7,.2,1) forwards;
+    }
+    .reveal.d1{ animation-delay:.05s; }
+    .reveal.d2{ animation-delay:.15s; }
+    .reveal.d3{ animation-delay:.25s; }
+    .reveal.d4{ animation-delay:.35s; }
+    .reveal.d5{ animation-delay:.45s; }
+    .reveal.d6{ animation-delay:.55s; }
+    .reveal.d7{ animation-delay:.65s; }
+    .reveal.d8{ animation-delay:.75s; }
+    .reveal.d9{ animation-delay:.85s; }
+    .reveal.d10{ animation-delay:.95s; }
+    .reveal.d11{ animation-delay:1.05s; }
+    @keyframes rise{ to{ opacity:1; transform:translateY(0); } }
+
+    .hero h1{
+      animation:slam .8s cubic-bezier(.15,1.6,.3,1) .1s both;
+    }
+    @keyframes slam{
+      from{ transform:scale(1.22) translateY(-26px); opacity:0; filter:blur(6px); }
+      to{ transform:scale(1) translateY(0); opacity:1; filter:blur(0); }
+    }
+  }
+
+  button:focus-visible, a:focus-visible{
+    outline:2px solid var(--acid);
+    outline-offset:3px;
+  }
+
+  /* ---------- 响应式 ---------- */
+  @media (max-width:860px){
+    .podium{ grid-template-columns:1fr; }
+    .podium-card.mid{ order:-1; }
+    .rank-tag{ display:none; }
+  }
+  @media (max-width:560px){
+    .page{ padding:1.5rem 1.1rem 4rem; }
+    .topbar{ margin-bottom:2.5rem; }
+    .topbar .live-meta{ gap:.75rem; font-size:.62rem; }
+    .hero h1{ font-size:3.2rem; }
+    .hero-sub{ font-size:.68rem; gap:.5rem 1.5rem; }
+    .rank-item{ gap:.7rem; padding:.9rem .75rem; }
+    .rank-no{ flex:0 0 2.2rem; font-size:1.4rem; }
+    .rank-info .t{ font-size:.94rem; }
+    .rank-votes{ flex:0 0 3.2rem; font-size:1.05rem; }
+    .vote-mini{ padding:.35rem .5rem; font-size:.58rem; }
+    .board-head{ flex-direction:column; align-items:flex-start; gap:.5rem; }
+    .board-head .sort-note{ text-align:left; }
+    .foot{ flex-direction:column; gap:.5rem; }
+  }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Space+Grotesk:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<div class="page">
+
+  <!-- 顶栏 -->
+  <div class="topbar reveal d1">
+    <div class="brand"><span class="glyph"></span>FRAME</div>
+    <div class="live-meta">
+      <span class="live-badge">LIVE</span>
+      <span>VOL.07 / 2025.04</span>
+      <span>投票通道开启</span>
+    </div>
+  </div>
+
+  <!-- 主视觉 -->
+  <header class="hero">
+    <div class="kicker reveal d2">AIGC SHORT-FORM AWARDS · 实时打投</div>
+    <h1 class="reveal d2">
+      AIGC<br>
+      <span class="hit">打投</span><br>
+      <span class="outline">现场</span>
+    </h1>
+    <div class="hero-sub reveal d3">
+      <span class="stat"><b id="totalVotes">0</b>总票数</span>
+      <span class="stat"><b>8</b>位创作者</span>
+      <span>综合播放完成度 · 互动密度 · 跨平台传播</span>
+      <span>每次点击 = 1 票，每人每项限投一次</span>
+    </div>
+  </header>
+
+  <!-- 前三名投票台 -->
+  <section class="podium" id="podium" aria-label="本期前三名，可投票"></section>
+
+  <!-- 完整榜单 -->
+  <section aria-label="完整榜单，可投票">
+    <div class="board-head reveal d6">
+      <h2>完整榜单</h2>
+      <div class="sort-note">
+        按票数实时降序<br>
+        <b>点击 VOTE 投票，榜单即时重排</b>
+      </div>
+    </div>
+    <ul class="rank-list" id="rankList"></ul>
+  </section>
+
+  <!-- 页脚 -->
+  <footer class="foot reveal d11">
+    <span>指数 = 播放完成度 × 0.5 + 互动密度 × 0.3 + 跨平台传播 × 0.2</span>
+    <span><a href="#">方法论</a> · <a href="#">提交作品</a></span>
+  </footer>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  const creators = [
+    { id:'c1', rank:1, title:'《雾中回声》', creator:'林默',        meta:'悬疑短剧',   tag:'AI 短剧 · 8 集',  votes:9860 },
+    { id:'c2', rank:2, title:'《蓝色断层》', creator:'Charmaine',   meta:'科幻微视频', tag:'AI 视频 · 单集',  votes:9620 },
+    { id:'c3', rank:3, title:'《二十四帧》', creator:'暗房工作室', meta:'实验叙事',   tag:'AI 短剧 · 6 集',  votes:9470 },
+    { id:'c4', rank:4, title:'《她的第二个身体》', creator:'陈墨白', meta:'',          tag:'AI 视频 · 系列',  votes:9210 },
+    { id:'c5', rank:5, title:'《夜航西飞》', creator:'Aurora Lab',  meta:'',          tag:'AI 短剧 · 12 集', votes:9080 },
+    { id:'c6', rank:6, title:'《像素回响》', creator:'李维',        meta:'',          tag:'AI 视频 · 单集',  votes:8930 },
+    { id:'c7', rank:7, title:'《荒原往事》', creator:'北纬三十度', meta:'',          tag:'AI 短剧 · 10 集', votes:8750 },
+    { id:'c8', rank:8, title:'《无声告白》', creator:'言午',        meta:'',          tag:'AI 视频 · 系列',  votes:8590 }
+  ];
+
+  const voted = new Set();
+  const podiumEl = document.getElementById('podium');
+  const listEl   = document.getElementById('rankList');
+  const totalEl  = document.getElementById('totalVotes');
+
+  const fmt = n => n.toLocaleString('en-US');
+
+  // 计算当前最高票，用于条形宽度
+  function maxVotes(){
+    return Math.max(...creators.map(c => c.votes), 1);
+  }
+
+  function updateTotal(){
+    totalEl.textContent = fmt(creators.reduce((s,c)=>s+c.votes,0));
+  }
+
+  /* ---------- 渲染榜单行 ---------- */
+  function renderRow(c, idx, mv){
+    const li = document.createElement('li');
+    const rank = idx + 1;
+    li.className = 'rank-item reveal' + (rank<=3 ? ' top3' : '') + ' d' + Math.min(rank+5, 11);
+    li.dataset.id = c.id;
+    const pct = Math.round(c.votes / mv * 100);
+    li.innerHTML = `
+      <div class="rank-no">${String(rank).padStart(2,'0')}</div>
+      <div class="rank-info">
+        <div class="t">${c.title}</div>
+        <div class="c">${c.creator}${c.meta ? ' · ' + c.meta : ''}</div>
+      </div>
+      <span class="rank-tag">${c.tag}</span>
+      <div class="rank-bar"><div class="fill" style="width:${pct}%"></div></div>
+      <div class="rank-votes" data-votes>${fmt(c.votes)}</div>
+      <button class="vote-mini" type="button" aria-label="为 ${c.title} 投票">VOTE</button>
+    `;
+    bindVote(li.querySelector('.vote-mini'), c, li);
+    if (voted.has(c.id)) markVoted(li.querySelector('.vote-mini'));
+    return li;
+  }
+
+  /* ---------- 渲染前三名 ---------- */
+  function renderPodium(){
+    const top3 = [...creators].sort((a,b)=>b.votes-a.votes).slice(0,3);
+    const order = [top3[1], top3[0], top3[2]];
+    const mv = maxVotes();
+    podiumEl.innerHTML = '';
+    order.forEach((c, i) => {
+      const card = document.createElement('div');
+      const isMid = i === 1;
+      const rankNow = top3.indexOf(c) + 1;
+      card.className = 'podium-card reveal' + (isMid ? ' mid' : '') + ' d' + (3+i);
+      card.dataset.id = c.id;
+      const pct = Math.round(c.votes / mv * 100);
+      card.innerHTML = `
+        <div class="podium-rank">${String(rankNow).padStart(2,'0')}</div>
+        <div class="podium-title">${c.title}</div>
+        <div class="podium-creator">${c.creator}${c.meta ? ' · ' + c.meta : ''}</div>
+        <div class="podium-meter">
+          <div class="bar-wrap"><div class="bar" style="width:${pct}%"></div></div>
+          <div class="podium-votes">
+            <span class="num" data-votes>${fmt(c.votes)}</span>
+            <button class="vote-btn" type="button" aria-label="为 ${c.title} 投票">VOTE</button>
+          </div>
+        </div>
+      `;
+      const btn = card.querySelector('.vote-btn');
+      bindVote(btn, c, card);
+      if (voted.has(c.id)) markVoted(btn);
+      podiumEl.appendChild(card);
+    });
+  }
+
+  function markVoted(btn){
+    btn.classList.add('voted');
+    btn.textContent = '已投';
+  }
+
+  function bindVote(btn, c, scope){
+    btn.addEventListener('click', () => {
+      if (voted.has(c.id)) return;
+      voted.add(c.id);
+      c.votes += 1;
+
+      if (scope) {
+        const numEl = scope.querySelector('[data-votes]');
+        if (numEl) {
+          numEl.textContent = fmt(c.votes);
+          numEl.classList.add('bump');
+          setTimeout(()=>numEl.classList.remove('bump'), 450);
+        }
+      }
+      markVoted(btn);
+      updateTotal();
+      reorderAll(c.id);
+    });
+  }
+
+  /* ---------- 重排 ---------- */
+  function reorderAll(changedId){
+    creators.sort((a,b)=>b.votes-a.votes);
+    const mv = maxVotes();
+
+    // 榜单
+    const rows = Array.from(listEl.children);
+    const newOrder = creators.map((c, idx) => {
+      const old = rows.find(r => r.dataset.id === c.id);
+      if (old) {
+        old.className = 'rank-item' + (idx<3 ? ' top3' : '');
+        old.querySelector('.rank-no').textContent = String(idx+1).padStart(2,'0');
+        old.querySelector('[data-votes]').textContent = fmt(c.votes);
+        const fill = old.querySelector('.rank-bar .fill');
+        if (fill) fill.style.width = Math.round(c.votes/mv*100) + '%';
+        return old;
+      }
+      return renderRow(c, idx, mv);
+    });
+    listEl.innerHTML = '';
+    newOrder.forEach(r => listEl.appendChild(r));
+
+    // 前三名
+    renderPodium();
+
+    // 高亮
+    if (changedId) {
+      const row = listEl.querySelector(`.rank-item[data-id="${changedId}"]`);
+      if (row) {
+        row.classList.add('flash');
+        setTimeout(()=>row.classList.remove('flash'), 650);
+      }
+    }
+  }
+
+  function init(){
+    creators.sort((a,b)=>b.votes-a.votes);
+    const mv = maxVotes();
+    listEl.innerHTML = '';
+    creators.forEach((c, i) => listEl.appendChild(renderRow(c, i, mv)));
+    renderPodium();
+    updateTotal();
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

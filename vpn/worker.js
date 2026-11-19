@@ -916,8 +916,9 @@ export default {
           }
 
           const nowStr = new Date().toISOString().slice(0, 19).replace('T', ' ');
-          await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)').bind('immmor', `用户 ${email} 点击了获取验证码${site ? ` | site: ${site}` : ''}`, nowStr).run();
-          await notifyAdmin('获取验证码', `用户 ${email} 点击了获取验证码${site ? ` | site: ${site}` : ''}`);
+          const verifyMsg = '用户 ' + email + ' 点击了获取验证码' + (site ? ' | site: ' + site : '');
+          await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)').bind('immmor', verifyMsg, nowStr).run();
+          await notifyAdmin('获取验证码', verifyMsg);
 
           return resJson({ success: true, message: '验证码已发送到您的邮箱！' });
         } catch (e) {
