@@ -847,7 +847,7 @@ export default {
       // ========== 发送邮箱验证码接口 ==========
       if (path === '/api/send-verify-code' && request.method === 'POST') {
         const params = await request.json();
-        const { email } = params;
+        const { email, site } = params;
 
         if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
           return resJson({ success: false, message: '请输入有效的邮箱地址！' }, 400);
@@ -916,8 +916,8 @@ export default {
           }
 
           const nowStr = new Date().toISOString().slice(0, 19).replace('T', ' ');
-          await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)').bind('immmor', `用户 ${email} 点击了获取验证码`, nowStr).run();
-          await notifyAdmin('获取验证码', `用户 ${email} 点击了获取验证码`);
+          await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)').bind('immmor', `用户 ${email} 点击了获取验证码${site ? ` | site: ${site}` : ''}`, nowStr).run();
+          await notifyAdmin('获取验证码', `用户 ${email} 点击了获取验证码${site ? ` | site: ${site}` : ''}`);
 
           return resJson({ success: true, message: '验证码已发送到您的邮箱！' });
         } catch (e) {
@@ -1357,13 +1357,13 @@ export default {
             vi: `Người dùng ${username} đã đăng ký thành công qua ${verifyMethod.vi}!`,
             ar: `قام المستخدم ${username} بالتسجيل بنجاح عبر ${verifyMethod.ar}!`,
             ru: `Пользователь ${username} успешно зарегистрировался через ${verifyMethod.ru}!`
-          });
+          }) + (site ? ` | site: ${site}` : '');
 
           await DB
             .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
             .bind('immmor', msg, now)
             .run();
-          await notifyAdmin('新用户注册', `用户 ${username} 通过${verifyMethod.cn}注册成功！`);
+          await notifyAdmin('新用户注册', `用户 ${username} 通过${verifyMethod.cn}注册成功！${site ? ` | site: ${site}` : ''}`);
 
           await DB
             .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
