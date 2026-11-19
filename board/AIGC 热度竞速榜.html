@@ -28,7 +28,6 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:0;paddin
 .tabs button{font:400 clamp(46px,10vw,104px)/1.05 var(--display);color:var(--mute);position:relative;transition:color .25s}
 .tabs button:hover{color:var(--sub)}
 .tabs button[aria-pressed="true"]{color:var(--ink)}
-.tabs button[aria-pressed="true"]::after{content:"";position:absolute;left:0;right:0;bottom:.06em;height:.12em;background:var(--c1);border-radius:99px}
 .tabs .tail{font:400 clamp(20px,3vw,30px)/1 var(--display);color:var(--sub)}
 .sub{color:var(--sub);margin:8px 0 26px}
 
@@ -44,7 +43,7 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:0;paddin
 .race{position:relative}
 .row{position:absolute;left:0;right:0;top:0;transition:transform .8s cubic-bezier(.3,.8,.2,1)}
 .row[hidden]{display:none}
-.line{display:grid;grid-template-columns:64px 1fr;gap:10px;align-items:center}
+.line{display:grid;grid-template-columns:64px 1fr auto;gap:10px;align-items:center}
 .no{font:400 clamp(34px,6vw,54px)/1 var(--display);text-align:center}
 .bar{display:flex;align-items:center;gap:16px;height:64px;padding:0 24px;border-radius:12px 999px 999px 12px;text-align:left;width:0;transition:width .9s cubic-bezier(.3,.8,.2,1);overflow:hidden;white-space:nowrap}
 .row[data-r="1"] .bar{height:92px;background:var(--c1);color:var(--on1)}
@@ -58,6 +57,9 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:0;paddin
 .hv{font:400 26px/1 var(--display)}
 .row[data-r="1"] .hv{font-size:38px}
 .mv{font-size:12px;font-weight:700;border:1.5px solid currentColor;border-radius:99px;padding:0 9px;line-height:20px}
+.vote{flex:none;display:inline-flex;align-items:center;gap:4px;padding:0 10px;height:30px;border:1.5px solid currentColor;border-radius:99px;font:400 14px/1 var(--sans);font-weight:700}
+.vote:hover{background:rgba(255,255,255,.18)}
+.voted .vote{opacity:.65;cursor:default}
 
 .detail{display:none;margin:8px 0 6px 74px;background:var(--surface);border:2px solid var(--ink);border-radius:14px;padding:14px 18px;gap:18px;align-items:center}
 .row.open .detail{display:flex}
@@ -70,7 +72,8 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:0;paddin
 .note{color:var(--sub);font-size:12px;margin:26px 0 0}
 
 @media (max-width:640px){
-  .line{grid-template-columns:42px 1fr;gap:6px}
+  .line{grid-template-columns:42px 1fr auto;gap:6px}
+  .vote{height:26px;padding:0 7px;font-size:12px}
   .bar{height:58px;padding:0 14px;gap:10px}
   .row[data-r="1"] .bar{height:78px}
   .tt b{font-size:18px}.row[data-r="1"] .tt b{font-size:24px}
@@ -133,6 +136,8 @@ author:[
  {n:"折纸实验室",a:"视频、实验",tool:["可灵","海螺"],h:[980,7300,25700],m:[3,1,2],tr:[20,28,36,44,52,60,70],d:"强调镜头创意的个人工作室。粉丝 97 万。"}]
 };
 const S={k:"drama",p:1,q:""},$=s=>document.querySelector(s),race=$("#race"),cache={};
+const V=(()=>{try{return JSON.parse(localStorage.getItem("aigcvote"))||{c:{},v:[]}}catch(e){return {c:{},v:[]}}})();
+const saveV=()=>{try{localStorage.setItem("aigcvote",JSON.stringify(V))}catch(e){}};
 const fmt=v=>v>=10000?(v/10000).toFixed(1).replace(/\.0$/,"")+" 亿":v+" 万";
 const esc=s=>s.replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));
 function spark(tr){
@@ -145,10 +150,18 @@ function build(k){
   return cache[k]=DATA[k].map(it=>{
     const el=document.createElement("div");el.className="row";
     el.innerHTML=`<div class="line"><span class="no"></span>
-      <button class="bar" aria-expanded="false"><span class="tt"><b>${esc(it.n)}</b><i>${esc(it.a)}　${it.tool.join("、")}</i></span><span class="mv"></span><span class="hv"></span></button></div>
+      <button class="bar" aria-expanded="false"><span class="tt"><b>${esc(it.n)}</b><i>${esc(it.a)}　${it.tool.join("、")}</i></span><span class="mv"></span><span class="hv"></span></button>
+      <button class="vote" aria-label="投票给 ${esc(it.n)}">♥ <span class="vc">0</span></button></div>
       <div class="detail"><div class="d"><p>${esc(it.d)}</p><div class="tags">${it.tool.map(t=>`<span>${t}</span>`).join("")}</div></div><div>${spark(it.tr)}<small>近 7 天热度</small></div></div>`;
     el.querySelector(".bar").addEventListener("click",e=>{
       const o=el.classList.toggle("open");e.currentTarget.setAttribute("aria-expanded",o);layout();
+    });
+    const vk=k+":"+it.n, vote=el.querySelector(".vote"), vc=el.querySelector(".vc");
+    const draw=()=>{vc.textContent=V.c[vk]||0;el.classList.toggle("voted",V.v.includes(vk))};
+    draw();
+    vote.addEventListener("click",()=>{
+      if(V.v.includes(vk))return;
+      V.v.push(vk);V.c[vk]=(V.c[vk]||0)+1;saveV();draw();
     });
     return {it,el};
   });

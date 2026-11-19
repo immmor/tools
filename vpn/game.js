@@ -29,6 +29,74 @@
         } catch (e) {}
     };
 
+    // 摇摇机音效：拉杆 + 齿轮咔哒 + 机身震动 + 爆金币（Web Audio 纯合成）
+    const slotAudio = {
+        ctx: null,
+        init() {
+            if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            if (this.ctx.state === 'suspended') this.ctx.resume();
+        },
+        playLever() {
+            this.init();
+            const t = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(120, t);
+            osc.frequency.linearRampToValueAtTime(40, t + 0.15);
+            gain.gain.setValueAtTime(0.3, t);
+            gain.gain.linearRampToValueAtTime(0.01, t + 0.15);
+            osc.connect(gain).connect(this.ctx.destination);
+            osc.start();
+            osc.stop(t + 0.15);
+        },
+        playReelClick() {
+            this.init();
+            const t = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(280, t);
+            gain.gain.setValueAtTime(0.1, t);
+            gain.gain.linearRampToValueAtTime(0.01, t + 0.04);
+            osc.connect(gain).connect(this.ctx.destination);
+            osc.start();
+            osc.stop(t + 0.04);
+        },
+        playShakeSound(duration = 0.5) {
+            this.init();
+            const t = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(65, t);
+            osc.frequency.linearRampToValueAtTime(45, t + duration);
+            gain.gain.setValueAtTime(0.4, t);
+            gain.gain.linearRampToValueAtTime(0.01, t + duration);
+            osc.connect(gain).connect(this.ctx.destination);
+            osc.start();
+            osc.stop(t + duration);
+        },
+        playCoinSound(intensity = 1) {
+            this.init();
+            const now = this.ctx.currentTime;
+            const max = intensity === 'max';
+            const count = max ? 25 : 10;
+            for (let i = 0; i < count; i++) {
+                const delay = i * (max ? 0.04 : 0.07);
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(950 + Math.random() * 850, now + delay);
+                gain.gain.setValueAtTime(0.18, now + delay);
+                gain.gain.linearRampToValueAtTime(0.001, now + delay + 0.12);
+                osc.connect(gain).connect(this.ctx.destination);
+                osc.start(now + delay);
+                osc.stop(now + delay + 0.13);
+            }
+        }
+    };
+
     let slotSoundRaf = null;
     let slotLastTickIndex = 0;
 
@@ -53,66 +121,50 @@
             if (now - start > duration + 80) return;
             const idx = Math.floor(getReelTranslateY(reel) / symbolHeight);
             if (idx > slotLastTickIndex) {
-                playGameTone(550 + Math.random() * 250, 0.04, 'square', 0.05);
+                slotAudio.playReelClick();
                 slotLastTickIndex = idx;
             }
             slotSoundRaf = requestAnimationFrame(loop);
         };
         slotSoundRaf = requestAnimationFrame(loop);
     };
-    const playSlotReelStop = () => {
-        playGameTone(180, 0.12, 'triangle', 0.1);
-        setTimeout(() => playGameTone(120, 0.08, 'triangle', 0.07), 40);
-    };
-    const playSlotWinSound = () => {
-        [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => playGameTone(f, 0.18, 'sine', 0.09), i * 100));
-    };
 
-    const getElementRotation = (el) => {
-        const m = getComputedStyle(el).transform;
-        if (!m || m === 'none') return 0;
-        const p = m.match(/matrix\(([^)]+)\)/);
-        if (!p) return 0;
-        const v = p[1].split(',').map(parseFloat);
-        return Math.atan2(v[1], v[0]) * (180 / Math.PI);
-    };
-
-    let wheelSoundRaf = null;
-    let wheelTickCount = 0;
-
-    const stopWheelSpinSound = () => {
-        if (wheelSoundRaf) { cancelAnimationFrame(wheelSoundRaf); wheelSoundRaf = null; }
-        wheelTickCount = 0;
-    };
-
-    const startWheelSpinSound = (wheelEl, duration, stepDeg) => {
-        stopWheelSpinSound();
-        let prevAngle = null;
-        let cumulative = 0;
-        const start = performance.now();
-        const loop = (now) => {
-            if (now - start > duration + 80) return;
-            const angle = getElementRotation(wheelEl);
-            if (prevAngle !== null) {
-                let delta = angle - prevAngle;
-                if (delta > 180) delta -= 360;
-                if (delta < -180) delta += 360;
-                cumulative += Math.abs(delta);
-                const count = Math.floor(cumulative / stepDeg);
-                while (wheelTickCount < count) {
-                    playGameTone(420 + Math.random() * 180, 0.035, 'square', 0.04);
-                    wheelTickCount++;
-                }
-            }
-            prevAngle = angle;
-            wheelSoundRaf = requestAnimationFrame(loop);
-        };
-        wheelSoundRaf = requestAnimationFrame(loop);
-    };
-
-    const playWheelStopSound = () => {
-        playGameTone(160, 0.14, 'triangle', 0.1);
-        setTimeout(() => playGameTone(90, 0.1, 'triangle', 0.07), 45);
+    // 转盘音效：霓虹机台咔哒 + 中奖琶音（Web Audio 纯合成）
+    const wheelAudio = {
+        ctx: null,
+        init() {
+            if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            if (this.ctx.state === 'suspended') this.ctx.resume();
+        },
+        playTick() {
+            this.init();
+            const t = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(600, t);
+            osc.frequency.exponentialRampToValueAtTime(150, t + 0.05);
+            gain.gain.setValueAtTime(0.15, t);
+            gain.gain.linearRampToValueAtTime(0.01, t + 0.05);
+            osc.connect(gain).connect(this.ctx.destination);
+            osc.start();
+            osc.stop(t + 0.05);
+        },
+        playWin() {
+            this.init();
+            const now = this.ctx.currentTime;
+            [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, now + i * 0.08);
+                gain.gain.setValueAtTime(0.2, now + i * 0.08);
+                gain.gain.linearRampToValueAtTime(0.01, now + i * 0.08 + 0.3);
+                osc.connect(gain).connect(this.ctx.destination);
+                osc.start(now + i * 0.08);
+                osc.stop(now + i * 0.08 + 0.3);
+            });
+        }
     };
 
     // 中奖音：清脆风铃式上行 + 明亮"叮"收尾（八音盒/抽中奖感）
@@ -172,7 +224,7 @@
         } catch (e) { /* 忽略 */ }
     };
 
-    const showGameResult = (isWin, amount, icon) => {
+    const showGameResult = (isWin, amount, icon, skipSound = false) => {
         const modal = document.getElementById('game-result-modal');
         const iconEl = document.getElementById('game-result-icon');
         const titleEl = document.getElementById('game-result-title');
@@ -185,8 +237,10 @@
         modal.classList.add(isWin ? 'win' : 'lose');
 
         // 中奖/失败音效（WebAudio 合成，覆盖所有调用本弹窗的游戏）
-        if (isWin) playWinSound();
-        else playLoseSound();
+        if (!skipSound) {
+            if (isWin) playWinSound();
+            else playLoseSound();
+        }
         
         iconEl.textContent = icon || (isWin ? '🎉' : '😔');
         titleEl.textContent = isWin ? (dict.game_result_win_title || '恭喜中奖！') : (dict.game_result_lose_title || '未中奖');
@@ -395,41 +449,106 @@
 
         // ==================== 幸运转盘 ====================
         const WHEEL_PRIZES = [3, 5, 5, 10, 10, 20, 50, 200];
-        const WHEEL_COLORS = [
-            '#448aff', '#00d4ff', '#00e676', '#b388ff',
-            '#ffd600', '#ff9100', '#ff4081', '#ff5252'
+        const WHEEL_SEGMENT_STYLE = [
+            { bg: '#24113b', text: '#ff99cc', icon: '💵' },
+            { bg: '#17072b', text: '#a3ff00', icon: '🪙' },
+            { bg: '#24113b', text: '#ffffff', icon: '🐟' },
+            { bg: '#17072b', text: '#ff99cc', icon: '✨' },
+            { bg: '#24113b', text: '#a3ff00', icon: '🎵' },
+            { bg: '#17072b', text: '#ffffff', icon: '💎' },
+            { bg: '#24113b', text: '#ff99cc', icon: '🎁' },
+            { bg: '#17072b', text: '#a3ff00', icon: '👑' }
         ];
 
-        const wheelFace = document.getElementById('wheel-face');
+        const wheelCanvas = document.getElementById('wheelCanvas');
         const spinBtn = document.getElementById('spin-wheel');
         const wheelResult = document.getElementById('wheel-result');
+        const wheelCtx = wheelCanvas ? wheelCanvas.getContext('2d') : null;
         let wheelRotation = 0;
         let isWheelSpinning = false;
 
         const normalizeDeg = (deg) => ((deg % 360) + 360) % 360;
         const getWheelStep = () => 360 / WHEEL_PRIZES.length;
 
-        const getIndexAtPointer = (rotation) => {
-            const step = getWheelStep();
-            const mod = normalizeDeg(rotation);
-            const centerAtTop = normalizeDeg(360 - mod);
-            return Math.floor(centerAtTop / step) % WHEEL_PRIZES.length;
+        const drawWheel = () => {
+            if (!wheelCtx) return;
+            const radius = wheelCanvas.width / 2;
+            const segRad = (2 * Math.PI) / WHEEL_PRIZES.length;
+            wheelCtx.clearRect(0, 0, wheelCanvas.width, wheelCanvas.height);
+            wheelCtx.save();
+            wheelCtx.translate(radius, radius);
+            wheelCtx.rotate(wheelRotation * Math.PI / 180);
+            WHEEL_PRIZES.forEach((prize, i) => {
+                const startAng = i * segRad - Math.PI / 2;
+                const endAng = startAng + segRad;
+                const style = WHEEL_SEGMENT_STYLE[i];
+                wheelCtx.beginPath();
+                wheelCtx.moveTo(0, 0);
+                wheelCtx.arc(0, 0, radius - 15, startAng, endAng);
+                wheelCtx.closePath();
+                wheelCtx.fillStyle = style.bg;
+                wheelCtx.fill();
+                wheelCtx.lineWidth = 3;
+                wheelCtx.strokeStyle = 'rgba(157, 78, 221, 0.4)';
+                wheelCtx.stroke();
+                wheelCtx.save();
+                wheelCtx.rotate(startAng + segRad / 2);
+                wheelCtx.fillStyle = style.text;
+                wheelCtx.font = "bold 40px 'PingFang SC', sans-serif";
+                wheelCtx.shadowColor = style.text;
+                wheelCtx.shadowBlur = 10;
+                wheelCtx.fillText('¥' + prize, 160, 10);
+                wheelCtx.font = "36px 'Apple Color Emoji'";
+                wheelCtx.shadowBlur = 0;
+                wheelCtx.fillText(style.icon, 310, 14);
+                wheelCtx.restore();
+            });
+            wheelCtx.restore();
         };
 
-        const initWheel = () => {
-            if (!wheelFace) return;
-            const step = getWheelStep();
-            const gradientStops = WHEEL_PRIZES.map((_, i) =>
-                `${WHEEL_COLORS[i]} ${i * step}deg ${(i + 1) * step}deg`
-            ).join(', ');
-            wheelFace.style.background = `conic-gradient(from -90deg, ${gradientStops})`;
-            wheelFace.innerHTML = WHEEL_PRIZES.map((prize, i) => {
-                const angle = i * step + step / 2;
-                return `<span class="wheel-label" style="--angle:${angle}deg;color:#fff">¥${prize}</span>`;
-            }).join('');
+        const wheelMarker = document.querySelector('.wheel-pointer-marker');
+        let markerAnim = null;
+        // 每格拨动一次指针：先偏移，再带阻尼回弹归位
+        const flickMarker = () => {
+            if (!wheelMarker) return;
+            if (markerAnim) markerAnim.cancel();
+            markerAnim = wheelMarker.animate([
+                { transform: 'translateX(-50%) rotate(0deg)', offset: 0 },
+                { transform: 'translateX(-50%) rotate(16deg)', offset: 0.2 },
+                { transform: 'translateX(-50%) rotate(-8deg)', offset: 0.5 },
+                { transform: 'translateX(-50%) rotate(3deg)', offset: 0.75 },
+                { transform: 'translateX(-50%) rotate(0deg)', offset: 1 }
+            ], { duration: 260, easing: 'ease-out' });
         };
 
-        initWheel();
+        // 指针固定在 12 点，旋转到目标扇区；每跨一格触发一次咔哒音和拨动
+        const spinWheelTo = (targetIndex, onDone) => {
+            const step = getWheelStep();
+            const segmentCenter = targetIndex * step + step / 2;
+            const targetMod = normalizeDeg(360 - segmentCenter);
+            const currentMod = normalizeDeg(wheelRotation);
+            let delta = targetMod - currentMod;
+            if (delta <= 0) delta += 360;
+            const extraSpins = 6 + Math.floor(Math.random() * 4);
+            const startRotation = wheelRotation;
+            const endRotation = startRotation + delta + extraSpins * 360;
+            const duration = 4800;
+            const startTime = performance.now();
+            let lastTick = 0;
+            const animate = (now) => {
+                const p = Math.min((now - startTime) / duration, 1);
+                const ease = 1 - Math.pow(1 - p, 3);
+                wheelRotation = startRotation + (endRotation - startRotation) * ease;
+                drawWheel();
+                const seg = Math.floor(normalizeDeg(wheelRotation) / step);
+                if (seg !== lastTick) { wheelAudio.playTick(); flickMarker(); lastTick = seg; }
+                if (p < 1) requestAnimationFrame(animate);
+                else onDone();
+            };
+            requestAnimationFrame(animate);
+        };
+
+        drawWheel();
 
         // 幸运转盘为默认激活 Tab，初始化时加载其历史记录
         renderGameHistory('wheel');
@@ -459,30 +578,16 @@
                     spinBtn.disabled = true;
                     wheelResult.textContent = '';
                     const targetIndex = WHEEL_PRIZES.indexOf(giftData.prize);
-                    const step = getWheelStep();
-                    const segmentCenter = targetIndex * step + step / 2;
-                    const targetMod = normalizeDeg(360 - segmentCenter);
-                    const currentMod = normalizeDeg(wheelRotation);
-                    let delta = targetMod - currentMod;
-                    if (delta <= 0) delta += 360;
-                    const extraSpins = 4 + Math.floor(Math.random() * 2);
-                    wheelRotation += delta + extraSpins * 360;
-                    const WHEEL_SPIN_MS = 4000;
-                    playGameTone(280, 0.06, 'sine', 0.05);
-                    startWheelSpinSound(wheelFace, WHEEL_SPIN_MS, step);
-                    wheelFace.style.transition = `transform ${WHEEL_SPIN_MS}ms cubic-bezier(0.17, 0.67, 0.12, 0.99)`;
-                    wheelFace.style.transform = `rotate(${wheelRotation}deg)`;
-                    setTimeout(() => {
-                        playWheelStopSound();
-                        stopWheelSpinSound();
-                        playSlotWinSound();
+                    spinWheelTo(targetIndex, () => {
+                        const isWin = giftData.prize > 0;
+                        if (isWin) wheelAudio.playWin();
                         updateBalanceDisplay(giftData.balance);
                         renderGameHistory('wheel');
-                        showGameResult(giftData.prize > 0, giftData.prize, '🎁');
+                        showGameResult(isWin, giftData.prize, '🎁', isWin);
                         if (window.pendingGift) { window.pendingGift.wheel = false; window.updateGameCostText && window.updateGameCostText('wheel'); }
                         isWheelSpinning = false;
                         spinBtn.disabled = false;
-                    }, WHEEL_SPIN_MS);
+                    });
                     return;
                 }
             } catch(e) {}
@@ -508,33 +613,15 @@
 
                 // 根据后端返回的 prize 计算目标扇区
                 const targetIndex = WHEEL_PRIZES.indexOf(data.prize);
-                const step = getWheelStep();
-                const segmentCenter = targetIndex * step + step / 2;
-                const targetMod = normalizeDeg(360 - segmentCenter);
-                const currentMod = normalizeDeg(wheelRotation);
-                let delta = targetMod - currentMod;
-                if (delta <= 0) delta += 360;
-                const extraSpins = 4 + Math.floor(Math.random() * 2);
-                wheelRotation += delta + extraSpins * 360;
-
-                const WHEEL_SPIN_MS = 4000;
-                playGameTone(280, 0.06, 'sine', 0.05);
-                startWheelSpinSound(wheelFace, WHEEL_SPIN_MS, step);
-                wheelFace.style.transition = `transform ${WHEEL_SPIN_MS}ms cubic-bezier(0.17, 0.67, 0.12, 0.99)`;
-                wheelFace.style.transform = `rotate(${wheelRotation}deg)`;
-
-                setTimeout(() => {
-                    playWheelStopSound();
-                    stopWheelSpinSound();
-                    playSlotWinSound();
-
+                spinWheelTo(targetIndex, () => {
+                    const isWin = data.prize > 0;
+                    if (isWin) wheelAudio.playWin();
                     updateBalanceDisplay(data.balance);
                     renderGameHistory('wheel');
-                    showGameResult(data.prize > 0, data.prize, '🎡');
-
+                    showGameResult(isWin, data.prize, '🎡', isWin);
                     isWheelSpinning = false;
                     spinBtn.disabled = false;
-                }, WHEEL_SPIN_MS + 100);
+                });
             } catch (e) {
                 console.error('转盘游戏失败:', e);
                 alert('网络错误，请稍后重试');
@@ -546,6 +633,10 @@
         const slotResult = document.getElementById('slot-result');
         let isSlotSpinning = false;
         const symbols = ['🍒', '🍊', '🍋', '⭐', '💎', '7️⃣', '🔔'];
+        // 后端符号顺序保持不变，仅替换展示图标为猫娘主题
+        const displaySymbols = ['🐱', '💎', '👑', '🧦', '🐟', '🎀', '🍬'];
+        const machineBody = document.getElementById('machine-body');
+        const handle = document.getElementById('mechanical-handle');
 
         const initSlotReels = () => {
             const reel1 = document.getElementById('slot-reel-1');
@@ -555,7 +646,7 @@
             const createReelContent = () => {
                 let content = '';
                 for (let i = 0; i < 3; i++) {
-                    symbols.forEach(symbol => {
+                    displaySymbols.forEach(symbol => {
                         content += `<div class="slot-symbol">${symbol}</div>`;
                     });
                 }
@@ -564,6 +655,21 @@
             reel1.innerHTML = createReelContent();
             reel2.innerHTML = createReelContent();
             reel3.innerHTML = createReelContent();
+        };
+
+        // 拉杆反馈：音效 + 拉杆下压 + 机身轻晃
+        const pullLever = () => {
+            slotAudio.playLever();
+            if (handle) { handle.classList.add('pulled'); setTimeout(() => handle.classList.remove('pulled'), 200); }
+            if (machineBody) { machineBody.classList.add('machine-shake-light'); setTimeout(() => machineBody.classList.remove('machine-shake-light'), 500); }
+        };
+        // 中奖反馈：机身剧烈晃动 + 爆金币声 + 整组发光
+        const celebrateWin = () => {
+            if (machineBody) { machineBody.classList.add('machine-shake'); setTimeout(() => machineBody.classList.remove('machine-shake'), 1200); }
+            slotAudio.playShakeSound(1.2);
+            slotAudio.playCoinSound('max');
+            const reels = document.querySelector('.slot-reels');
+            if (reels) { reels.classList.add('win'); setTimeout(() => reels.classList.remove('win'), 1800); }
         };
 
         initSlotReels();
@@ -592,6 +698,7 @@
                     isSlotSpinning = true;
                     slotBtn.disabled = true;
                     slotResult.textContent = '';
+                    pullLever();
                     const reel1 = document.getElementById('slot-reel-1');
                     const reel2 = document.getElementById('slot-reel-2');
                     const reel3 = document.getElementById('slot-reel-3');
@@ -607,9 +714,7 @@
                     void reel1.offsetWidth; void reel2.offsetWidth; void reel3.offsetWidth;
                     const spinDuration1 = 2000, spinDuration2 = 2500, spinDuration3 = 3000;
                     startSlotSpinSound(reel3, symbolHeight, spinDuration3);
-                    setTimeout(playSlotReelStop, spinDuration1);
-                    setTimeout(playSlotReelStop, spinDuration2);
-                    setTimeout(() => { playSlotReelStop(); stopSlotSpinSound(); }, spinDuration3);
+                    setTimeout(stopSlotSpinSound, spinDuration3);
                     reel1.style.transition = `transform ${spinDuration1}ms cubic-bezier(0.175, 0.885, 0.32, 1.275)`;
                     reel2.style.transition = `transform ${spinDuration2}ms cubic-bezier(0.175, 0.885, 0.32, 1.275)`;
                     reel3.style.transition = `transform ${spinDuration3}ms cubic-bezier(0.175, 0.885, 0.32, 1.275)`;
@@ -617,7 +722,7 @@
                     reel2.style.transform = `translateY(-${totalSpin2}px)`;
                     reel3.style.transform = `translateY(-${totalSpin3}px)`;
                     setTimeout(() => {
-                        if (giftData.prize > 0) { playSlotWinSound(); showGameResult(true, giftData.prize, '🎁'); }
+                        if (giftData.prize > 0) { celebrateWin(); showGameResult(true, giftData.prize, '🎁', true); }
                         else { showGameResult(false, 0, '🎁'); }
                         updateBalanceDisplay(giftData.balance);
                         renderGameHistory('slot');
@@ -647,6 +752,7 @@
                 isSlotSpinning = true;
                 slotBtn.disabled = true;
                 slotResult.textContent = '';
+                pullLever();
 
                 const reel1 = document.getElementById('slot-reel-1');
                 const reel2 = document.getElementById('slot-reel-2');
@@ -679,9 +785,7 @@
                 const spinDuration3 = 3000;
 
                 startSlotSpinSound(reel3, symbolHeight, spinDuration3);
-                setTimeout(playSlotReelStop, spinDuration1);
-                setTimeout(playSlotReelStop, spinDuration2);
-                setTimeout(() => { playSlotReelStop(); stopSlotSpinSound(); }, spinDuration3);
+                setTimeout(stopSlotSpinSound, spinDuration3);
 
                 reel1.style.transition = `transform ${spinDuration1}ms cubic-bezier(0.175, 0.885, 0.32, 1.275)`;
                 reel2.style.transition = `transform ${spinDuration2}ms cubic-bezier(0.175, 0.885, 0.32, 1.275)`;
@@ -693,14 +797,8 @@
 
                 setTimeout(() => {
                     if (data.prize > 0) {
-                        playSlotWinSound();
-                        showGameResult(true, data.prize, '🎰');
-                        // 中奖：机台整组发光脉冲
-                        const reels = document.querySelector('.slot-reels');
-                        if (reels) {
-                            reels.classList.add('win');
-                            setTimeout(() => reels.classList.remove('win'), 1800);
-                        }
+                        celebrateWin();
+                        showGameResult(true, data.prize, '🎰', true);
                     } else {
                         showGameResult(false, 0, '🎰');
                     }
@@ -802,53 +900,45 @@
 
             if (!canvas || !card) return;
 
-            const rect = card.getBoundingClientRect();
+            const rect = canvas.getBoundingClientRect();
             canvas.width = rect.width;
             canvas.height = rect.height;
 
             scratchCanvas = canvas;
             scratchCtx = canvas.getContext('2d');
+            scratchCtx.textAlign = 'center';
+            scratchCtx.textBaseline = 'middle';
 
             const dict = window.translations?.[window.currentLang] || {};
             if (!hasValidCard) {
                 scratchPrize.textContent = '';
-                scratchCtx.fillStyle = 'rgba(60, 60, 60, 0.95)';
+                scratchCtx.fillStyle = 'rgba(17, 7, 36, 0.95)';
                 scratchCtx.fillRect(0, 0, canvas.width, canvas.height);
-                scratchCtx.fillStyle = '#888';
-                scratchCtx.font = 'bold 14px Arial';
-                scratchCtx.textAlign = 'center';
-                scratchCtx.textBaseline = 'middle';
+                scratchCtx.fillStyle = '#ff99cc';
+                scratchCtx.font = 'bold 16px "PingFang SC", sans-serif';
                 scratchCtx.fillText(dict.scratch_buy_first || '请先购买刮刮卡', canvas.width / 2, canvas.height / 2);
                 return;
             }
 
             const gradient = scratchCtx.createLinearGradient(0, 0, canvas.width, canvas.height);
-            gradient.addColorStop(0, '#444');
-            gradient.addColorStop(0.5, '#666');
-            gradient.addColorStop(1, '#444');
+            gradient.addColorStop(0, '#3a1c66');
+            gradient.addColorStop(0.5, '#200b3b');
+            gradient.addColorStop(1, '#ff1493');
             scratchCtx.fillStyle = gradient;
             scratchCtx.fillRect(0, 0, canvas.width, canvas.height);
 
-            scratchCtx.fillStyle = '#999';
-            scratchCtx.font = 'bold 16px Arial';
-            scratchCtx.textAlign = 'center';
-            scratchCtx.textBaseline = 'middle';
-            scratchCtx.fillText(dict.scratch_here || '👆 刮开此处', canvas.width / 2, canvas.height / 2);
-
-            scratchCtx.strokeStyle = 'rgba(255,255,255,0.1)';
-            scratchCtx.lineWidth = 1;
-            for (let i = 0; i < canvas.width; i += 20) {
+            scratchCtx.strokeStyle = 'rgba(163, 255, 0, 0.15)';
+            scratchCtx.lineWidth = 3;
+            for (let i = 0; i < canvas.width; i += 40) {
                 scratchCtx.beginPath();
                 scratchCtx.moveTo(i, 0);
-                scratchCtx.lineTo(i, canvas.height);
+                scratchCtx.lineTo(i + 20, canvas.height);
                 scratchCtx.stroke();
             }
-            for (let i = 0; i < canvas.height; i += 20) {
-                scratchCtx.beginPath();
-                scratchCtx.moveTo(0, i);
-                scratchCtx.lineTo(canvas.width, i);
-                scratchCtx.stroke();
-            }
+
+            scratchCtx.fillStyle = '#ffffff';
+            scratchCtx.font = 'bold 18px "PingFang SC", sans-serif';
+            scratchCtx.fillText('⚡ 划动刮开电子图层 ⚡', canvas.width / 2, canvas.height / 2);
 
             if (!scratchEventsInitialized) {
                 initScratchEvents();

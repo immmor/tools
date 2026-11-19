@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AIGC 热度竞速榜</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=ZCOOL+QingKe+HuangYou&display=swap">
+<style>
+:root{
+  --bg:#EFE9FA;--ink:#24173F;--mute:rgba(36,23,63,.28);--sub:#5E5278;--surface:#FFFFFF;--line:#D9CFF0;
+  --c1:#E8307C;--on1:#FFFFFF;--c2:#FF9A2E;--on2:#24173F;--c3:#19B8A6;--on3:#0F2A27;--c4:#CDBFF3;--on4:#24173F;
+  --display:"ZCOOL QingKe HuangYou","Noto Sans SC","PingFang SC",sans-serif;--sans:"Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){--bg:#1A1230;--ink:#F3EEFF;--mute:rgba(243,238,255,.3);--sub:#B3A7D1;--surface:#2A1F47;--line:#3C2F63;--c1:#FF5C9A;--on1:#1A1230;--c2:#FFA94D;--on2:#1A1230;--c3:#3FD6C6;--on3:#0F2A27;--c4:#3A2D63;--on4:#F3EEFF}
+}
+:root[data-theme="dark"]{--bg:#1A1230;--ink:#F3EEFF;--mute:rgba(243,238,255,.3);--sub:#B3A7D1;--surface:#2A1F47;--line:#3C2F63;--c1:#FF5C9A;--on1:#1A1230;--c2:#FFA94D;--on2:#1A1230;--c3:#3FD6C6;--on3:#0F2A27;--c4:#3A2D63;--on4:#F3EEFF}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 15px/1.6 var(--sans)}
+button{font:inherit;color:inherit;cursor:pointer;background:none;border:0;padding:0}
+:focus-visible{outline:3px solid var(--c1);outline-offset:3px}
+.wrap{max-width:1040px;margin:0 auto;padding:30px 20px 70px}
+
+/* 标题就是切换器 */
+.tabs{display:flex;gap:clamp(14px,3vw,34px);flex-wrap:wrap;align-items:baseline}
+.tabs button{font:400 clamp(46px,10vw,104px)/1.05 var(--display);color:var(--mute);position:relative;transition:color .25s}
+.tabs button:hover{color:var(--sub)}
+.tabs button[aria-pressed="true"]{color:var(--ink)}
+.tabs .tail{font:400 clamp(20px,3vw,30px)/1 var(--display);color:var(--sub)}
+.sub{color:var(--sub);margin:8px 0 26px}
+
+.bar-tools{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:30px}
+.seg{display:inline-flex;border:2px solid var(--ink);border-radius:999px;overflow:hidden}
+.seg button{padding:6px 20px;font-weight:700}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.search input{font:inherit;color:var(--ink);background:transparent;border:2px solid var(--ink);border-radius:999px;padding:6px 18px;width:230px}
+.search input::placeholder{color:var(--sub)}
+.search{margin-left:auto}
+
+/* 竞速条 */
+.race{position:relative}
+.row{position:absolute;left:0;right:0;top:0;transition:transform .8s cubic-bezier(.3,.8,.2,1)}
+.row[hidden]{display:none}
+.line{display:grid;grid-template-columns:64px 1fr auto;gap:10px;align-items:center}
+.no{font:400 clamp(34px,6vw,54px)/1 var(--display);text-align:center}
+.bar{display:flex;align-items:center;gap:16px;height:64px;padding:0 24px;border-radius:12px 999px 999px 12px;text-align:left;width:0;transition:width .9s cubic-bezier(.3,.8,.2,1);overflow:hidden;white-space:nowrap}
+.row[data-r="1"] .bar{height:92px;background:var(--c1);color:var(--on1)}
+.row[data-r="2"] .bar{background:var(--c2);color:var(--on2)}
+.row[data-r="3"] .bar{background:var(--c3);color:var(--on3)}
+.row[data-r="4"] .bar{background:var(--c4);color:var(--on4)}
+.tt{flex:1;min-width:0}
+.tt b{display:block;font:400 22px/1.2 var(--display);overflow:hidden;text-overflow:ellipsis}
+.row[data-r="1"] .tt b{font-size:34px}
+.tt i{display:block;font-style:normal;font-size:13px;opacity:.82;overflow:hidden;text-overflow:ellipsis}
+.hv{font:400 26px/1 var(--display)}
+.row[data-r="1"] .hv{font-size:38px}
+.mv{font-size:12px;font-weight:700;border:1.5px solid currentColor;border-radius:99px;padding:0 9px;line-height:20px}
+.vote{flex:none;display:inline-flex;align-items:center;gap:4px;padding:0 10px;height:30px;border:1.5px solid currentColor;border-radius:99px;font:400 14px/1 var(--sans);font-weight:700}
+.vote:hover{background:rgba(255,255,255,.18)}
+.voted .vote{opacity:.65;cursor:default}
+
+.detail{display:none;margin:8px 0 6px 74px;background:var(--surface);border:2px solid var(--ink);border-radius:14px;padding:14px 18px;gap:18px;align-items:center}
+.row.open .detail{display:flex}
+.detail p{margin:0 0 8px;color:var(--sub)}
+.detail .tags{display:flex;gap:8px;flex-wrap:wrap}
+.detail .tags span{background:var(--bg);border-radius:6px;padding:0 10px;font-size:12px}
+.detail .d{flex:1;min-width:0}
+.detail small{color:var(--sub);display:block;font-size:12px;margin-top:2px}
+.empty{padding:50px 0;color:var(--sub)}
+.note{color:var(--sub);font-size:12px;margin:26px 0 0}
+
+@media (max-width:640px){
+  .line{grid-template-columns:42px 1fr auto;gap:6px}
+  .vote{height:26px;padding:0 7px;font-size:12px}
+  .bar{height:58px;padding:0 14px;gap:10px}
+  .row[data-r="1"] .bar{height:78px}
+  .tt b{font-size:18px}.row[data-r="1"] .tt b{font-size:24px}
+  .tt i,.mv{display:none}
+  .hv{font-size:20px}.row[data-r="1"] .hv{font-size:28px}
+  .detail{margin-left:48px;flex-direction:column;align-items:flex-start}
+  .search{margin-left:0;width:100%}.search input{width:100%}
+}
+@media (prefers-reduced-motion:reduce){.row,.bar{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="tabs" role="group" aria-label="榜单类型" id="tabs">
+    <button aria-pressed="true" data-k="drama">短剧</button>
+    <button aria-pressed="false" data-k="video">视频</button>
+    <button aria-pressed="false" data-k="author">作者</button>
+    <span class="tail">热度竞速榜</span>
+  </div>
+  <p class="sub" id="date"></p>
+
+  <div class="bar-tools">
+    <div class="seg" role="group" aria-label="统计周期" id="periods">
+      <button aria-pressed="false" data-p="0">日榜</button>
+      <button aria-pressed="true" data-p="1">周榜</button>
+      <button aria-pressed="false" data-p="2">月榜</button>
+    </div>
+    <label class="search"><span hidden>搜索</span><input id="q" type="search" placeholder="搜索名称、作者或工具"></label>
+  </div>
+
+  <div class="race" id="race" aria-live="polite"></div>
+  <p class="note">条越长，热度越高。点击任意一条可查看简介与走势。页面中的作品与数据均为示例，替换 DATA 即可接入真实数据。</p>
+</div>
+
+<script>
+// h = [日, 周, 月] 热度（万）；m = [日, 周, 月] 名次变化；tr = 近 7 天走势
+const DATA={
+drama:[
+ {n:"重生之我在 AI 片场",a:"墨染工作室",tool:["可灵","即梦"],h:[820,5200,19800],m:[2,0,3],tr:[40,52,48,66,70,88,96],d:"80 集竖屏爽剧，全程 AI 生成，主角面部一致性稳定。"},
+ {n:"赛博长安：夜行人",a:"七号机位",tool:["Vidu","海螺"],h:[760,5480,17400],m:[-1,2,1],tr:[60,58,72,80,84,90,92],d:"唐风赛博朋克悬疑，单集 90 秒，追更率高。"},
+ {n:"山海经纪人",a:"星河小分队",tool:["即梦"],h:[690,4100,16100],m:[1,-1,0],tr:[30,44,50,60,58,70,82],d:"神兽签约娱乐公司的职场喜剧，台词原创度高。"},
+ {n:"她的数字分身",a:"阿澈 Prompt",tool:["可灵"],h:[610,3900,12800],m:[0,1,-2],tr:[50,48,56,60,66,64,70],d:"都市情感题材，用分身讲述孤独与陪伴。"},
+ {n:"末日便利店",a:"猫爷 AI",tool:["海螺","Vidu"],h:[540,3400,11900],m:[3,2,2],tr:[20,30,45,52,60,72,78],d:"末世背景下的暖心群像，每集一位顾客的故事。"},
+ {n:"龙王赘婿 2099",a:"墨染工作室",tool:["可灵"],h:[480,3100,10400],m:[-2,-1,1],tr:[70,66,62,58,60,56,58],d:"经典逆袭题材的未来改编，节奏紧凑。"},
+ {n:"会说话的猫探长",a:"猫爷 AI",tool:["即梦"],h:[430,2700,9300],m:[0,0,0],tr:[40,44,42,46,48,50,52],d:"猫咪侦探系列，适合全年龄观看。"},
+ {n:"月球快递员",a:"星河小分队",tool:["可灵","即梦"],h:[310,1800,6900],m:[2,1,1],tr:[18,24,30,34,40,46,50],d:"轻科幻短剧，单集 60 秒，适合通勤观看。"}],
+video:[
+ {n:"一镜到底：纸城",a:"折纸实验室",tool:["可灵"],h:[1300,8800,31000],m:[1,0,2],tr:[50,64,70,78,90,98,104],d:"一镜到底穿越折纸城市，转场流畅。"},
+ {n:"AI 复原 1998 年的上海",a:"老街影像",tool:["Vidu","即梦"],h:[1180,9300,28600],m:[0,1,0],tr:[80,82,86,88,92,90,96],d:"用老照片生成动态影像，评论区满是回忆。"},
+ {n:"水墨动物园",a:"墨染工作室",tool:["即梦"],h:[990,7400,24100],m:[2,-1,1],tr:[40,50,58,62,70,76,84],d:"水墨风格的动物动画合集。"},
+ {n:"机甲少女日常",a:"七号机位",tool:["海螺"],h:[880,6100,20800],m:[-1,2,3],tr:[56,60,58,64,66,72,76],d:"日系机甲日常短片，画风统一。"},
+ {n:"三分钟看懂量子计算",a:"阿澈 Prompt",tool:["可灵"],h:[760,5600,18200],m:[3,1,-1],tr:[28,36,44,52,60,70,74],d:"科普视频，用比喻和动画解释抽象概念。"},
+ {n:"深海来信",a:"星河小分队",tool:["Vidu"],h:[690,4900,15700],m:[0,0,1],tr:[50,52,50,54,52,56,58],d:"深海题材的氛围短片，配乐原创。"}],
+author:[
+ {n:"墨染工作室",a:"短剧、视频",tool:["可灵","即梦"],h:[2400,16800,61000],m:[0,0,1],tr:[60,66,72,78,86,92,100],d:"12 部作品上榜，擅长长篇连续剧。粉丝 286 万。"},
+ {n:"七号机位",a:"短剧、动画",tool:["Vidu","海螺"],h:[2100,15200,55400],m:[1,1,0],tr:[56,60,66,70,76,80,90],d:"古装与科幻混搭，视觉辨识度强。粉丝 214 万。"},
+ {n:"星河小分队",a:"短剧、轻科幻",tool:["即梦","可灵"],h:[1700,12100,43800],m:[-1,0,2],tr:[44,50,52,58,60,66,72],d:"团队 6 人，日更两条。粉丝 168 万。"},
+ {n:"阿澈 Prompt",a:"教程、视频",tool:["可灵"],h:[1500,10900,39000],m:[2,2,-1],tr:[30,38,46,54,60,68,76],d:"以 Prompt 教学起家，转型叙事短片。粉丝 152 万。"},
+ {n:"猫爷 AI",a:"短剧、儿童",tool:["海螺","即梦"],h:[1200,8800,30900],m:[0,-1,1],tr:[40,42,44,46,48,50,52],d:"萌宠与亲子题材。粉丝 131 万。"},
+ {n:"折纸实验室",a:"视频、实验",tool:["可灵","海螺"],h:[980,7300,25700],m:[3,1,2],tr:[20,28,36,44,52,60,70],d:"强调镜头创意的个人工作室。粉丝 97 万。"}]
+};
+const S={k:"drama",p:1,q:""},$=s=>document.querySelector(s),race=$("#race"),cache={};
+const V=(()=>{try{return JSON.parse(localStorage.getItem("aigcvote"))||{c:{},v:[]}}catch(e){return {c:{},v:[]}}})();
+const saveV=()=>{try{localStorage.setItem("aigcvote",JSON.stringify(V))}catch(e){}};
+const fmt=v=>v>=10000?(v/10000).toFixed(1).replace(/\.0$/,"")+" 亿":v+" 万";
+const esc=s=>s.replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));
+function spark(tr){
+  const mx=Math.max(...tr),mn=Math.min(...tr),w=130,h=40;
+  const p=tr.map((v,i)=>(i*w/6).toFixed(1)+","+(h-4-((v-mn)/(mx-mn||1))*(h-8)).toFixed(1)).join(" ");
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><polyline fill="none" stroke="var(--c1)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="${p}"/></svg>`;
+}
+const mvText=m=>m>0?"升 "+m:m<0?"降 "+(-m):"持平";
+function build(k){
+  return cache[k]=DATA[k].map(it=>{
+    const el=document.createElement("div");el.className="row";
+    el.innerHTML=`<div class="line"><span class="no"></span>
+      <button class="bar" aria-expanded="false"><span class="tt"><b>${esc(it.n)}</b><i>${esc(it.a)}　${it.tool.join("、")}</i></span><span class="mv"></span><span class="hv"></span></button>
+      <button class="vote" aria-label="投票给 ${esc(it.n)}">♥ <span class="vc">0</span></button></div>
+      <div class="detail"><div class="d"><p>${esc(it.d)}</p><div class="tags">${it.tool.map(t=>`<span>${t}</span>`).join("")}</div></div><div>${spark(it.tr)}<small>近 7 天热度</small></div></div>`;
+    el.querySelector(".bar").addEventListener("click",e=>{
+      const o=el.classList.toggle("open");e.currentTarget.setAttribute("aria-expanded",o);layout();
+    });
+    const vk=k+":"+it.n, vote=el.querySelector(".vote"), vc=el.querySelector(".vc");
+    const draw=()=>{vc.textContent=V.c[vk]||0;el.classList.toggle("voted",V.v.includes(vk))};
+    draw();
+    vote.addEventListener("click",()=>{
+      if(V.v.includes(vk))return;
+      V.v.push(vk);V.c[vk]=(V.c[vk]||0)+1;saveV();draw();
+    });
+    return {it,el};
+  });
+}
+let order=[];
+function update(){
+  const lo=innerWidth<640?.58:.42, list=cache[S.k].slice().sort((a,b)=>b.it.h[S.p]-a.it.h[S.p]);
+  const max=list[0].it.h[S.p], q=S.q.trim().toLowerCase();
+  list.forEach((o,i)=>{
+    const {it,el}=o, rank=i+1;
+    o.show=!q||(it.n+it.a+it.tool.join("")).toLowerCase().includes(q);
+    el.hidden=!o.show;el.dataset.r=Math.min(rank,4);
+    el.querySelector(".no").textContent=rank;
+    const m=it.m[S.p],mv=el.querySelector(".mv");mv.textContent=mvText(m);
+    el.querySelector(".hv").textContent=fmt(it.h[S.p]);
+    el.querySelector(".bar").style.width=((lo+(1-lo)*it.h[S.p]/max)*100).toFixed(1)+"%";
+  });
+  order=list;layout();
+}
+function layout(){
+  let y=0,n=0;
+  order.forEach(o=>{if(!o.show)return;n++;o.el.style.transform=`translateY(${y}px)`;y+=o.el.offsetHeight+12});
+  race.style.height=(n?y:70)+"px";
+  let e=race.querySelector(".empty");
+  if(!n&&!e){e=document.createElement("div");e.className="empty";e.textContent="没有找到“"+S.q+"”相关的结果，换个关键词试试。";race.appendChild(e)}
+  if(n&&e)e.remove();
+}
+function mount(){
+  race.innerHTML="";
+  (cache[S.k]||build(S.k)).forEach(o=>{o.el.classList.remove("open");o.el.querySelector(".bar").style.width="0";race.appendChild(o.el)});
+  update(); // 先把位置排好，再在下一帧让条形长出来
+  const w=cache[S.k].map(o=>o.el.querySelector(".bar").style.width);
+  cache[S.k].forEach(o=>o.el.querySelector(".bar").style.width="0");
+  requestAnimationFrame(()=>requestAnimationFrame(()=>cache[S.k].forEach((o,i)=>o.el.querySelector(".bar").style.width=w[i])));
+}
+document.addEventListener("click",e=>{
+  const t=e.target.closest("#tabs button");
+  if(t){S.k=t.dataset.k;document.querySelectorAll("#tabs button").forEach(b=>b.setAttribute("aria-pressed",b===t));mount();return}
+  const p=e.target.closest("#periods button");
+  if(p){S.p=+p.dataset.p;document.querySelectorAll("#periods button").forEach(b=>b.setAttribute("aria-pressed",b===p));update()}
+});
+$("#q").addEventListener("input",e=>{S.q=e.target.value;update()});
+addEventListener("resize",update);
+const d=new Date();$("#date").textContent=`${d.getFullYear()} 年 ${d.getMonth()+1} 月 ${d.getDate()} 日更新`;
+(document.fonts&&document.fonts.ready?document.fonts.ready:Promise.resolve()).then(mount);
+</script>
+</body>
+</html>

@@ -1349,16 +1349,7 @@ export default {
             : audioVerified ? { cn: '声音验证', en: 'Audio verification', jp: '音声認証', kr: '음성 인증', es: 'Verificación de audio', vi: 'Xác minh bằng giọng nói', ar: 'التحقق الصوتي', ru: 'Аудио-верификация' }
             : { cn: '邮箱验证码', en: 'Email code', jp: 'メール認証コード', kr: '이메일 코드', es: 'Código de correo', vi: 'Mã email', ar: 'رمز البريد الإلكتروني', ru: 'Код по email' };
 
-          const msg = nt({
-            cn: `用户 ${username} 通过${verifyMethod.cn}注册成功！`,
-            en: `User ${username} registered successfully via ${verifyMethod.en}!`,
-            jp: `ユーザー ${username} が${verifyMethod.jp}で登録に成功しました！`,
-            kr: `사용자 ${username} 님이 ${verifyMethod.kr}로 등록했습니다!`,
-            es: `¡El usuario ${username} se registró exitosamente vía ${verifyMethod.es}!`,
-            vi: `Người dùng ${username} đã đăng ký thành công qua ${verifyMethod.vi}!`,
-            ar: `قام المستخدم ${username} بالتسجيل بنجاح عبر ${verifyMethod.ar}!`,
-            ru: `Пользователь ${username} успешно зарегистрировался через ${verifyMethod.ru}!`
-          }) + (site ? ` | site: ${site}` : '');
+          const msg = `用户 ${username} 通过${verifyMethod.cn}注册成功！${site ? ` | site: ${site}` : ''}`;
 
           await DB
             .prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)')
