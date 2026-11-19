@@ -1470,37 +1470,29 @@
                  });
 
         // 获取邮箱验证码
-        let sendCodeTimer = null;
+        let sendCodeTimer;
+        function startCodeCooldown() {
+            clearInterval(sendCodeTimer);
+            const tick = () => {
+                const left = Math.ceil((Number(localStorage.codeExpire) - Date.now()) / 1000);
+                sendCodeBtn.textContent = left > 0 ? left + 's' : '获取';
+                sendCodeBtn.disabled = left > 0;
+                if (left <= 0) { clearInterval(sendCodeTimer); delete localStorage.codeExpire; }
+            };
+            tick(); sendCodeTimer = setInterval(tick, 1000);
+        }
+        if (localStorage.codeExpire > Date.now()) startCodeCooldown();
         sendCodeBtn.addEventListener('click', async () => {
             const email = document.getElementById('regEmail').value.trim();
-            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-                return;
-            }
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
             try {
                 const res = await fetch('https://api.immmor.com/api/send-verify-code', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email, site: new URLSearchParams(location.search).get('site') })
                 });
-                const data = await res.json();
-                if (data.success) {
-                    let left = 60;
-                    sendCodeBtn.disabled = true;
-                    sendCodeBtn.textContent = left + 's';
-                    sendCodeTimer = setInterval(() => {
-                        left -= 1;
-                        if (left <= 0) {
-                            clearInterval(sendCodeTimer);
-                            sendCodeBtn.disabled = false;
-                            sendCodeBtn.textContent = '获取';
-                        } else {
-                            sendCodeBtn.textContent = left + 's';
-                        }
-                    }, 1000);
-                }
-            } catch (err) {
-                // 静默失败，不弹窗
-            }
+                if ((await res.json()).success) { localStorage.codeExpire = Date.now() + 60000; startCodeCooldown(); }
+            } catch (err) { /* 静默失败 */ }
         });
 
         registerForm.addEventListener('submit', async (e) => {
