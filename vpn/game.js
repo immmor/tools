@@ -50,18 +50,22 @@
             osc.start();
             osc.stop(t + 0.15);
         },
-        playReelClick() {
+        playReelClick(freq = 280) {
             this.init();
             const t = this.ctx.currentTime;
             const osc = this.ctx.createOscillator();
             const gain = this.ctx.createGain();
             osc.type = 'triangle';
-            osc.frequency.setValueAtTime(280, t);
+            osc.frequency.setValueAtTime(freq, t);
             gain.gain.setValueAtTime(0.1, t);
             gain.gain.linearRampToValueAtTime(0.01, t + 0.04);
             osc.connect(gain).connect(this.ctx.destination);
             osc.start();
             osc.stop(t + 0.04);
+        },
+        // 滚轮落定音：复用咔哒音色，音高逐个上升（280/310/340）
+        playReelStop(index = 0) {
+            this.playReelClick(280 + index * 30);
         },
         playShakeSound(duration = 0.5) {
             this.init();
@@ -732,6 +736,9 @@
                     const spinDuration1 = 2000, spinDuration2 = 2500, spinDuration3 = 3000;
                     startSlotSpinSound(reel3, symbolHeight, spinDuration3);
                     setTimeout(stopSlotSpinSound, spinDuration3);
+                    setTimeout(() => slotAudio.playReelStop(0), spinDuration1);
+                    setTimeout(() => slotAudio.playReelStop(1), spinDuration2);
+                    setTimeout(() => slotAudio.playReelStop(2), spinDuration3);
                     reel1.style.transition = `transform ${spinDuration1}ms cubic-bezier(0.175, 0.885, 0.32, 1.275)`;
                     reel2.style.transition = `transform ${spinDuration2}ms cubic-bezier(0.175, 0.885, 0.32, 1.275)`;
                     reel3.style.transition = `transform ${spinDuration3}ms cubic-bezier(0.175, 0.885, 0.32, 1.275)`;
@@ -803,6 +810,9 @@
 
                 startSlotSpinSound(reel3, symbolHeight, spinDuration3);
                 setTimeout(stopSlotSpinSound, spinDuration3);
+                setTimeout(() => slotAudio.playReelStop(0), spinDuration1);
+                setTimeout(() => slotAudio.playReelStop(1), spinDuration2);
+                setTimeout(() => slotAudio.playReelStop(2), spinDuration3);
 
                 reel1.style.transition = `transform ${spinDuration1}ms cubic-bezier(0.175, 0.885, 0.32, 1.275)`;
                 reel2.style.transition = `transform ${spinDuration2}ms cubic-bezier(0.175, 0.885, 0.32, 1.275)`;
@@ -956,7 +966,7 @@
 
             scratchCtx.fillStyle = '#ffffff';
             scratchCtx.font = 'bold 18px "PingFang SC", sans-serif';
-            scratchCtx.fillText('⚡ 划动刮开电子图层 ⚡', canvas.width / 2, canvas.height / 2);
+            scratchCtx.fillText(dict.scratch_here || '👆 刮开此处', canvas.width / 2, canvas.height / 2);
 
             if (!scratchEventsInitialized) {
                 initScratchEvents();
