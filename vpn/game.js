@@ -843,8 +843,8 @@
         let scratchNoise = null;
 
         const ensureScratchNoise = () => {
-            if (scratchNoise) return scratchNoise;
             const ctx = getGameAudioCtx();
+            if (scratchNoise) return scratchNoise;
             const sampleRate = ctx.sampleRate;
             const dur = 2;
             const buf = ctx.createBuffer(1, sampleRate * dur, sampleRate);
