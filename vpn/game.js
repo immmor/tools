@@ -723,7 +723,7 @@
                     const reel1 = document.getElementById('slot-reel-1');
                     const reel2 = document.getElementById('slot-reel-2');
                     const reel3 = document.getElementById('slot-reel-3');
-                    const symbolHeight = parseInt(getComputedStyle(document.querySelector('.slot-reel') || document.body).height, 10) || 120;
+                    const symbolHeight = parseFloat(getComputedStyle(document.querySelector('.slot-reel') || document.body).height) || 120;
                     const stopIndex1 = symbols.indexOf(giftData.symbols[0]);
                     const stopIndex2 = symbols.indexOf(giftData.symbols[1]);
                     const stopIndex3 = symbols.indexOf(giftData.symbols[2]);
@@ -782,7 +782,7 @@
                 const reel2 = document.getElementById('slot-reel-2');
                 const reel3 = document.getElementById('slot-reel-3');
 
-                const symbolHeight = parseInt(getComputedStyle(document.querySelector('.slot-reel') || document.body).height, 10) || 120;
+                const symbolHeight = parseFloat(getComputedStyle(document.querySelector('.slot-reel') || document.body).height) || 120;
 
                 // 根据后端返回的 symbols 计算停止位置
                 const stopIndex1 = symbols.indexOf(data.symbols[0]);
