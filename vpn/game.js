@@ -228,7 +228,7 @@
         } catch (e) { /* 忽略 */ }
     };
 
-    const showGameResult = (isWin, amount, icon, skipSound = false) => {
+    const showGameResult = (isWin, amount, icon, skipSound = false, onClose = null) => {
         const modal = document.getElementById('game-result-modal');
         const iconEl = document.getElementById('game-result-icon');
         const titleEl = document.getElementById('game-result-title');
@@ -297,8 +297,8 @@
             }
         }
         
-        closeBtn.textContent = dict.game_result_close || '确定';
-        
+        closeBtn.style.display = 'none';
+
         modal.classList.add('show');
         // 中奖瞬间触发屏幕震动（仅中奖时）
         if (isWin) {
@@ -306,9 +306,13 @@
             setTimeout(() => modal.classList.remove('shake'), 500);
         }
 
+        let closed = false;
         const hideModal = () => {
+            if (closed) return;
+            closed = true;
             modal.classList.remove('show', 'shake');
             modal.querySelectorAll('.win-particle').forEach(el => el.remove());
+            onClose?.();
         };
 
         closeBtn.onclick = hideModal;
@@ -316,6 +320,8 @@
         modal.onclick = (e) => {
             if (e.target === modal) hideModal();
         };
+
+        setTimeout(hideModal, 3500);
     };
 
     // 游戏历史记录功能 - 从后端获取
@@ -402,21 +408,59 @@
         }).join('');
     };
 
-    // 更新余额显示
+    // 更新余额显示：余额增加时滚动增长，与下拉框动画一致
     const updateBalanceDisplay = (balance) => {
-        const balanceEl = document.getElementById('user-balance');
-        if (balanceEl) {
-            balanceEl.textContent = `¥${parseFloat(balance).toFixed(2)}`;
+        const to = parseFloat(balance) || 0;
+        const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
+        const from = parseFloat(userInfo.balance || 0) || 0;
+        const apply = (v) => {
+            const s = `¥${v.toFixed(2)}`;
+            const balanceEl = document.getElementById('user-balance');
+            if (balanceEl) balanceEl.textContent = s;
+            document.querySelectorAll('.node-balance').forEach(el => { el.textContent = s; });
+        };
+        if (to > from) {
+            const t0 = performance.now();
+            const tick = (now) => {
+                const p = Math.min(1, (now - t0) / 800);
+                const e = 1 - Math.pow(1 - p, 3);
+                apply(from + (to - from) * e);
+                if (p < 1) requestAnimationFrame(tick);
+                else apply(to);
+            };
+            requestAnimationFrame(tick);
+        } else {
+            apply(to);
         }
         // 同步更新 localStorage
-        const userInfo = JSON.parse(localStorage.getItem('userInfo') || '{}');
         if (userInfo.username) {
             userInfo.balance = balance;
             localStorage.setItem('userInfo', JSON.stringify(userInfo));
         }
     };
 
+    const showDebitBalance = (d) => updateBalanceDisplay(Number(d.balance) - Number(d.prize || 0));
+
+    const refreshBalance = async () => {
+        const user = JSON.parse(localStorage.getItem('userInfo') || '{}');
+        if (!user.username) return;
+        try {
+            const res = await fetch(`https://api.funbua.uk/api/balance?username=${encodeURIComponent(user.username)}`);
+            const data = await res.json();
+            if (data.code === 200) updateBalanceDisplay(data.balance);
+        } catch (e) {}
+    };
+
     const initGameCenter = () => {
+        const savedUser = JSON.parse(localStorage.getItem('userInfo') || '{}');
+        if (savedUser.username) updateBalanceDisplay(savedUser.balance || 0);
+
+        const balanceRefreshBtn = document.getElementById('game-balance-refresh');
+        balanceRefreshBtn?.addEventListener('click', () => {
+            balanceRefreshBtn.animate?.([{ transform: 'rotate(0)' }, { transform: 'rotate(360deg)' }], { duration: 600 });
+            refreshBalance();
+        });
+
         // 中奖信息轮播（纯前端模拟）
         initWinnerCarousel();
 
@@ -426,6 +470,7 @@
 
         gameTabs.forEach(tab => {
             tab.addEventListener('click', () => {
+                refreshBalance();
                 const tabId = tab.getAttribute('data-tab');
                 gameTabs.forEach(t => t.classList.remove('game-tab-active'));
                 tab.classList.add('game-tab-active');
@@ -595,6 +640,7 @@
                 });
                 const giftData = await giftResp.json();
                 if (giftData.success && giftData.gift) {
+                    showDebitBalance(giftData);
                     isWheelSpinning = true;
                     spinBtn.disabled = true;
                     wheelResult.textContent = '';
@@ -602,9 +648,8 @@
                     spinWheelTo(targetIndex, () => {
                         const isWin = giftData.prize > 0;
                         if (isWin) wheelAudio.playWin();
-                        updateBalanceDisplay(giftData.balance);
                         renderGameHistory('wheel');
-                        showGameResult(isWin, giftData.prize, '🎁', isWin);
+                        showGameResult(isWin, giftData.prize, '🎁', isWin, () => updateBalanceDisplay(giftData.balance));
                         if (window.pendingGift) { window.pendingGift.wheel = false; window.updateGameCostText && window.updateGameCostText('wheel'); }
                         isWheelSpinning = false;
                         spinBtn.disabled = false;
@@ -627,6 +672,7 @@
                     alert(data.message || '操作失败');
                     return;
                 }
+                showDebitBalance(data);
 
                 isWheelSpinning = true;
                 spinBtn.disabled = true;
@@ -637,9 +683,8 @@
                 spinWheelTo(targetIndex, () => {
                     const isWin = data.prize > 0;
                     if (isWin) wheelAudio.playWin();
-                    updateBalanceDisplay(data.balance);
                     renderGameHistory('wheel');
-                    showGameResult(isWin, data.prize, '🎡', isWin);
+                    showGameResult(isWin, data.prize, '🎡', isWin, () => updateBalanceDisplay(data.balance));
                     isWheelSpinning = false;
                     spinBtn.disabled = false;
                 });
@@ -716,6 +761,7 @@
                 });
                 const giftData = await giftResp.json();
                 if (giftData.success && giftData.gift) {
+                    showDebitBalance(giftData);
                     isSlotSpinning = true;
                     slotBtn.disabled = true;
                     slotResult.textContent = '';
@@ -746,9 +792,8 @@
                     reel2.style.transform = `translateY(-${totalSpin2}px)`;
                     reel3.style.transform = `translateY(-${totalSpin3}px)`;
                     setTimeout(() => {
-                        if (giftData.prize > 0) { celebrateWin(); showGameResult(true, giftData.prize, '🎁', true); }
-                        else { showGameResult(false, 0, '🎁'); }
-                        updateBalanceDisplay(giftData.balance);
+                        if (giftData.prize > 0) { celebrateWin(); showGameResult(true, giftData.prize, '🎁', true, () => updateBalanceDisplay(giftData.balance)); }
+                        else { showGameResult(false, 0, '🎁', false, () => updateBalanceDisplay(giftData.balance)); }
                         renderGameHistory('slot');
                         if (window.pendingGift) { window.pendingGift.slot = false; window.updateGameCostText && window.updateGameCostText('slot'); }
                         isSlotSpinning = false;
@@ -772,6 +817,7 @@
                     alert(data.message || '操作失败');
                     return;
                 }
+                showDebitBalance(data);
 
                 isSlotSpinning = true;
                 slotBtn.disabled = true;
@@ -825,12 +871,11 @@
                 setTimeout(() => {
                     if (data.prize > 0) {
                         celebrateWin();
-                        showGameResult(true, data.prize, '🎰', true);
+                        showGameResult(true, data.prize, '🎰', true, () => updateBalanceDisplay(data.balance));
                     } else {
-                        showGameResult(false, 0, '🎰');
+                        showGameResult(false, 0, '🎰', false, () => updateBalanceDisplay(data.balance));
                     }
 
-                    updateBalanceDisplay(data.balance);
                     renderGameHistory('slot');
 
                     isSlotSpinning = false;
@@ -1081,9 +1126,8 @@
             if (isPrizeAdded || !hasValidCard) return;
             isPrizeAdded = true;
 
-            updateBalanceDisplay(parseFloat(JSON.parse(localStorage.getItem('userInfo') || '{}').balance || 0) + scratchPrizeAmount);
             renderGameHistory('scratch');
-            showGameResult(true, scratchPrizeAmount, '🎁');
+            showGameResult(true, scratchPrizeAmount, '🎁', false, () => updateBalanceDisplay(parseFloat(JSON.parse(localStorage.getItem('userInfo') || '{}').balance || 0) + scratchPrizeAmount));
             if (window.pendingGift) { window.pendingGift.scratch = false; window.updateGameCostText && window.updateGameCostText('scratch'); }
         };
 
