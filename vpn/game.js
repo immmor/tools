@@ -455,7 +455,7 @@
         const WHEEL_PRIZES = [3, 5, 5, 10, 10, 20, 50, 200];
         const WHEEL_SEGMENT_STYLE = [
             { bg: '#24113b', text: '#ff99cc', icon: '💵' },
-            { bg: '#17072b', text: '#a3ff00', icon: '🪙' },
+            { bg: '#17072b', text: '#a3ff00', icon: '💰' },
             { bg: '#24113b', text: '#ffffff', icon: '🐟' },
             { bg: '#17072b', text: '#ff99cc', icon: '✨' },
             { bg: '#24113b', text: '#a3ff00', icon: '🎵' },
@@ -466,7 +466,7 @@
 
         const WHEEL_SEGMENT_LIGHT = [
             { bg: '#efeaf7', text: '#a1146b', icon: '💵' },
-            { bg: '#fbf8fc', text: '#5d7a00', icon: '🪙' },
+            { bg: '#fbf8fc', text: '#5d7a00', icon: '💰' },
             { bg: '#efeaf7', text: '#2b2823', icon: '🐟' },
             { bg: '#fbf8fc', text: '#a1146b', icon: '✨' },
             { bg: '#efeaf7', text: '#5d7a00', icon: '🎵' },
