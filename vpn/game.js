@@ -4,6 +4,16 @@
         initGameCenter();
     });
 
+    // 多语言文本：对象按当前语言取，旧字符串原样返回
+    const pickLang = (v) => {
+        if (v && typeof v === 'object' && !Array.isArray(v)) {
+            const map = { 'zh-CN': 'cn', 'en-US': 'en', 'ja-JP': 'jp', 'ko-KR': 'kr', 'es-ES': 'es', 'vi-VN': 'vi', 'ar-SA': 'ar', 'ru-RU': 'ru' };
+            const key = map[window.currentLang] || 'en';
+            return v[key] || v.en || v.cn || Object.values(v)[0] || '';
+        }
+        return v ?? '';
+    };
+
     const getGameAudioCtx = () => {
         if (!window._gameAudioCtx) {
             window._gameAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -380,20 +390,20 @@
             if (gameType === 'predict') {
                 try {
                     const parsed = JSON.parse(item.result || '{}');
-                    const pickHist = (v) => {
-                        if (v && typeof v === 'object' && !Array.isArray(v)) {
-                            const map = { 'zh-CN': 'cn', 'en-US': 'en', 'ja-JP': 'jp', 'ko-KR': 'kr', 'es-ES': 'es', 'vi-VN': 'vi', 'ar-SA': 'ar', 'ru-RU': 'ru' };
-                            const key = map[window.currentLang] || 'en';
-                            return v[key] || v.en || v.cn || Object.values(v)[0] || '';
-                        }
-                        return v || '';
-                    };
-                    const cachedQ = pickHist(parsed.question);
+                    const cachedQ = pickLang(parsed.question);
                     const topicQ = cachedQ || (typeof PredictModule?.getTopicQuestion === 'function'
                         ? PredictModule.getTopicQuestion(parsed.topic_id)
                         : '');
+                    let optionText = pickLang(parsed.option_name);
+                    // 旧记录存的是中文字符串，回查当前话题的多语言选项
+                    if (!parsed.option_name || typeof parsed.option_name === 'string') {
+                        const lookedUp = typeof PredictModule?.getTopicOption === 'function'
+                            ? PredictModule.getTopicOption(parsed.topic_id, parsed.option_index)
+                            : '';
+                        if (lookedUp) optionText = lookedUp;
+                    }
                     const _tr = (k) => (window.translations?.[window.currentLang]?.[k]) || k;
-                    resultText = `${topicQ || (_tr('predict_topic') + '#' + (parsed.topic_id ?? '?'))} → ${pickHist(parsed.option_name) || _tr('predict_option')}`;
+                    resultText = `${topicQ || (_tr('predict_topic') + '#' + (parsed.topic_id ?? '?'))} → ${optionText || _tr('predict_option')}`;
                 } catch (e) {
                     resultText = item.result || ((window.translations?.[window.currentLang]?.['predict_record']) || '预测记录');
                 }
@@ -1238,6 +1248,8 @@
 
         document.addEventListener('languageChanged', () => {
             initScratchCard();
+            ['wheel', 'slot', 'scratch', 'predict'].forEach(g => renderGameHistory(g));
+            if (typeof PredictModule?.loadTopics === 'function') PredictModule.loadTopics();
         });
 
         // 暴露给外部（登录 / 登出时主动刷新幸运转盘数据）
@@ -1424,27 +1436,9 @@
     const PredictModule = (() => {
         const API_BASE = 'https://api.immmor.com';
         const t = (k) => (window.translations?.[window.currentLang]?.[k]) || k;
-        // 后端多语言 JSON（通知同款）按当前语言解析，普通字符串原样返回
+        // 后端返回的是多语言 JSON 字符串，解析后交给 pickLang
         const parseServerMsg = (raw) => {
-            if (!raw) return '';
-            try {
-                const o = JSON.parse(raw);
-                if (o && typeof o === 'object') {
-                    const map = { 'zh-CN': 'cn', 'en-US': 'en', 'ja-JP': 'jp', 'ko-KR': 'kr', 'es-ES': 'es', 'vi-VN': 'vi', 'ar-SA': 'ar', 'ru-RU': 'ru' };
-                    const key = map[window.currentLang] || 'en';
-                    return o[key] || o.en || Object.values(o)[0] || raw;
-                }
-            } catch (e) {}
-            return raw;
-        };
-        // 话题问题/选项：多语言对象按当前语言取，旧字符串原样返回
-        const pickLang = (v) => {
-            if (v && typeof v === 'object' && !Array.isArray(v)) {
-                const map = { 'zh-CN': 'cn', 'en-US': 'en', 'ja-JP': 'jp', 'ko-KR': 'kr', 'es-ES': 'es', 'vi-VN': 'vi', 'ar-SA': 'ar', 'ru-RU': 'ru' };
-                const key = map[window.currentLang] || 'en';
-                return v[key] || v.en || v.cn || Object.values(v)[0] || '';
-            }
-            return v ?? '';
+            try { return pickLang(JSON.parse(raw)); } catch (e) { return raw || ''; }
         };
         let allTopics = [];
         let myPredictBets = {}; // { topicId: { optionIndex, amount } } 本地追踪
@@ -1687,7 +1681,13 @@
             return pickLang(t?.question);
         }
 
-        return { loadTopics, loadMyBets, getTopicQuestion };
+        function getTopicOption(id, optionIndex) {
+            const t = allTopics.find(x => String(x.id) === String(id));
+            if (!t || !Array.isArray(t.options) || optionIndex == null) return '';
+            return pickLang(t.options[optionIndex]);
+        }
+
+        return { loadTopics, loadMyBets, getTopicQuestion, getTopicOption };
     })();
 
 })();
