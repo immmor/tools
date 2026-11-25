@@ -1928,7 +1928,7 @@ export default {
             pToken = await newPToken(DB, user.username, userInfo, pricePlan);
           }
 
-          return resJson({ success: true, message: '登录成功！', p_token: pToken });
+          return resJson({ success: true, message: '登录成功！', p_token: pToken, trusted: user.trusted || '' });
         } else {
           return resJson({ success: false, message: '用户不存在' }, 401);
         }

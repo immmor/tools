@@ -718,8 +718,17 @@
         const slotResult = document.getElementById('slot-result');
         let isSlotSpinning = false;
         const symbols = ['🍒', '🍊', '🍋', '⭐', '💎', '7️⃣', '🔔'];
-        // 后端符号顺序保持不变，仅替换展示图标为猫娘主题
-        const displaySymbols = ['🐱', '💎', '👑', '🧦', '🐟', '🎀', '🍬'];
+        // 图案与后端符号一一对应：停下后即为历史记录里的 emoji
+        const displaySymbols = ['🍒', '🍊', '🍋', '⭐', '💎', '7️⃣', '🔔'];
+        const chars = (s) => Array.from(String(s || ''));
+        const symKey = (s) => chars(s).filter(c => c !== '\uFE0F').join('');
+        const symbolIndex = (sym) => {
+            const s = String(sym || '');
+            let i = symbols.indexOf(s);
+            if (i < 0) i = symbols.findIndex(x => symKey(x) === symKey(s));
+            if (i < 0) i = symbols.findIndex(x => chars(x)[0] === chars(s)[0]);
+            return i < 0 ? 0 : i;
+        };
         const machineBody = document.getElementById('machine-body');
         const handle = document.getElementById('mechanical-handle');
 
@@ -788,13 +797,16 @@
                     const reel1 = document.getElementById('slot-reel-1');
                     const reel2 = document.getElementById('slot-reel-2');
                     const reel3 = document.getElementById('slot-reel-3');
-                    const symbolHeight = parseFloat(getComputedStyle(document.querySelector('.slot-reel') || document.body).height) || 120;
-                    const stopIndex1 = symbols.indexOf(giftData.symbols[0]);
-                    const stopIndex2 = symbols.indexOf(giftData.symbols[1]);
-                    const stopIndex3 = symbols.indexOf(giftData.symbols[2]);
-                    const totalSpin1 = (7 + stopIndex1) * symbolHeight;
-                    const totalSpin2 = (14 + stopIndex2) * symbolHeight;
-                    const totalSpin3 = (14 + stopIndex3) * symbolHeight;
+                    const symbolHeight = reel1.querySelector('.slot-symbol')?.offsetHeight || 120;
+                    // 用目标符号的真实 offsetTop 定位，避免估算高度累积偏移
+                    const slotOffset = (reel, loop, pos) => {
+                        const i = symbolIndex(giftData.symbols[pos]);
+                        const el = reel.children[loop + i];
+                        return el ? el.offsetTop : (loop + i) * symbolHeight;
+                    };
+                    const totalSpin1 = slotOffset(reel1, 7, 0);
+                    const totalSpin2 = slotOffset(reel2, 14, 1);
+                    const totalSpin3 = slotOffset(reel3, 14, 2);
                     reel1.style.transition = 'none'; reel2.style.transition = 'none'; reel3.style.transition = 'none';
                     reel1.style.transform = 'translateY(0)'; reel2.style.transform = 'translateY(0)'; reel3.style.transform = 'translateY(0)';
                     void reel1.offsetWidth; void reel2.offsetWidth; void reel3.offsetWidth;
@@ -847,16 +859,17 @@
                 const reel2 = document.getElementById('slot-reel-2');
                 const reel3 = document.getElementById('slot-reel-3');
 
-                const symbolHeight = parseFloat(getComputedStyle(document.querySelector('.slot-reel') || document.body).height) || 120;
+                const symbolHeight = reel1.querySelector('.slot-symbol')?.offsetHeight || 120;
 
-                // 根据后端返回的 symbols 计算停止位置
-                const stopIndex1 = symbols.indexOf(data.symbols[0]);
-                const stopIndex2 = symbols.indexOf(data.symbols[1]);
-                const stopIndex3 = symbols.indexOf(data.symbols[2]);
-
-                const totalSpin1 = (7 + stopIndex1) * symbolHeight;
-                const totalSpin2 = (14 + stopIndex2) * symbolHeight;
-                const totalSpin3 = (14 + stopIndex3) * symbolHeight;
+                // 用目标符号的真实 offsetTop 定位，避免估算高度累积偏移
+                const slotOffset = (reel, loop, pos) => {
+                    const i = symbolIndex(data.symbols[pos]);
+                    const el = reel.children[loop + i];
+                    return el ? el.offsetTop : (loop + i) * symbolHeight;
+                };
+                const totalSpin1 = slotOffset(reel1, 7, 0);
+                const totalSpin2 = slotOffset(reel2, 14, 1);
+                const totalSpin3 = slotOffset(reel3, 14, 2);
 
                 reel1.style.transition = 'none';
                 reel2.style.transition = 'none';

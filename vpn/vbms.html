@@ -801,15 +801,11 @@
         .page-content { padding: 2rem 2.2rem 3.2rem; background: var(--canvas); }
         .dashboard-grid { gap: 1.25rem; margin-bottom: 1.5rem; }
 
-        /* 统计卡片：顶部彩条 + 多层次阴影 */
+        /* 统计卡片：多层次阴影 */
         .stat-card {
             background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
             box-shadow: var(--shadow-sm); padding: 1.55rem; position: relative; overflow: hidden;
             transition: transform .2s, box-shadow .2s;
-        }
-        .stat-card::before {
-            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
-            background: linear-gradient(90deg, var(--accent), #60a5fa);
         }
         .stat-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
         .stat-info h3 { color: var(--ink-900); font-size: 2rem; font-weight: 700; letter-spacing: -.03em; }
@@ -1496,20 +1492,11 @@
                                     <label for="adminEmail">管理员邮箱</label>
                                     <input type="email" id="adminEmail" name="adminEmail" value="admin@example.com">
                                 </div>
-                                <h4 style="margin:1.5rem 0 .5rem;border-top:1px solid #e2e8f0;padding-top:1.5rem;">AI 接口配置（用于预测模板生成，仅保存在本机浏览器）</h4>
-                                <div class="form-group">
-                                    <label for="vbmsAiUrl">API 地址（OpenAI 兼容 chat/completions 端点）</label>
-                                    <input type="text" id="vbmsAiUrl" placeholder="https://api.example.com/v1/chat/completions">
-                                </div>
-                                <div class="form-group">
-                                    <label for="vbmsAiModel">模型名称</label>
-                                    <input type="text" id="vbmsAiModel" placeholder="gpt-4o-mini">
-                                </div>
-                                <div class="form-group">
-                                    <label for="vbmsAiKey">API Key</label>
-                                    <input type="password" id="vbmsAiKey" placeholder="sk-...">
-                                </div>
-                                <button type="submit" class="btn" style="width: auto;">保存设置</button>
+                                <h4 style="margin:1.5rem 0 .5rem;border-top:1px solid #e2e8f0;padding-top:1.5rem;">AI 供应商管理（用于预测模板生成和消息翻译，仅保存在本机浏览器）</h4>
+                                <div id="aiProviderList" style="display:flex; flex-direction:column; gap:.9rem;"></div>
+                                <button type="button" class="btn" onclick="addAiProvider()" style="width:auto; margin-top:.8rem;">+ 添加供应商</button>
+                                <div style="font-size:.8rem; color:var(--ink-400); margin-top:.45rem;">同一时间只有一个供应商生效；请求失败不会自动切换或重试。</div>
+                                <button type="submit" class="btn" style="width: auto; margin-top:1.2rem;">保存设置</button>
                             </form>
                         </div>
                     </div>
@@ -1525,6 +1512,15 @@
                             <div class="form-group">
                                 <label for="messageContent">消息内容</label>
                                 <textarea id="messageContent" rows="5" placeholder="请输入消息内容" style="width: 100%; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 4px; resize: vertical;"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label for="messageAiJson">AI 多语言 JSON（生成后由管理员复制到消息内容）</label>
+                                <textarea id="messageAiJson" rows="7" placeholder="点击「AI 翻译」后在这里生成多语言 JSON" style="width:100%; padding:.75rem; border:1px solid #e2e8f0; border-radius:8px; font-family:monospace; font-size:.85rem; resize:vertical;"></textarea>
+                                <div style="display:flex; gap:.6rem; flex-wrap:wrap; margin-top:.6rem;">
+                                    <button type="button" class="btn" onclick="aiTranslateMessage(this)" style="width:auto;">AI 翻译成多语言</button>
+                                    <button type="button" class="action-btn edit-btn" onclick="copyMessageAiJson()" style="width:auto;">复制 JSON</button>
+                                </div>
+                                <div style="font-size:.8rem; color:var(--ink-400); margin-top:.45rem;">使用系统设置中的 AI 配置；生成后请自行复制到「消息内容」再发送。</div>
                             </div>
                             <div class="form-group">
                                 <label for="messageTarget">发送对象</label>
@@ -1557,7 +1553,7 @@
                                 <label for="singleUsername">用户名</label>
                                 <input type="text" id="singleUsername" placeholder="请输入用户名" style="width: 100%; padding: 0.75rem; border: 1px solid #e2e8f0; border-radius: 4px;">
                             </div>
-                            <button type="button" class="btn" onclick="sendMessage()" style="width: auto;">发送消息</button>
+                            <button type="button" id="sendMessageBtn" class="btn" onclick="sendMessage()" style="width: auto;">发送消息</button>
                         </div>
                     </div>
 
@@ -4945,25 +4941,120 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
         // 系统设置表单提交
         document.getElementById('settingsForm').addEventListener('submit', function(e) {
             e.preventDefault();
-            const siteName = document.getElementById('siteName').value;
-            const siteDescription = document.getElementById('siteDescription').value;
-            const adminEmail = document.getElementById('adminEmail').value;
-
-            localStorage.setItem('vbms_ai_config', JSON.stringify({
-                url: document.getElementById('vbmsAiUrl').value.trim(),
-                model: document.getElementById('vbmsAiModel').value.trim(),
-                key: document.getElementById('vbmsAiKey').value.trim()
-            }));
-            alert('设置已保存！');
+            alert('网站设置已保存！');
         });
-        (function loadAiConfig() {
+
+        const AI_PROVIDERS_KEY = 'vbms_ai_providers';
+        const AI_LEGACY_KEY = 'vbms_ai_config';
+        function aiEsc(s) {
+            return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        }
+        function loadAiProviders() {
             try {
-                const c = JSON.parse(localStorage.getItem('vbms_ai_config') || '{}');
-                if (c.url) document.getElementById('vbmsAiUrl').value = c.url;
-                if (c.model) document.getElementById('vbmsAiModel').value = c.model;
-                if (c.key) document.getElementById('vbmsAiKey').value = c.key;
+                const raw = localStorage.getItem(AI_PROVIDERS_KEY);
+                if (raw) {
+                    const list = JSON.parse(raw);
+                    if (Array.isArray(list)) return list;
+                }
             } catch (e) {}
-        })();
+            try {
+                const c = JSON.parse(localStorage.getItem(AI_LEGACY_KEY) || '{}');
+                if (c.url || c.model || c.key) {
+                    const list = [{ id: 'ai_' + Date.now(), name: '默认供应商', url: c.url || '', model: c.model || '', key: c.key || '', active: true }];
+                    localStorage.setItem(AI_PROVIDERS_KEY, JSON.stringify(list));
+                    return list;
+                }
+            } catch (e) {}
+            return [];
+        }
+        function saveAiProviders(list) {
+            localStorage.setItem(AI_PROVIDERS_KEY, JSON.stringify(list));
+        }
+        function collectAiProvidersFromDom() {
+            const list = loadAiProviders();
+            document.querySelectorAll('.ai-provider-card').forEach(card => {
+                const p = list.find(x => x.id === card.dataset.id);
+                if (!p) return;
+                ['name', 'url', 'model', 'key'].forEach(f => {
+                    const input = card.querySelector(`[data-field="${f}"]`);
+                    if (input) p[f] = input.value.trim();
+                });
+            });
+            return list;
+        }
+        function renderAiProviders() {
+            const box = document.getElementById('aiProviderList');
+            if (!box) return;
+            const list = loadAiProviders();
+            if (!list.length) {
+                box.innerHTML = '<div style="padding:1rem; border:1px dashed var(--line); border-radius:10px; color:var(--ink-400);">暂无 AI 供应商，请点击「添加供应商」。</div>';
+                return;
+            }
+            box.innerHTML = list.map(p => `
+                <div class="ai-provider-card" data-id="${p.id}" style="border:1px solid var(--line); border-radius:12px; padding:1rem; background:var(--canvas);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:.8rem; margin-bottom:.75rem;">
+                        <label style="display:flex; align-items:center; gap:.45rem; font-weight:600; color:var(--ink-800);">
+                            <input type="radio" name="aiProviderActive" ${p.active ? 'checked' : ''} onchange="activateAiProvider('${p.id}')">
+                            激活
+                        </label>
+                        <button type="button" class="action-btn delete-btn" onclick="deleteAiProvider('${p.id}')">删除</button>
+                    </div>
+                    <div class="form-group">
+                        <label>名称</label>
+                        <input type="text" data-field="name" value="${aiEsc(p.name)}" placeholder="如 OpenAI">
+                    </div>
+                    <div class="form-group">
+                        <label>API 地址（OpenAI 兼容 chat/completions 端点）</label>
+                        <input type="text" data-field="url" value="${aiEsc(p.url)}" placeholder="https://api.example.com/v1/chat/completions">
+                    </div>
+                    <div class="form-group">
+                        <label>模型名称</label>
+                        <input type="text" data-field="model" value="${aiEsc(p.model)}" placeholder="gpt-4o-mini">
+                    </div>
+                    <div class="form-group">
+                        <label>API Key</label>
+                        <input type="password" data-field="key" value="${aiEsc(p.key)}" placeholder="sk-..." autocomplete="off">
+                    </div>
+                    <button type="button" class="action-btn edit-btn" onclick="saveAiProvider('${p.id}')" style="margin-top:.5rem;">保存</button>
+                </div>`).join('');
+        }
+        function addAiProvider() {
+            const list = collectAiProvidersFromDom();
+            list.push({
+                id: 'ai_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+                name: '', url: '', model: '', key: '', active: list.length === 0
+            });
+            saveAiProviders(list);
+            renderAiProviders();
+        }
+        function saveAiProvider() {
+            const list = collectAiProvidersFromDom();
+            saveAiProviders(list);
+            renderAiProviders();
+            alert('AI 供应商已保存');
+        }
+        function activateAiProvider(id) {
+            const list = collectAiProvidersFromDom();
+            list.forEach(p => { p.active = p.id === id; });
+            saveAiProviders(list);
+            renderAiProviders();
+            const active = list.find(p => p.id === id);
+            alert('已激活：' + (active && active.name ? active.name : '未命名供应商'));
+        }
+        function deleteAiProvider(id) {
+            let list = collectAiProvidersFromDom();
+            const target = list.find(p => p.id === id);
+            if (!target) return;
+            if (!confirm('确定删除 AI 供应商「' + (target.name || '未命名供应商') + '」？')) return;
+            list = list.filter(p => p.id !== id);
+            if (list.length && !list.some(p => p.active)) list[0].active = true;
+            saveAiProviders(list);
+            renderAiProviders();
+        }
+        function getActiveAiProvider() {
+            return loadAiProviders().find(p => p.active) || null;
+        }
+        renderAiProviders();
 
         // 切换发送对象
         document.getElementById('messageTarget').addEventListener('change', function() {
@@ -4974,6 +5065,49 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
                 singleUserGroup.style.display = 'none';
             }
         });
+
+        const MESSAGE_LANGS = ['cn', 'en', 'jp', 'kr', 'es', 'vi', 'ar', 'ru'];
+        async function aiTranslateMessage(btn) {
+            const content = document.getElementById('messageContent').value.trim();
+            const title = document.getElementById('messageTitle').value.trim();
+            if (!content) {
+                alert('请先在消息内容中填写原文');
+                return;
+            }
+            if (btn) { btn.disabled = true; btn.textContent = '翻译中...'; }
+            try {
+                const prompt = `你是翻译助手。把下面的消息内容和标题翻译成 8 种语言，只返回 JSON（不要代码块、不要解释），格式：{"cn":"","en":"","jp":"","kr":"","es":"","vi":"","ar":"","ru":"","title":{"cn":"","en":"","jp":"","kr":"","es":"","vi":"","ar":"","ru":""}}\n中文消息内容：${content}\n中文弹窗标题：${title || '（空）'}`;
+                const text = await callUserAI(prompt);
+                const parsed = JSON.parse(text);
+                const result = { title: {} };
+                MESSAGE_LANGS.forEach(l => {
+                    result[l] = (parsed[l] || (l === 'cn' ? content : '')).toString().trim();
+                    result.title[l] = ((parsed.title && parsed.title[l]) || (l === 'cn' ? title : '')).toString().trim();
+                });
+                document.getElementById('messageAiJson').value = JSON.stringify(result, null, 2);
+                alert('已生成多语言 JSON，可复制到消息内容');
+            } catch (e) {
+                alert('AI 翻译失败: ' + e.message);
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = 'AI 翻译成多语言'; }
+            }
+        }
+        async function copyMessageAiJson() {
+            const text = document.getElementById('messageAiJson').value.trim();
+            if (!text) {
+                alert('请先生成 JSON');
+                return;
+            }
+            try {
+                await navigator.clipboard.writeText(text);
+                alert('JSON 已复制');
+            } catch (e) {
+                const el = document.getElementById('messageAiJson');
+                el.focus();
+                el.select();
+                alert('请手动复制选中的 JSON');
+            }
+        }
 
         // 发送消息
         async function sendMessage() {
@@ -5011,7 +5145,7 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
                 content = JSON.stringify(obj);
             }
 
-            const loadingBtn = document.querySelector('#messagesPage button.btn');
+            const loadingBtn = document.getElementById('sendMessageBtn');
             const originalText = loadingBtn.innerText;
             loadingBtn.innerText = '发送中...';
             loadingBtn.disabled = true;
@@ -5719,9 +5853,9 @@ ${order.paid_at ? '支付时间: ' + new Date(new Date(order.paid_at).getTime() 
         }
         // 调用用户自配置的 OpenAI 兼容接口，返回文本回复
         async function callUserAI(prompt) {
-            let cfg;
-            try { cfg = JSON.parse(localStorage.getItem('vbms_ai_config') || '{}'); } catch (e) { cfg = {}; }
-            if (!cfg.url || !cfg.model || !cfg.key) throw new Error('请先在「网站配置」中填写 AI 地址、模型和 Key');
+            const cfg = getActiveAiProvider();
+            if (!cfg) throw new Error('请先在「系统设置」中添加并激活 AI 供应商');
+            if (!cfg.url || !cfg.model || !cfg.key) throw new Error('当前激活的 AI 供应商信息不完整，请补全地址、模型和 Key');
             const res = await fetch(cfg.url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + cfg.key },
