@@ -2710,7 +2710,7 @@ export default {
           const user = await DB.prepare('SELECT source FROM user WHERE username = ?').bind(username).first();
           if (!user) return resJson({ code: 404, msg: '用户不存在' }, 404);
           if (user.source) return resJson({ code: 400, msg: '来源已设置' }, 400);
-          await DB.prepare('UPDATE user SET source = ? WHERE username = ?').bind(source, username).run();
+          await DB.prepare('UPDATE user SET source = ? WHERE username = ?').bind(`用户自填:${source}`, username).run();
           return resJson({ code: 200, msg: '提交成功' });
         } catch (err) {
           return resJson({ code: 500, msg: '提交失败', error: err.message }, 500);
