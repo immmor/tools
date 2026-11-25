@@ -731,6 +731,8 @@
         };
         const machineBody = document.getElementById('machine-body');
         const handle = document.getElementById('mechanical-handle');
+        const leverArm = document.getElementById('lever-arm');
+        let leverRaf = 0;
 
         const initSlotReels = () => {
             const reel1 = document.getElementById('slot-reel-1');
@@ -751,10 +753,29 @@
             reel3.innerHTML = createReelContent();
         };
 
-        // 拉杆反馈：音效 + 拉杆下压 + 机身轻晃
+        // 拉杆：杆绕转轴拉向用户，球反向自转保持正对，指数阻尼回弹
+        const setLeverAngle = (deg) => {
+            if (leverArm) leverArm.style.transform = `rotateX(${-deg}deg)`;
+            if (slotBtn) slotBtn.style.transform = `translateZ(3px) rotateX(${deg}deg)`;
+        };
         const pullLever = () => {
             slotAudio.playLever();
-            if (handle) { handle.classList.add('pulled'); setTimeout(() => handle.classList.remove('pulled'), 200); }
+            if (handle) handle.classList.add('pulled');
+            cancelAnimationFrame(leverRaf);
+            const t0 = performance.now();
+            const step = (now) => {
+                const from = 176;
+                const s = (now - t0) / 1000;
+                if (s < 0.9) {
+                    setLeverAngle(from * Math.exp(-9 * s) * Math.cos(9 * s));
+                    leverRaf = requestAnimationFrame(step);
+                } else {
+                    setLeverAngle(0);
+                    if (handle) handle.classList.remove('pulled');
+                }
+            };
+            setLeverAngle(176);
+            leverRaf = requestAnimationFrame(step);
             if (machineBody) { machineBody.classList.add('machine-shake-light'); setTimeout(() => machineBody.classList.remove('machine-shake-light'), 500); }
         };
         // 中奖反馈：机身剧烈晃动 + 爆金币声 + 整组发光
@@ -1004,9 +1025,14 @@
 
             if (!canvas || !card) return;
 
-            const rect = canvas.getBoundingClientRect();
-            canvas.width = rect.width;
-            canvas.height = rect.height;
+            // 以 .scratch-grid-wrapper 的内容盒为基准，和 .prize-underlay(inset:0) 完全一致
+            const layer = canvas.parentElement;
+            const rect = layer ? layer.getBoundingClientRect() : canvas.getBoundingClientRect();
+            const style = layer ? getComputedStyle(layer) : null;
+            const bw = style ? parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth) : 0;
+            const bh = style ? parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth) : 0;
+            canvas.width = Math.round(rect.width - bw);
+            canvas.height = Math.round(rect.height - bh);
 
             scratchCanvas = canvas;
             scratchCtx = canvas.getContext('2d');
@@ -1020,7 +1046,7 @@
                 scratchCtx.fillStyle = light ? '#f3f1ec' : 'rgba(17, 7, 36, 0.95)';
                 scratchCtx.fillRect(0, 0, canvas.width, canvas.height);
                 scratchCtx.fillStyle = light ? '#5f5c56' : '#ff99cc';
-                scratchCtx.font = 'bold 16px "PingFang SC", sans-serif';
+                scratchCtx.font = 'bold 18px "PingFang SC", sans-serif';
                 scratchCtx.fillText(dict.scratch_buy_first || '请先购买刮刮卡', canvas.width / 2, canvas.height / 2);
                 return;
             }
