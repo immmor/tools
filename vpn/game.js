@@ -380,11 +380,20 @@
             if (gameType === 'predict') {
                 try {
                     const parsed = JSON.parse(item.result || '{}');
-                    const topicQ = typeof PredictModule?.getTopicQuestion === 'function'
+                    const pickHist = (v) => {
+                        if (v && typeof v === 'object' && !Array.isArray(v)) {
+                            const map = { 'zh-CN': 'cn', 'en-US': 'en', 'ja-JP': 'jp', 'ko-KR': 'kr', 'es-ES': 'es', 'vi-VN': 'vi', 'ar-SA': 'ar', 'ru-RU': 'ru' };
+                            const key = map[window.currentLang] || 'en';
+                            return v[key] || v.en || v.cn || Object.values(v)[0] || '';
+                        }
+                        return v || '';
+                    };
+                    const cachedQ = pickHist(parsed.question);
+                    const topicQ = cachedQ || (typeof PredictModule?.getTopicQuestion === 'function'
                         ? PredictModule.getTopicQuestion(parsed.topic_id)
-                        : '';
+                        : '');
                     const _tr = (k) => (window.translations?.[window.currentLang]?.[k]) || k;
-                    resultText = `${topicQ || (_tr('predict_topic') + '#' + (parsed.topic_id ?? '?'))} → ${parsed.option_name || _tr('predict_option')}`;
+                    resultText = `${topicQ || (_tr('predict_topic') + '#' + (parsed.topic_id ?? '?'))} → ${pickHist(parsed.option_name) || _tr('predict_option')}`;
                 } catch (e) {
                     resultText = item.result || ((window.translations?.[window.currentLang]?.['predict_record']) || '预测记录');
                 }
@@ -1415,6 +1424,28 @@
     const PredictModule = (() => {
         const API_BASE = 'https://api.immmor.com';
         const t = (k) => (window.translations?.[window.currentLang]?.[k]) || k;
+        // 后端多语言 JSON（通知同款）按当前语言解析，普通字符串原样返回
+        const parseServerMsg = (raw) => {
+            if (!raw) return '';
+            try {
+                const o = JSON.parse(raw);
+                if (o && typeof o === 'object') {
+                    const map = { 'zh-CN': 'cn', 'en-US': 'en', 'ja-JP': 'jp', 'ko-KR': 'kr', 'es-ES': 'es', 'vi-VN': 'vi', 'ar-SA': 'ar', 'ru-RU': 'ru' };
+                    const key = map[window.currentLang] || 'en';
+                    return o[key] || o.en || Object.values(o)[0] || raw;
+                }
+            } catch (e) {}
+            return raw;
+        };
+        // 话题问题/选项：多语言对象按当前语言取，旧字符串原样返回
+        const pickLang = (v) => {
+            if (v && typeof v === 'object' && !Array.isArray(v)) {
+                const map = { 'zh-CN': 'cn', 'en-US': 'en', 'ja-JP': 'jp', 'ko-KR': 'kr', 'es-ES': 'es', 'vi-VN': 'vi', 'ar-SA': 'ar', 'ru-RU': 'ru' };
+                const key = map[window.currentLang] || 'en';
+                return v[key] || v.en || v.cn || Object.values(v)[0] || '';
+            }
+            return v ?? '';
+        };
         let allTopics = [];
         let myPredictBets = {}; // { topicId: { optionIndex, amount } } 本地追踪
 
@@ -1550,11 +1581,12 @@
                     let cls = 'predict-opt-btn';
                     if (myBet && myBet.optionIndex === i) cls += ' selected';
                     if (b.isWinner) cls += ' resolved-winner';
+                    const optText = pickLang(opt);
                     return `
                         <button class="${cls}" data-topic="${tp.id}" data-opt="${i}" ${!active ? 'disabled' : ''}>
                             <span class="text-xs flex items-center gap-2">
                                 <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${b.color};flex-shrink:0;"></span>
-                                ${b.isWinner ? '🏆 ' : ''}${opt}
+                                ${b.isWinner ? '🏆 ' : ''}${optText}
                             </span>
                             <span class="text-[10px] font-mono" style="color:#999;">
                                 ${t('predict_odds')} ${b.odds} | ${Number(b.pct).toFixed(1)}%
@@ -1569,7 +1601,7 @@
                 return `
                     <div class="predict-topic-card ${!active ? 'resolved' : ''}">
                         <div class="flex justify-between items-start mb-1">
-                            <p class="text-xs font-bold leading-relaxed flex-1 mr-2">${tp.question}</p>
+                            <p class="text-xs font-bold leading-relaxed flex-1 mr-2">${pickLang(tp.question)}</p>
                             <div class="flex items-center gap-2 shrink-0">
                                 <span class="predict-badge ${displayStatus}">${
                                     displayStatus === 'active' ? t('predict_ongoing') :
@@ -1583,7 +1615,7 @@
                         </div>
                         <div class="predict-pool-bar">${barSegments}</div>
                         <div class="grid gap-1 mt-2" style="display:flex; flex-direction:column; gap:6px;">${optionsHTML}</div>
-                        ${tp.winner !== null && tp.winner !== undefined ? `<p class="text-[10px] mt-2" style="color:var(--neon-green);">${t('predict_result')} ${tp.options[tp.winner]}</p>` : ''}
+                        ${tp.winner !== null && tp.winner !== undefined ? `<p class="text-[10px] mt-2" style="color:var(--neon-green);">${t('predict_result')} ${pickLang(tp.options[tp.winner])}</p>` : ''}
                     </div>`;
             }).join('');
 
@@ -1603,11 +1635,12 @@
             }
             const topic = allTopics.find(tp2 => String(tp2.id) === String(topicId));
             if (!topic || topic.status !== 'active') return;
-            const optName = topic.options[optIndex];
+            const optObj = topic.options[optIndex];
+            const optName = pickLang(optObj);
             const MIN_BET = 10;
             let amount;
             while (true) {
-                const raw = prompt(t('predict_enter_amount').replace('{question}', topic.question).replace('{option}', optName).replace('{min}', MIN_BET), String(MIN_BET));
+                const raw = prompt(t('predict_enter_amount').replace('{question}', pickLang(topic.question)).replace('{option}', optName).replace('{min}', MIN_BET), String(MIN_BET));
                 if (raw == null) return;
                 if (!raw || isNaN(Number(raw))) continue;
                 const v = parseFloat(Number(raw).toFixed(2));
@@ -1621,7 +1654,7 @@
                 const res = await fetch(`${API_BASE}/api/predict/bet`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username: user.username, topicId, optionIndex: optIndex, optionName: optName, amount: betAmount })
+                    body: JSON.stringify({ username: user.username, topicId, optionIndex: optIndex, optionName: optObj, question: topic.question, amount: betAmount })
                 });
                 const data = await res.json();
                 if (data.success) {
@@ -1631,7 +1664,7 @@
                     renderTopics();
                     loadMyBets();
                 } else {
-                    alert(data.message || t('predict_bet_failed'));
+                    alert(parseServerMsg(data.message) || t('predict_bet_failed'));
                 }
             } catch (e) {
                 console.warn('投注API失败', e);
@@ -1651,7 +1684,7 @@
 
         function getTopicQuestion(id) {
             const t = allTopics.find(x => String(x.id) === String(id));
-            return t?.question || '';
+            return pickLang(t?.question);
         }
 
         return { loadTopics, loadMyBets, getTopicQuestion };
