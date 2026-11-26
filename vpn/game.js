@@ -1043,9 +1043,16 @@
             if (!hasValidCard) {
                 scratchPrize.textContent = '';
                 const light = document.body.classList.contains('theme-light');
-                scratchCtx.fillStyle = light ? '#f3f1ec' : 'rgba(17, 7, 36, 0.95)';
+                if (light) {
+                    const cover = scratchCtx.createLinearGradient(0, 0, canvas.width, canvas.height);
+                    cover.addColorStop(0, '#fff6fb');
+                    cover.addColorStop(1, '#f6eaf4');
+                    scratchCtx.fillStyle = cover;
+                } else {
+                    scratchCtx.fillStyle = 'rgba(17, 7, 36, 0.95)';
+                }
                 scratchCtx.fillRect(0, 0, canvas.width, canvas.height);
-                scratchCtx.fillStyle = light ? '#5f5c56' : '#ff99cc';
+                scratchCtx.fillStyle = light ? '#b3006b' : '#ff99cc';
                 scratchCtx.font = 'bold 18px "PingFang SC", sans-serif';
                 scratchCtx.fillText(dict.scratch_buy_first || '请先购买刮刮卡', canvas.width / 2, canvas.height / 2);
                 return;
