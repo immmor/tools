@@ -502,6 +502,22 @@ async function talangyaFetch(env, apiPath, opts = {}) {
     } catch (e) {
       console.error('talangya 重新登录失败:', e);
     }
+  } else {
+    // 上游 cookie 失效时返回的是 HTTP 200 + code:0 的业务错误（如「您未登录，请先登录」），
+    // 不是 401，需要识别后重新登录再试一次
+    try {
+      const t = await r.clone().text();
+      let j = null;
+      try { j = JSON.parse(t); } catch {}
+      if (j && (j.code === 0 || j.code === 401 || j.code === 403) &&
+          /未登录|请先登录|登录已过期|登录超时|重新登录/.test(String(j.msg || ''))) {
+        console.error('talangya 业务级未登录，刷新 cookie 重试:', j.msg);
+        await talCookieRefresh(env);
+        r = await call();
+      }
+    } catch (e) {
+      console.error('talangya 未登录重试失败:', e);
+    }
   }
   return r;
 }
@@ -560,6 +576,81 @@ async function smsFetch(env, apiPath) {
   return r;
 }
 
+// ===== 反爬签名校验（与 index.html 内前端算法保持一致） =====
+const rotl = (x, n) => ((x << n) | (x >>> (32 - n))) >>> 0;
+function mix(str, seed) {
+  let a = (seed ^ 0x9e3779b9) >>> 0;
+  let b = (seed ^ 0x85ebca6b) >>> 0;
+  let c = (seed ^ 0xc2b2ae35) >>> 0;
+  let d = (seed ^ 0x27d4eb2f) >>> 0;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str.charCodeAt(i);
+    a = (rotl((a ^ ch) >>> 0, 7) + Math.imul(a, 0x01000193)) >>> 0;
+    b = (rotl((b ^ a) >>> 0, 11) + Math.imul(b, 0x85ebca77)) >>> 0;
+    c = (rotl((c ^ b) >>> 0, 13) + Math.imul(c, 0xc2b2ae3d)) >>> 0;
+    d = (rotl((d ^ c) >>> 0, 17) + Math.imul(d, 0x27d4eb2f)) >>> 0;
+  }
+  return [a, b, c, d];
+}
+function diffuse(state, times) {
+  let [a, b, c, d] = state;
+  for (let r = 0; r < times; r++) {
+    a = rotl((a ^ b) >>> 0, 5) >>> 0;
+    b = rotl((b + c) >>> 0, 9) >>> 0;
+    c = rotl((c ^ d) >>> 0, 13) >>> 0;
+    d = rotl((d + a) >>> 0, 17) >>> 0;
+    a = (a ^ Math.imul(b, 0x9e3779b1)) >>> 0;
+    b = (b ^ Math.imul(c, 0x85ebca77)) >>> 0;
+    c = (c ^ Math.imul(d, 0xc2b2ae3d)) >>> 0;
+    d = (d ^ Math.imul(a, 0x27d4eb2f)) >>> 0;
+  }
+  return [a, b, c, d];
+}
+const toHex = (state) => state.map((n) => n.toString(16).padStart(8, '0')).join('');
+function verifySign(method, target, bodyStr, ts, nc, fp) {
+  const raw = [method.toUpperCase(), target, bodyStr, String(ts), nc, fp].join('\u0001');
+  let state = diffuse(mix(raw, (ts ^ 0x5a5a5a5a) >>> 0), 12);
+  const fpState = mix(fp, 0x1234567);
+  state = diffuse([
+    state[0] ^ fpState[1], state[1] ^ fpState[3],
+    state[2] ^ fpState[0], state[3] ^ fpState[2]
+  ], 8);
+  return toHex(state);
+}
+
+// ========== App 更新配置：版本号与各平台下载链接由开发者手动维护 ==========
+// 发布新版本时，改 version / changelog，以及需要更新的平台/架构链接
+// 优先匹配 platform-arch，找不到时回退到 platform
+// 直链格式示例：https://github.com/chen08209/FlClash/releases/download/v1.2.1/FlClash-1.2.1-android-arm64-v8a.apk
+// iOS 暂无安装包，不放进下载表
+const APP_UPDATE = {
+  version: '1.2.1',
+  // 强制更新：设置版本号后，本地版本与之不一致时必须更新，弹窗不可关闭；留空表示不强制
+  // 例：forceUpdateVersion: '1.2.2' 表示低于/不等于 1.2.2 的用户必须更新
+  forceUpdateVersion: '',
+  downloads: {
+    // Android
+    'android-arm64': 'https://github.com/chen08209/FlClash/releases/latest',
+    'android-armv7': 'https://github.com/chen08209/FlClash/releases/latest',
+    'android-x64': 'https://github.com/chen08209/FlClash/releases/latest',
+    android: 'https://github.com/chen08209/FlClash/releases/latest',
+    // macOS
+    'macos-arm64': 'https://github.com/chen08209/FlClash/releases/latest',
+    'macos-x64': 'https://github.com/chen08209/FlClash/releases/latest',
+    macos: 'https://github.com/chen08209/FlClash/releases/latest',
+    // Windows
+    'windows-x64': 'https://github.com/chen08209/FlClash/releases/latest',
+    windows: 'https://github.com/chen08209/FlClash/releases/latest',
+    // Linux
+    'linux-x64': 'https://github.com/chen08209/FlClash/releases/latest',
+    linux: 'https://github.com/chen08209/FlClash/releases/latest'
+  },
+  changelog: [
+    '视觉与交互体验优化',
+    '修复已知问题'
+  ]
+};
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -571,7 +662,7 @@ export default {
         headers: {
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-mj-cookie, cookie',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-mj-cookie, cookie, X-Phantom-Ts, X-Phantom-Nonce, X-Phantom-Sign, X-Phantom-Fp',
           'Access-Control-Max-Age': '86400'
         }
       });
@@ -587,6 +678,30 @@ export default {
       });
     };
 
+    // ========== 反爬签名校验：带头才验，缺头放行（兼容其它页面/旧缓存） ==========
+    if (path.startsWith('/api/')) {
+      const pTs = request.headers.get('X-Phantom-Ts');
+      const pNonce = request.headers.get('X-Phantom-Nonce');
+      const pSign = request.headers.get('X-Phantom-Sign');
+      const pFp = request.headers.get('X-Phantom-Fp');
+      if (pTs && pNonce && pSign && pFp) {
+        const ts = Number(pTs);
+        if (!Number.isFinite(ts) || Math.abs(Date.now() - ts) > 5 * 60 * 1000) {
+          return resJson({ code: 401, msg: '签名已过期' }, 401);
+        }
+        const clean = new URL(request.url);
+        clean.searchParams.delete('_ts');
+        clean.searchParams.delete('_nc');
+        clean.searchParams.delete('_sig');
+        const target = clean.pathname + clean.search;
+        const bodyStr = ['GET', 'HEAD'].includes(request.method) ? '' : await request.clone().text();
+        const expected = verifySign(request.method, target, bodyStr, ts, pNonce, pFp);
+        if (expected !== pSign.toLowerCase()) {
+          return resJson({ code: 401, msg: '签名校验失败' }, 401);
+        }
+      }
+    }
+
     try {
       // ========== ✅ 核心修复：数据库实例兜底（解决prepare undefined） ==========
       // 【关键】这里的 DB 必须和你Worker绑定D1的「Variable name」完全一致！！！
@@ -597,6 +712,34 @@ export default {
           msg: "数据库绑定失败！请检查Worker的D1绑定配置",
           error: "D1 database instance is undefined"
         }, 500);
+      }
+
+      // ========== App 更新检查：版本号匹配检测，按平台+架构返回下载链接 ==========
+      // GET /api/app/update?version=1.2.1&platform=android&arch=arm64
+      if (path === '/api/app/update' && request.method === 'GET') {
+        const version = (url.searchParams.get('version') || '').replace(/^v/i, '');
+        const platform = (url.searchParams.get('platform') || '').toLowerCase();
+        const arch = (url.searchParams.get('arch') || '').toLowerCase();
+        const hasUpdate = version !== APP_UPDATE.version;
+        const forceUpdateVersion = (APP_UPDATE.forceUpdateVersion || '').replace(/^v/i, '');
+        const forceUpdate =
+          hasUpdate && !!forceUpdateVersion && version !== forceUpdateVersion;
+        const platformArch = arch ? `${platform}-${arch}` : platform;
+        const downloadUrl =
+          APP_UPDATE.downloads[platformArch] || APP_UPDATE.downloads[platform] || '';
+        return resJson({
+          success: true,
+          hasUpdate,
+          forceUpdate,
+          forceUpdateVersion,
+          currentVersion: version,
+          latestVersion: APP_UPDATE.version,
+          platform,
+          arch,
+          downloadKey: APP_UPDATE.downloads[platformArch] ? platformArch : platform,
+          downloadUrl,
+          changelog: APP_UPDATE.changelog
+        });
       }
 
       // ========== talangya 商品代理（绕过CORS，原样返回） ==========
@@ -1293,8 +1436,9 @@ export default {
           pricePlanStr = JSON.stringify(defaultPrice);
         }
 
-        // 根据前端传入的nt参数决定not_trusted值：nt=n时设为空字符串（信任）
-        const notTrustedValue = params.nt === 'n' ? '' : 'yes';
+        // 根据前端传入的 t 参数决定 trusted：yes(信任)/try(需审核)/no(隐藏支付宝人工)，默认 no
+        const tParam = String(params.t || '').toLowerCase();
+        const notTrustedValue = ['yes', 'try', 'no'].includes(tParam) ? tParam : 'no';
 
         // 原子插入：利用数据库 UNIQUE 约束防止并发重复注册
         // 不再单独 SELECT 检查，直接 INSERT，由数据库保证原子性
@@ -1304,7 +1448,7 @@ export default {
         let result;
         try {
           result = await DB
-            .prepare('INSERT INTO user (username, password, balance, v_expire_date, learn_vip_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code, v_token, v_link_clash, v_link_v2ray, price_plan, survey, security_answer, fetch_link, source, site, not_trusted, auto_rewn, vorders, web3_address, card_number) VALUES (?, ?, ?, NULL, NULL, 153600, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)')
+            .prepare('INSERT INTO user (username, password, balance, v_expire_date, learn_vip_expire_date, monthly_quota, used_quota, quota_reset_date, invite_code, v_token, v_link_clash, v_link_v2ray, price_plan, survey, security_answer, fetch_link, source, site, trusted, auto_rewn, vorders, web3_address, card_number) VALUES (?, ?, ?, NULL, NULL, 153600, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)')
             .bind(username, password, finalBalance, new Date().toISOString().slice(0, 19).replace('T', ' '), userInviteCode, '', '', '', pricePlanStr, '{}', securityAnswer || '', '[]', source || '', site || '', notTrustedValue, '[]', web3AddressLower || '', newCardNumber)
             .run();
         } catch (e) {
@@ -1466,7 +1610,7 @@ export default {
         }
 
         const user = await DB
-          .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders, invite_code, invited_user, rebates, card_number FROM user WHERE username = ? AND password = ?')
+          .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, trusted, fetch_link, vorders, invite_code, invited_user, rebates, card_number, monthly_quota FROM user WHERE username = ? AND password = ?')
           .bind(username, password)
           .first();
 
@@ -1489,7 +1633,7 @@ export default {
 
           const pricePlan = user.price_plan ? JSON.parse(user.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
           const cardNumber = user.card_number || await ensureCardNumber(DB, user.rowid);
-          const userInfo = { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates, card_number: cardNumber };
+          const userInfo = { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, trusted: user.trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates, card_number: cardNumber, monthly_quota: user.monthly_quota };
           const pToken = await newPToken(DB, username, userInfo, pricePlan);
 
           return resJson({ success: true, message: '登录成功！', p_token: pToken });
@@ -1507,7 +1651,7 @@ export default {
         if (!p_token || !newEmail) return resJson({ success: false, message: '参数不完整' }, 400);
         if (!force && !code) return resJson({ success: false, message: '参数不完整' }, 400);
         if (!force && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) return resJson({ success: false, message: '邮箱格式不正确' }, 400);
-        const u = await DB.prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders, invite_code, invited_user, rebates, card_number FROM user WHERE p_token = ?').bind(p_token).first();
+        const u = await DB.prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, trusted, fetch_link, vorders, invite_code, invited_user, rebates, card_number FROM user WHERE p_token = ?').bind(p_token).first();
         if (!u) return resJson({ success: false, message: '登录态无效，请重新登录' }, 401);
         const oldEmail = u.username;
         if (newEmail === oldEmail) return resJson({ success: false, message: '新邮箱不能与当前邮箱相同' }, 400);
@@ -1523,10 +1667,10 @@ export default {
         await redis(env, 'DEL', `verify_code_${newEmail}`);
         const ok = await renameUserEmail(DB, oldEmail, newEmail);
         if (!ok) return resJson({ success: false, message: '改名失败，请稍后重试' }, 500);
-        const user = await DB.prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders, invite_code, invited_user, rebates, card_number FROM user WHERE username = ?').bind(newEmail).first();
+        const user = await DB.prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, trusted, fetch_link, vorders, invite_code, invited_user, rebates, card_number FROM user WHERE username = ?').bind(newEmail).first();
         const pricePlan = user.price_plan ? JSON.parse(user.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
         const cardNumber = user.card_number || await ensureCardNumber(DB, user.rowid);
-        const userInfo = { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates, card_number: cardNumber };
+        const userInfo = { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, trusted: user.trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates, card_number: cardNumber };
         const newPT = await newPToken(DB, user.username, userInfo, pricePlan);
         const nowStr = new Date().toISOString().slice(0, 19).replace('T', ' ');
         await DB.prepare('INSERT INTO messages (username, content, created_at, is_read) VALUES (?, ?, ?, 0)').bind('immmor', `用户 ${oldEmail} 修改邮箱为 ${newEmail} 成功`, nowStr).run();
@@ -1556,7 +1700,7 @@ export default {
         }
         // 1:1 验证：只比对该指定用户名自己录入的人脸模板
         const u = await DB
-          .prepare("SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders, invite_code, invited_user, rebates, card_number, face_descriptor FROM user WHERE username = ?")
+          .prepare("SELECT rowid, username, balance, v_expire_date, price_plan, v_token, trusted, fetch_link, vorders, invite_code, invited_user, rebates, card_number, face_descriptor FROM user WHERE username = ?")
           .bind(username).first();
         if (!u || !u.face_descriptor) {
           return resJson({ success: false, message: '该用户未录入人脸，请先录入或使用密码登录' }, 401);
@@ -1580,7 +1724,7 @@ export default {
         await DB.prepare('UPDATE user SET login_info = ? WHERE username = ?').bind(updatedLoginInfo, username).run();
         const pricePlan = u.price_plan ? JSON.parse(u.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
         const cardNumber = u.card_number || await ensureCardNumber(DB, u.rowid);
-        const userInfo = { id: u.rowid, username: u.username, balance: u.balance, v_token: u.v_token, v_expire_date: u.v_expire_date, not_trusted: u.not_trusted || '', vorders: u.vorders, invite_code: u.invite_code, invited_user: u.invited_user, rebates: u.rebates, card_number: cardNumber };
+        const userInfo = { id: u.rowid, username: u.username, balance: u.balance, v_token: u.v_token, v_expire_date: u.v_expire_date, trusted: u.trusted || '', vorders: u.vorders, invite_code: u.invite_code, invited_user: u.invited_user, rebates: u.rebates, card_number: cardNumber };
         const pToken = await newPToken(DB, username, userInfo, pricePlan);
         await BFAdd(env, 'bf_user', username); // 自愈：补进布隆过滤器
         return resJson({ success: true, message: '刷脸登录成功！', p_token: pToken });
@@ -1608,7 +1752,7 @@ export default {
         }
         // 1:1 验证：只比对该指定用户名自己录入的声纹模板
         const u = await DB
-          .prepare("SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders, invite_code, invited_user, rebates, card_number, voice_embedding FROM user WHERE username = ?")
+          .prepare("SELECT rowid, username, balance, v_expire_date, price_plan, v_token, trusted, fetch_link, vorders, invite_code, invited_user, rebates, card_number, voice_embedding FROM user WHERE username = ?")
           .bind(username).first();
         if (!u || !u.voice_embedding) {
           return resJson({ success: false, message: '该用户未录入声纹，请先录入或使用密码登录' }, 401);
@@ -1636,7 +1780,7 @@ export default {
         await DB.prepare('UPDATE user SET login_info = ? WHERE username = ?').bind(updatedLoginInfo, username).run();
         const pricePlan = u.price_plan ? JSON.parse(u.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
         const cardNumber = u.card_number || await ensureCardNumber(DB, u.rowid);
-        const userInfo = { id: u.rowid, username: u.username, balance: u.balance, v_token: u.v_token, v_expire_date: u.v_expire_date, not_trusted: u.not_trusted || '', vorders: u.vorders, invite_code: u.invite_code, invited_user: u.invited_user, rebates: u.rebates, card_number: cardNumber };
+        const userInfo = { id: u.rowid, username: u.username, balance: u.balance, v_token: u.v_token, v_expire_date: u.v_expire_date, trusted: u.trusted || '', vorders: u.vorders, invite_code: u.invite_code, invited_user: u.invited_user, rebates: u.rebates, card_number: cardNumber };
         const pToken = await newPToken(DB, username, userInfo, pricePlan);
         return resJson({ success: true, message: '声纹登录成功！', sim: +sim.toFixed(3), threshold: VOICE_THRESHOLD, p_token: pToken });
       }
@@ -1666,7 +1810,7 @@ export default {
         const addressLower = address.toLowerCase();
 
         const user = await DB
-          .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders, card_number FROM user WHERE username = ? OR web3_address = ?')
+          .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, trusted, fetch_link, vorders, card_number FROM user WHERE username = ? OR web3_address = ?')
           .bind(addressLower, addressLower)
           .first();
 
@@ -1688,7 +1832,7 @@ export default {
           const pricePlan = user.price_plan ? JSON.parse(user.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
 
           const cardNumber = user.card_number || await ensureCardNumber(DB, user.rowid);
-          const userInfo = { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates, card_number: cardNumber };
+          const userInfo = { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, trusted: user.trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates, card_number: cardNumber };
           const pToken = await newPToken(DB, user.username, userInfo, pricePlan);
 
           return resJson({ success: true, message: '登录成功！', p_token: pToken });
@@ -1761,7 +1905,7 @@ export default {
         }
 
         const user = await DB
-          .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders, invite_code, invited_user, rebates, login_ticket, ticket_expire, p_token, card_number FROM user WHERE login_ticket = ?')
+          .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, trusted, fetch_link, vorders, invite_code, invited_user, rebates, login_ticket, ticket_expire, p_token, card_number FROM user WHERE login_ticket = ?')
           .bind(ticket)
           .first();
 
@@ -1792,7 +1936,7 @@ export default {
           const pricePlan = user.price_plan ? JSON.parse(user.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
 
           const cardNumber = user.card_number || await ensureCardNumber(DB, user.rowid);
-          const userInfo = { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates, card_number: cardNumber };
+          const userInfo = { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, trusted: user.trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates, card_number: cardNumber };
           // 复用仍有效的旧 token：避免充值（quick-login）后原页面 token 被轮换，导致后续 open-vip 等接口返回 403「无权操作该账号」；仅当旧 token 缺失或已过期才重新签发
           let pToken = user.p_token;
           const _exp = pToken ? getLoginExp(pToken) : 0;
@@ -1800,7 +1944,7 @@ export default {
             pToken = await newPToken(DB, user.username, userInfo, pricePlan);
           }
 
-          return resJson({ success: true, message: '登录成功！', p_token: pToken });
+          return resJson({ success: true, message: '登录成功！', p_token: pToken, trusted: user.trusted || '' });
         } else {
           return resJson({ success: false, message: '用户不存在' }, 401);
         }
@@ -1834,7 +1978,7 @@ export default {
           }
 
           const user = await DB
-            .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders FROM user WHERE username = ?')
+            .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, trusted, fetch_link, vorders FROM user WHERE username = ?')
             .bind(email)
             .first();
 
@@ -1854,7 +1998,7 @@ export default {
             await DB.prepare('UPDATE user SET login_info = ? WHERE username = ?').bind(updatedLoginInfo, email).run();
 
             const pricePlan = user.price_plan ? JSON.parse(user.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
-            const userInfo = { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates };
+            const userInfo = { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, trusted: user.trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates };
             const pToken = await newPToken(DB, user.username, userInfo, pricePlan);
 
             return resJson({ success: true, message: '登录成功！', p_token: pToken });
@@ -1933,7 +2077,7 @@ export default {
           const email = primaryEmail;
 
           const user = await DB
-            .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, not_trusted, fetch_link, vorders FROM user WHERE username = ?')
+            .prepare('SELECT rowid, username, balance, v_expire_date, price_plan, v_token, trusted, fetch_link, vorders FROM user WHERE username = ?')
             .bind(email)
             .first();
 
@@ -1953,7 +2097,7 @@ export default {
             await DB.prepare('UPDATE user SET login_info = ? WHERE username = ?').bind(updatedLoginInfo, email).run();
 
             const pricePlan = user.price_plan ? JSON.parse(user.price_plan) : { monthly_original: 12, monthly_discount: 10, annual_original: 144, annual_discount: 100, savings: 44 };
-            const userInfo = { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, not_trusted: user.not_trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates };
+            const userInfo = { id: user.rowid, username: user.username, balance: user.balance, v_token: user.v_token, v_expire_date: user.v_expire_date, trusted: user.trusted || '', vorders: user.vorders, invite_code: user.invite_code, invited_user: user.invited_user, rebates: user.rebates };
             const pToken = await newPToken(DB, user.username, userInfo, pricePlan);
 
             return resJson({ success: true, message: '登录成功！', p_token: pToken });
@@ -2582,7 +2726,7 @@ export default {
           const user = await DB.prepare('SELECT source FROM user WHERE username = ?').bind(username).first();
           if (!user) return resJson({ code: 404, msg: '用户不存在' }, 404);
           if (user.source) return resJson({ code: 400, msg: '来源已设置' }, 400);
-          await DB.prepare('UPDATE user SET source = ? WHERE username = ?').bind(source, username).run();
+          await DB.prepare('UPDATE user SET source = ? WHERE username = ?').bind(`用户自填:${source}`, username).run();
           return resJson({ code: 200, msg: '提交成功' });
         } catch (err) {
           return resJson({ code: 500, msg: '提交失败', error: err.message }, 500);
@@ -3129,7 +3273,7 @@ export default {
       if (path === '/api/user/edit' && request.method === 'POST') {
         try {
           const params = await request.json();
-          const { username, password, balance, v_expire_date, learn_vip_expire_date, monthly_quota, v_token, invite_code, v_link_clash, v_link_v2ray, not_trusted, login_info, price_plan, vorders, fetch_link, security_answer, auto_rewn, remark, free_expire_date, last_checkin } = params;
+          const { username, password, balance, v_expire_date, learn_vip_expire_date, monthly_quota, v_token, invite_code, v_link_clash, v_link_v2ray, trusted, login_info, price_plan, vorders, fetch_link, security_answer, auto_rewn, remark, free_expire_date, last_checkin } = params;
           
           if (!username) {
             return resJson({ code: 400, msg: '缺少username参数' }, 400);
@@ -3183,9 +3327,9 @@ export default {
             updates.push('v_link_v2ray = ?');
             values.push(v_link_v2ray);
           }
-          if (not_trusted !== undefined) {
-            updates.push('not_trusted = ?');
-            values.push(not_trusted);
+          if (trusted !== undefined) {
+            updates.push('trusted = ?');
+            values.push(trusted);
           }
           if (price_plan !== undefined) {
             updates.push('price_plan = ?');
@@ -4060,8 +4204,8 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
             all: '',
             vip: " WHERE v_expire_date IS NOT NULL AND v_expire_date > ?",
             nonvip: " WHERE v_expire_date IS NULL OR v_expire_date <= ?",
-            trusted: " WHERE COALESCE(not_trusted, '') = ''",
-            untrusted: " WHERE not_trusted = 'yes'"
+            trusted: " WHERE trusted = 'yes'",
+            untrusted: " WHERE trusted = 'try'"
           };
 
           if (target === 'single') {
@@ -4681,6 +4825,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           await DB.prepare('UPDATE user SET balance = balance - ? + ?, game_winnings = COALESCE(game_winnings, 0) + ? WHERE username = ?').bind(cost, prize, prize, username).run();
           await DB.prepare('INSERT INTO game_bet (username, game_type, cost, prize, result, created_at) VALUES (?, ?, ?, ?, ?, ?)')
             .bind(username, 'wheel', cost, prize, `¥${prize}`, now).run();
+          ctx.waitUntil(notifyAdmin('游戏中心购买', `用户 ${username} 购买幸运转盘，花费 ¥${cost}，中奖 ¥${prize}`));
 
           return resJson({ success: true, prize, balance: user.balance - cost + prize });
         } catch (err) {
@@ -4727,6 +4872,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           await DB.prepare('UPDATE user SET balance = balance - ? + ?, game_winnings = COALESCE(game_winnings, 0) + ? WHERE username = ?').bind(cost, prize, prize, username).run();
           await DB.prepare('INSERT INTO game_bet (username, game_type, cost, prize, result, created_at) VALUES (?, ?, ?, ?, ?, ?)')
             .bind(username, 'slot', cost, prize, resultStr, now).run();
+          ctx.waitUntil(notifyAdmin('游戏中心购买', `用户 ${username} 购买摇摇机，花费 ¥${cost}，中奖 ¥${prize}`));
 
           return resJson({ success: true, prize, symbols: [s1, s2, s3], balance: user.balance - cost + prize });
         } catch (err) {
@@ -4768,6 +4914,7 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
           await DB.prepare('UPDATE user SET balance = balance - ? + ?, game_winnings = COALESCE(game_winnings, 0) + ? WHERE username = ?').bind(cost, prize, prize, username).run();
           await DB.prepare('INSERT INTO game_bet (username, game_type, cost, prize, result, created_at) VALUES (?, ?, ?, ?, ?, ?)')
             .bind(username, 'scratch', cost, prize, `¥${prize}`, now).run();
+          ctx.waitUntil(notifyAdmin('游戏中心购买', `用户 ${username} 购买刮刮乐，花费 ¥${cost}，中奖 ¥${prize}`));
 
           return resJson({ success: true, prize, balance: user.balance - cost + prize });
         } catch (err) {
@@ -4850,22 +4997,22 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
       // 下注
       if (path === '/api/predict/bet' && request.method === 'POST') {
         try {
-          const { username, topicId, optionIndex, optionName, amount } = await request.json();
-          if (!username) return resJson({ success: false, message: '请先登录' }, 401);
-          if (amount == null || amount <= 0) return resJson({ success: false, message: '金额无效' }, 400);
+          const { username, topicId, optionIndex, optionName, question, amount } = await request.json();
+          if (!username) return resJson({ success: false, message: t({ cn:'请先登录', en:'Please log in first', jp:'先にログインしてください', kr:'먼저 로그인해 주세요', es:'Inicia sesión primero', vi:'Vui lòng đăng nhập', ar:'يرجى تسجيل الدخول أولاً', ru:'Сначала войдите в систему' }) }, 401);
+          if (amount == null || amount <= 0) return resJson({ success: false, message: t({ cn:'金额无效', en:'Invalid amount', jp:'金額が無効です', kr:'금액이 유효하지 않습니다', es:'Monto inválido', vi:'Số tiền không hợp lệ', ar:'مبلغ غير صالح', ru:'Неверная сумма' }) }, 400);
 
           const user = await DB.prepare('SELECT rowid, username, balance FROM user WHERE username = ?').bind(username).first();
-          if (!user) return resJson({ success: false, message: '用户不存在' }, 404);
-          if (user.balance < amount) return resJson({ success: false, message: '余额不足' }, 400);
+          if (!user) return resJson({ success: false, message: t({ cn:'用户不存在', en:'User not found', jp:'ユーザーが見つかりません', kr:'사용자를 찾을 수 없습니다', es:'Usuario no encontrado', vi:'Không tìm thấy người dùng', ar:'المستخدم غير موجود', ru:'Пользователь не найден' }) }, 404);
+          if (user.balance < amount) return resJson({ success: false, message: t({ cn:'余额不足', en:'Insufficient balance', jp:'残高が不足しています', kr:'잔액이 부족합니다', es:'Saldo insuficiente', vi:'Số dư không đủ', ar:'الرصيد غير كافٍ', ru:'Недостаточно средств' }) }, 400);
 
           // 检查话题是否存在且有效
           const topicRow = await DB.prepare('SELECT value FROM link WHERE key = ?').bind('predict_topics').first();
           const topics = topicRow?.value ? JSON.parse(topicRow.value) : [];
           const topic = topics.find(t => t.id == topicId);
-          if (!topic) return resJson({ success: false, message: '话题不存在' }, 404);
-          if (topic.status !== 'active') return resJson({ success: false, message: '该话题已截止' }, 400);
+          if (!topic) return resJson({ success: false, message: t({ cn:'话题不存在', en:'Topic not found', jp:'トピックが見つかりません', kr:'주제를 찾을 수 없습니다', es:'Tema no encontrado', vi:'Không tìm thấy chủ đề', ar:'الموضوع غير موجود', ru:'Тема не найдена' }) }, 404);
+          if (topic.status !== 'active') return resJson({ success: false, message: t({ cn:'该话题已截止', en:'This topic has closed', jp:'このトピックは締め切りました', kr:'이 주제는 마감되었습니다', es:'Este tema ha finalizado', vi:'Chủ đề này đã kết thúc', ar:'انتهى هذا الموضوع', ru:'Эта тема закрыта' }) }, 400);
 
-          const result = JSON.stringify({ topic_id: topicId, option_index: optionIndex, option_name: optionName || '' });
+          const result = JSON.stringify({ topic_id: topicId, option_index: optionIndex, option_name: optionName || '', question: question || '' });
           const now = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' ');
 
           await DB.prepare('UPDATE user SET balance = balance - ? WHERE username = ?').bind(amount, username).run();
@@ -4903,11 +5050,11 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
             const tid = String(t.id);
             t.total_pool = poolMap[tid] || 0;
             t.bettor_count = bettorMap[tid] ? bettorMap[tid].size : 0;
-            // 归一化 options 为数组（兼容 option_pools / options / choices 等多种字段名）
+            // 归一化 options 为数组（兼容多语言对象 / 旧字符串 / 多种字段名）
             const rawOpts = t.options ?? t.option_pools ?? t.choices ?? t.option_list;
             let opts;
             if (Array.isArray(rawOpts)) {
-              opts = rawOpts.map(s => String(s).trim()).filter(Boolean);
+              opts = rawOpts.map(s => (s && typeof s === 'object') ? s : String(s ?? '').trim()).filter(Boolean);
             } else if (typeof rawOpts === 'string') {
               opts = rawOpts.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
             } else {
@@ -4944,6 +5091,28 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
               .all();
           }
           return resJson({ success: true, bets: bets.results || [] });
+        } catch (err) {
+          return resJson({ success: false, message: err.message }, 500);
+        }
+      }
+
+      // 管理端修改预测投注记录（多语言问题/选项快照、奖金）
+      if (path === '/api/predict/admin/bet-update' && request.method === 'POST') {
+        try {
+          const { id, question, option_name, prize } = await request.json();
+          if (!id) return resJson({ success: false, message: '缺少记录ID' }, 400);
+          const row = await DB.prepare('SELECT result FROM game_bet WHERE id = ? AND game_type = ?').bind(id, 'predict').first();
+          if (!row) return resJson({ success: false, message: '记录不存在' }, 404);
+          let result;
+          try { result = JSON.parse(row.result || '{}'); } catch (e) { result = {}; }
+          if (question !== undefined) result.question = question;
+          if (option_name !== undefined) result.option_name = option_name;
+          if (prize !== undefined && !Number.isNaN(Number(prize))) {
+            await DB.prepare('UPDATE game_bet SET prize = ?, result = ? WHERE id = ?').bind(Number(prize), JSON.stringify(result), id).run();
+          } else {
+            await DB.prepare('UPDATE game_bet SET result = ? WHERE id = ?').bind(JSON.stringify(result), id).run();
+          }
+          return resJson({ success: true });
         } catch (err) {
           return resJson({ success: false, message: err.message }, 500);
         }
@@ -5443,8 +5612,8 @@ ${contract.contract_content.replace(/<script[^>]*>.*?<\/script>/gi, '')}
             all: 'SELECT username FROM user',
             vip: "SELECT username FROM user WHERE v_expire_date IS NOT NULL AND v_expire_date > ?",
             nonvip: "SELECT username FROM user WHERE v_expire_date IS NULL OR v_expire_date <= ?",
-            trusted: "SELECT username FROM user WHERE COALESCE(not_trusted, '') = ''",
-            untrusted: "SELECT username FROM user WHERE not_trusted = 'yes'"
+            trusted: "SELECT username FROM user WHERE trusted = 'yes'",
+            untrusted: "SELECT username FROM user WHERE trusted = 'try'"
           };
 
           let resolved = [];
